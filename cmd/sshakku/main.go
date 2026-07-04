@@ -249,10 +249,9 @@ func loadKeys(stderr io.Writer) int {
 	// load, or parse problem is logged and the affected setting falls back to
 	// its default.
 	var file config.File
-	if path, perr := config.DefaultPath(); perr != nil {
-		_ = log.Log("ERROR", fmt.Sprintf("load-keys: config path: %v", perr))
-	} else if f, lerr := config.Load(path); lerr != nil {
-		_ = log.Log("ERROR", fmt.Sprintf("load-keys: config %s: %v", path, lerr))
+	configPath := filepath.Join(layout.ConfigDir, "config.toml")
+	if f, lerr := config.Load(configPath); lerr != nil {
+		_ = log.Log("ERROR", fmt.Sprintf("load-keys: config %s: %v", configPath, lerr))
 		file = f
 	} else {
 		file = f

@@ -488,6 +488,11 @@ is committable and the bash keeps working until each piece moves.
   `~/.ssh/agent` cleanup, and a bounded session log. `shell-init` prints
   `agent_sock`/`agent_lock`/`log_file`; the entrypoint evals them. The Go lint and
   `golang.org/x/sys` (BSD-3-Clause) licence decisions are recorded (rules 12, 16).
+  Follow-up: the session log had shipped under `ConfigDir` instead of a
+  dedicated state dir, missing the `$XDG_STATE_HOME` split called for in 1.1.
+  Closed by adding a `StateDir` field, defaulting to `~/.local/state`, and moving
+  `LogFile` under it. `internal/config` no longer resolves its own config dir; it
+  now reuses the `ConfigDir` already computed by `paths.Resolve`.
 - **Slice 2 — agent lifecycle. ✅ Done.** (the Phase 1.4 work, in Go): reachability
   plus the five-state self-healing policy of open decision 15 — start on the fixed
   socket when clean, attach when ours is healthy, reap dead sockets/agents (ours and

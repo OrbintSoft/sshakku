@@ -12,18 +12,20 @@ func TestEnsureCreatesLayout(t *testing.T) {
 	root := t.TempDir()
 	runtime := filepath.Join(root, "run", "sshakku")
 	config := filepath.Join(root, "cfg", "sshakku")
+	state := filepath.Join(root, "state", "sshakku")
 	l := Layout{
 		ConfigDir:  config,
+		StateDir:   state,
 		RuntimeDir: runtime,
 		SocketDir:  runtime,
 		AgentSock:  filepath.Join(runtime, "agent.sock"),
 		AgentLock:  filepath.Join(runtime, ".start.lock"),
-		LogFile:    filepath.Join(config, "sessions.log"),
+		LogFile:    filepath.Join(state, "sessions.log"),
 	}
 	if err := Ensure(l); err != nil {
 		t.Fatalf("Ensure: %v", err)
 	}
-	for _, dir := range []string{config, runtime} {
+	for _, dir := range []string{config, state, runtime} {
 		fi, err := os.Stat(dir)
 		if err != nil {
 			t.Fatalf("stat %s: %v", dir, err)

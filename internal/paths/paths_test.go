@@ -92,12 +92,29 @@ func TestResolveConfigDir(t *testing.T) {
 	if want := "/home/u/.config/sshakku"; got.ConfigDir != want {
 		t.Errorf("ConfigDir = %q, want %q", got.ConfigDir, want)
 	}
-	if want := "/home/u/.config/sshakku/sessions.log"; got.LogFile != want {
-		t.Errorf("LogFile = %q, want %q", got.LogFile, want)
-	}
 
 	got = Resolve(Env{Home: "/home/u", ConfigHome: "/cfg", UID: 1}, noProbe)
 	if want := "/cfg/sshakku"; got.ConfigDir != want {
 		t.Errorf("ConfigDir with XDG_CONFIG_HOME = %q, want %q", got.ConfigDir, want)
+	}
+}
+
+func TestResolveStateDir(t *testing.T) {
+	noProbe := func(string, bool) bool { return false }
+
+	got := Resolve(Env{Home: "/home/u", UID: 1}, noProbe)
+	if want := "/home/u/.local/state/sshakku"; got.StateDir != want {
+		t.Errorf("StateDir = %q, want %q", got.StateDir, want)
+	}
+	if want := "/home/u/.local/state/sshakku/sessions.log"; got.LogFile != want {
+		t.Errorf("LogFile = %q, want %q", got.LogFile, want)
+	}
+
+	got = Resolve(Env{Home: "/home/u", StateHome: "/state", UID: 1}, noProbe)
+	if want := "/state/sshakku"; got.StateDir != want {
+		t.Errorf("StateDir with XDG_STATE_HOME = %q, want %q", got.StateDir, want)
+	}
+	if want := "/state/sshakku/sessions.log"; got.LogFile != want {
+		t.Errorf("LogFile with XDG_STATE_HOME = %q, want %q", got.LogFile, want)
 	}
 }

@@ -1,6 +1,7 @@
 // Package paths computes and creates sshakku's per-user runtime layout: config
-// and the session log under the config dir, the agent socket in the per-user
-// tmpfs — always outside ~/.ssh, which is OpenSSH's domain.
+// under the XDG config dir, the session log under the XDG state dir, the agent
+// socket in the per-user tmpfs — always outside ~/.ssh, which is OpenSSH's
+// domain.
 package paths
 
 import (
@@ -15,6 +16,7 @@ const app = "sshakku"
 type Env struct {
 	Home       string // $HOME
 	ConfigHome string // $XDG_CONFIG_HOME (may be empty)
+	StateHome  string // $XDG_STATE_HOME (may be empty)
 	RuntimeDir string // $XDG_RUNTIME_DIR (may be empty)
 	CacheHome  string // $XDG_CACHE_HOME (may be empty)
 	UID        int
@@ -23,6 +25,7 @@ type Env struct {
 // Layout is the set of resolved paths.
 type Layout struct {
 	ConfigDir  string
+	StateDir   string
 	RuntimeDir string
 	SocketDir  string // RuntimeDir; a per-login token component is added later
 	AgentSock  string
@@ -41,16 +44,23 @@ func Resolve(env Env, probe func(path string, requireOwner bool) bool) Layout {
 	}
 	configDir := filepath.Join(configHome, app)
 
+	stateHome := env.StateHome
+	if stateHome == "" {
+		stateHome = filepath.Join(env.Home, ".local", "state")
+	}
+	stateDir := filepath.Join(stateHome, app)
+
 	runtimeDir := resolveRuntimeDir(env, probe)
 	socketDir := runtimeDir // a per-login token is inserted here in a later step
 
 	return Layout{
 		ConfigDir:  configDir,
+		StateDir:   stateDir,
 		RuntimeDir: runtimeDir,
 		SocketDir:  socketDir,
 		AgentSock:  filepath.Join(socketDir, "agent.sock"),
 		AgentLock:  filepath.Join(socketDir, ".start.lock"),
-		LogFile:    filepath.Join(configDir, "sessions.log"),
+		LogFile:    filepath.Join(stateDir, "sessions.log"),
 	}
 }
 

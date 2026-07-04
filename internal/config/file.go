@@ -4,8 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -30,16 +28,6 @@ type Settings struct {
 	GiveupTTL   time.Duration // 0 never expires the give-up record
 	NoGiveup    bool          // true disables give-up tracking entirely
 	Quiet       bool          // true suppresses the failure notice
-}
-
-// DefaultPath returns the standard config-file location,
-// $XDG_CONFIG_HOME/sshakku/config.toml (≈ ~/.config/sshakku/config.toml).
-func DefaultPath() (string, error) {
-	dir, err := os.UserConfigDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, "sshakku", "config.toml"), nil
 }
 
 // Load reads and decodes the TOML config at path. A missing file is not an
