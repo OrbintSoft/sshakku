@@ -20,6 +20,7 @@ func FromOS() Env {
 	return Env{
 		Home:       home,
 		ConfigHome: os.Getenv("XDG_CONFIG_HOME"),
+		StateHome:  os.Getenv("XDG_STATE_HOME"),
 		RuntimeDir: os.Getenv("XDG_RUNTIME_DIR"),
 		CacheHome:  os.Getenv("XDG_CACHE_HOME"),
 		UID:        os.Getuid(),
@@ -46,7 +47,7 @@ func ProbeDir(path string, requireOwner bool) bool {
 // (0600). Intermediate parents (e.g. ~/.config) are created with the process
 // umask but never re-permissioned — only our own leaf dirs are forced to 0700.
 func Ensure(l Layout) error {
-	for _, dir := range dedupe(l.ConfigDir, l.RuntimeDir, l.SocketDir) {
+	for _, dir := range dedupe(l.ConfigDir, l.StateDir, l.RuntimeDir, l.SocketDir) {
 		if err := ensureDir(dir); err != nil {
 			return err
 		}
