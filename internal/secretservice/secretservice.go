@@ -30,12 +30,12 @@ const (
 	// noPrompt is the sentinel object path the Secret Service returns in
 	// place of a real prompt path when no interactive confirmation is needed.
 	noPrompt = dbus.ObjectPath("/")
-
-	// promptTimeout bounds how long Unlock/Lock/CreateCollection/CreateItem
-	// wait for an interactive prompt to complete before dismissing it and
-	// treating the operation as failed.
-	promptTimeout = 30 * time.Second
 )
+
+// promptTimeout bounds how long Unlock/Lock/CreateCollection/CreateItem wait
+// for an interactive prompt to complete before dismissing it and treating the
+// operation as failed. A var, not a const, so tests can shorten it.
+var promptTimeout = 30 * time.Second
 
 // Secret is the D-Bus Secret Service "Secret" struct. sshakku only ever
 // negotiates the "plain" session algorithm, so Parameters is always empty and
