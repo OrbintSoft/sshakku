@@ -45,6 +45,9 @@ endif
 build:
 	$(GO) build -o $(GO_BIN) $(GO_MAIN)
 
+test:
+	$(GO) test -race ./...
+
 print-paths:
 	@echo "PREFIX: $(PREFIX)"
 	@echo "BINDIR: $(BINDIR)"
@@ -85,5 +88,5 @@ lint-go:
 	$(GO) vet ./...
 	golangci-lint run
 
-.PHONY: install uninstall build print-paths lint lint-sh lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go
+.PHONY: install uninstall build test print-paths lint lint-sh lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go
 .DEFAULT_GOAL := install

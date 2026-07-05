@@ -3,6 +3,8 @@ package keys
 import (
 	"fmt"
 	"strings"
+
+	"github.com/godbus/dbus/v5"
 )
 
 // fakeRunner answers Run from a per-binary handler table, so a test can stub
@@ -173,3 +175,74 @@ func (g *fakeGiveup) Clear(key string) error {
 type fakeNotifier struct{ msgs []string }
 
 func (n *fakeNotifier) Notify(message string) { n.msgs = append(n.msgs, message) }
+
+// fakeSecretServiceClient scripts SecretServiceClient for SecretServiceBackend
+// tests, recording the objects passed to Unlock/Lock so tests can assert the
+// unlock/lock bracket around a Lookup/Store.
+type fakeSecretServiceClient struct {
+	collection      dbus.ObjectPath
+	collectionErr   error
+	collectionCalls int
+
+	unlockErr error
+	unlocked  []dbus.ObjectPath
+
+	lockErr error
+	locked  []dbus.ObjectPath
+
+	items         []dbus.ObjectPath
+	searchErr     error
+	searchedAttrs map[string]string
+
+	secretsByItem map[dbus.ObjectPath]string
+	secretErr     error
+
+	createErr    error
+	createdItems []ssCreateCall
+}
+
+type ssCreateCall struct {
+	collection dbus.ObjectPath
+	label      string
+	attrs      map[string]string
+	passphrase string
+	replace    bool
+}
+
+func (f *fakeSecretServiceClient) Collection(string, string) (dbus.ObjectPath, error) {
+	f.collectionCalls++
+	if f.collectionErr != nil {
+		return "", f.collectionErr
+	}
+	return f.collection, nil
+}
+
+func (f *fakeSecretServiceClient) Unlock(objects ...dbus.ObjectPath) error {
+	f.unlocked = append(f.unlocked, objects...)
+	return f.unlockErr
+}
+
+func (f *fakeSecretServiceClient) Lock(objects ...dbus.ObjectPath) error {
+	f.locked = append(f.locked, objects...)
+	return f.lockErr
+}
+
+func (f *fakeSecretServiceClient) SearchItems(_ dbus.ObjectPath, attrs map[string]string) ([]dbus.ObjectPath, error) {
+	f.searchedAttrs = attrs
+	if f.searchErr != nil {
+		return nil, f.searchErr
+	}
+	return f.items, nil
+}
+
+func (f *fakeSecretServiceClient) GetSecret(item dbus.ObjectPath) (string, error) {
+	if f.secretErr != nil {
+		return "", f.secretErr
+	}
+	return f.secretsByItem[item], nil
+}
+
+func (f *fakeSecretServiceClient) CreateItem(collection dbus.ObjectPath, label string, attrs map[string]string, passphrase string, replace bool) error {
+	f.createdItems = append(f.createdItems, ssCreateCall{collection, label, attrs, passphrase, replace})
+	return f.createErr
+}

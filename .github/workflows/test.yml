@@ -1,0 +1,27 @@
+name: Tests
+
+on: [push]
+
+# The workflow only builds and runs the checked-out tree's test suite; no
+# write scopes.
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: make test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: stable
+
+      - name: Ensure dbus-daemon is available
+        run: command -v dbus-daemon || (sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends dbus)
+
+      - name: Run make test
+        run: make test

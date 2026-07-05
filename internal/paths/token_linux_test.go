@@ -5,9 +5,15 @@ package paths
 import (
 	"encoding/hex"
 	"testing"
+
+	"github.com/OrbintSoft/sshakku/internal/keyring"
 )
 
 func TestSocketToken(t *testing.T) {
+	if !keyring.Available() {
+		t.Skip("kernel user keyring isn't usable for a round trip in this environment (e.g. no session-keyring link — common in CI/containers without a PAM login)")
+	}
+
 	tok := SocketToken()
 	if tok == "" {
 		t.Skip("user keyring unavailable")

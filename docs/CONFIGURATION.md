@@ -48,6 +48,30 @@ the environment takes precedence, an exported variable overrides the file in
 either direction — for example `SSHAKKU_QUIET=0` re-enables the notice even when
 `quiet = true` in the file.
 
+## Where passphrases are stored
+
+Passphrases live in their own Secret Service collection, labelled and aliased
+`sshakku`, separate from the desktop's default wallet (`kdewallet` on KDE, the
+login keyring on GNOME). SSHakku talks to the Secret Service D-Bus API
+(`org.freedesktop.secrets`) directly — the same API KDE Wallet and GNOME
+Keyring both implement — rather than shelling out to `secret-tool`, so it can
+unlock its collection only for the seconds a lookup or store takes and lock it
+again immediately after, instead of relying on the desktop's fixed idle
+timeout to bound how long an unlocked entry is queryable by another process of
+the same user.
+
+Because the collection is separate from the desktop's default, it will not
+appear in wallet GUIs that only browse the default collection (e.g.
+KWalletManager on KDE, where `ksecretd` — the Secret Service backend — and
+`kwalletd6` — KWalletManager's own backend — are different daemons entirely).
+Inspect it with `secret-tool` if needed, e.g.
+`secret-tool search --unlock service SSH-Key-id_rsa`.
+
+Upgrading from a version that stored passphrases in the default collection: an
+already-stored key is not found in the new `sshakku` collection, so it
+re-prompts once on the first load after upgrading and is then stored under
+`sshakku` — no migration, and every load after that behaves as before.
+
 ## Key expiry and the wallet
 
 Keys are added to the agent with a lifetime (`SSHAKKU_KEY_LIFETIME`, default 8h).
