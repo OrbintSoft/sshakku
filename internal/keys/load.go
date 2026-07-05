@@ -67,6 +67,11 @@ type Config struct {
 	ServicePrefix string
 	// MaxAttempts bounds the retries per key; <1 uses 3.
 	MaxAttempts int
+	// WalletStore reports whether keyname's passphrase should be persisted to
+	// the secret store; nil stores every key (today's behaviour). An excluded
+	// key is still used normally in-session — only the persistent store is
+	// skipped.
+	WalletStore func(keyname string) bool
 }
 
 // Loader loads the user's keys into the agent, skipping any already present and
@@ -247,9 +252,14 @@ func (l Loader) failPrompt(keyname string, err error) {
 	l.notify("could not load key %s: %v", keyname, err)
 }
 
-// storePassphrase saves a freshly prompted passphrase after a successful add.
-// Storing is best-effort: the key is already in the agent if this fails.
+// storePassphrase saves a freshly prompted passphrase after a successful add,
+// unless the wallet-store policy excludes keyname. Storing is best-effort: the
+// key is already in the agent if this fails.
 func (l Loader) storePassphrase(service, keyname, passphrase string) {
+	if !walletStores(l.Config, keyname) {
+		l.logf("INFO", "wallet-store policy excludes %s, not storing", keyname)
+		return
+	}
 	if err := storeInWallet(l.Secret, service, keyname, passphrase); err != nil {
 		l.logf("ERROR", "store passphrase for %s: %v", keyname, err)
 		return

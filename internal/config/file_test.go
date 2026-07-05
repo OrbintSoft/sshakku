@@ -2,6 +2,7 @@ package config
 
 import (
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -56,7 +57,7 @@ func TestLoadMissingIsZeroNoError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("a missing file must not error, got %v", err)
 	}
-	if (f != File{}) {
+	if !reflect.DeepEqual(f, File{}) {
 		t.Errorf("a missing file must give the zero File, got %+v", f)
 	}
 }
@@ -76,7 +77,7 @@ func TestLoadMalformedErrors(t *testing.T) {
 	if err == nil {
 		t.Fatal("a syntax error must be reported")
 	}
-	if (f != File{}) {
+	if !reflect.DeepEqual(f, File{}) {
 		t.Errorf("a malformed file must give the zero File, got %+v", f)
 	}
 }
@@ -86,8 +87,8 @@ func TestResolveDefaults(t *testing.T) {
 	if len(errs) != 0 {
 		t.Fatalf("unexpected errors: %v", errs)
 	}
-	want := Settings{KeyLifetime: DefaultKeyLifetime, GiveupTTL: DefaultGiveupTTL}
-	if s != want {
+	want := Settings{KeyLifetime: DefaultKeyLifetime, GiveupTTL: DefaultGiveupTTL, WalletStoreMode: WalletStoreModeAll}
+	if !reflect.DeepEqual(s, want) {
 		t.Errorf("Resolve(empty) = %+v, want %+v", s, want)
 	}
 }
@@ -105,14 +106,99 @@ func TestResolveFileWins(t *testing.T) {
 		t.Fatalf("unexpected errors: %v", errs)
 	}
 	want := Settings{
-		KeyLifetime: 2 * time.Hour,
-		MaxAttempts: 5,
-		GiveupTTL:   30 * time.Minute,
-		NoGiveup:    true,
-		Quiet:       true,
+		KeyLifetime:     2 * time.Hour,
+		MaxAttempts:     5,
+		GiveupTTL:       30 * time.Minute,
+		NoGiveup:        true,
+		Quiet:           true,
+		WalletStoreMode: WalletStoreModeAll,
 	}
-	if s != want {
+	if !reflect.DeepEqual(s, want) {
 		t.Errorf("Resolve(file) = %+v, want %+v", s, want)
+	}
+}
+
+func TestResolveWalletStoreModeDefaultsToAll(t *testing.T) {
+	s, errs := Resolve(File{}, lookupFrom(nil))
+	if len(errs) != 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if s.WalletStoreMode != WalletStoreModeAll {
+		t.Errorf("WalletStoreMode = %q, want %q", s.WalletStoreMode, WalletStoreModeAll)
+	}
+}
+
+func TestResolveWalletStoreModeFromFile(t *testing.T) {
+	for _, mode := range []string{WalletStoreModeAll, WalletStoreModeInclude, WalletStoreModeExclude} {
+		file := File{WalletStoreMode: ptr(mode)}
+		s, errs := Resolve(file, lookupFrom(nil))
+		if len(errs) != 0 {
+			t.Fatalf("mode %q: unexpected errors: %v", mode, errs)
+		}
+		if s.WalletStoreMode != mode {
+			t.Errorf("mode %q: WalletStoreMode = %q", mode, s.WalletStoreMode)
+		}
+	}
+}
+
+func TestResolveWalletStoreModeInvalidFallsBackToAll(t *testing.T) {
+	file := File{WalletStoreMode: ptr("bogus")}
+	s, errs := Resolve(file, lookupFrom(nil))
+	if len(errs) == 0 {
+		t.Fatal("an invalid wallet_store_mode must be reported")
+	}
+	if s.WalletStoreMode != WalletStoreModeAll {
+		t.Errorf("WalletStoreMode = %q, want %q on an invalid value", s.WalletStoreMode, WalletStoreModeAll)
+	}
+}
+
+func TestResolveWalletStoreListsPassThrough(t *testing.T) {
+	file := File{
+		WalletStoreMode:    ptr(WalletStoreModeInclude),
+		WalletStoreInclude: []string{"id_rsa", "id_ed25519"},
+		WalletStoreExclude: []string{"id_ignored"},
+	}
+	s, _ := Resolve(file, lookupFrom(nil))
+	if !reflect.DeepEqual(s.WalletStoreInclude, []string{"id_rsa", "id_ed25519"}) {
+		t.Errorf("WalletStoreInclude = %v", s.WalletStoreInclude)
+	}
+	if !reflect.DeepEqual(s.WalletStoreExclude, []string{"id_ignored"}) {
+		t.Errorf("WalletStoreExclude = %v", s.WalletStoreExclude)
+	}
+}
+
+func TestStoresWalletAllModeStoresEverything(t *testing.T) {
+	s := Settings{WalletStoreMode: WalletStoreModeAll}
+	if !s.StoresWallet("anything") {
+		t.Error("mode all must store every key")
+	}
+}
+
+func TestStoresWalletIncludeModeConsultsOnlyInclude(t *testing.T) {
+	s := Settings{
+		WalletStoreMode:    WalletStoreModeInclude,
+		WalletStoreInclude: []string{"id_rsa"},
+		WalletStoreExclude: []string{"id_rsa"}, // must be ignored: mode is authoritative
+	}
+	if !s.StoresWallet("id_rsa") {
+		t.Error("id_rsa is in the include list, must store")
+	}
+	if s.StoresWallet("id_ed25519") {
+		t.Error("id_ed25519 is not in the include list, must not store")
+	}
+}
+
+func TestStoresWalletExcludeModeConsultsOnlyExclude(t *testing.T) {
+	s := Settings{
+		WalletStoreMode:    WalletStoreModeExclude,
+		WalletStoreInclude: []string{"id_ed25519"}, // must be ignored: mode is authoritative
+		WalletStoreExclude: []string{"id_rsa"},
+	}
+	if s.StoresWallet("id_rsa") {
+		t.Error("id_rsa is in the exclude list, must not store")
+	}
+	if !s.StoresWallet("id_ed25519") {
+		t.Error("id_ed25519 is not in the exclude list, must store")
 	}
 }
 

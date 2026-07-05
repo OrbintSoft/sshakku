@@ -310,16 +310,26 @@ honoured) before or during the phases. Each notes the related goal.
     -race ./...`) and a `test.yml` workflow so it actually runs on push.
 
 18. **Which keys' passphrases are stored in the wallet is configurable (goals 2,
-    7; open decision 13).** Independently of which keys are auto-loaded (decision
-    13), the config file selects the *wallet-store* set in one of two modes: *all
-    keys except an exclude-list*, or *only an include-list*. Default: store all
-    (convenience — once typed, a passphrase is never asked again). A
-    security-conscious user excludes sensitive keys so their passphrase is never
-    persisted: it is typed each time it is needed and kept in memory only. The
-    policy is consulted at **every** wallet write — the load-keys prompt-then-store
-    path and the askpass broker's miss-then-store fallback — so an excluded key is
-    still used but never saved. Realised with the config file in the configurability
-    phase; until then every successfully typed passphrase is stored.
+    7; open decision 13). ✅ Done.** `config.toml` gains three keys, config-file
+    only — no `SSHAKKU_*` twin, since the include/exclude lists don't fit a
+    single environment variable cleanly: `wallet_store_mode` (`"all"` default,
+    `"include"`, or `"exclude"`), `wallet_store_include`, and
+    `wallet_store_exclude`. The mode is authoritative, so the two lists never
+    conflict — `"include"` consults only `wallet_store_include` and
+    `"exclude"` consults only `wallet_store_exclude`; the other list, if
+    present, is simply not read. An unrecognised mode falls back to `"all"`
+    and is logged (`config.Settings.StoresWallet(keyname) bool`). The policy
+    is consulted at every wallet write: `keys.Config` gained a `WalletStore
+    func(keyname string) bool` predicate (nil stores everything, preserving
+    prior behaviour), checked by both `Loader.storePassphrase` (the load-keys
+    prompt-then-store path) and `Broker.storePassphrase` (the askpass
+    broker's miss-then-store fallback) before every `SecretBackend.Store`
+    call. An excluded key is still used normally in the session — only the
+    persistent store is skipped. Scoping this surfaced a real gap: the
+    askpass broker never loaded `config.toml` at all, so none of the
+    file-based settings — not just this one — reached it; `cmd/sshakku` now
+    shares one `loadSettings` helper between `load-keys` and the askpass
+    broker so both read the same config.
 
 19. **Command to forget stored passphrases (goals 2, 15). ✅ Done.** `sshakku
     forget <keyname>...` deletes one or more stored passphrases; `sshakku forget

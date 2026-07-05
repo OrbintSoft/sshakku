@@ -72,6 +72,35 @@ already-stored key is not found in the new `sshakku` collection, so it
 re-prompts once on the first load after upgrading and is then stored under
 `sshakku` — no migration, and every load after that behaves as before.
 
+## Choosing which keys' passphrases are stored
+
+By default every passphrase you type is stored in the wallet, so every key
+refills silently after it expires from the agent. `wallet_store_mode` in
+`config.toml` narrows that with an include or exclude list. Unlike every other
+setting, these three keys are config-file only — there is no `SSHAKKU_*`
+environment override, since a list of key names does not fit a single
+environment variable cleanly:
+
+```toml
+wallet_store_mode = "exclude"       # "all" (default), "include", or "exclude"
+wallet_store_include = ["id_rsa"]   # consulted only when mode = "include"
+wallet_store_exclude = ["id_work"]  # consulted only when mode = "exclude"
+```
+
+- `"all"` (the default) stores every key's passphrase.
+- `"include"` stores only the keys named in `wallet_store_include`; every
+  other key is still used normally in the session, but its passphrase is
+  never persisted, so it prompts again on the next expiry or login.
+- `"exclude"` stores every key except those named in `wallet_store_exclude`.
+
+The mode is authoritative: with `wallet_store_mode = "include"`,
+`wallet_store_exclude` is never read even if present in the file, and vice
+versa — the two lists never conflict. An unrecognised mode falls back to
+`"all"` and is logged. The policy applies wherever a passphrase is written to
+the wallet — the load-keys prompt-then-store path and the askpass broker's
+miss-then-store fallback — so an excluded key is never stored from either
+path.
+
 ## Forgetting stored passphrases
 
 `sshakku forget <keyname>...` deletes the stored passphrase for one or more

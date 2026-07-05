@@ -100,6 +100,10 @@ func looksLikeConfirmation(prompt string) bool {
 }
 
 func (b Broker) storePassphrase(service, keyname, passphrase string) {
+	if !walletStores(b.Config, keyname) {
+		b.logf("INFO", "askpass: wallet-store policy excludes %s, not storing", keyname)
+		return
+	}
 	if err := storeInWallet(b.Secret, service, keyname, passphrase); err != nil {
 		b.logf("ERROR", "askpass: store passphrase for %s: %v", keyname, err)
 		return
@@ -126,4 +130,13 @@ func servicePrefixOf(c Config) string {
 // loader and the broker write entries the same way.
 func storeInWallet(secret SecretBackend, service, keyname, passphrase string) error {
 	return secret.Store(service, "SSH Passphrase for "+keyname, passphrase)
+}
+
+// walletStores reports whether keyname should be persisted under c's
+// wallet-store policy; a nil WalletStore stores every key.
+func walletStores(c Config, keyname string) bool {
+	if c.WalletStore == nil {
+		return true
+	}
+	return c.WalletStore(keyname)
 }
