@@ -64,11 +64,15 @@ func (l fakeLister) Keys() ([]string, error) { return l.paths, l.err }
 
 // fakeSecret is a scripted SecretBackend that records every Store.
 type fakeSecret struct {
-	lookupPass  string
-	lookupFound bool
-	lookupErr   error
-	storeErr    error
-	stored      []storeCall
+	lookupPass   string
+	lookupFound  bool
+	lookupErr    error
+	storeErr     error
+	stored       []storeCall
+	deleteErr    error
+	deleted      []string
+	listServices []string
+	listErr      error
 }
 
 type storeCall struct{ service, label, passphrase string }
@@ -83,6 +87,18 @@ func (s *fakeSecret) Store(service, label, passphrase string) error {
 	}
 	s.stored = append(s.stored, storeCall{service, label, passphrase})
 	return nil
+}
+
+func (s *fakeSecret) Delete(service string) error {
+	if s.deleteErr != nil {
+		return s.deleteErr
+	}
+	s.deleted = append(s.deleted, service)
+	return nil
+}
+
+func (s *fakeSecret) List() ([]string, error) {
+	return s.listServices, s.listErr
 }
 
 // fakeKeyAdder records each add and returns scripted exit codes per call.
@@ -199,6 +215,15 @@ type fakeSecretServiceClient struct {
 
 	createErr    error
 	createdItems []ssCreateCall
+
+	itemsByCollection map[dbus.ObjectPath][]dbus.ObjectPath
+	itemsErr          error
+
+	attrsByItem map[dbus.ObjectPath]map[string]string
+	attrsErr    error
+
+	deleteItemErr error
+	deletedItems  []dbus.ObjectPath
 }
 
 type ssCreateCall struct {
@@ -245,4 +270,26 @@ func (f *fakeSecretServiceClient) GetSecret(item dbus.ObjectPath) (string, error
 func (f *fakeSecretServiceClient) CreateItem(collection dbus.ObjectPath, label string, attrs map[string]string, passphrase string, replace bool) error {
 	f.createdItems = append(f.createdItems, ssCreateCall{collection, label, attrs, passphrase, replace})
 	return f.createErr
+}
+
+func (f *fakeSecretServiceClient) Items(collection dbus.ObjectPath) ([]dbus.ObjectPath, error) {
+	if f.itemsErr != nil {
+		return nil, f.itemsErr
+	}
+	return f.itemsByCollection[collection], nil
+}
+
+func (f *fakeSecretServiceClient) ItemAttributes(item dbus.ObjectPath) (map[string]string, error) {
+	if f.attrsErr != nil {
+		return nil, f.attrsErr
+	}
+	return f.attrsByItem[item], nil
+}
+
+func (f *fakeSecretServiceClient) DeleteItem(item dbus.ObjectPath) error {
+	if f.deleteItemErr != nil {
+		return f.deleteItemErr
+	}
+	f.deletedItems = append(f.deletedItems, item)
+	return nil
 }
