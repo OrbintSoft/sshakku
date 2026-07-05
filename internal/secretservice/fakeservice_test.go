@@ -8,6 +8,10 @@ import (
 	"github.com/godbus/dbus/v5"
 )
 
+// propsIface is the standard D-Bus interface GetProperty calls land on;
+// fakeCollection and fakeItem answer it alongside their own interface.
+const propsIface = "org.freedesktop.DBus.Properties"
+
 // fakeService is a minimal in-memory Secret Service, exported over a private
 // D-Bus session bus, exercising Client against the real wire protocol rather
 // than a mocked Go interface. behavior controls how CreateCollection, Unlock,
@@ -54,6 +58,15 @@ func startFakeSecretService(t *testing.T, conn *dbus.Conn, behavior string) *fak
 	return svc
 }
 
+// getBehavior reads behavior under the lock, since tests may change it after
+// setup (e.g. to make only a later call dismiss/hang while earlier calls in
+// the same test complete cleanly).
+func (s *fakeService) getBehavior() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.behavior
+}
+
 func (s *fakeService) nextPath(prefix string) dbus.ObjectPath {
 	s.nextID++
 	return dbus.ObjectPath(fmt.Sprintf("%s/%d", prefix, s.nextID))
@@ -64,7 +77,7 @@ func (s *fakeService) nextPath(prefix string) dbus.ObjectPath {
 // for the "ok" case (e.g. the newly created collection or item path).
 func (s *fakeService) newPrompt(resultFn func() dbus.Variant) dbus.ObjectPath {
 	path := s.nextPath("/org/freedesktop/secrets/prompt")
-	p := &fakePrompt{conn: s.conn, path: path, behavior: s.behavior, resultFn: resultFn}
+	p := &fakePrompt{conn: s.conn, path: path, behavior: s.getBehavior(), resultFn: resultFn}
 	if err := s.conn.Export(p, path, promptIface); err != nil {
 		panic(fmt.Sprintf("export fake prompt: %v", err))
 	}
@@ -106,10 +119,13 @@ func (s *fakeService) CreateCollection(props map[string]dbus.Variant, alias stri
 		if err := s.conn.Export(col, path, collectionIface); err != nil {
 			panic(fmt.Sprintf("export fake collection: %v", err))
 		}
+		if err := s.conn.Export(col, path, propsIface); err != nil {
+			panic(fmt.Sprintf("export fake collection properties: %v", err))
+		}
 		return path
 	}
 
-	if s.behavior == "" {
+	if s.getBehavior() == "" {
 		return create(), noPrompt, nil
 	}
 	return noPrompt, s.newPrompt(func() dbus.Variant { return dbus.MakeVariant(create()) }), nil
@@ -124,7 +140,7 @@ func (s *fakeService) Lock(objects []dbus.ObjectPath) ([]dbus.ObjectPath, dbus.O
 }
 
 func (s *fakeService) unlockOrLock(objects []dbus.ObjectPath) ([]dbus.ObjectPath, dbus.ObjectPath, *dbus.Error) {
-	if s.behavior == "" {
+	if s.getBehavior() == "" {
 		return objects, noPrompt, nil
 	}
 	return nil, s.newPrompt(func() dbus.Variant { return dbus.MakeVariant(objects) }), nil
@@ -140,6 +156,21 @@ type fakeCollection struct {
 
 	mu    sync.Mutex
 	items map[dbus.ObjectPath]*fakeItem
+}
+
+// Get answers org.freedesktop.DBus.Properties.Get for the Items property, the
+// only one Client reads from a collection.
+func (c *fakeCollection) Get(iface, prop string) (dbus.Variant, *dbus.Error) {
+	if iface == collectionIface && prop == "Items" {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		items := make([]dbus.ObjectPath, 0, len(c.items))
+		for path := range c.items {
+			items = append(items, path)
+		}
+		return dbus.MakeVariant(items), nil
+	}
+	return dbus.Variant{}, dbus.MakeFailedError(fmt.Errorf("unknown property %s.%s", iface, prop))
 }
 
 func (c *fakeCollection) SearchItems(attrs map[string]string) ([]dbus.ObjectPath, *dbus.Error) {
@@ -173,15 +204,18 @@ func (c *fakeCollection) CreateItem(props map[string]dbus.Variant, secret Secret
 		}
 
 		path := c.svc.nextPath(string(c.path) + "/item")
-		item := &fakeItem{path: path, label: label, attrs: attrs, secret: append([]byte(nil), secret.Value...)}
+		item := &fakeItem{path: path, label: label, attrs: attrs, secret: append([]byte(nil), secret.Value...), col: c}
 		c.items[path] = item
 		if err := c.svc.conn.Export(item, path, itemIface); err != nil {
 			panic(fmt.Sprintf("export fake item: %v", err))
 		}
+		if err := c.svc.conn.Export(item, path, propsIface); err != nil {
+			panic(fmt.Sprintf("export fake item properties: %v", err))
+		}
 		return path
 	}
 
-	if c.svc.behavior == "" {
+	if c.svc.getBehavior() == "" {
 		return create(), noPrompt, nil
 	}
 	return noPrompt, c.svc.newPrompt(func() dbus.Variant { return dbus.MakeVariant(create()) }), nil
@@ -193,10 +227,37 @@ type fakeItem struct {
 	label  string
 	attrs  map[string]string
 	secret []byte
+	col    *fakeCollection
 }
 
 func (it *fakeItem) GetSecret(session dbus.ObjectPath) (Secret, *dbus.Error) {
 	return Secret{Session: session, Value: append([]byte(nil), it.secret...), ContentType: "text/plain"}, nil
+}
+
+// Get answers org.freedesktop.DBus.Properties.Get for the Attributes
+// property, the only one Client reads from an item.
+func (it *fakeItem) Get(iface, prop string) (dbus.Variant, *dbus.Error) {
+	if iface == itemIface && prop == "Attributes" {
+		return dbus.MakeVariant(it.attrs), nil
+	}
+	return dbus.Variant{}, dbus.MakeFailedError(fmt.Errorf("unknown property %s.%s", iface, prop))
+}
+
+// Delete removes the item from its collection, following the same
+// immediate-vs-prompt-mediated completion rule as CreateItem: a dismissed or
+// hung prompt leaves the item in place, since deletion was never confirmed.
+func (it *fakeItem) Delete() (dbus.ObjectPath, *dbus.Error) {
+	remove := func() dbus.Variant {
+		it.col.mu.Lock()
+		delete(it.col.items, it.path)
+		it.col.mu.Unlock()
+		return dbus.MakeVariant("")
+	}
+	if it.col.svc.getBehavior() == "" {
+		remove()
+		return noPrompt, nil
+	}
+	return it.col.svc.newPrompt(remove), nil
 }
 
 // fakePrompt drives the async Prompt/Completed dance the client must

@@ -22,6 +22,8 @@ func TestRun(t *testing.T) {
 		{"help flag", []string{"--help"}, 0},
 		{"unknown command", []string{"bogus"}, 2},
 		{"doctor unknown flag", []string{"doctor", "--bogus"}, 2},
+		{"forget no args", []string{"forget"}, 2},
+		{"forget --all with names", []string{"forget", "--all", "id_rsa"}, 2},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

@@ -6,6 +6,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -40,6 +41,7 @@ commands:
   load-keys      add the user's ssh keys to the agent (interactive sessions)
   askpass-env    print exports routing ssh's askpass through sshakku (GUI only)
   doctor         report the ssh-agent situation; --fix applies the self-heal
+  forget         delete stored passphrases: <keyname>... or --all
   help           show this help
 `
 
@@ -71,6 +73,8 @@ func run(stdout, stderr io.Writer, args []string) int {
 		return askpassEnv(stdout, stderr)
 	case "doctor":
 		return doctor(stdout, stderr, args[1:])
+	case "forget":
+		return forget(stdout, stderr, args[1:])
 	case "help", "-h", "--help":
 		_, _ = fmt.Fprint(stdout, usage)
 		return 0
@@ -431,6 +435,68 @@ func gatherReport(env paths.Env, layout paths.Layout) diagnose.Report {
 		LogFile:   layout.LogFile,
 		OurUID:    env.UID,
 	}, agent.Inspector{}, agent.SocketProber{}, diagnose.ProcfsAncestry{})
+}
+
+// forget deletes stored passphrases: either the named keys, or every entry
+// sshakku manages with --all. Argument validation happens before any secret
+// backend is opened, so a usage error never touches the D-Bus session bus.
+func forget(stdout, stderr io.Writer, args []string) int {
+	all := false
+	var names []string
+	for _, a := range args {
+		if a == "--all" {
+			all = true
+			continue
+		}
+		names = append(names, a)
+	}
+	switch {
+	case all && len(names) > 0:
+		_, _ = fmt.Fprintln(stderr, "sshakku: forget: --all cannot be combined with key names")
+		return 2
+	case !all && len(names) == 0:
+		_, _ = fmt.Fprintln(stderr, "sshakku: forget: specify one or more key names, or --all")
+		return 2
+	}
+
+	log := sessionlog.New(paths.Resolve(paths.FromOS(), paths.ProbeDir).LogFile)
+	secret, closeSecret := newSecretBackend(currentUser(), log)
+	defer closeSecret()
+
+	var services []string
+	if all {
+		list, err := secret.List()
+		if err != nil {
+			if errors.Is(err, keys.ErrListUnsupported) {
+				_, _ = fmt.Fprintln(stderr, "sshakku: forget --all needs the native Secret Service backend; name keys explicitly instead")
+			} else {
+				_, _ = fmt.Fprintf(stderr, "sshakku: forget: %v\n", err)
+			}
+			return 1
+		}
+		services = list
+	} else {
+		services = make([]string, len(names))
+		for i, name := range names {
+			services[i] = keys.DefaultServicePrefix + "-" + name
+		}
+	}
+
+	fail := false
+	for _, service := range services {
+		if err := secret.Delete(service); err != nil {
+			_, _ = fmt.Fprintf(stderr, "sshakku: forget %s: %v\n", service, err)
+			_ = log.Log("ERROR", fmt.Sprintf("forget %s: %v", service, err))
+			fail = true
+			continue
+		}
+		_, _ = fmt.Fprintf(stdout, "forgot %s\n", service)
+		_ = log.Log("INFO", fmt.Sprintf("forgot %s", service))
+	}
+	if fail {
+		return 1
+	}
+	return 0
 }
 
 // currentUser returns the login name for the secret-store "username" attribute,
