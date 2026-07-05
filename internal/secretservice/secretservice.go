@@ -24,6 +24,7 @@ const (
 	sessionIface    = "org.freedesktop.Secret.Session"
 
 	collectionLabelProp = "org.freedesktop.Secret.Collection.Label"
+	collectionItemsProp = "org.freedesktop.Secret.Collection.Items"
 	itemLabelProp       = "org.freedesktop.Secret.Item.Label"
 	itemAttributesProp  = "org.freedesktop.Secret.Item.Attributes"
 
@@ -186,6 +187,51 @@ func (c *Client) CreateItem(collection dbus.ObjectPath, label string, attrs map[
 	call := obj.Call(collectionIface+".CreateItem", 0, props, secret, replace)
 	if err := call.Store(&item, &prompt); err != nil {
 		return fmt.Errorf("secret service: create item %q: %w", label, err)
+	}
+	if prompt == noPrompt {
+		return nil
+	}
+	_, err := c.completePrompt(prompt)
+	return err
+}
+
+// Items returns every item currently in collection, regardless of attributes
+// — unlike SearchItems, which only returns items matching a given filter.
+func (c *Client) Items(collection dbus.ObjectPath) ([]dbus.ObjectPath, error) {
+	obj := c.conn.Object(busName, collection)
+	v, err := obj.GetProperty(collectionItemsProp)
+	if err != nil {
+		return nil, fmt.Errorf("secret service: collection items: %w", err)
+	}
+	items, ok := v.Value().([]dbus.ObjectPath)
+	if !ok {
+		return nil, fmt.Errorf("secret service: collection items: unexpected property type %T", v.Value())
+	}
+	return items, nil
+}
+
+// ItemAttributes returns the lookup attributes (e.g. "service", "username")
+// item was stored under.
+func (c *Client) ItemAttributes(item dbus.ObjectPath) (map[string]string, error) {
+	obj := c.conn.Object(busName, item)
+	v, err := obj.GetProperty(itemAttributesProp)
+	if err != nil {
+		return nil, fmt.Errorf("secret service: item attributes: %w", err)
+	}
+	attrs, ok := v.Value().(map[string]string)
+	if !ok {
+		return nil, fmt.Errorf("secret service: item attributes: unexpected property type %T", v.Value())
+	}
+	return attrs, nil
+}
+
+// DeleteItem removes item from its collection, completing an interactive
+// prompt if the Secret Service requires one.
+func (c *Client) DeleteItem(item dbus.ObjectPath) error {
+	var prompt dbus.ObjectPath
+	obj := c.conn.Object(busName, item)
+	if err := obj.Call(itemIface+".Delete", 0).Store(&prompt); err != nil {
+		return fmt.Errorf("secret service: delete item: %w", err)
 	}
 	if prompt == noPrompt {
 		return nil

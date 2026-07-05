@@ -192,3 +192,111 @@ func TestClientSearchCreateGetSecret(t *testing.T) {
 		}
 	})
 }
+
+func TestClientItemsAttributesDelete(t *testing.T) {
+	t.Run("Items and ItemAttributes reflect what was created", func(t *testing.T) {
+		client, _ := newTestClient(t, "")
+		col, err := client.Collection("sshakku", "sshakku")
+		if err != nil {
+			t.Fatalf("Collection: %v", err)
+		}
+
+		if items, err := client.Items(col); err != nil || len(items) != 0 {
+			t.Fatalf("Items on empty collection = %v, %v, want none, no error", items, err)
+		}
+
+		attrs := map[string]string{"service": "SSH-Key-id_rsa", "username": "alice"}
+		if err := client.CreateItem(col, "SSH Passphrase for id_rsa", attrs, "hunter2", true); err != nil {
+			t.Fatalf("CreateItem: %v", err)
+		}
+
+		items, err := client.Items(col)
+		if err != nil {
+			t.Fatalf("Items: %v", err)
+		}
+		if len(items) != 1 {
+			t.Fatalf("Items = %v, want exactly one", items)
+		}
+
+		got, err := client.ItemAttributes(items[0])
+		if err != nil {
+			t.Fatalf("ItemAttributes: %v", err)
+		}
+		if got["service"] != attrs["service"] || got["username"] != attrs["username"] {
+			t.Fatalf("ItemAttributes = %v, want %v", got, attrs)
+		}
+	})
+
+	t.Run("DeleteItem removes the item immediately when no prompt is needed", func(t *testing.T) {
+		client, _ := newTestClient(t, "")
+		col, err := client.Collection("sshakku", "sshakku")
+		if err != nil {
+			t.Fatalf("Collection: %v", err)
+		}
+		if err := client.CreateItem(col, "x", map[string]string{"service": "s"}, "p", true); err != nil {
+			t.Fatalf("CreateItem: %v", err)
+		}
+		items, err := client.Items(col)
+		if err != nil || len(items) != 1 {
+			t.Fatalf("Items = %v, %v, want exactly one", items, err)
+		}
+
+		if err := client.DeleteItem(items[0]); err != nil {
+			t.Fatalf("DeleteItem: %v", err)
+		}
+		items, err = client.Items(col)
+		if err != nil || len(items) != 0 {
+			t.Fatalf("Items after DeleteItem = %v, %v, want none", items, err)
+		}
+	})
+
+	t.Run("DeleteItem completes via a completed prompt", func(t *testing.T) {
+		client, _ := newTestClient(t, "ok")
+		col, err := client.Collection("sshakku", "sshakku")
+		if err != nil {
+			t.Fatalf("Collection: %v", err)
+		}
+		if err := client.CreateItem(col, "x", map[string]string{"service": "s"}, "p", true); err != nil {
+			t.Fatalf("CreateItem: %v", err)
+		}
+		items, err := client.Items(col)
+		if err != nil || len(items) != 1 {
+			t.Fatalf("Items = %v, %v, want exactly one", items, err)
+		}
+
+		if err := client.DeleteItem(items[0]); err != nil {
+			t.Fatalf("DeleteItem: %v", err)
+		}
+		items, err = client.Items(col)
+		if err != nil || len(items) != 0 {
+			t.Fatalf("Items after DeleteItem = %v, %v, want none", items, err)
+		}
+	})
+
+	t.Run("a dismissed prompt leaves the item in place and is an error", func(t *testing.T) {
+		client, svc := newTestClient(t, "")
+		col, err := client.Collection("sshakku", "sshakku")
+		if err != nil {
+			t.Fatalf("Collection: %v", err)
+		}
+		if err := client.CreateItem(col, "x", map[string]string{"service": "s"}, "p", true); err != nil {
+			t.Fatalf("CreateItem: %v", err)
+		}
+		items, err := client.Items(col)
+		if err != nil || len(items) != 1 {
+			t.Fatalf("Items = %v, %v, want exactly one", items, err)
+		}
+
+		svc.mu.Lock()
+		svc.behavior = "dismiss"
+		svc.mu.Unlock()
+
+		if err := client.DeleteItem(items[0]); err == nil {
+			t.Fatal("expected an error for a dismissed prompt")
+		}
+		items, err = client.Items(col)
+		if err != nil || len(items) != 1 {
+			t.Fatalf("Items after dismissed DeleteItem = %v, %v, want still one", items, err)
+		}
+	})
+}
