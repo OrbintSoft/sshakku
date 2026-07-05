@@ -335,6 +335,37 @@ honoured) before or during the phases. Each notes the related goal.
     D-Bus `Item.Delete` call succeeded — investigate before relying on
     `secret-tool clear` as the implementation.
 
+20. **Three-tier container/VM test strategy (goal 16; open decision 9).**
+    Prompted by a real incident: the kernel user keyring behaves differently
+    without a PAM-established session (Add succeeds, a same-process Read is
+    denied — see the `internal/keyring`/`internal/paths` fix that shipped
+    alongside open decision 17), which a plain headless container missed
+    until it was hit in CI. Bare container matrices are necessary but not
+    sufficient; real desktop-session behaviour (wallet prompts, PAM-linked
+    keyrings, a real login) needs a heavier tier. Three tiers, increasing in
+    fidelity and cost:
+    1. **Headless, multi-distro containers** (Gentoo/OpenRC, systemd
+       distros, …), no desktop: the agent five-state lifecycle (Phase 1.5),
+       Go unit/integration tests (already how `internal/secretservice`'s
+       fake-D-Bus-peer suite and `internal/agent` run). Cheap and fast —
+       every push, in the existing `test.yml` workflow or one like it.
+    2. **Containers with a real desktop secret stack** (`ksecretd` +
+       `kwalletd6` or GNOME Keyring, `kdialog`, a headless display via Xvfb
+       or weston) exercising the actual wallet prompt/unlock flow end to
+       end, not the fake server. Heavier and more brittle.
+    3. **Vagrant, a full Gentoo/OpenRC/KDE box** doing a real login (SDDM,
+       PAM, an actual user session) for the truest end-to-end check —
+       reproducing, automatically and repeatably, the same kind of live
+       install today only done by hand on the user's own PC — the slowest
+       and most maintenance-heavy tier.
+    **Decided:** cost is not a blocker — thoroughness wins. Tiers 2 and 3 are
+    too heavy/flaky for every push, so they run as **manually-triggered CI
+    workflows** (`workflow_dispatch`), not on every push like tier 1's
+    `test.yml`; run on demand or before a release rather than gating every
+    commit. Detailed sub-steps (which distros, which container images, the
+    Vagrant box definition) are written when the phase that needs them is
+    reached — this decision fixes the shape, not the implementation.
+
 ---
 
 ## Phases
@@ -490,7 +521,8 @@ Sub-phases (detailed steps written when we start each one):
   Phase 2 note): this lifecycle logic moves into the Go core rather than staying in
   bash. → goals 5, 6, 8; threats D1, D5.
 - **1.5 — Shell test harness (rule 12).** `bats` unit tests + container integration
-  tests covering the plumbing regression scenarios below. `bats` is a new file
+  tests covering the plumbing regression scenarios below — tier 1 of open
+  decision 20 (headless multi-distro containers). `bats` is a new file
   type — evaluate a linter and record the decision (including a deliberate "no
   linter") here. → goal 16.
 
@@ -612,7 +644,9 @@ macOS as a wide port, never trust Apple; then Windows last as the most divergent
 ### Phase 6 — Full test matrix
 
 Extend CI to macOS and Windows runners and complete the cross-platform test
-matrix. → goal 16; open decision 9.
+matrix. Also where tiers 2 and 3 of open decision 20 (real-desktop-secret-stack
+containers; the Vagrant Gentoo/OpenRC/KDE box) get their manually-triggered
+CI workflows. → goal 16; open decisions 9, 20.
 
 ### Phase 7 — CI review & dependency hardening
 
