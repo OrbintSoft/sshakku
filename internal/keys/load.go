@@ -72,6 +72,11 @@ type Config struct {
 	// key is still used normally in-session — only the persistent store is
 	// skipped.
 	WalletStore func(keyname string) bool
+	// AutoLoad reports whether keyname should be proactively added to the
+	// agent at shell-init; nil loads every key (today's behaviour). An
+	// excluded key is simply never considered here — it can still be added on
+	// demand via the askpass broker, which does not consult this policy.
+	AutoLoad func(keyname string) bool
 }
 
 // Loader loads the user's keys into the agent, skipping any already present and
@@ -114,6 +119,11 @@ func (l Loader) LoadKeys() error {
 // loadOne loads a single key unless its fingerprint is already in the agent.
 func (l Loader) loadOne(keyfile string, loaded map[string]bool) {
 	keyname := filepath.Base(keyfile)
+
+	if !autoLoads(l.Config, keyname) {
+		l.logf("INFO", "auto-load policy excludes %s, skipping", keyname)
+		return
+	}
 
 	fp, err := FileFingerprint(l.Runner, keyfile)
 	if err != nil {
@@ -295,6 +305,15 @@ func (l Loader) clearGiveup(keyname string) {
 
 func (l Loader) servicePrefix() string {
 	return servicePrefixOf(l.Config)
+}
+
+// autoLoads reports whether keyname should be proactively added to the agent
+// under c's auto-load policy; a nil AutoLoad loads every key.
+func autoLoads(c Config, keyname string) bool {
+	if c.AutoLoad == nil {
+		return true
+	}
+	return c.AutoLoad(keyname)
 }
 
 func (l Loader) logf(level, format string, args ...any) {
