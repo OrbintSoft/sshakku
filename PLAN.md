@@ -278,23 +278,36 @@ honoured) before or during the phases. Each notes the related goal.
     mandate (goal 8, Phase 3).
 
 17. **Scoped, explicit-lock unlock window per collection (goals 2, 11; open
-    decision 7; threat I6).** Give sshakku its own Secret Service collection,
-    separate from the desktop's default (`kdewallet` / login keyring), instead of
-    sharing it. Rather than relying on a fixed idle timeout to bound the unlocked
-    window (today: 5 min, set by hand in `kwalletrc`), have sshakku unlock only its
-    own collection right before a lookup, read the passphrase, and lock it again
-    immediately after `ssh-add` succeeds — collapsing the exposure window from
-    minutes to the seconds the fetch actually takes (window configurable as a
-    fallback safety net, not the primary bound). `Service.Unlock` /
-    `Collection.Lock` are part of the generic freedesktop Secret Service D-Bus
-    spec, so this works identically on KWallet and GNOME Keyring, not a
-    KDE-specific trick. Catch: `secret-tool` only ever targets the default
-    collection and has no lock/unlock verbs, so this needs a native D-Bus Secret
-    Service client in the Go core rather than shelling out — a bigger change to
-    `SecretBackend` / `SecretToolBackend` (`internal/keys/secret.go`), not a config
-    tweak. Does **not** by itself close threat I6 (`docs/THREAT-MODEL.md`: any
-    process of the same UID can still query the collection while it happens to be
-    unlocked) — it only shrinks the window during which that exposure exists.
+    decision 7; threat I6). ✅ Done.** Gave sshakku its own Secret Service
+    collection (label and alias `sshakku`), separate from the desktop's default
+    (`kdewallet` / login keyring). Rather than relying on the desktop's fixed idle
+    timeout to bound the unlocked window, sshakku unlocks only its own collection
+    right before a lookup or store and locks it again immediately after —
+    collapsing the exposure window from minutes to the seconds the operation
+    actually takes. `secret-tool` only ever targets the default collection and has
+    no lock/unlock verbs, so this needed a native D-Bus Secret Service client
+    (`internal/secretservice`, using `github.com/godbus/dbus/v5`) rather than
+    shelling out; `SecretServiceBackend` (`internal/keys/secret.go`) wraps it
+    behind the existing `SecretBackend` interface and is now the default in
+    `cmd/sshakku`, falling back to `SecretToolBackend` if the D-Bus session bus is
+    unreachable (the same underlying dependency secret-tool always had, so no new
+    failure mode). Verified live against the user's `ksecretd`: `CreateCollection`
+    with a custom alias works, and `Unlock` can complete either synchronously or
+    via the async `Prompt`/`Completed` flow depending on session state, so the
+    client handles both — confirmed by a white-box test suite
+    (`internal/secretservice`) exporting a fake Secret Service over a private
+    `dbus-daemon` session bus, reproducing every completion mode observed live.
+    Does **not** close threat I6 (`docs/THREAT-MODEL.md`: any process of the same
+    UID can still query the collection while it happens to be unlocked, and a
+    process killed between unlock and the deferred lock leaves it open until the
+    desktop's idle timeout) — it only shrinks the window during which that
+    exposure exists. **No migration** from the old default-collection storage: an
+    already-stored key re-prompts once on the first load after upgrading, then
+    lands in `sshakku` and behaves normally — simpler than a dual-collection read
+    fallback or a copy/delete migration, for a single-user deployment today.
+    **Follow-up (rule 2, noticed in passing):** the Go test suite had no CI
+    entrypoint (`linting.yml` only ran `make lint`); added `make test` (`go test
+    -race ./...`) and a `test.yml` workflow so it actually runs on push.
 
 18. **Which keys' passphrases are stored in the wallet is configurable (goals 2,
     7; open decision 13).** Independently of which keys are auto-loaded (decision
