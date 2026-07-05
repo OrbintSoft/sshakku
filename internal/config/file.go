@@ -13,12 +13,20 @@ import (
 // File mirrors the on-disk TOML config. Each field is a pointer so an absent key
 // stays nil, letting Resolve tell "unset in the file" from "set to the zero
 // value" and apply the precedence environment variable > file > default.
+//
+// The wallet_store_* keys have no environment-variable counterpart: they are
+// config-file only, since the include/exclude lists don't fit a single
+// environment variable cleanly.
 type File struct {
 	KeyLifetime *string `toml:"key_lifetime"`
 	MaxAttempts *int    `toml:"max_attempts"`
 	GiveupTTL   *string `toml:"giveup_ttl"`
 	NoGiveup    *bool   `toml:"no_giveup"`
 	Quiet       *bool   `toml:"quiet"`
+
+	WalletStoreMode    *string  `toml:"wallet_store_mode"`
+	WalletStoreInclude []string `toml:"wallet_store_include"`
+	WalletStoreExclude []string `toml:"wallet_store_exclude"`
 }
 
 // Settings is the configuration resolved from environment, file, and defaults.
@@ -28,6 +36,43 @@ type Settings struct {
 	GiveupTTL   time.Duration // 0 never expires the give-up record
 	NoGiveup    bool          // true disables give-up tracking entirely
 	Quiet       bool          // true suppresses the failure notice
+
+	// WalletStoreMode is one of "all", "include", or "exclude"; see StoresWallet.
+	WalletStoreMode    string
+	WalletStoreInclude []string // key names consulted only when mode is "include"
+	WalletStoreExclude []string // key names consulted only when mode is "exclude"
+}
+
+// Wallet-store policy modes for Settings.WalletStoreMode.
+const (
+	WalletStoreModeAll     = "all"
+	WalletStoreModeInclude = "include"
+	WalletStoreModeExclude = "exclude"
+)
+
+// StoresWallet reports whether keyname's passphrase should be persisted to the
+// secret store under the resolved wallet-store policy. Mode is authoritative, so
+// include and exclude never conflict: "include" consults only WalletStoreInclude
+// and "exclude" consults only WalletStoreExclude; the other list, if set, is
+// ignored. Any other mode (including the default "all") stores every key.
+func (s Settings) StoresWallet(keyname string) bool {
+	switch s.WalletStoreMode {
+	case WalletStoreModeInclude:
+		return containsKey(s.WalletStoreInclude, keyname)
+	case WalletStoreModeExclude:
+		return !containsKey(s.WalletStoreExclude, keyname)
+	default:
+		return true
+	}
+}
+
+func containsKey(keys []string, keyname string) bool {
+	for _, k := range keys {
+		if k == keyname {
+			return true
+		}
+	}
+	return false
 }
 
 // Load reads and decodes the TOML config at path. A missing file is not an
@@ -77,7 +122,30 @@ func Resolve(file File, lookup func(string) (string, bool)) (Settings, []error) 
 	s.NoGiveup = resolveBool(lookup, "SSHAKKU_NO_GIVEUP", file.NoGiveup)
 	s.Quiet = resolveBool(lookup, "SSHAKKU_QUIET", file.Quiet)
 
+	mode, err := resolveWalletStoreMode(file.WalletStoreMode)
+	if err != nil {
+		errs = append(errs, err)
+	}
+	s.WalletStoreMode = mode
+	s.WalletStoreInclude = file.WalletStoreInclude
+	s.WalletStoreExclude = file.WalletStoreExclude
+
 	return s, errs
+}
+
+// resolveWalletStoreMode is config-file only (no environment override, per
+// File's doc comment). An absent or empty value defaults to "all"; an
+// unrecognised value falls back to "all" too, reported as an error to log.
+func resolveWalletStoreMode(fileVal *string) (string, error) {
+	if fileVal == nil || *fileVal == "" {
+		return WalletStoreModeAll, nil
+	}
+	switch *fileVal {
+	case WalletStoreModeAll, WalletStoreModeInclude, WalletStoreModeExclude:
+		return *fileVal, nil
+	default:
+		return WalletStoreModeAll, fmt.Errorf("invalid wallet_store_mode %q, using %q", *fileVal, WalletStoreModeAll)
+	}
 }
 
 // coalesce returns the environment value when the variable is set, else the file
