@@ -3,6 +3,8 @@ package keys
 import (
 	"fmt"
 	"strings"
+
+	"github.com/godbus/dbus/v5"
 )
 
 // SecretBackend stores and retrieves a key's passphrase in the OS secret store.
@@ -67,3 +69,72 @@ func (b SecretToolBackend) Store(service, label, passphrase string) error {
 }
 
 var _ SecretBackend = SecretToolBackend{}
+
+const (
+	secretServiceAlias = "sshakku"
+	secretServiceLabel = "sshakku"
+)
+
+// SecretServiceClient is the subset of the freedesktop Secret Service D-Bus
+// API SecretServiceBackend needs; *secretservice.Client implements it. Kept
+// as an interface here so the backend is unit-testable without a real D-Bus
+// session bus.
+type SecretServiceClient interface {
+	// Collection resolves (creating if necessary) the object path of the
+	// collection identified by alias.
+	Collection(alias, label string) (dbus.ObjectPath, error)
+	Unlock(objects ...dbus.ObjectPath) error
+	Lock(objects ...dbus.ObjectPath) error
+	SearchItems(collection dbus.ObjectPath, attrs map[string]string) ([]dbus.ObjectPath, error)
+	GetSecret(item dbus.ObjectPath) (string, error)
+	CreateItem(collection dbus.ObjectPath, label string, attrs map[string]string, passphrase string, replace bool) error
+}
+
+// SecretServiceBackend keeps passphrases in a dedicated Secret Service
+// collection, unlocking it only for the duration of each Lookup/Store and
+// locking it again immediately after — instead of relying on the desktop's
+// fixed idle timeout to bound the exposure window. Unlike SecretToolBackend,
+// which only ever targets the default collection and has no lock/unlock
+// verbs, this talks to the Secret Service D-Bus API directly.
+type SecretServiceBackend struct {
+	Client SecretServiceClient
+	// User is the "username" attribute, constant for the login session.
+	User string
+
+	collection dbus.ObjectPath
+}
+
+func (b *SecretServiceBackend) resolveCollection() (dbus.ObjectPath, error) {
+	if b.collection == "" {
+		col, err := b.Client.Collection(secretServiceAlias, secretServiceLabel)
+		if err != nil {
+			return "", err
+		}
+		b.collection = col
+	}
+	return b.collection, nil
+}
+
+// Lookup unlocks the sshakku collection, searches it for service, reads the
+// secret if found, and re-locks the collection before returning — on a hit, a
+// miss, or an error alike.
+func (b *SecretServiceBackend) Lookup(service string) (string, bool, error) {
+	col, err := b.resolveCollection()
+	if err != nil {
+		return "", false, err
+	}
+	if err := b.Client.Unlock(col); err != nil {
+		return "", false, err
+	}
+	defer func() { _ = b.Client.Lock(col) }()
+
+	items, err := b.Client.SearchItems(col, map[string]string{"service": service, "username": b.User})
+	if err != nil || len(items) == 0 {
+		return "", false, err
+	}
+	passphrase, err := b.Client.GetSecret(items[0])
+	if err != nil {
+		return "", false, err
+	}
+	return passphrase, true, nil
+}
