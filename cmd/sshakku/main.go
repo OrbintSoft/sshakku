@@ -294,6 +294,7 @@ func loadKeys(stderr io.Writer) int {
 			GUI:         keys.GUIAvailable(guiEnv, runner, prompter),
 			MaxAttempts: settings.MaxAttempts,
 			WalletStore: settings.StoresWallet,
+			AutoLoad:    settings.AutoLoads,
 		},
 	}
 	if err := loader.LoadKeys(); err != nil {

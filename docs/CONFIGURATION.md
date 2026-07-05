@@ -101,6 +101,34 @@ the wallet — the load-keys prompt-then-store path and the askpass broker's
 miss-then-store fallback — so an excluded key is never stored from either
 path.
 
+## Choosing which keys are auto-loaded
+
+By default every key found in `~/.ssh` is proactively added to the agent at
+shell-init. `auto_load_mode` in `config.toml` narrows that with an include or
+exclude list, in the same shape as `wallet_store_mode` above and, like it,
+config-file only:
+
+```toml
+auto_load_mode = "exclude"       # "all" (default), "include", or "exclude"
+auto_load_include = ["id_rsa"]   # consulted only when mode = "include"
+auto_load_exclude = ["id_work"]  # consulted only when mode = "exclude"
+```
+
+- `"all"` (the default) auto-loads every key.
+- `"include"` auto-loads only the keys named in `auto_load_include`.
+- `"exclude"` auto-loads every key except those named in `auto_load_exclude`.
+
+The mode is authoritative, exactly as for `wallet_store_mode`: the two lists
+never conflict, and an unrecognised mode falls back to `"all"` and is logged.
+This policy is independent from `wallet_store_mode` — it only controls
+whether a key is *proactively* added at shell-init. A key excluded from
+auto-load is not added to the agent automatically, but if you use it directly
+(e.g. `ssh -i ~/.ssh/id_work`), the askpass broker still fetches or prompts
+for its passphrase normally; narrowing auto-load shrinks the agent's blast
+radius (fewer keys sitting in the agent for other same-user processes or
+agent forwarding to reach), without affecting whether that key's passphrase
+is stored.
+
 ## Forgetting stored passphrases
 
 `sshakku forget <keyname>...` deletes the stored passphrase for one or more

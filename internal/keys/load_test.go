@@ -108,6 +108,31 @@ func TestLoadKeysPromptThenStoreExcludedByPolicy(t *testing.T) {
 	}
 }
 
+func TestLoadKeysAutoLoadExcludedByPolicyNeverAdded(t *testing.T) {
+	// ssh-keygen is deliberately not registered: an excluded key must never
+	// reach the fingerprint lookup, only the agent snapshot (ssh-add -l).
+	r := newFakeRunner().on("ssh-add", agentEmpty())
+	adder := &fakeKeyAdder{}
+	log := &fakeLogger{}
+	l := Loader{
+		Keys:   fakeLister{paths: []string{"/ssh/id_rsa"}},
+		Runner: r, Adder: adder, Log: log,
+		Config: Config{GUI: true, AutoLoad: func(keyname string) bool { return keyname != "id_rsa" }},
+	}
+	if err := l.LoadKeys(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(adder.calls) != 0 {
+		t.Fatalf("an auto-load-excluded key must not be added, got %d adds", len(adder.calls))
+	}
+	if len(r.calls) != 1 || r.calls[0].Name != "ssh-add" {
+		t.Fatalf("an auto-load-excluded key must not be fingerprinted, got calls %v", r.calls)
+	}
+	if !log.contains("auto-load policy excludes id_rsa") {
+		t.Fatalf("expected an excluded-by-policy log, got %v", log.lines)
+	}
+}
+
 func TestLoadKeysRetriesThenGivesUp(t *testing.T) {
 	r := newFakeRunner().on("ssh-add", agentEmpty()).on("ssh-keygen", keygen("SHA256:NEW"))
 	secret := &fakeSecret{lookupPass: "stale", lookupFound: true}
