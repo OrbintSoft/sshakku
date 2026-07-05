@@ -138,3 +138,22 @@ func (b *SecretServiceBackend) Lookup(service string) (string, bool, error) {
 	}
 	return passphrase, true, nil
 }
+
+// Store unlocks the sshakku collection, creates or replaces the item for
+// service, and re-locks the collection before returning — on success or
+// error alike.
+func (b *SecretServiceBackend) Store(service, label, passphrase string) error {
+	col, err := b.resolveCollection()
+	if err != nil {
+		return err
+	}
+	if err := b.Client.Unlock(col); err != nil {
+		return err
+	}
+	defer func() { _ = b.Client.Lock(col) }()
+
+	attrs := map[string]string{"service": service, "username": b.User}
+	return b.Client.CreateItem(col, label, attrs, passphrase, true)
+}
+
+var _ SecretBackend = (*SecretServiceBackend)(nil)
