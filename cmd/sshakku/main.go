@@ -167,14 +167,19 @@ func askpass(stdout io.Writer, args []string) int {
 // askpassBroker answers ssh's passphrase or confirmation prompt: a key passphrase
 // comes from the wallet (or the terminal on a miss), other prompts pass through to
 // the terminal. Only the reply goes to stdout; diagnostics go to the session log.
+// It reads the config file for the wallet-store policy, so a miss-then-store
+// refill honours the same include/exclude rules as load-keys.
 func askpassBroker(stdout io.Writer, args []string) int {
-	log := sessionlog.New(paths.Resolve(paths.FromOS(), paths.ProbeDir).LogFile)
+	layout := paths.Resolve(paths.FromOS(), paths.ProbeDir)
+	log := sessionlog.New(layout.LogFile)
 	secret, closeSecret := newSecretBackend(currentUser(), log)
 	defer closeSecret()
+	settings := loadSettings(layout, "askpass", log)
 	broker := keys.Broker{
 		Secret: secret,
 		TTY:    ttyPrompter{},
 		Log:    log,
+		Config: keys.Config{WalletStore: settings.StoresWallet},
 	}
 	reply, ok := broker.Answer(strings.Join(args, " "))
 	if !ok {
@@ -251,22 +256,7 @@ func loadKeys(stderr io.Writer) int {
 		return 1
 	}
 
-	// Settings come from the environment, the TOML config file, and built-in
-	// defaults, in that order of precedence. A missing file is fine; a path,
-	// load, or parse problem is logged and the affected setting falls back to
-	// its default.
-	var file config.File
-	configPath := filepath.Join(layout.ConfigDir, "config.toml")
-	if f, lerr := config.Load(configPath); lerr != nil {
-		_ = log.Log("ERROR", fmt.Sprintf("load-keys: config %s: %v", configPath, lerr))
-		file = f
-	} else {
-		file = f
-	}
-	settings, errs := config.Resolve(file, os.LookupEnv)
-	for _, e := range errs {
-		_ = log.Log("ERROR", e.Error())
-	}
+	settings := loadSettings(layout, "load-keys", log)
 
 	var giveupStore keys.GiveupStore
 	if !settings.NoGiveup {
@@ -303,6 +293,7 @@ func loadKeys(stderr io.Writer) int {
 		Config: keys.Config{
 			GUI:         keys.GUIAvailable(guiEnv, runner, prompter),
 			MaxAttempts: settings.MaxAttempts,
+			WalletStore: settings.StoresWallet,
 		},
 	}
 	if err := loader.LoadKeys(); err != nil {
@@ -311,6 +302,27 @@ func loadKeys(stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+// loadSettings reads the TOML config under layout's config dir, resolving it
+// against the environment and built-in defaults (environment variable > file >
+// default, per setting). A missing file is fine; a path, load, or parse
+// problem is logged under tag and the affected setting falls back to its
+// default.
+func loadSettings(layout paths.Layout, tag string, log keys.Logger) config.Settings {
+	var file config.File
+	configPath := filepath.Join(layout.ConfigDir, "config.toml")
+	if f, err := config.Load(configPath); err != nil {
+		_ = log.Log("ERROR", fmt.Sprintf("%s: config %s: %v", tag, configPath, err))
+		file = f
+	} else {
+		file = f
+	}
+	settings, errs := config.Resolve(file, os.LookupEnv)
+	for _, e := range errs {
+		_ = log.Log("ERROR", e.Error())
+	}
+	return settings
 }
 
 // newSecretBackend opens the native Secret Service client and wraps it in a
