@@ -72,6 +72,19 @@ already-stored key is not found in the new `sshakku` collection, so it
 re-prompts once on the first load after upgrading and is then stored under
 `sshakku` — no migration, and every load after that behaves as before.
 
+## Forgetting stored passphrases
+
+`sshakku forget <keyname>...` deletes the stored passphrase for one or more
+keys (matched by file name, e.g. `id_rsa`), and `sshakku forget --all` deletes
+every entry sshakku manages. Useful for testing, for revoking a passphrase
+after suspecting it was exposed, or for removing an already-stored passphrase
+so the key goes back to being prompted for and kept in memory only.
+
+`--all` enumerates the dedicated `sshakku` collection directly, so it needs
+the native Secret Service backend; if sshakku fell back to `secret-tool` (no
+D-Bus session bus reachable), `--all` fails with an explanatory error and the
+named form must be used instead.
+
 ## Key expiry and the wallet
 
 Keys are added to the agent with a lifetime (`SSHAKKU_KEY_LIFETIME`, default 8h).

@@ -321,19 +321,26 @@ honoured) before or during the phases. Each notes the related goal.
     still used but never saved. Realised with the config file in the configurability
     phase; until then every successfully typed passphrase is stored.
 
-19. **Command to forget stored passphrases (goals 2, 15).** A CLI command to
-    delete one or more passphrases from the secret store on demand — one or more
-    key names, or `--all` to clear every sshakku-managed entry. Useful for
-    testing, for revoking a passphrase after suspecting exposure, or for opting a
-    key out of persistent storage after it was already saved (decision 18 only
-    stops *future* stores). Needs a `Clear`/`Delete` verb added to `SecretBackend`
-    (`internal/keys/secret.go`) — today only `Lookup`/`Store` exist. `--all` must
-    only ever touch entries under sshakku's own service prefix (`SSH-Key-<keyname>`
-    / `ServicePrefix`, per `internal/keys/load.go`), never wallet entries belonging
-    to other applications. Field note from manual testing: `secret-tool clear`
-    failed silently (exit 1, no stderr) against a real stored entry; a direct
-    D-Bus `Item.Delete` call succeeded — investigate before relying on
-    `secret-tool clear` as the implementation.
+19. **Command to forget stored passphrases (goals 2, 15). ✅ Done.** `sshakku
+    forget <keyname>...` deletes one or more stored passphrases; `sshakku forget
+    --all` clears every sshakku-managed entry. Useful for testing, for revoking
+    a passphrase after suspecting exposure, or for opting a key out of
+    persistent storage after it was already saved (decision 18 only stops
+    *future* stores). `SecretBackend` (`internal/keys/secret.go`) gained
+    `Delete(service string) error` (a miss is success, not an error) and
+    `List() ([]string, error)`. `SecretServiceBackend.List` enumerates the
+    dedicated `sshakku` collection's items directly (`secretservice.Client`
+    gained `Items`/`ItemAttributes`/`DeleteItem`) — since the collection is
+    sshakku's own (decision 17), every item in it is sshakku-managed, so no
+    separate prefix filter is needed. `SecretToolBackend.List` returns
+    `ErrListUnsupported`: `secret-tool` has no generic enumeration verb, so
+    `--all` only works with the native Secret Service backend; the fallback
+    path still supports deleting named keys via `secret-tool clear`. Field note
+    from manual testing during scoping: `secret-tool clear` failed silently
+    (exit 1, no stderr) against a real stored entry, while a direct D-Bus
+    `Item.Delete` call succeeded — this is why `SecretServiceBackend.Delete`
+    goes through `DeleteItem`/D-Bus rather than shelling out, and why the
+    fallback's `secret-tool clear` path is documented as not fully trustworthy.
 
 20. **Three-tier container/VM test strategy (goal 16; open decision 9).**
     Prompted by a real incident: the kernel user keyring behaves differently
