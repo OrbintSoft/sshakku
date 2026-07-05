@@ -277,7 +277,26 @@ honoured) before or during the phases. Each notes the related goal.
     return to the clean state where only we run the agent — is the diagnostic tool's
     mandate (goal 8, Phase 3).
 
-16. **Which keys' passphrases are stored in the wallet is configurable (goals 2,
+17. **Scoped, explicit-lock unlock window per collection (goals 2, 11; open
+    decision 7; threat I6).** Give sshakku its own Secret Service collection,
+    separate from the desktop's default (`kdewallet` / login keyring), instead of
+    sharing it. Rather than relying on a fixed idle timeout to bound the unlocked
+    window (today: 5 min, set by hand in `kwalletrc`), have sshakku unlock only its
+    own collection right before a lookup, read the passphrase, and lock it again
+    immediately after `ssh-add` succeeds — collapsing the exposure window from
+    minutes to the seconds the fetch actually takes (window configurable as a
+    fallback safety net, not the primary bound). `Service.Unlock` /
+    `Collection.Lock` are part of the generic freedesktop Secret Service D-Bus
+    spec, so this works identically on KWallet and GNOME Keyring, not a
+    KDE-specific trick. Catch: `secret-tool` only ever targets the default
+    collection and has no lock/unlock verbs, so this needs a native D-Bus Secret
+    Service client in the Go core rather than shelling out — a bigger change to
+    `SecretBackend` / `SecretToolBackend` (`internal/keys/secret.go`), not a config
+    tweak. Does **not** by itself close threat I6 (`docs/THREAT-MODEL.md`: any
+    process of the same UID can still query the collection while it happens to be
+    unlocked) — it only shrinks the window during which that exposure exists.
+
+18. **Which keys' passphrases are stored in the wallet is configurable (goals 2,
     7; open decision 13).** Independently of which keys are auto-loaded (decision
     13), the config file selects the *wallet-store* set in one of two modes: *all
     keys except an exclude-list*, or *only an include-list*. Default: store all
@@ -288,6 +307,20 @@ honoured) before or during the phases. Each notes the related goal.
     path and the askpass broker's miss-then-store fallback — so an excluded key is
     still used but never saved. Realised with the config file in the configurability
     phase; until then every successfully typed passphrase is stored.
+
+19. **Command to forget stored passphrases (goals 2, 15).** A CLI command to
+    delete one or more passphrases from the secret store on demand — one or more
+    key names, or `--all` to clear every sshakku-managed entry. Useful for
+    testing, for revoking a passphrase after suspecting exposure, or for opting a
+    key out of persistent storage after it was already saved (decision 18 only
+    stops *future* stores). Needs a `Clear`/`Delete` verb added to `SecretBackend`
+    (`internal/keys/secret.go`) — today only `Lookup`/`Store` exist. `--all` must
+    only ever touch entries under sshakku's own service prefix (`SSH-Key-<keyname>`
+    / `ServicePrefix`, per `internal/keys/load.go`), never wallet entries belonging
+    to other applications. Field note from manual testing: `secret-tool clear`
+    failed silently (exit 1, no stderr) against a real stored entry; a direct
+    D-Bus `Item.Delete` call succeeded — investigate before relying on
+    `secret-tool clear` as the implementation.
 
 ---
 
@@ -557,7 +590,7 @@ daemonize/reparent; and cross-user inspection under `sudo` for the fuller pictur
 Make the secret store pluggable (secret-service first, then 1Password) and the
 tool highly parametrizable via a config file under `$XDG_CONFIG_HOME/sshakku/`
 (default `~/.config/sshakku/`), into which the current `SSHAKKU_*` environment
-knobs migrate. → goals 11, 15; open decisions 7, 13, 16.
+knobs migrate. → goals 11, 15; open decisions 7, 13, 17, 18, 19.
 
 ### Phase 5 — Widen the OS targets
 
