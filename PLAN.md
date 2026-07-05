@@ -217,12 +217,23 @@ honoured) before or during the phases. Each notes the related goal.
     fallback, and optional per-login agent isolation as a config flag. The
     per-user bootstrap hook stays open for step 1.2.
 
-13. **Which keys to auto-load is configurable (goals 1, 2, 15).** The config file
-    selects the auto-load set in one of two modes: *all keys except a denylist*, or
-    *only an allowlist*. Default: all keys (convenience); a security-conscious user
-    narrows it to an allowlist to shrink the agent's blast radius — fewer keys in
-    the agent (A2) means fewer credentials exposed to same-user processes and to any
-    agent forwarding. Realised with the config file in the configurability phase.
+13. **Which keys to auto-load is configurable (goals 1, 2, 15). ✅ Done.**
+    `config.toml` gains three keys, config-file only — no `SSHAKKU_*` twin, same
+    reasoning as decision 18's wallet-store keys: `auto_load_mode` (`"all"`
+    default, `"include"`, or `"exclude"`), `auto_load_include`, and
+    `auto_load_exclude`. The mode is authoritative, so the two lists never
+    conflict, mirroring `StoresWallet` exactly
+    (`config.Settings.AutoLoads(keyname) bool`). `keys.Config` gained an
+    `AutoLoad func(keyname string) bool` predicate (nil loads every key,
+    preserving prior behaviour), checked at the top of `Loader.loadOne` — before
+    the fingerprint lookup, so an excluded key never runs `ssh-keygen` or
+    touches the agent at all. A security-conscious user narrows the auto-load
+    set to shrink the agent's blast radius (A2): fewer keys sitting in the agent
+    means fewer credentials exposed to same-user processes and to agent
+    forwarding. Independent of decision 18: an auto-load-excluded key is not
+    proactively added at shell-init, but the askpass broker still answers for it
+    normally on demand (e.g. `ssh -i`), since the broker never calls
+    `Loader.LoadKeys`.
 
 14. **Project name (goal identity).** **Decided:** the project is named
     **SSHakku** (from Akkadian *iššakku*, a steward who administers an estate on
