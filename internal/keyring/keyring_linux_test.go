@@ -10,6 +10,10 @@ import (
 )
 
 func TestKeyringRoundTrip(t *testing.T) {
+	if !Available() {
+		t.Skip("kernel user keyring isn't usable for a round trip in this environment (e.g. no session-keyring link — common in CI/containers without a PAM login)")
+	}
+
 	desc := fmt.Sprintf("sshakku-keyring-test-%d", time.Now().UnixNano())
 	payload := []byte("a-secret-passphrase")
 
