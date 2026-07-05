@@ -83,6 +83,31 @@ func TestLoadKeysPromptThenStore(t *testing.T) {
 	}
 }
 
+func TestLoadKeysPromptThenStoreExcludedByPolicy(t *testing.T) {
+	r := newFakeRunner().on("ssh-add", agentEmpty()).on("ssh-keygen", keygen("SHA256:NEW"))
+	secret := &fakeSecret{lookupFound: false}
+	prompter := &fakePrompter{pass: "typed-pass"}
+	adder := &fakeKeyAdder{withCodes: []int{0}}
+	log := &fakeLogger{}
+	l := Loader{
+		Keys:   fakeLister{paths: []string{"/ssh/id_rsa"}},
+		Runner: r, Secret: secret, Prompt: prompter, Adder: adder, Log: log,
+		Config: Config{GUI: true, WalletStore: func(keyname string) bool { return keyname != "id_rsa" }},
+	}
+	if err := l.LoadKeys(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(adder.calls) != 1 || adder.calls[0].passphrase != "typed-pass" {
+		t.Fatalf("calls = %+v, want one add with the prompted pass", adder.calls)
+	}
+	if len(secret.stored) != 0 {
+		t.Fatalf("an excluded key must not be stored, got %v", secret.stored)
+	}
+	if !log.contains("wallet-store policy excludes id_rsa") {
+		t.Fatalf("expected an excluded-by-policy log, got %v", log.lines)
+	}
+}
+
 func TestLoadKeysRetriesThenGivesUp(t *testing.T) {
 	r := newFakeRunner().on("ssh-add", agentEmpty()).on("ssh-keygen", keygen("SHA256:NEW"))
 	secret := &fakeSecret{lookupPass: "stale", lookupFound: true}

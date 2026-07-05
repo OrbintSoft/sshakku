@@ -82,6 +82,27 @@ func TestBrokerWalletMissPromptsAndStores(t *testing.T) {
 	}
 }
 
+func TestBrokerWalletMissExcludedByPolicyNotStored(t *testing.T) {
+	secret := &fakeSecret{lookupFound: false}
+	tty := &fakeTTY{answer: "typed"}
+	log := &fakeLogger{}
+	b := Broker{
+		Secret: secret, TTY: tty, Log: log,
+		Config: Config{WalletStore: func(keyname string) bool { return keyname != "id_rsa" }},
+	}
+
+	reply, ok := b.Answer("Enter passphrase for key '/home/u/.ssh/id_rsa': ")
+	if !ok || reply != "typed" {
+		t.Fatalf("Answer = (%q, %v), want (typed, true)", reply, ok)
+	}
+	if len(secret.stored) != 0 {
+		t.Fatalf("an excluded key must not be stored, got %v", secret.stored)
+	}
+	if !log.contains("wallet-store policy excludes id_rsa") {
+		t.Fatalf("expected an excluded-by-policy log, got %v", log.lines)
+	}
+}
+
 func TestBrokerNonPassphrasePassThrough(t *testing.T) {
 	secret := &fakeSecret{}
 	tty := &fakeTTY{answer: "yes"}
