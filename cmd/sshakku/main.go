@@ -22,6 +22,7 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/keyring"
 	"github.com/OrbintSoft/sshakku/internal/keys"
 	"github.com/OrbintSoft/sshakku/internal/paths"
+	"github.com/OrbintSoft/sshakku/internal/secretservice"
 	"github.com/OrbintSoft/sshakku/internal/sessionlog"
 )
 
@@ -164,8 +165,10 @@ func askpass(stdout io.Writer, args []string) int {
 // the terminal. Only the reply goes to stdout; diagnostics go to the session log.
 func askpassBroker(stdout io.Writer, args []string) int {
 	log := sessionlog.New(paths.Resolve(paths.FromOS(), paths.ProbeDir).LogFile)
+	secret, closeSecret := newSecretBackend(currentUser(), log)
+	defer closeSecret()
 	broker := keys.Broker{
-		Secret: keys.SecretToolBackend{Runner: keys.ExecRunner{}, User: currentUser()},
+		Secret: secret,
 		TTY:    ttyPrompter{},
 		Log:    log,
 	}
@@ -281,10 +284,13 @@ func loadKeys(stderr io.Writer) int {
 		Display:        os.Getenv("DISPLAY"),
 	}
 
+	secret, closeSecret := newSecretBackend(currentUser(), log)
+	defer closeSecret()
+
 	loader := keys.Loader{
 		Keys:   keys.Enumerator{Dir: filepath.Join(env.Home, ".ssh")},
 		Runner: runner,
-		Secret: keys.SecretToolBackend{Runner: runner, User: currentUser()},
+		Secret: secret,
 		Prompt: prompter,
 		Adder:  keys.ExecKeyAdder{AskpassProg: self, KeyLifetime: settings.KeyLifetime},
 		Log:    log,
@@ -301,6 +307,24 @@ func loadKeys(stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+// newSecretBackend opens the native Secret Service client and wraps it in a
+// SecretServiceBackend, which unlocks its own dedicated collection only for
+// the duration of each lookup/store rather than relying on the desktop's
+// idle timeout. If the session bus is unreachable (e.g. a headless session
+// with no D-Bus user session) it logs the failure and falls back to
+// SecretToolBackend, so a key can still be looked up or stored via the
+// desktop's default collection rather than aborting the caller outright. The
+// returned func releases the client's D-Bus connection, if any was opened,
+// and must always be called.
+func newSecretBackend(user string, log keys.Logger) (keys.SecretBackend, func()) {
+	client, err := secretservice.NewClient()
+	if err != nil {
+		_ = log.Log("ERROR", fmt.Sprintf("secret service: %v; falling back to secret-tool", err))
+		return keys.SecretToolBackend{Runner: keys.ExecRunner{}, User: user}, func() {}
+	}
+	return &keys.SecretServiceBackend{Client: client, User: user}, func() { _ = client.Close() }
 }
 
 // stderrNotifier surfaces a user-facing notice to the terminal of the
