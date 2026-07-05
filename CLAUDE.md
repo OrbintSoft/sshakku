@@ -84,3 +84,9 @@ appending. See `docs/THREAT-MODEL.md` for the threat model and the June 2026 inc
     with the EUPL 1.2 **and** does not obstruct relicensing; record any incompatibility
     and do not add it without explicit authorization. Keep `LICENSE`, `COPYRIGHT.md`,
     and `AUTHORS.md` accurate as the code, dependencies, and contributors change.
+
+17. **Every commit carries a DCO sign-off.** Before each `git commit`, use `-s` (or
+    an equivalent `Signed-off-by` trailer) and verify it landed with `git log -1`;
+    before opening or updating a PR, confirm every commit on the branch is signed
+    off. See `CONTRIBUTING.md` / `CLA.md` for the DCO 1.1 + CLA mechanism this
+    supports.

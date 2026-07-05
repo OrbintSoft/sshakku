@@ -116,7 +116,7 @@ security is a shared responsibility between the software and how it is deployed.
 | I3 | Passphrase written to a **log** file. | Present (mitigated) | Never log secrets; the capped log holds only non-sensitive events. |
 | I4 | Any byte on **stdout/stderr** on the success path → corrupts non-interactive `scp`/`rsync`/`git`-over-ssh and could echo a secret. | Present (open) | Success path emits nothing; all output goes to the log only. |
 | I5 | `keyctl` handoff entry readable by **same-user** processes. | Present (mitigated, residual) | Short timeout + unlink on read narrows the window. **Deferred**: residual same-user exposure tracked in the residual-risk register. |
-| I6 | Secret-store entry queryable by any same-user process once the session is unlocked. | Present (residual) | Relies on the session lock. **Deferred**: same-user exposure tracked in the residual-risk register. |
+| I6 | Secret-store entry queryable by any same-user process once the session is unlocked. **This is inherent to the D-Bus session bus, which authenticates by UID only, not caller identity** — every `org.freedesktop.secrets` implementation (KWallet/`ksecretd`, GNOME Keyring, KeePassXC's secret-service integration, …) shares this exposure equally, so switching backend does not change it. | Present (residual) | Relies on the session lock. **Deferred**: same-user exposure tracked in the residual-risk register. Real per-caller isolation would need portal-mediated sandboxing (e.g. Flatpak's `xdg-desktop-portal` deriving a distinct secret per App ID) or OS-level process/user separation — out of scope for a CLI agent talking to the bus directly. |
 | I7 | **World-readable** state/log files or socket directory → other local users read A3/A6. | Present (open) | Per-user `0700` dirs, `0600` files; socket in `$XDG_RUNTIME_DIR` (already `0700`). |
 | I8 | Passphrase reaching **swap or a coredump**. | Present (residual) | **Deferred**: candidate defence-in-depth is `mlock` / disabling core dumps; tracked in the residual-risk register. |
 | I9 | **Agent forwarding** (`ssh -A` / `ForwardAgent`) exposes A2 to the remote host, which can use the loaded key for the connection's lifetime. | Present (open) | We do not enable forwarding; how to guard it (warn, confirm-on-use, scope `IdentityAgent`) is **Deferred** to the rewrite. |
@@ -175,6 +175,10 @@ threats above against each new mechanism:
 - **Pluggable secret backends** — a 1Password-style CLI (`op`) adds: trusting the
   binary found on `PATH` (S1), session-token handling, and never logging secret
   output (I3). The backend interface is the natural home for these invariants.
+  Note this does **not** address I6: choosing among `org.freedesktop.secrets`
+  implementations (KWallet, GNOME Keyring, KeePassXC, …) doesn't add per-caller
+  isolation, since they all sit behind the same UID-only-authenticated D-Bus
+  session bus.
 - **Go core** — dependency supply chain, parsing of untrusted config (T4), and safe
   temp-file handling (T2).
 - **CI / containers** — mocked `keyctl` / D-Bus must not weaken the real backends,
