@@ -14,9 +14,9 @@ import (
 // stays nil, letting Resolve tell "unset in the file" from "set to the zero
 // value" and apply the precedence environment variable > file > default.
 //
-// The wallet_store_* keys have no environment-variable counterpart: they are
-// config-file only, since the include/exclude lists don't fit a single
-// environment variable cleanly.
+// The wallet_store_* and auto_load_* keys have no environment-variable
+// counterpart: they are config-file only, since the include/exclude lists
+// don't fit a single environment variable cleanly.
 type File struct {
 	KeyLifetime *string `toml:"key_lifetime"`
 	MaxAttempts *int    `toml:"max_attempts"`
@@ -27,6 +27,10 @@ type File struct {
 	WalletStoreMode    *string  `toml:"wallet_store_mode"`
 	WalletStoreInclude []string `toml:"wallet_store_include"`
 	WalletStoreExclude []string `toml:"wallet_store_exclude"`
+
+	AutoLoadMode    *string  `toml:"auto_load_mode"`
+	AutoLoadInclude []string `toml:"auto_load_include"`
+	AutoLoadExclude []string `toml:"auto_load_exclude"`
 }
 
 // Settings is the configuration resolved from environment, file, and defaults.
@@ -41,6 +45,11 @@ type Settings struct {
 	WalletStoreMode    string
 	WalletStoreInclude []string // key names consulted only when mode is "include"
 	WalletStoreExclude []string // key names consulted only when mode is "exclude"
+
+	// AutoLoadMode is one of "all", "include", or "exclude"; see AutoLoads.
+	AutoLoadMode    string
+	AutoLoadInclude []string // key names consulted only when mode is "include"
+	AutoLoadExclude []string // key names consulted only when mode is "exclude"
 }
 
 // Wallet-store policy modes for Settings.WalletStoreMode.
@@ -48,6 +57,13 @@ const (
 	WalletStoreModeAll     = "all"
 	WalletStoreModeInclude = "include"
 	WalletStoreModeExclude = "exclude"
+)
+
+// Auto-load policy modes for Settings.AutoLoadMode.
+const (
+	AutoLoadModeAll     = "all"
+	AutoLoadModeInclude = "include"
+	AutoLoadModeExclude = "exclude"
 )
 
 // StoresWallet reports whether keyname's passphrase should be persisted to the
@@ -61,6 +77,24 @@ func (s Settings) StoresWallet(keyname string) bool {
 		return containsKey(s.WalletStoreInclude, keyname)
 	case WalletStoreModeExclude:
 		return !containsKey(s.WalletStoreExclude, keyname)
+	default:
+		return true
+	}
+}
+
+// AutoLoads reports whether keyname should be proactively added to the agent
+// at shell-init under the resolved auto-load policy. Mode is authoritative, so
+// include and exclude never conflict: "include" consults only AutoLoadInclude
+// and "exclude" consults only AutoLoadExclude; the other list, if set, is
+// ignored. Any other mode (including the default "all") loads every key.
+// Independent of StoresWallet: an excluded key can still be loaded on demand
+// via the askpass broker, which does not consult this policy.
+func (s Settings) AutoLoads(keyname string) bool {
+	switch s.AutoLoadMode {
+	case AutoLoadModeInclude:
+		return containsKey(s.AutoLoadInclude, keyname)
+	case AutoLoadModeExclude:
+		return !containsKey(s.AutoLoadExclude, keyname)
 	default:
 		return true
 	}
@@ -130,6 +164,14 @@ func Resolve(file File, lookup func(string) (string, bool)) (Settings, []error) 
 	s.WalletStoreInclude = file.WalletStoreInclude
 	s.WalletStoreExclude = file.WalletStoreExclude
 
+	autoLoadMode, err := resolveAutoLoadMode(file.AutoLoadMode)
+	if err != nil {
+		errs = append(errs, err)
+	}
+	s.AutoLoadMode = autoLoadMode
+	s.AutoLoadInclude = file.AutoLoadInclude
+	s.AutoLoadExclude = file.AutoLoadExclude
+
 	return s, errs
 }
 
@@ -145,6 +187,21 @@ func resolveWalletStoreMode(fileVal *string) (string, error) {
 		return *fileVal, nil
 	default:
 		return WalletStoreModeAll, fmt.Errorf("invalid wallet_store_mode %q, using %q", *fileVal, WalletStoreModeAll)
+	}
+}
+
+// resolveAutoLoadMode is config-file only (no environment override, per File's
+// doc comment). An absent or empty value defaults to "all"; an unrecognised
+// value falls back to "all" too, reported as an error to log.
+func resolveAutoLoadMode(fileVal *string) (string, error) {
+	if fileVal == nil || *fileVal == "" {
+		return AutoLoadModeAll, nil
+	}
+	switch *fileVal {
+	case AutoLoadModeAll, AutoLoadModeInclude, AutoLoadModeExclude:
+		return *fileVal, nil
+	default:
+		return AutoLoadModeAll, fmt.Errorf("invalid auto_load_mode %q, using %q", *fileVal, AutoLoadModeAll)
 	}
 }
 

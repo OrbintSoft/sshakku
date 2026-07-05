@@ -87,7 +87,7 @@ func TestResolveDefaults(t *testing.T) {
 	if len(errs) != 0 {
 		t.Fatalf("unexpected errors: %v", errs)
 	}
-	want := Settings{KeyLifetime: DefaultKeyLifetime, GiveupTTL: DefaultGiveupTTL, WalletStoreMode: WalletStoreModeAll}
+	want := Settings{KeyLifetime: DefaultKeyLifetime, GiveupTTL: DefaultGiveupTTL, WalletStoreMode: WalletStoreModeAll, AutoLoadMode: AutoLoadModeAll}
 	if !reflect.DeepEqual(s, want) {
 		t.Errorf("Resolve(empty) = %+v, want %+v", s, want)
 	}
@@ -112,6 +112,7 @@ func TestResolveFileWins(t *testing.T) {
 		NoGiveup:        true,
 		Quiet:           true,
 		WalletStoreMode: WalletStoreModeAll,
+		AutoLoadMode:    AutoLoadModeAll,
 	}
 	if !reflect.DeepEqual(s, want) {
 		t.Errorf("Resolve(file) = %+v, want %+v", s, want)
@@ -199,6 +200,90 @@ func TestStoresWalletExcludeModeConsultsOnlyExclude(t *testing.T) {
 	}
 	if !s.StoresWallet("id_ed25519") {
 		t.Error("id_ed25519 is not in the exclude list, must store")
+	}
+}
+
+func TestResolveAutoLoadModeDefaultsToAll(t *testing.T) {
+	s, errs := Resolve(File{}, lookupFrom(nil))
+	if len(errs) != 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if s.AutoLoadMode != AutoLoadModeAll {
+		t.Errorf("AutoLoadMode = %q, want %q", s.AutoLoadMode, AutoLoadModeAll)
+	}
+}
+
+func TestResolveAutoLoadModeFromFile(t *testing.T) {
+	for _, mode := range []string{AutoLoadModeAll, AutoLoadModeInclude, AutoLoadModeExclude} {
+		file := File{AutoLoadMode: ptr(mode)}
+		s, errs := Resolve(file, lookupFrom(nil))
+		if len(errs) != 0 {
+			t.Fatalf("mode %q: unexpected errors: %v", mode, errs)
+		}
+		if s.AutoLoadMode != mode {
+			t.Errorf("mode %q: AutoLoadMode = %q", mode, s.AutoLoadMode)
+		}
+	}
+}
+
+func TestResolveAutoLoadModeInvalidFallsBackToAll(t *testing.T) {
+	file := File{AutoLoadMode: ptr("bogus")}
+	s, errs := Resolve(file, lookupFrom(nil))
+	if len(errs) == 0 {
+		t.Fatal("an invalid auto_load_mode must be reported")
+	}
+	if s.AutoLoadMode != AutoLoadModeAll {
+		t.Errorf("AutoLoadMode = %q, want %q on an invalid value", s.AutoLoadMode, AutoLoadModeAll)
+	}
+}
+
+func TestResolveAutoLoadListsPassThrough(t *testing.T) {
+	file := File{
+		AutoLoadMode:    ptr(AutoLoadModeInclude),
+		AutoLoadInclude: []string{"id_rsa", "id_ed25519"},
+		AutoLoadExclude: []string{"id_ignored"},
+	}
+	s, _ := Resolve(file, lookupFrom(nil))
+	if !reflect.DeepEqual(s.AutoLoadInclude, []string{"id_rsa", "id_ed25519"}) {
+		t.Errorf("AutoLoadInclude = %v", s.AutoLoadInclude)
+	}
+	if !reflect.DeepEqual(s.AutoLoadExclude, []string{"id_ignored"}) {
+		t.Errorf("AutoLoadExclude = %v", s.AutoLoadExclude)
+	}
+}
+
+func TestAutoLoadsAllModeLoadsEverything(t *testing.T) {
+	s := Settings{AutoLoadMode: AutoLoadModeAll}
+	if !s.AutoLoads("anything") {
+		t.Error("mode all must load every key")
+	}
+}
+
+func TestAutoLoadsIncludeModeConsultsOnlyInclude(t *testing.T) {
+	s := Settings{
+		AutoLoadMode:    AutoLoadModeInclude,
+		AutoLoadInclude: []string{"id_rsa"},
+		AutoLoadExclude: []string{"id_rsa"}, // must be ignored: mode is authoritative
+	}
+	if !s.AutoLoads("id_rsa") {
+		t.Error("id_rsa is in the include list, must load")
+	}
+	if s.AutoLoads("id_ed25519") {
+		t.Error("id_ed25519 is not in the include list, must not load")
+	}
+}
+
+func TestAutoLoadsExcludeModeConsultsOnlyExclude(t *testing.T) {
+	s := Settings{
+		AutoLoadMode:    AutoLoadModeExclude,
+		AutoLoadInclude: []string{"id_ed25519"}, // must be ignored: mode is authoritative
+		AutoLoadExclude: []string{"id_rsa"},
+	}
+	if s.AutoLoads("id_rsa") {
+		t.Error("id_rsa is in the exclude list, must not load")
+	}
+	if !s.AutoLoads("id_ed25519") {
+		t.Error("id_ed25519 is not in the exclude list, must load")
 	}
 }
 
