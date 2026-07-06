@@ -38,6 +38,16 @@ func SocketToken() string {
 	return token
 }
 
+// ReadSocketToken returns the per-login token from the @u user keyring without
+// creating one, unlike SocketToken. It reads the keyring of the calling
+// process's own effective uid — never another user's — so a caller that needs
+// another uid's token must first assume that uid's identity (e.g. by spawning a
+// child process with that uid's credentials) before calling this. Returns ""
+// when no token exists yet or the keyring is unavailable.
+func ReadSocketToken() string {
+	return readToken()
+}
+
 // readToken returns the socket-token payload from the @u keyring, or "" if it is
 // absent or unreadable.
 func readToken() string {

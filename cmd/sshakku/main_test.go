@@ -2,7 +2,12 @@ package main
 
 import (
 	"io"
+	"os"
+	"os/user"
+	"strconv"
 	"testing"
+
+	"github.com/OrbintSoft/sshakku/internal/paths"
 )
 
 // TestRun exercises argument dispatch only. shell-init and ensure-agent are
@@ -24,6 +29,9 @@ func TestRun(t *testing.T) {
 		{"doctor unknown flag", []string{"doctor", "--bogus"}, 2},
 		{"forget no args", []string{"forget"}, 2},
 		{"forget --all with names", []string{"forget", "--all", "id_rsa"}, 2},
+		{"internal read socket token", []string{internalReadSocketTokenCmd}, 0},
+		{"doctor --user missing value", []string{"doctor", "--user"}, 2},
+		{"doctor --user unknown", []string{"doctor", "--user", "sshakku-test-no-such-user"}, 2},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -31,6 +39,97 @@ func TestRun(t *testing.T) {
 				t.Errorf("run(%q) = %d, want %d", tc.args, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestResolveTargetUser(t *testing.T) {
+	self, err := user.Current()
+	if err != nil {
+		t.Skipf("user.Current: %v", err)
+	}
+	selfUID := os.Getuid()
+
+	t.Run("no --user, not root: self, no lookup needed", func(t *testing.T) {
+		t.Setenv("SUDO_UID", "")
+		got, err := resolveTargetUser("", paths.Env{UID: selfUID})
+		if err != nil {
+			t.Fatalf("resolveTargetUser: %v", err)
+		}
+		if got.UID != selfUID || got.Source != "" {
+			t.Errorf("got %+v, want UID=%d Source=\"\"", got, selfUID)
+		}
+	})
+
+	t.Run("--user names the invoking user: still self", func(t *testing.T) {
+		got, err := resolveTargetUser(self.Username, paths.Env{UID: selfUID})
+		if err != nil {
+			t.Fatalf("resolveTargetUser: %v", err)
+		}
+		if got.UID != selfUID || got.Source != "" {
+			t.Errorf("got %+v, want UID=%d Source=\"\"", got, selfUID)
+		}
+	})
+
+	t.Run("--user names someone else: cross-user, regardless of who's actually invoking", func(t *testing.T) {
+		// selfEnv.UID is deliberately a uid nothing resolves to, so this exercises
+		// the "different from invoker" branch without depending on whether the test
+		// process happens to be root.
+		got, err := resolveTargetUser(self.Username, paths.Env{UID: -1})
+		if err != nil {
+			t.Fatalf("resolveTargetUser: %v", err)
+		}
+		if got.UID != selfUID || got.Source == "" {
+			t.Errorf("got %+v, want UID=%d and a non-empty Source", got, selfUID)
+		}
+	})
+
+	t.Run("unknown --user value errors", func(t *testing.T) {
+		if _, err := resolveTargetUser("sshakku-test-no-such-user", paths.Env{UID: selfUID}); err == nil {
+			t.Error("resolveTargetUser: got nil error for an unknown user")
+		}
+	})
+
+	t.Run("SUDO_UID auto-detected only when invoking as root", func(t *testing.T) {
+		t.Setenv("SUDO_UID", strconv.Itoa(selfUID))
+		got, err := resolveTargetUser("", paths.Env{UID: 0})
+		if err != nil {
+			t.Fatalf("resolveTargetUser: %v", err)
+		}
+		if got.UID != selfUID || got.Source == "" {
+			t.Errorf("got %+v, want UID=%d and a non-empty Source", got, selfUID)
+		}
+	})
+
+	t.Run("SUDO_UID ignored when not invoking as root", func(t *testing.T) {
+		t.Setenv("SUDO_UID", strconv.Itoa(selfUID))
+		got, err := resolveTargetUser("", paths.Env{UID: selfUID})
+		if err != nil {
+			t.Fatalf("resolveTargetUser: %v", err)
+		}
+		if got.Source != "" {
+			t.Errorf("got %+v, want Source=\"\" (SUDO_UID should be ignored)", got)
+		}
+	})
+}
+
+func TestCrossUserGuard(t *testing.T) {
+	self := targetUser{Source: ""}
+	other := targetUser{Source: "the --user flag", UID: 1000, Username: "alice"}
+
+	if got := crossUserGuard(self, true, 0); got != "" {
+		t.Errorf("self, --fix: got %q, want \"\" (nothing cross-user applies)", got)
+	}
+	if got := crossUserGuard(self, false, 1000); got != "" {
+		t.Errorf("self, non-root: got %q, want \"\"", got)
+	}
+	if got := crossUserGuard(other, true, 0); got == "" {
+		t.Error("other user, --fix, root: want a refusal, got \"\"")
+	}
+	if got := crossUserGuard(other, false, 1000); got == "" {
+		t.Error("other user, no --fix, non-root: want a refusal (requires root), got \"\"")
+	}
+	if got := crossUserGuard(other, false, 0); got != "" {
+		t.Errorf("other user, no --fix, root: got %q, want \"\" (read-only cross-user is allowed)", got)
 	}
 }
 

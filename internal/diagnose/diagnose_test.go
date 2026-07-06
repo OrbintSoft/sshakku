@@ -137,6 +137,25 @@ func TestGatherMultipleAndDead(t *testing.T) {
 	}
 }
 
+func TestGatherDifferentUserAgent(t *testing.T) {
+	const other = "/run/user/1000/sshakku/tok/agent.sock"
+	src := fakeSource{procs: []agent.AgentProc{
+		{PID: 100, UID: 1000, Socket: other}, // healthy, but not uid 0's
+	}}
+	prober := fakeProber{up: map[string]bool{other: true}}
+	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 0}, src, prober, nil)
+
+	if r.State != StateClean {
+		t.Errorf("State = %v, want StateClean: a different user's agent isn't serving this account", r.State)
+	}
+	if hasFinding(r, "foreign ssh-agent") || hasFinding(r, "dead ssh-agent") {
+		t.Errorf("findings = %v, want no foreign/dead wording for a different user's agent", r.Findings)
+	}
+	if !hasFinding(r, "belong to a different user account") {
+		t.Errorf("findings = %v, want a different-user finding", r.Findings)
+	}
+}
+
 func TestGatherInspectError(t *testing.T) {
 	src := fakeSource{err: errors.New("boom")}
 	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000},

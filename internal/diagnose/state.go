@@ -43,10 +43,17 @@ func (s State) String() string {
 // classifyState maps the gathered agents to a single lifecycle state, in the same
 // precedence order the login path resolves: several live agents are a disaster, a
 // lone healthy agent is ours or foreign, and with nothing live the question is
-// only whether dead remnants of ours linger.
+// only whether dead remnants of ours linger. An agent owned by a different real
+// user never contributes: it cannot be ours, and — whether or not a privileged
+// caller can technically still reach it — it is not serving this report's
+// account, so it must not drive the state to foreign/disaster on that account's
+// behalf.
 func classifyState(r Report) State {
 	var reachable, oursReach, otherReach, deadOurs int
 	for _, a := range r.Agents {
+		if differentUser(a, r.OurUID) {
+			continue
+		}
 		if a.Reachable {
 			reachable++
 			if a.Kind == agent.KindOurs {

@@ -97,12 +97,26 @@ func Gather(in Inputs, src AgentSource, prober agent.Prober, anc AncestrySource)
 	return r
 }
 
+// differentUser reports whether a is owned by a real uid other than the one
+// this report is about. That is an ordinary multi-user fact — someone else's
+// ssh-agent, visible to a privileged caller or simply coexisting on the host —
+// not evidence of tampering with this report's own account. Unknown ownership
+// (-1) is treated conservatively as possibly this account's, matching the rest
+// of the report.
+func differentUser(a AgentView, ourUID int) bool {
+	return a.UID >= 0 && a.UID != ourUID
+}
+
 // findings turns the gathered facts into plain-language observations. It only
 // describes what it sees; remediation guidance arrives with the fix path.
 func findings(in Inputs, r Report) []string {
-	var reachable, dead int
+	var reachable, dead, elsewhere int
 	for _, a := range r.Agents {
 		switch {
+		case differentUser(a, r.OurUID):
+			if a.Socket != "" {
+				elsewhere++
+			}
 		case a.Reachable:
 			reachable++
 		case a.Socket != "":
@@ -129,8 +143,11 @@ func findings(in Inputs, r Report) []string {
 	if dead > 0 {
 		f = append(f, fmt.Sprintf("%d dead ssh-agent process(es) with a stale socket are lingering", dead))
 	}
+	if elsewhere > 0 {
+		f = append(f, fmt.Sprintf("%d ssh-agent process(es) belong to a different user account — visible here, but not part of this account's session", elsewhere))
+	}
 	for _, a := range r.Agents {
-		if a.Kind != agent.KindForeign || !a.Reachable {
+		if a.Kind != agent.KindForeign || !a.Reachable || differentUser(a, r.OurUID) {
 			continue
 		}
 		who := "an unknown launcher"

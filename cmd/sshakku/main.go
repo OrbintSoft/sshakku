@@ -31,6 +31,13 @@ import (
 // proceeds without it, so a stuck holder slows the login but never hangs it.
 const agentLockWait = 5 * time.Second
 
+// internalReadSocketTokenCmd is not a user-facing command: `doctor` execs the
+// binary under this name as a child running with another user's credentials,
+// to read that user's per-login socket token from their own kernel keyring (a
+// keyring is only visible to the uid that owns it, unlike files, which root can
+// read regardless of owner). It is deliberately absent from usage/--help.
+const internalReadSocketTokenCmd = "__read-socket-token"
+
 const usage = `sshakku — SSH agent and key shepherd
 
 usage: sshakku <command>
@@ -40,7 +47,9 @@ commands:
   ensure-agent   drive the agent to a healthy state and print agent_sock
   load-keys      add the user's ssh keys to the agent (interactive sessions)
   askpass-env    print exports routing ssh's askpass through sshakku (GUI only)
-  doctor         report the ssh-agent situation; --fix applies the self-heal
+  doctor         report the ssh-agent situation; --fix applies the self-heal;
+                 --user <name|uid> reports on another user's session (root only,
+                 read-only; auto-detected from SUDO_UID under sudo)
   forget         delete stored passphrases: <keyname>... or --all
   help           show this help
 `
@@ -75,6 +84,8 @@ func run(stdout, stderr io.Writer, args []string) int {
 		return doctor(stdout, stderr, args[1:])
 	case "forget":
 		return forget(stdout, stderr, args[1:])
+	case internalReadSocketTokenCmd:
+		return readSocketTokenInternal(stdout)
 	case "help", "-h", "--help":
 		_, _ = fmt.Fprint(stdout, usage)
 		return 0
@@ -388,23 +399,154 @@ func askpassExports(self string) string {
 	)
 }
 
+// readSocketTokenInternal prints the calling process's own per-login socket
+// token (see paths.ReadSocketToken) and nothing else, so a parent process that
+// exec'd this as a child under another uid's credentials can capture that uid's
+// token from stdout. It never creates a token: an unavailable or empty keyring
+// prints an empty line, not an error, since "no token yet" is a valid, expected
+// state (a tokenless layout) rather than a failure.
+func readSocketTokenInternal(stdout io.Writer) int {
+	_, _ = fmt.Fprintln(stdout, paths.ReadSocketToken())
+	return 0
+}
+
+// targetUser identifies whose ssh-agent session `doctor` should report on.
+// Source is "" for the invoking user themselves; otherwise it names how a
+// different target was chosen, for the report header.
+type targetUser struct {
+	UID      int
+	GID      int
+	Username string
+	Home     string
+	Source   string
+}
+
+// resolveTargetUser decides whose session to diagnose: an explicit --user
+// value (userArg), else a uid auto-detected from SUDO_UID when the invoking
+// user is root, else the invoking user themselves. A target that turns out to
+// be the invoking user (however specified) always gets Source == "", since
+// nothing cross-user actually applies.
+func resolveTargetUser(userArg string, selfEnv paths.Env) (targetUser, error) {
+	lookup := func(nameOrUID, source string) (targetUser, error) {
+		u, err := lookupUser(nameOrUID)
+		if err != nil {
+			return targetUser{}, err
+		}
+		if u.UID != selfEnv.UID {
+			u.Source = source
+		}
+		return u, nil
+	}
+
+	if userArg != "" {
+		u, err := lookup(userArg, "the --user flag")
+		if err != nil {
+			return targetUser{}, fmt.Errorf("--user %q: %w", userArg, err)
+		}
+		return u, nil
+	}
+	if selfEnv.UID == 0 {
+		if sudoUID := os.Getenv("SUDO_UID"); sudoUID != "" {
+			u, err := lookup(sudoUID, "SUDO_UID (auto-detected)")
+			if err != nil {
+				return targetUser{}, fmt.Errorf("SUDO_UID=%s: %w", sudoUID, err)
+			}
+			return u, nil
+		}
+	}
+	return targetUser{UID: selfEnv.UID, Home: selfEnv.Home}, nil
+}
+
+// lookupUser resolves a username or uid string via the OS user database.
+func lookupUser(nameOrUID string) (targetUser, error) {
+	var u *user.User
+	var err error
+	if _, convErr := strconv.Atoi(nameOrUID); convErr == nil {
+		u, err = user.LookupId(nameOrUID)
+	} else {
+		u, err = user.Lookup(nameOrUID)
+	}
+	if err != nil {
+		return targetUser{}, err
+	}
+	uid, err := strconv.Atoi(u.Uid)
+	if err != nil {
+		return targetUser{}, fmt.Errorf("parse uid %q: %w", u.Uid, err)
+	}
+	gid, err := strconv.Atoi(u.Gid)
+	if err != nil {
+		return targetUser{}, fmt.Errorf("parse gid %q: %w", u.Gid, err)
+	}
+	return targetUser{UID: uid, GID: gid, Username: u.Username, Home: u.HomeDir}, nil
+}
+
+// crossUserGuard returns the refusal message for an operation that would touch
+// another user's session, or "" when it may proceed. --fix must never run
+// cross-user (docs/THREAT-MODEL.md E1: elevation is for read-only inspection,
+// never for writing as root); reading another user's session requires euid 0,
+// since only root can assume another uid's identity to read their socket token.
+func crossUserGuard(target targetUser, fix bool, euid int) string {
+	if target.Source == "" {
+		return ""
+	}
+	if fix {
+		return fmt.Sprintf(
+			"doctor --fix cannot act on another user's session (uid %d); run as that user instead, e.g.:\n  sudo -u %s -H sshakku doctor --fix",
+			target.UID, target.Username)
+	}
+	if euid != 0 {
+		return fmt.Sprintf("diagnosing uid %d requires root privileges (e.g. run via sudo)", target.UID)
+	}
+	return ""
+}
+
 // doctor reports the ssh-agent situation: which agents are running, which one is
 // ours, whether each answers, and whether this shell's SSH_AUTH_SOCK is wired to
 // a healthy agent. Plain `doctor` inspects only and changes nothing. With --fix
 // it then applies the same self-heal the login path runs (reap dead agents,
 // start on the fixed socket, or adopt a healthy foreign one) and re-reports.
+//
+// --user <name|uid> diagnoses a different user's session instead of the
+// invoking one (auto-detected from SUDO_UID when invoked as root via sudo with
+// no --user given). This requires root, is read-only regardless of --fix (see
+// crossUserGuard), and confirms the target's own fixed socket by reading their
+// per-login token from their own kernel keyring — reached by re-executing this
+// binary under their credentials (execTokenSource), never by guessing.
 func doctor(stdout, stderr io.Writer, args []string) int {
 	fix := false
-	for _, a := range args {
-		if a == "--fix" {
+	var userArg string
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--fix":
 			fix = true
-			continue
+		case "--user":
+			i++
+			if i >= len(args) {
+				_, _ = fmt.Fprintln(stderr, "sshakku: doctor: --user requires a value")
+				return 2
+			}
+			userArg = args[i]
+		default:
+			_, _ = fmt.Fprintf(stderr, "sshakku: doctor: unknown argument %q\n", args[i])
+			return 2
 		}
-		_, _ = fmt.Fprintf(stderr, "sshakku: doctor: unknown argument %q\n", a)
-		return 2
 	}
 
 	env := paths.FromOS()
+	target, err := resolveTargetUser(userArg, env)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "sshakku: doctor: %v\n", err)
+		return 2
+	}
+	if msg := crossUserGuard(target, fix, os.Geteuid()); msg != "" {
+		_, _ = fmt.Fprintf(stderr, "sshakku: doctor: %s\n", msg)
+		return 2
+	}
+
+	if target.Source != "" {
+		return doctorCrossUser(stdout, stderr, env, target)
+	}
+
 	layout := paths.Resolve(env, paths.ProbeDir).WithSocketToken(paths.SocketToken())
 
 	diagnose.Format(stdout, gatherReport(env, layout))
@@ -433,6 +575,40 @@ func doctor(stdout, stderr io.Writer, args []string) int {
 			"\nthis shell still points elsewhere; open a new shell or run:\n  export SSH_AUTH_SOCK=%s\n",
 			shellSingleQuote(liveSock))
 	}
+	return 0
+}
+
+// doctorCrossUser reports on target's session instead of the invoking one.
+// Read-only: crossUserGuard has already refused --fix and confirmed euid 0
+// before this runs. It confirms target's own fixed socket by reading their
+// per-login token from their own kernel keyring (execTokenSource), rather than
+// guessing a path — an empty token is a valid "no agent started yet" state, not
+// a failure.
+func doctorCrossUser(stdout, stderr io.Writer, invoking paths.Env, target targetUser) int {
+	token, err := (execTokenSource{}).ReadToken(target.UID, target.GID)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "sshakku: doctor: %v\n", err)
+		return 1
+	}
+	targetEnv := paths.Env{Home: target.Home, UID: target.UID}
+	layout := paths.Resolve(targetEnv, paths.ProbeDirAs(target.UID)).WithSocketToken(token)
+
+	_, _ = fmt.Fprintf(stdout,
+		"diagnosing uid %d (%s) — chosen via %s; invoked as uid %d (root)\n"+
+			"note: SSH_AUTH_SOCK and \"started by\" below describe %s's own session, not this shell's environment.\n\n",
+		target.UID, target.Username, target.Source, invoking.UID, target.Username)
+
+	// UIDGatedProber: root can dial any socket regardless of ownership, but that
+	// isn't what "reachable" should mean for a report about target's session —
+	// it must reflect what target could reach, not what this elevated caller
+	// can bypass into.
+	diagnose.Format(stdout, diagnose.Gather(diagnose.Inputs{
+		FixedSock: layout.AgentSock,
+		LegacyDir: filepath.Join(targetEnv.Home, ".ssh", "agent"),
+		StatePath: filepath.Join(filepath.Dir(layout.AgentSock), "agent.state"),
+		LogFile:   layout.LogFile,
+		OurUID:    target.UID,
+	}, agent.Inspector{}, agent.UIDGatedProber{UID: target.UID, Prober: agent.SocketProber{}}, diagnose.ProcfsAncestry{}))
 	return 0
 }
 
