@@ -33,6 +33,13 @@ display manager, an SSH login, a login shell). Because `ssh-agent` daemonizes an
 is then reparented to `init`, the original launcher is often no longer in the
 process tree; the report says so rather than guessing.
 
+A foreign agent whose socket has sshakku's own naming shape
+(`.../sshakku/<hex>/agent.sock`) but a token that doesn't match this session's
+own is called out as likely a previous instance of sshakku's own agent —
+orphaned by an old build or manual testing, say — rather than a truly
+external tool, since another program reinventing that exact layout by
+coincidence is far less likely.
+
 ## `sshakku doctor --fix`
 
 `sshakku doctor --fix` first prints the diagnosis, then applies the same
