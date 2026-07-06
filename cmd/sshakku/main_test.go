@@ -142,3 +142,32 @@ func TestAskpassExports(t *testing.T) {
 		t.Errorf("askpassExports = %q, want %q", got, want)
 	}
 }
+
+// TestWantsAskpass guards against askpass-env's shell-wide export of
+// EnvAskpassMode shadowing every later subcommand typed by hand in that same
+// shell (e.g. `sshakku doctor` silently turning into an askpass prompt).
+func TestWantsAskpass(t *testing.T) {
+	tests := []struct {
+		name          string
+		askpassEnvSet bool
+		args          []string
+		want          bool
+	}{
+		{"env unset, real prompt text", false, []string{"Enter passphrase for key '/home/u/.ssh/id_ed25519': "}, false},
+		{"env set, real prompt text", true, []string{"Enter passphrase for key '/home/u/.ssh/id_ed25519': "}, true},
+		{"env set, no args", true, nil, true},
+		{"env set, doctor", true, []string{"doctor"}, false},
+		{"env set, doctor with flags", true, []string{"doctor", "--user", "stefano"}, false},
+		{"env set, forget", true, []string{"forget", "--all"}, false},
+		{"env set, help", true, []string{"help"}, false},
+		{"env set, unknown command", true, []string{"bogus"}, true},
+		{"env unset, doctor", false, []string{"doctor"}, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := wantsAskpass(tc.askpassEnvSet, tc.args); got != tc.want {
+				t.Errorf("wantsAskpass(%v, %q) = %v, want %v", tc.askpassEnvSet, tc.args, got, tc.want)
+			}
+		})
+	}
+}

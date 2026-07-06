@@ -38,6 +38,26 @@ const agentLockWait = 5 * time.Second
 // read regardless of owner). It is deliberately absent from usage/--help.
 const internalReadSocketTokenCmd = "__read-socket-token"
 
+// knownSubcommands lists every argv[1] value run dispatches below. main checks
+// it before trusting EnvAskpassMode: ssh always execs the SSH_ASKPASS helper
+// with just the prompt text as its one argument, never one of these exact
+// names, but askpass-env exports EnvAskpassMode into the whole interactive
+// shell (nn-ssh-init-linux.sh), so it stays set for anything the user later
+// types by hand in that same shell — a real subcommand must win over it. Keep
+// this in sync with the switch in run.
+var knownSubcommands = map[string]bool{
+	"shell-init":               true,
+	"ensure-agent":             true,
+	"load-keys":                true,
+	"askpass-env":              true,
+	"doctor":                   true,
+	"forget":                   true,
+	"help":                     true,
+	"-h":                       true,
+	"--help":                   true,
+	internalReadSocketTokenCmd: true,
+}
+
 const usage = `sshakku — SSH agent and key shepherd
 
 usage: sshakku <command>
@@ -57,11 +77,26 @@ commands:
 func main() {
 	// ssh-add execs this binary as its SSH_ASKPASS program, passing only the
 	// prompt as an argument and marking the call via the environment. Handle that
-	// before subcommand dispatch and return the passphrase from the keyring.
-	if os.Getenv(keys.EnvAskpassMode) != "" {
-		os.Exit(askpass(os.Stdout, os.Args[1:]))
+	// before subcommand dispatch and return the passphrase from the keyring —
+	// unless args actually name one of our own subcommands, which always wins
+	// (see wantsAskpass).
+	args := os.Args[1:]
+	if wantsAskpass(os.Getenv(keys.EnvAskpassMode) != "", args) {
+		os.Exit(askpass(os.Stdout, args))
 	}
-	os.Exit(run(os.Stdout, os.Stderr, os.Args[1:]))
+	os.Exit(run(os.Stdout, os.Stderr, args))
+}
+
+// wantsAskpass reports whether main should treat this invocation as ssh's
+// SSH_ASKPASS helper rather than dispatch args as a subcommand. askpassEnvSet
+// is EnvAskpassMode's presence in the environment; it alone is not enough,
+// because askpass-env exports it into the whole interactive shell
+// (nn-ssh-init-linux.sh) so it stays set for anything typed by hand afterward
+// too — a real ssh invocation always execs the helper with just the prompt
+// text as its one argument, never one of our own subcommand names, so a known
+// subcommand always takes priority over the env marker.
+func wantsAskpass(askpassEnvSet bool, args []string) bool {
+	return askpassEnvSet && (len(args) == 0 || !knownSubcommands[args[0]])
 }
 
 // run dispatches a subcommand and returns the process exit code. Output goes to
