@@ -671,15 +671,27 @@ this account's own state or foreign-agent wording — which is what actually
 fixes a plain `sudo sshakku doctor` (no `--user` at all) misreporting the
 invoking-as-root case as state D. Documented in `docs/DIAGNOSTICS.md`.
 
-*Deferred refinements (not blocking):* deeper foreign-agent attribution via
-socket-path heuristics (gnome-keyring `keyring/ssh`, gpg-agent, systemd
-`ssh-agent.socket`) and environment probing to recover a launcher lost to the
-daemonize/reparent — including the specific case (found while validating the
-cross-user work above) of an agent whose socket has sshakku's own naming shape
-but an unrecognised per-login token, most likely one of our own orphaned by a
-keyring that didn't survive across logins/reboots rather than a truly external
-tool; tracked separately (see `orphaned-agent-token-steps.md` during
-development).
+**✅ Done — orphaned-ours attribution heuristic.** While validating the
+cross-user work above, even a correct same-user diagnosis kept alarmingly
+reporting "started by an unknown launcher... investigate" for an agent whose
+socket had sshakku's own naming shape
+(`.../sshakku/<hex>/agent.sock`) but an unrecognised token. The initial
+hypothesis — that the per-login token's kernel `@u` user-keyring doesn't
+survive across logins/reboots — was investigated empirically on the affected
+machine and **disproved**: no reboot had occurred, and `keyctl show` from two
+independent shells (this session's and the user's own real terminal) showed
+identical keyring serials, confirming the keyring is in fact persistent and
+shared correctly. The far more mundane explanation: a leftover agent from
+manual testing or an older build, from earlier in this project's own
+development. `findings()` now recognises the shape
+(`looksLikeOrphanedOurs`) and says so — wording only, no change to
+state/reap/adopt. See `orphaned-agent-token-steps.md` (used during
+development) for the investigation.
+
+*Deferred refinements (not blocking):* deeper foreign-agent attribution for
+agents that do *not* match sshakku's own shape — gnome-keyring `keyring/ssh`,
+gpg-agent, systemd `ssh-agent.socket` — and environment probing to recover a
+launcher lost to the daemonize/reparent.
 
 ### Phase 4 — Configurability & pluggable secret backends
 

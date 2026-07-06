@@ -156,6 +156,46 @@ func TestGatherDifferentUserAgent(t *testing.T) {
 	}
 }
 
+func TestGatherOrphanedOursAgent(t *testing.T) {
+	// Same shape sshakku itself uses, but a token that doesn't match this
+	// session's own fixedSock — most likely a previous instance of our own
+	// agent, not a truly external tool.
+	const orphan = "/run/user/1000/sshakku/00112233445566778899aabbccddeeff/agent.sock"
+	src := fakeSource{procs: []agent.AgentProc{
+		{PID: 100, UID: 1000, Socket: orphan},
+	}}
+	prober := fakeProber{up: map[string]bool{orphan: true}}
+	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, src, prober, nil)
+
+	if !hasFinding(r, "looks like a previous sshakku-managed agent") {
+		t.Errorf("findings = %v, want the orphaned-ours wording", r.Findings)
+	}
+	if hasFinding(r, "an unknown launcher") {
+		t.Errorf("findings = %v, want no generic foreign-launcher wording for a same-shape socket", r.Findings)
+	}
+}
+
+func TestLooksLikeOrphanedOurs(t *testing.T) {
+	cases := []struct {
+		socket string
+		want   bool
+	}{
+		{"/run/user/1000/sshakku/00112233445566778899aabbccddeeff/agent.sock", true},
+		{"/home/u/.cache/sshakku/00112233445566778899aabbccddeeff/agent.sock", true},
+		{"/run/user/1000/sshakku/agent.sock", false},                                    // tokenless layout, no hex dir
+		{"/run/user/1000/sshakku/TooShortHex/agent.sock", false},                        // wrong length
+		{"/run/user/1000/sshakku/00112233445566778899AABBCCDDEEFF/agent.sock", false},   // uppercase
+		{"/run/user/1000/other-app/00112233445566778899aabbccddeeff/agent.sock", false}, // not sshakku
+		{"/tmp/foreign.sock", false},
+		{"", false},
+	}
+	for _, c := range cases {
+		if got := looksLikeOrphanedOurs(c.socket); got != c.want {
+			t.Errorf("looksLikeOrphanedOurs(%q) = %v, want %v", c.socket, got, c.want)
+		}
+	}
+}
+
 func TestGatherInspectError(t *testing.T) {
 	src := fakeSource{err: errors.New("boom")}
 	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000},

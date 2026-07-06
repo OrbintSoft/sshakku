@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -107,6 +108,43 @@ func differentUser(a AgentView, ourUID int) bool {
 	return a.UID >= 0 && a.UID != ourUID
 }
 
+// orphanTokenLen is the hex length of sshakku's own per-login socket token
+// (see paths.tokenByteLen*2), duplicated here rather than imported so this
+// package's attribution heuristic stays a pure string check with no
+// dependency on how the token is actually produced.
+const orphanTokenLen = 32
+
+// looksLikeOrphanedOurs reports whether socket has the exact shape sshakku
+// itself uses for its own per-login socket — ".../sshakku/<32-hex>/agent.sock"
+// — even though its token doesn't match this session's own. An agent bound
+// there is far more likely a previous instance of sshakku's own agent
+// (orphaned by a keyring reset, an old build, or manual testing) than a truly
+// external tool that happens to reinvent the same layout, so it is worth
+// saying so explicitly rather than calling it foreign to an unknown launcher.
+// This is a naming-convention heuristic, not proof: it only ever changes
+// wording, never reap/adopt behaviour.
+func looksLikeOrphanedOurs(socket string) bool {
+	if filepath.Base(socket) != "agent.sock" {
+		return false
+	}
+	tokenDir := filepath.Dir(socket)
+	token := filepath.Base(tokenDir)
+	if len(token) != orphanTokenLen || !isLowerHex(token) {
+		return false
+	}
+	return filepath.Base(filepath.Dir(tokenDir)) == "sshakku"
+}
+
+// isLowerHex reports whether s consists solely of lowercase hex digits.
+func isLowerHex(s string) bool {
+	for _, c := range s {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
 // findings turns the gathered facts into plain-language observations. It only
 // describes what it sees; remediation guidance arrives with the fix path.
 func findings(in Inputs, r Report) []string {
@@ -148,6 +186,12 @@ func findings(in Inputs, r Report) []string {
 	}
 	for _, a := range r.Agents {
 		if a.Kind != agent.KindForeign || !a.Reachable || differentUser(a, r.OurUID) {
+			continue
+		}
+		if looksLikeOrphanedOurs(a.Socket) {
+			f = append(f, fmt.Sprintf(
+				"pid %d looks like a previous sshakku-managed agent (its socket has our own naming shape, but a different per-login token) rather than a truly external tool — investigate only if you don't recognize ever running sshakku here",
+				a.PID))
 			continue
 		}
 		who := "an unknown launcher"
