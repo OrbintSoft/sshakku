@@ -305,6 +305,70 @@ func TestLoadKeysClearsGiveupOnSuccess(t *testing.T) {
 	}
 }
 
+func TestLoadKeysSessionUnlocksOnceAcrossKeys(t *testing.T) {
+	r := newFakeRunner().on("ssh-add", agentEmpty()).on("ssh-keygen", keygen("SHA256:NEW"))
+	secret := &fakeSecret{lookupPass: "stored-pass", lookupFound: true}
+	adder := &fakeKeyAdder{withCodes: []int{0, 0}}
+	l := Loader{
+		Keys:   fakeLister{paths: []string{"/ssh/id_rsa", "/ssh/id_ed25519"}},
+		Runner: r, Secret: secret, Prompt: &fakePrompter{}, Adder: adder, Log: &fakeLogger{},
+		Config: Config{GUI: true},
+	}
+	if err := l.LoadKeys(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(adder.calls) != 2 {
+		t.Fatalf("want 2 adds, got %d", len(adder.calls))
+	}
+	if secret.unlockCalls != 1 || secret.lockCalls != 1 {
+		t.Fatalf("unlockCalls=%d lockCalls=%d, want exactly one unlock and one lock for the whole batch",
+			secret.unlockCalls, secret.lockCalls)
+	}
+}
+
+func TestLoadKeysSessionSkipsUnlockWhenNothingNeeded(t *testing.T) {
+	r := newFakeRunner().
+		on("ssh-add", stdout("256 SHA256:DUP loaded (ED25519)\n", 0)).
+		on("ssh-keygen", keygen("SHA256:DUP"))
+	secret := &fakeSecret{}
+	l := Loader{
+		Keys:   fakeLister{paths: []string{"/ssh/id_x"}},
+		Runner: r, Secret: secret, Adder: &fakeKeyAdder{}, Log: &fakeLogger{},
+		Config: Config{GUI: true},
+	}
+	if err := l.LoadKeys(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if secret.unlockCalls != 0 || secret.lockCalls != 0 {
+		t.Fatalf("unlockCalls=%d lockCalls=%d, want none: no key needed the wallet",
+			secret.unlockCalls, secret.lockCalls)
+	}
+}
+
+func TestLoadKeysSessionUnlockFailureFallsBackPerKey(t *testing.T) {
+	r := newFakeRunner().on("ssh-add", agentEmpty()).on("ssh-keygen", keygen("SHA256:NEW"))
+	secret := &fakeSecret{lookupPass: "stored-pass", lookupFound: true, unlockErr: errors.New("dismissed")}
+	adder := &fakeKeyAdder{withCodes: []int{0, 0}}
+	l := Loader{
+		Keys:   fakeLister{paths: []string{"/ssh/id_rsa", "/ssh/id_ed25519"}},
+		Runner: r, Secret: secret, Prompt: &fakePrompter{}, Adder: adder, Log: &fakeLogger{},
+		Config: Config{GUI: true},
+	}
+	if err := l.LoadKeys(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(adder.calls) != 2 {
+		t.Fatalf("keys must still load despite the unlock failure, got %d adds", len(adder.calls))
+	}
+	if secret.unlockCalls != 2 {
+		t.Fatalf("unlockCalls = %d, want a retry attempt per key when the session unlock keeps failing",
+			secret.unlockCalls)
+	}
+	if secret.lockCalls != 0 {
+		t.Fatalf("lockCalls = %d, want none: the session was never actually held", secret.lockCalls)
+	}
+}
+
 func TestLoadKeysNoKeys(t *testing.T) {
 	r := newFakeRunner() // ssh-add must not be consulted
 	log := &fakeLogger{}

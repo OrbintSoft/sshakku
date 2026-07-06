@@ -652,6 +652,22 @@ func forget(stdout, stderr io.Writer, args []string) int {
 	secret, closeSecret := newSecretBackend(currentUser(), log)
 	defer closeSecret()
 
+	// forget always touches the secret store (listing and/or deleting), so —
+	// unlike load-keys, which unlocks lazily since some keys may need no wallet
+	// access at all — it unlocks once up front for the whole operation instead
+	// of once per List/Delete call.
+	if sess, ok := secret.(keys.SecretSession); ok {
+		if err := sess.Unlock(); err != nil {
+			_ = log.Log("ERROR", fmt.Sprintf("forget: unlock secret store: %v", err))
+		} else {
+			defer func() {
+				if err := sess.Lock(); err != nil {
+					_ = log.Log("ERROR", fmt.Sprintf("forget: lock secret store: %v", err))
+				}
+			}()
+		}
+	}
+
 	var services []string
 	if all {
 		list, err := secret.List()

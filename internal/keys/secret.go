@@ -136,19 +136,67 @@ type SecretServiceClient interface {
 	DeleteItem(item dbus.ObjectPath) error
 }
 
+// SecretSession is implemented by backends that can hold their store unlocked
+// across several Lookup/Store calls instead of locking again after each one.
+// Loader uses it to unlock once for a whole batch of keys — closing the
+// wallet as soon as the batch finishes rather than once per key — while a
+// single reactive lookup (the askpass broker refilling one expired key)
+// still gets its own short unlock/lock, unaffected by this interface.
+type SecretSession interface {
+	// Unlock unlocks the store and keeps it unlocked for subsequent
+	// Lookup/Store/Delete calls until Lock is called.
+	Unlock() error
+	// Lock re-locks the store previously unlocked via Unlock.
+	Lock() error
+}
+
 // SecretServiceBackend keeps passphrases in a dedicated Secret Service
 // collection, unlocking it only for the duration of each Lookup/Store and
 // locking it again immediately after — instead of relying on the desktop's
 // fixed idle timeout to bound the exposure window. Unlike SecretToolBackend,
 // which only ever targets the default collection and has no lock/unlock
 // verbs, this talks to the Secret Service D-Bus API directly.
+//
+// It also implements SecretSession: a caller that wants to batch several
+// Lookup/Store calls under one unlock (Loader, across a run's worth of keys)
+// can call Unlock/Lock explicitly, which suppresses the per-call unlock/lock
+// below until Lock is called.
 type SecretServiceBackend struct {
 	Client SecretServiceClient
 	// User is the "username" attribute, constant for the login session.
 	User string
 
 	collection dbus.ObjectPath
+	// held is true between an explicit Unlock and its matching Lock: while
+	// true, Lookup/Store/Delete skip their own unlock/lock bracket.
+	held bool
 }
+
+// Unlock unlocks the sshakku collection and keeps it unlocked for subsequent
+// Lookup/Store/Delete calls until Lock is called.
+func (b *SecretServiceBackend) Unlock() error {
+	col, err := b.resolveCollection()
+	if err != nil {
+		return err
+	}
+	if err := b.Client.Unlock(col); err != nil {
+		return err
+	}
+	b.held = true
+	return nil
+}
+
+// Lock re-locks the sshakku collection previously unlocked via Unlock.
+func (b *SecretServiceBackend) Lock() error {
+	col, err := b.resolveCollection()
+	if err != nil {
+		return err
+	}
+	b.held = false
+	return b.Client.Lock(col)
+}
+
+var _ SecretSession = (*SecretServiceBackend)(nil)
 
 func (b *SecretServiceBackend) resolveCollection() (dbus.ObjectPath, error) {
 	if b.collection == "" {
@@ -163,16 +211,19 @@ func (b *SecretServiceBackend) resolveCollection() (dbus.ObjectPath, error) {
 
 // Lookup unlocks the sshakku collection, searches it for service, reads the
 // secret if found, and re-locks the collection before returning — on a hit, a
-// miss, or an error alike.
+// miss, or an error alike. When the collection is already held unlocked (see
+// SecretSession), it skips its own unlock/lock and leaves that to the holder.
 func (b *SecretServiceBackend) Lookup(service string) (string, bool, error) {
 	col, err := b.resolveCollection()
 	if err != nil {
 		return "", false, err
 	}
-	if err := b.Client.Unlock(col); err != nil {
-		return "", false, err
+	if !b.held {
+		if err := b.Client.Unlock(col); err != nil {
+			return "", false, err
+		}
+		defer func() { _ = b.Client.Lock(col) }()
 	}
-	defer func() { _ = b.Client.Lock(col) }()
 
 	items, err := b.Client.SearchItems(col, map[string]string{"service": service, "username": b.User})
 	if err != nil || len(items) == 0 {
@@ -187,16 +238,19 @@ func (b *SecretServiceBackend) Lookup(service string) (string, bool, error) {
 
 // Store unlocks the sshakku collection, creates or replaces the item for
 // service, and re-locks the collection before returning — on success or
-// error alike.
+// error alike. When the collection is already held unlocked (see
+// SecretSession), it skips its own unlock/lock and leaves that to the holder.
 func (b *SecretServiceBackend) Store(service, label, passphrase string) error {
 	col, err := b.resolveCollection()
 	if err != nil {
 		return err
 	}
-	if err := b.Client.Unlock(col); err != nil {
-		return err
+	if !b.held {
+		if err := b.Client.Unlock(col); err != nil {
+			return err
+		}
+		defer func() { _ = b.Client.Lock(col) }()
 	}
-	defer func() { _ = b.Client.Lock(col) }()
 
 	attrs := map[string]string{"service": service, "username": b.User}
 	return b.Client.CreateItem(col, label, attrs, passphrase, true)
@@ -204,16 +258,20 @@ func (b *SecretServiceBackend) Store(service, label, passphrase string) error {
 
 // Delete unlocks the sshakku collection, deletes every item matching service,
 // and re-locks the collection before returning — on success, a miss, or an
-// error alike. A miss (nothing to delete) is success, not an error.
+// error alike. A miss (nothing to delete) is success, not an error. When the
+// collection is already held unlocked (see SecretSession), it skips its own
+// unlock/lock and leaves that to the holder.
 func (b *SecretServiceBackend) Delete(service string) error {
 	col, err := b.resolveCollection()
 	if err != nil {
 		return err
 	}
-	if err := b.Client.Unlock(col); err != nil {
-		return err
+	if !b.held {
+		if err := b.Client.Unlock(col); err != nil {
+			return err
+		}
+		defer func() { _ = b.Client.Lock(col) }()
 	}
-	defer func() { _ = b.Client.Lock(col) }()
 
 	items, err := b.Client.SearchItems(col, map[string]string{"service": service, "username": b.User})
 	if err != nil {
@@ -230,16 +288,19 @@ func (b *SecretServiceBackend) Delete(service string) error {
 // List unlocks the sshakku collection, reads the "service" attribute of every
 // item it holds, and re-locks the collection before returning. Since the
 // collection is dedicated to sshakku (open decision 17), every item in it is
-// sshakku-managed.
+// sshakku-managed. When the collection is already held unlocked (see
+// SecretSession), it skips its own unlock/lock and leaves that to the holder.
 func (b *SecretServiceBackend) List() ([]string, error) {
 	col, err := b.resolveCollection()
 	if err != nil {
 		return nil, err
 	}
-	if err := b.Client.Unlock(col); err != nil {
-		return nil, err
+	if !b.held {
+		if err := b.Client.Unlock(col); err != nil {
+			return nil, err
+		}
+		defer func() { _ = b.Client.Lock(col) }()
 	}
-	defer func() { _ = b.Client.Lock(col) }()
 
 	items, err := b.Client.Items(col)
 	if err != nil {

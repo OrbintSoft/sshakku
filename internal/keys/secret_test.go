@@ -238,6 +238,64 @@ func TestSecretServiceLookup(t *testing.T) {
 	})
 }
 
+func TestSecretServiceSession(t *testing.T) {
+	const col = dbus.ObjectPath("/org/freedesktop/secrets/collection/sshakku")
+	const item = dbus.ObjectPath("/org/freedesktop/secrets/collection/sshakku/1")
+
+	t.Run("Unlock then several Lookup/Store share one unlock, Lock releases it", func(t *testing.T) {
+		c := &fakeSecretServiceClient{
+			collection:    col,
+			items:         []dbus.ObjectPath{item},
+			secretsByItem: map[dbus.ObjectPath]string{item: "hunter2"},
+		}
+		b := &SecretServiceBackend{Client: c, User: "alice"}
+
+		if err := b.Unlock(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if _, _, err := b.Lookup("a"); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if err := b.Store("b", "label", "hunter2"); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(c.unlocked) != 1 {
+			t.Fatalf("unlocked = %v, want exactly one explicit unlock shared across calls", c.unlocked)
+		}
+		if len(c.locked) != 0 {
+			t.Fatalf("locked = %v, want none until Lock is called", c.locked)
+		}
+
+		if err := b.Lock(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(c.locked) != 1 {
+			t.Fatalf("locked = %v, want exactly one lock after Lock()", c.locked)
+		}
+
+		// held is cleared after Lock: a further call unlocks and locks on its own again.
+		if _, _, err := b.Lookup("c"); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(c.unlocked) != 2 || len(c.locked) != 2 {
+			t.Fatalf("unlocked=%v locked=%v, want a fresh unlock/lock bracket after Lock()", c.unlocked, c.locked)
+		}
+	})
+
+	t.Run("an Unlock collection error leaves held false", func(t *testing.T) {
+		wantErr := errors.New("boom")
+		c := &fakeSecretServiceClient{collectionErr: wantErr}
+		b := &SecretServiceBackend{Client: c, User: "alice"}
+
+		if err := b.Unlock(); !errors.Is(err, wantErr) {
+			t.Fatalf("error = %v, want %v", err, wantErr)
+		}
+		if b.held {
+			t.Fatal("held = true after a failed Unlock, want false")
+		}
+	})
+}
+
 func TestSecretServiceStore(t *testing.T) {
 	const col = dbus.ObjectPath("/org/freedesktop/secrets/collection/sshakku")
 

@@ -97,6 +97,11 @@ type Loader struct {
 // and loads each missing key (best-effort: a failure on one key is logged and the
 // rest still run). It returns an error only when the keys cannot be enumerated or
 // the agent cannot be queried.
+//
+// When the secret backend supports it (SecretSession), the whole batch shares a
+// single wallet unlock instead of one per key: the wallet opens lazily on the
+// first key that actually needs it and closes once the batch is done, rather
+// than once per key or waiting out the wallet's own idle timeout.
 func (l Loader) LoadKeys() error {
 	keyfiles, err := l.Keys.Keys()
 	if err != nil {
@@ -110,10 +115,56 @@ func (l Loader) LoadKeys() error {
 	if err != nil {
 		return fmt.Errorf("read agent fingerprints: %w", err)
 	}
+
+	if sess, ok := l.Secret.(SecretSession); ok {
+		sb := &sessionBackend{SecretBackend: l.Secret, sess: sess}
+		l.Secret = sb
+		defer func() {
+			if !sb.unlocked {
+				return
+			}
+			if err := sess.Lock(); err != nil {
+				l.logf("ERROR", "lock secret store: %v", err)
+			}
+		}()
+	}
+
 	for _, keyfile := range keyfiles {
 		l.loadOne(keyfile, loaded)
 	}
 	return nil
+}
+
+// sessionBackend wraps a SecretBackend so the first Lookup or Store made
+// through it unlocks the underlying SecretSession, and every call after that
+// reuses the same unlock instead of triggering its own. The holder (LoadKeys)
+// locks it back up once, after the whole batch — not after each call.
+type sessionBackend struct {
+	SecretBackend
+	sess     SecretSession
+	unlocked bool
+}
+
+// ensureUnlocked unlocks the session on first use; a failed unlock is left for
+// the wrapped backend's own Lookup/Store to report, so it still falls back to
+// prompting rather than failing the whole batch.
+func (s *sessionBackend) ensureUnlocked() {
+	if s.unlocked {
+		return
+	}
+	if err := s.sess.Unlock(); err == nil {
+		s.unlocked = true
+	}
+}
+
+func (s *sessionBackend) Lookup(service string) (string, bool, error) {
+	s.ensureUnlocked()
+	return s.SecretBackend.Lookup(service)
+}
+
+func (s *sessionBackend) Store(service, label, passphrase string) error {
+	s.ensureUnlocked()
+	return s.SecretBackend.Store(service, label, passphrase)
 }
 
 // loadOne loads a single key unless its fingerprint is already in the agent.

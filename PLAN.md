@@ -319,6 +319,16 @@ honoured) before or during the phases. Each notes the related goal.
     **Follow-up (rule 2, noticed in passing):** the Go test suite had no CI
     entrypoint (`linting.yml` only ran `make lint`); added `make test` (`go test
     -race ./...`) and a `test.yml` workflow so it actually runs on push.
+    **Follow-up (bug report): batch the unlock across `load-keys`.** Per-key
+    unlock/lock meant a shell with N keys prompted the wallet password up to N
+    times. `SecretServiceBackend` gained an explicit `Unlock`/`Lock` pair
+    (`SecretSession` interface) that a caller can hold across several
+    `Lookup`/`Store` calls; `Loader.LoadKeys` uses it to unlock lazily on the
+    first key that actually needs the wallet and lock once after the whole
+    batch, rather than once per key or waiting out the wallet's own idle
+    timeout — see `docs/THREAT-MODEL.md` I6 for the resulting exposure window.
+    The reactive askpass-broker path (a single expired key re-added outside
+    `load-keys`) is unaffected: it still opens and closes for that one lookup.
 
 18. **Which keys' passphrases are stored in the wallet is configurable (goals 2,
     7; open decision 13). ✅ Done.** `config.toml` gains three keys, config-file
