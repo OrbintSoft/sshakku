@@ -635,6 +635,14 @@ is committable and the bash keeps working until each piece moves.
   `SSHAKKU_GIVEUP_TTL` (per-login, tmpfs-backed; `SSHAKKU_NO_GIVEUP` opts out).
   `internal/giveup` + `internal/keys`; the env knobs are documented in
   `docs/CONFIGURATION.md` and the bash is now just the thin hook.
+  Follow-up: `askpass-env` exports `SSHAKKU_ASKPASS` into the whole
+  interactive shell (so ssh's own later exec of the helper carries it too),
+  which meant it stayed set for anything the user then typed by hand in that
+  same shell — a plain `sshakku doctor` silently turned into an askpass
+  prompt instead of running, since `main` trusted the env marker alone. Fixed
+  by giving a known subcommand name in `argv[1]` priority over the marker
+  (`wantsAskpass`): ssh always execs the helper with only the prompt text as
+  its one argument, never one of sshakku's own subcommand names.
 
 ### Phase 3 — Diagnostic tool
 
