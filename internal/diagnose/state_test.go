@@ -28,6 +28,16 @@ func TestClassifyState(t *testing.T) {
 		{"ours zombie, dead socket", Report{Agents: []AgentView{ours(false)}}, StateOursZombie},
 		{"ours zombie, recorded pid only", Report{RecordedPID: 123}, StateOursZombie},
 		{"disaster, two live", Report{Agents: []AgentView{ours(true), foreign(true)}}, StateDisaster},
+		{
+			"a different user's healthy agent doesn't make it foreign-serving",
+			Report{OurUID: 0, Agents: []AgentView{{Kind: agent.KindForeign, UID: 1000, Socket: "/tmp/f.sock", Reachable: true}}},
+			StateClean,
+		},
+		{
+			"a different user's agent doesn't mask our own healthy one either",
+			Report{OurUID: 0, Agents: []AgentView{ours(true), {Kind: agent.KindForeign, UID: 1000, Socket: "/tmp/f.sock", Reachable: true}}},
+			StateOursHealthy,
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
