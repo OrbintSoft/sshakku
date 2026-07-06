@@ -62,7 +62,9 @@ type fakeLister struct {
 
 func (l fakeLister) Keys() ([]string, error) { return l.paths, l.err }
 
-// fakeSecret is a scripted SecretBackend that records every Store.
+// fakeSecret is a scripted SecretBackend that records every Store. It also
+// implements SecretSession (Unlock/Lock), recording call counts, so Loader
+// batch-unlock tests can assert on them without a real Secret Service.
 type fakeSecret struct {
 	lookupPass   string
 	lookupFound  bool
@@ -73,6 +75,11 @@ type fakeSecret struct {
 	deleted      []string
 	listServices []string
 	listErr      error
+
+	unlockErr   error
+	unlockCalls int
+	lockErr     error
+	lockCalls   int
 }
 
 type storeCall struct{ service, label, passphrase string }
@@ -99,6 +106,16 @@ func (s *fakeSecret) Delete(service string) error {
 
 func (s *fakeSecret) List() ([]string, error) {
 	return s.listServices, s.listErr
+}
+
+func (s *fakeSecret) Unlock() error {
+	s.unlockCalls++
+	return s.unlockErr
+}
+
+func (s *fakeSecret) Lock() error {
+	s.lockCalls++
+	return s.lockErr
 }
 
 // fakeKeyAdder records each add and returns scripted exit codes per call.
