@@ -40,6 +40,14 @@ orphaned by an old build or manual testing, say — rather than a truly
 external tool, since another program reinventing that exact layout by
 coincidence is far less likely.
 
+When `SSH_AUTH_SOCK` is reachable but isn't the fixed socket, the report also
+recognises the socket's shape for a few well-known ssh-agent-compatible
+services — gpg-agent with ssh support enabled, gnome-keyring-daemon's ssh
+emulation, a systemd-activated `ssh-agent.socket` unit — and names the service
+instead of only saying "not our fixed socket". These services never run under
+the `ssh-agent` binary name, so they cannot appear as an agent in the process
+list above; the socket path is the only signal available for them.
+
 ## `sshakku doctor --fix`
 
 `sshakku doctor --fix` first prints the diagnosis, then applies the same

@@ -698,10 +698,20 @@ development. `findings()` now recognises the shape
 state/reap/adopt. See `orphaned-agent-token-steps.md` (used during
 development) for the investigation.
 
-*Deferred refinements (not blocking):* deeper foreign-agent attribution for
-agents that do *not* match sshakku's own shape — gnome-keyring `keyring/ssh`,
-gpg-agent, systemd `ssh-agent.socket` — and environment probing to recover a
-launcher lost to the daemonize/reparent.
+**✅ Done — foreign-agent shape attribution.** `Inspector.Agents` only
+enumerates processes literally named `ssh-agent`, so gnome-keyring, gpg-agent,
+and a systemd `ssh-agent.socket` unit never appear in the process list at all —
+the only place their presence is visible is `SSH_AUTH_SOCK` itself, when it is
+reachable but not the fixed socket. `knownForeignShape` recognises each
+service's fixed socket path there (`S.gpg-agent.ssh`, `.../keyring/ssh`,
+`ssh-agent.socket`) and names it instead of only saying "not our fixed
+socket" — wording only, no change to state/reap/adopt. See
+`foreign-agent-shape-steps.md` (used during development).
+
+*Deferred refinements (not blocking):* environment/systemd probing to recover
+a launcher lost to the daemonize/reparent, for agents ancestry cannot
+attribute (dead-ends at `init`) and whose socket doesn't match any of the
+known shapes above either.
 
 ### Phase 4 — Configurability & pluggable secret backends
 

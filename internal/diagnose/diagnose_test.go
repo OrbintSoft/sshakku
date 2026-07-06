@@ -196,6 +196,38 @@ func TestLooksLikeOrphanedOurs(t *testing.T) {
 	}
 }
 
+func TestKnownForeignShape(t *testing.T) {
+	cases := []struct {
+		socket string
+		want   bool
+	}{
+		{"/run/user/1000/gnupg/S.gpg-agent.ssh", true},
+		{"/home/u/.gnupg/S.gpg-agent.ssh", true},
+		{"/run/user/1000/keyring/ssh", true},
+		{"/run/user/1000/ssh-agent.socket", true},
+		{"/run/user/1000/gnupg/S.gpg-agent", false}, // the main agent socket, not the ssh one
+		{"/run/user/1000/keyring/pkcs11", false},    // a real gnome-keyring socket, wrong one
+		{"/tmp/keyring/ssh-agent.socket", true},     // basename alone identifies the systemd unit
+		{"/tmp/foreign.sock", false},
+		{"", false},
+	}
+	for _, c := range cases {
+		if _, ok := knownForeignShape(c.socket); ok != c.want {
+			t.Errorf("knownForeignShape(%q) = %v, want %v", c.socket, ok, c.want)
+		}
+	}
+}
+
+func TestGatherEnvSockKnownForeignShape(t *testing.T) {
+	const gpgSSH = "/run/user/1000/gnupg/S.gpg-agent.ssh"
+	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: gpgSSH, OurUID: 1000},
+		fakeSource{}, fakeProber{up: map[string]bool{gpgSSH: true}}, nil)
+
+	if !hasFinding(r, "gpg-agent, with ssh support enabled") {
+		t.Errorf("findings = %v, want the gpg-agent shape identified", r.Findings)
+	}
+}
+
 func TestGatherInspectError(t *testing.T) {
 	src := fakeSource{err: errors.New("boom")}
 	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000},

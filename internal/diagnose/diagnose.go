@@ -145,6 +145,26 @@ func isLowerHex(s string) bool {
 	return true
 }
 
+// knownForeignShape identifies socket as belonging to a well-known
+// ssh-agent-compatible service other than sshakku, by the fixed path shape
+// each is known to bind. Unlike looksLikeOrphanedOurs, these never surface
+// as an AgentView — Inspector.Agents only enumerates processes literally
+// named "ssh-agent" (internal/agent/inspect.go), and none of gnome-keyring,
+// gpg-agent, or a systemd-activated unit run under that name — so this is
+// checked against SSH_AUTH_SOCK itself rather than the process list.
+func knownForeignShape(socket string) (string, bool) {
+	switch base := filepath.Base(socket); {
+	case base == "S.gpg-agent.ssh":
+		return "gpg-agent, with ssh support enabled", true
+	case base == "ssh" && filepath.Base(filepath.Dir(socket)) == "keyring":
+		return "gnome-keyring-daemon's ssh-agent emulation", true
+	case base == "ssh-agent.socket":
+		return "a systemd-activated ssh-agent.socket unit", true
+	default:
+		return "", false
+	}
+}
+
 // findings turns the gathered facts into plain-language observations. It only
 // describes what it sees; remediation guidance arrives with the fix path.
 func findings(in Inputs, r Report) []string {
@@ -169,7 +189,11 @@ func findings(in Inputs, r Report) []string {
 	case !r.EnvReachable:
 		f = append(f, fmt.Sprintf("SSH_AUTH_SOCK points at %s, which is not answering", in.EnvSock))
 	case in.EnvSock != in.FixedSock:
-		f = append(f, fmt.Sprintf("SSH_AUTH_SOCK is %s, not our fixed socket %s", in.EnvSock, in.FixedSock))
+		if label, ok := knownForeignShape(in.EnvSock); ok {
+			f = append(f, fmt.Sprintf("SSH_AUTH_SOCK is %s (%s), not our fixed socket %s", in.EnvSock, label, in.FixedSock))
+		} else {
+			f = append(f, fmt.Sprintf("SSH_AUTH_SOCK is %s, not our fixed socket %s", in.EnvSock, in.FixedSock))
+		}
 	}
 
 	switch {
