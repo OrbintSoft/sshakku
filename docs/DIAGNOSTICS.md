@@ -50,3 +50,27 @@ points somewhere other than the healed socket, the command prints an
 `doctor` inspects the invoking user's session, and `--fix` acts as that user: it
 never escalates privileges, so it reaps only your own dead agents. Run it as the
 user whose agent you are diagnosing.
+
+### Diagnosing another user's session
+
+`sshakku doctor --user <name|uid>` reports on a different user's session
+instead — useful when you've `sudo`ed in to help diagnose someone else's
+account. Invoked as root with no `--user`, the target is auto-detected from
+`SUDO_UID` (the real user `sudo` ran as), so a plain `sudo sshakku doctor`
+diagnoses *that* user rather than root's own, empty session.
+
+This requires root (only root can assume another uid's identity), and it
+never accepts `--fix`: elevation is for read-only inspection only, never for
+writing as root into another user's files or sockets. To actually fix another
+user's session, run as that user instead:
+
+```sh
+sudo -u <user> -H sshakku doctor --fix
+```
+
+Confirming the target's fixed socket needs their per-login token, which lives
+in their own kernel keyring — invisible to root by simple file access, unlike
+regular files. `doctor` reads it by re-executing itself as a short-lived child
+process running under the target's own credentials (a kernel-mediated
+privilege drop, not an in-process one), then discards that identity
+immediately; nothing else runs under it.

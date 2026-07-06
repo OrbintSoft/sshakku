@@ -652,11 +652,34 @@ shell's `SSH_AUTH_SOCK`. Documented in `docs/DIAGNOSTICS.md` (linked from the
 README). No new file type — the docs are Markdown, already covered by
 `markdownlint-cli2` + `editorconfig-checker` (rule 12).
 
+**✅ Done — cross-user inspection under `sudo`.** `sshakku doctor --user
+<name|uid>` diagnoses another user's session instead of the invoking one
+(auto-detected from `SUDO_UID` when invoked as root with no `--user`), closing
+the gap noted below. It confirms the target's own fixed socket by reading
+their per-login token from their own kernel keyring — reached by re-executing
+the binary as a child process under their credentials (a kernel-mediated
+privilege drop via `exec.Cmd.SysProcAttr.Credential`, never in-process
+`setuid`/`seteuid`), so the confirmation is real, not a filesystem-shape
+guess. Requires root; `--fix` is refused cross-user (threat model E1:
+elevation is for read-only inspection, never for writing as root) — fixing
+another user's session is `sudo -u <user> -H sshakku doctor --fix` instead,
+which needs none of this machinery. Root also bypasses unix-socket
+permissions, which was inflating "reachable" for an agent the target could
+never actually reach themselves; `agent.UIDGatedProber` closes that, and
+`classifyState`/`findings` no longer let a different real user's agent drive
+this account's own state or foreign-agent wording — which is what actually
+fixes a plain `sudo sshakku doctor` (no `--user` at all) misreporting the
+invoking-as-root case as state D. Documented in `docs/DIAGNOSTICS.md`.
+
 *Deferred refinements (not blocking):* deeper foreign-agent attribution via
 socket-path heuristics (gnome-keyring `keyring/ssh`, gpg-agent, systemd
 `ssh-agent.socket`) and environment probing to recover a launcher lost to the
-daemonize/reparent; and cross-user inspection under `sudo` for the fuller picture
-(today `doctor` resolves paths for, and reaps only, the invoking user).
+daemonize/reparent — including the specific case (found while validating the
+cross-user work above) of an agent whose socket has sshakku's own naming shape
+but an unrecognised per-login token, most likely one of our own orphaned by a
+keyring that didn't survive across logins/reboots rather than a truly external
+tool; tracked separately (see `orphaned-agent-token-steps.md` during
+development).
 
 ### Phase 4 — Configurability & pluggable secret backends
 
