@@ -644,7 +644,7 @@ is committable and the bash keeps working until each piece moves.
   (`wantsAskpass`): ssh always execs the helper with only the prompt text as
   its one argument, never one of sshakku's own subcommand names.
 
-### Phase 3 — Diagnostic tool
+### Phase 3 — Diagnostic tool ✅ Done
 
 The currently-missing diagnostic that reports who started the agent, why it isn't
 working, and which processes are involved — runnable under `sudo` for the full
