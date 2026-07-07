@@ -643,7 +643,7 @@ func doctorCrossUser(stdout, stderr io.Writer, invoking paths.Env, target target
 		StatePath: filepath.Join(filepath.Dir(layout.AgentSock), "agent.state"),
 		LogFile:   layout.LogFile,
 		OurUID:    target.UID,
-	}, agent.Inspector{}, agent.UIDGatedProber{UID: target.UID, Prober: agent.SocketProber{}}, diagnose.ProcfsAncestry{}))
+	}, agent.Inspector{}, agent.UIDGatedProber{UID: target.UID, Prober: agent.SocketProber{}}, diagnose.ProcfsAncestry{}, diagnose.ProcfsCgroup{}))
 	return 0
 }
 
@@ -658,7 +658,7 @@ func gatherReport(env paths.Env, layout paths.Layout) diagnose.Report {
 		EnvSock:   os.Getenv("SSH_AUTH_SOCK"),
 		LogFile:   layout.LogFile,
 		OurUID:    env.UID,
-	}, agent.Inspector{}, agent.SocketProber{}, diagnose.ProcfsAncestry{})
+	}, agent.Inspector{}, agent.SocketProber{}, diagnose.ProcfsAncestry{}, diagnose.ProcfsCgroup{})
 }
 
 // forget deletes stored passphrases: either the named keys, or every entry

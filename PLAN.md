@@ -716,10 +716,16 @@ service's fixed socket path there (`S.gpg-agent.ssh`, `.../keyring/ssh`,
 socket" — wording only, no change to state/reap/adopt. See
 `foreign-agent-shape-steps.md` (used during development).
 
-*Deferred refinements (not blocking):* environment/systemd probing to recover
-a launcher lost to the daemonize/reparent, for agents ancestry cannot
-attribute (dead-ends at `init`) and whose socket doesn't match any of the
-known shapes above either.
+**✅ Done — systemd cgroup attribution fallback.** `/proc/<pid>/environ`
+(investigated as a candidate signal) turned out to be blocked by Yama
+`ptrace_scope=1` even for a same-uid, non-ancestor reader, so it cannot
+recover a launcher lost to the daemonize/reparent. `/proc/<pid>/cgroup` is
+world-readable and unaffected by Yama, and a process's cgroup membership
+survives being reparented to init, so `startedBy` now falls back to naming
+the systemd unit (service or transient scope) the agent's own cgroup still
+belongs to when ancestry dead-ends at `init` — wording only, no change to
+state/reap/adopt, and no `systemctl` shell-out. See
+`agent-cgroup-attribution-steps.md` (used during development).
 
 ### Phase 4 — Configurability & pluggable secret backends
 

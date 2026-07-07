@@ -1,6 +1,7 @@
 package diagnose
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -97,16 +98,23 @@ func ancestry(pid int, src AncestrySource) []ProcInfo {
 // startedBy attributes an agent to whoever launched it: the nearest ancestor
 // (past the agent process itself) that matches a known session launcher, or the
 // immediate parent's name when none is recognised. It returns false when the
-// ancestry is too shallow to attribute anything.
-func startedBy(chain []ProcInfo) (string, bool) {
+// ancestry is too shallow to attribute anything. cgroupUnit is the systemd unit
+// (from CgroupSource) the agent's own cgroup names, if any — used only as a
+// fallback when ancestry dead-ends at init; pass "" when none was found.
+func startedBy(chain []ProcInfo, cgroupUnit string) (string, bool) {
 	if len(chain) < 2 {
 		return "", false
 	}
 	ancestors := chain[1:] // skip the agent process itself
 	// A daemon double-forks and is reparented to init (pid 1); its real launcher
-	// is then gone from the process tree, so ancestry cannot attribute it. Say so
-	// rather than crediting init.
+	// is then gone from the process tree, so ancestry cannot attribute it. The
+	// process's cgroup membership survives the reparent, though, and often still
+	// names the systemd unit it was launched under — say that instead of only
+	// "unknown" when it's available.
 	if ancestors[0].PID == 1 {
+		if cgroupUnit != "" {
+			return fmt.Sprintf("an unknown launcher (daemonized, reparented to init; systemd unit: %s)", cgroupUnit), true
+		}
 		return "an unknown launcher (daemonized, reparented to init)", true
 	}
 	for _, p := range ancestors {

@@ -31,7 +31,10 @@ For each agent the report shows the process chain up toward `init` and names the
 launcher when it recognises one (systemd, the KDE Plasma or GNOME session, a
 display manager, an SSH login, a login shell). Because `ssh-agent` daemonizes and
 is then reparented to `init`, the original launcher is often no longer in the
-process tree; the report says so rather than guessing.
+process tree; when that happens, the report falls back to naming the systemd
+unit (service or transient scope) the agent's own cgroup still belongs to, if
+one is found — cgroup membership survives the reparent even though ancestry
+does not — and otherwise says the launcher is unknown rather than guessing.
 
 A foreign agent whose socket has sshakku's own naming shape
 (`.../sshakku/<hex>/agent.sock`) but a token that doesn't match this session's

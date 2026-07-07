@@ -44,6 +44,7 @@ type AgentView struct {
 	Socket    string
 	Reachable bool
 	Ancestry  []ProcInfo // the process chain that launched it, agent first
+	Cgroup    string     // systemd unit the agent's cgroup names, or "" if none/unknown
 }
 
 // Report is the read-only picture the doctor presents.
@@ -61,10 +62,11 @@ type Report struct {
 }
 
 // Gather inspects the agent situation described by in and returns the report,
-// reading everything through src, prober, and anc so it never touches the real
-// /proc or sockets in a test. A nil anc skips ancestry attribution. It mutates
-// nothing.
-func Gather(in Inputs, src AgentSource, prober agent.Prober, anc AncestrySource) Report {
+// reading everything through src, prober, anc, and cg so it never touches the
+// real /proc or sockets in a test. A nil anc skips ancestry attribution; a nil
+// cg skips the cgroup fallback used when ancestry dead-ends at init. It
+// mutates nothing.
+func Gather(in Inputs, src AgentSource, prober agent.Prober, anc AncestrySource, cg CgroupSource) Report {
 	r := Report{
 		FixedSock: in.FixedSock,
 		EnvSock:   in.EnvSock,
@@ -82,14 +84,20 @@ func Gather(in Inputs, src AgentSource, prober agent.Prober, anc AncestrySource)
 		r.InspectErr = err
 	}
 	for _, p := range procs {
-		r.Agents = append(r.Agents, AgentView{
+		av := AgentView{
 			PID:       p.PID,
 			UID:       p.UID,
 			Kind:      agent.Classify(p, in.FixedSock, in.LegacyDir),
 			Socket:    p.Socket,
 			Reachable: p.Socket != "" && prober.Reachable(p.Socket),
 			Ancestry:  ancestry(p.PID, anc),
-		})
+		}
+		if cg != nil {
+			if unit, ok := cg.Cgroup(p.PID); ok {
+				av.Cgroup = unit
+			}
+		}
+		r.Agents = append(r.Agents, av)
 	}
 
 	r.State = classifyState(r)
@@ -219,7 +227,7 @@ func findings(in Inputs, r Report) []string {
 			continue
 		}
 		who := "an unknown launcher"
-		if label, ok := startedBy(a.Ancestry); ok {
+		if label, ok := startedBy(a.Ancestry, a.Cgroup); ok {
 			who = label
 		}
 		f = append(f, fmt.Sprintf("a foreign ssh-agent (pid %d) started by %s is answering", a.PID, who))
@@ -259,7 +267,7 @@ func Format(w io.Writer, r Report) {
 		}
 		p("  pid %-7d %-7s %-9s %-6s %s\n",
 			a.PID, a.Kind, state, uidNote(a.UID, r.OurUID), orNone(a.Socket))
-		if label, ok := startedBy(a.Ancestry); ok {
+		if label, ok := startedBy(a.Ancestry, a.Cgroup); ok {
 			p("    started by %s\n", label)
 			p("    %s\n", chainString(a.Ancestry))
 		}
