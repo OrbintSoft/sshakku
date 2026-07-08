@@ -22,6 +22,7 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/giveup"
 	"github.com/OrbintSoft/sshakku/internal/keyring"
 	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/OrbintSoft/sshakku/internal/keystate"
 	"github.com/OrbintSoft/sshakku/internal/paths"
 	"github.com/OrbintSoft/sshakku/internal/secretservice"
 	"github.com/OrbintSoft/sshakku/internal/sessionlog"
@@ -311,6 +312,7 @@ func loadKeys(stderr io.Writer) int {
 			TTL: settings.GiveupTTL,
 		}
 	}
+	keyStateStore := keystate.Store{Dir: keystateDir(layout)}
 
 	var notifier keys.Notifier
 	if !settings.Quiet {
@@ -328,19 +330,21 @@ func loadKeys(stderr io.Writer) int {
 	defer closeSecret()
 
 	loader := keys.Loader{
-		Keys:   keys.Enumerator{Dir: filepath.Join(env.Home, ".ssh")},
-		Runner: runner,
-		Secret: secret,
-		Prompt: prompter,
-		Adder:  keys.ExecKeyAdder{AskpassProg: self, KeyLifetime: settings.KeyLifetime},
-		Log:    log,
-		Notify: notifier,
-		Giveup: giveupStore,
+		Keys:     keys.Enumerator{Dir: filepath.Join(env.Home, ".ssh")},
+		Runner:   runner,
+		Secret:   secret,
+		Prompt:   prompter,
+		Adder:    keys.ExecKeyAdder{AskpassProg: self, KeyLifetime: settings.KeyLifetime},
+		Log:      log,
+		Notify:   notifier,
+		Giveup:   giveupStore,
+		KeyState: keyStateStore,
 		Config: keys.Config{
 			GUI:         keys.GUIAvailable(guiEnv, runner, prompter),
 			MaxAttempts: settings.MaxAttempts,
 			WalletStore: settings.StoresWallet,
 			AutoLoad:    settings.AutoLoads,
+			KeyLifetime: settings.KeyLifetime,
 		},
 	}
 	if err := loader.LoadKeys(); err != nil {
@@ -643,14 +647,30 @@ func doctorCrossUser(stdout, stderr io.Writer, invoking paths.Env, target target
 		StatePath: filepath.Join(filepath.Dir(layout.AgentSock), "agent.state"),
 		LogFile:   layout.LogFile,
 		OurUID:    target.UID,
-	}, agent.Inspector{}, agent.UIDGatedProber{UID: target.UID, Prober: agent.SocketProber{}}, diagnose.ProcfsAncestry{}, diagnose.ProcfsCgroup{}))
+	}, agent.Inspector{}, agent.UIDGatedProber{UID: target.UID, Prober: agent.SocketProber{}}, diagnose.ProcfsAncestry{}, diagnose.ProcfsCgroup{},
+		nil, // the keys section only covers the invoking user's own ~/.ssh (see gatherReport)
+	))
 	return 0
+}
+
+// keystateDir is where load-keys records each key's added-at/lifetime state,
+// so doctor can later report it; shared so both sides agree on the path. It
+// sits alongside the giveup dir, under the per-login runtime directory
+// (tmpfs, wiped on logout/reboot — see internal/keystate).
+func keystateDir(layout paths.Layout) string {
+	return filepath.Join(filepath.Dir(layout.AgentSock), "keystate")
 }
 
 // gatherReport builds the diagnostic report for the resolved layout, reading the
 // real procfs, sockets, and process tree. Both the read-only and --fix paths use
 // it so they present the situation identically.
 func gatherReport(env paths.Env, layout paths.Layout) diagnose.Report {
+	runner := keys.ExecRunner{}
+	keySource := &diagnose.KeySource{
+		Lister:      keys.Enumerator{Dir: filepath.Join(env.Home, ".ssh")},
+		Fingerprint: keys.RunnerFingerprinter{Runner: runner},
+		State:       keystate.Store{Dir: keystateDir(layout)},
+	}
 	return diagnose.Gather(diagnose.Inputs{
 		FixedSock: layout.AgentSock,
 		LegacyDir: filepath.Join(env.Home, ".ssh", "agent"),
@@ -658,7 +678,7 @@ func gatherReport(env paths.Env, layout paths.Layout) diagnose.Report {
 		EnvSock:   os.Getenv("SSH_AUTH_SOCK"),
 		LogFile:   layout.LogFile,
 		OurUID:    env.UID,
-	}, agent.Inspector{}, agent.SocketProber{}, diagnose.ProcfsAncestry{}, diagnose.ProcfsCgroup{})
+	}, agent.Inspector{}, agent.SocketProber{}, diagnose.ProcfsAncestry{}, diagnose.ProcfsCgroup{}, keySource)
 }
 
 // forget deletes stored passphrases: either the named keys, or every entry

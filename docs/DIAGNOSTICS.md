@@ -20,6 +20,8 @@ situation. It changes nothing. The report covers:
 - **Processes** — every `ssh-agent` process found, each labelled *ours*,
   *legacy*, or *foreign*, with its reachability, owning user, socket, and the
   process chain that launched it.
+- **Keys** — every key file under `~/.ssh`, whether it is currently loaded in
+  the agent, and, for a loaded key, how much longer it has there.
 - **Findings** — plain-language observations (a stale environment, dead agents
   lingering, a foreign agent answering, and so on).
 - **Recommendation** — what to do about the current state.
@@ -50,6 +52,34 @@ emulation, a systemd-activated `ssh-agent.socket` unit — and names the service
 instead of only saying "not our fixed socket". These services never run under
 the `ssh-agent` binary name, so they cannot appear as an agent in the process
 list above; the socket path is the only signal available for them.
+
+### Keys and their remaining time
+
+The ssh-agent protocol has no query for a key's remaining lifetime, so sshakku
+tracks it itself: whenever `load-keys` adds a key, it records when and for how
+long (the `-t` lifetime `ssh-add` was given) in a small per-key file under the
+per-login runtime directory — the same tmpfs-backed location as the give-up
+sentinels, wiped on logout or reboot, holding no secret. `doctor` reads those
+records back to show, for each key under `~/.ssh`:
+
+```text
+~/.ssh keys (2):
+  id_ed25519_github           loaded, expires in 7h12m30s
+  id_rsa_old                  not loaded
+```
+
+A loaded key can also show:
+
+- `loaded, no expiry` — added with `key_lifetime`/`SSHAKKU_KEY_LIFETIME` set to
+  a non-positive value, so it never expires from the agent on its own.
+- `loaded, expired <duration> ago` — past its recorded lifetime but the agent
+  hasn't reaped it yet; the next new shell (or the reactive askpass broker in
+  an already-open one) refills it from the secret store.
+- `loaded, TTL unknown (not added by sshakku, or added before a reboot)` — the
+  key is in the agent but sshakku has no record for it: it was added by
+  something other than `load-keys` (a manual `ssh-add`, forwarded from
+  elsewhere), or the record was lost when the runtime directory was wiped
+  while the agent itself survived.
 
 ## `sshakku doctor --fix`
 
@@ -92,3 +122,6 @@ regular files. `doctor` reads it by re-executing itself as a short-lived child
 process running under the target's own credentials (a kernel-mediated
 privilege drop, not an in-process one), then discards that identity
 immediately; nothing else runs under it.
+
+`--user` reports omit the keys section: reading another user's `~/.ssh` and
+key-state records under a privilege drop is not implemented.

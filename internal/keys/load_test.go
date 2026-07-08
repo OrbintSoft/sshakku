@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 )
 
 // agentEmpty answers `ssh-add -l` as an empty agent; keygen answers `ssh-keygen
@@ -302,6 +303,64 @@ func TestLoadKeysClearsGiveupOnSuccess(t *testing.T) {
 	}
 	if len(give.cleared) != 1 || give.cleared[0] != "id_rsa" {
 		t.Fatalf("cleared = %v, want [id_rsa]", give.cleared)
+	}
+}
+
+func TestLoadKeysSavesKeyStateOnSuccess(t *testing.T) {
+	r := newFakeRunner().on("ssh-add", agentEmpty()).on("ssh-keygen", keygen("SHA256:NEW"))
+	secret := &fakeSecret{lookupPass: "ok", lookupFound: true}
+	adder := &fakeKeyAdder{withCodes: []int{0}}
+	ks := &fakeKeyState{}
+	l := Loader{
+		Keys:   fakeLister{paths: []string{"/ssh/id_rsa"}},
+		Runner: r, Secret: secret, Prompt: &fakePrompter{}, Adder: adder, Log: &fakeLogger{},
+		KeyState: ks, Config: Config{GUI: true, KeyLifetime: 8 * time.Hour},
+	}
+	if err := l.LoadKeys(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(ks.saved) != 1 || ks.saved[0] != (keyStateCall{"id_rsa", 8 * time.Hour}) {
+		t.Fatalf("saved = %v, want [{id_rsa 8h}]", ks.saved)
+	}
+}
+
+func TestLoadKeysSkipsLoadedNeverSavesKeyState(t *testing.T) {
+	r := newFakeRunner().
+		on("ssh-add", stdout("256 SHA256:DUP loaded (ED25519)\n", 0)).
+		on("ssh-keygen", keygen("SHA256:DUP"))
+	ks := &fakeKeyState{}
+	l := Loader{
+		Keys:     fakeLister{paths: []string{"/ssh/id_x"}},
+		Runner:   r,
+		Adder:    &fakeKeyAdder{},
+		Log:      &fakeLogger{},
+		KeyState: ks,
+		Config:   Config{GUI: true},
+	}
+	if err := l.LoadKeys(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(ks.saved) != 0 {
+		t.Fatalf("saved = %v, want none for an already-loaded key", ks.saved)
+	}
+}
+
+func TestLoadKeysExhaustedRetriesNeverSavesKeyState(t *testing.T) {
+	r := newFakeRunner().on("ssh-add", agentEmpty()).on("ssh-keygen", keygen("SHA256:NEW"))
+	secret := &fakeSecret{lookupFound: false}
+	prompter := &fakePrompter{pass: "wrong"}
+	adder := &fakeKeyAdder{withCodes: []int{1, 1, 1}}
+	ks := &fakeKeyState{}
+	l := Loader{
+		Keys:   fakeLister{paths: []string{"/ssh/id_rsa"}},
+		Runner: r, Secret: secret, Prompt: prompter, Adder: adder, Log: &fakeLogger{},
+		Giveup: newFakeGiveup(), KeyState: ks, Config: Config{GUI: true},
+	}
+	if err := l.LoadKeys(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(ks.saved) != 0 {
+		t.Fatalf("saved = %v, want none after exhausted retries", ks.saved)
 	}
 }
 

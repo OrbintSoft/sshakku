@@ -727,6 +727,31 @@ belongs to when ancestry dead-ends at `init` — wording only, no change to
 state/reap/adopt, and no `systemctl` shell-out. See
 `agent-cgroup-attribution-steps.md` (used during development).
 
+**✅ Done — `doctor` lists `~/.ssh` keys with their remaining agent TTL.**
+Prompted by a user report of a wallet-unlock prompt roughly every 5 minutes;
+investigating turned up no such interval anywhere in sshakku (the agent key
+lifetime default is correctly 8h) — the real cause was `gh`/VSCode's own
+credential storage hitting the *default* Secret Service collection's 5-minute
+idle-lock (`~/.config/kwalletrc`), unrelated to sshakku's own dedicated
+`sshakku` collection (decision 17) and its already-scoped unlock/lock. While
+investigating, the real gap surfaced: `doctor` had no way to show which keys
+are loaded or how long they have left, since the ssh-agent protocol itself
+has no query for a key's remaining lifetime. New `internal/keystate` records,
+per key, when `load-keys` added it and for how long (`ssh-add -t`'s value) —
+one small file per key under the per-login runtime directory, alongside the
+give-up sentinels: tmpfs-backed, wiped on logout/reboot, holding no secret.
+`internal/diagnose` gained an optional `KeySource` (nil skips the section)
+that cross-references every `~/.ssh` key's fingerprint against the agent's
+loaded set and, for a loaded key sshakku tracked, resolves its remaining time
+via `keystate.Record.ExpiresAt()`; `doctor`'s report now lists each key as not
+loaded, loaded with a countdown, loaded with no expiry, loaded but expired, or
+loaded with an unknown TTL (added outside sshakku, or before a reboot wiped
+the record while the agent itself survived). Cross-user `doctor --user`
+reports omit the section — reading another user's `~/.ssh`/key-state under a
+privilege drop is out of scope. Documented in `docs/DIAGNOSTICS.md`;
+live-verified against an isolated `HOME`/`ssh-agent` sandbox with throwaway
+keys before merging (not just unit tests).
+
 ### Phase 4 — Configurability & pluggable secret backends
 
 Make the secret store pluggable (secret-service first, then 1Password) and the

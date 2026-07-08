@@ -181,7 +181,7 @@ func TestGatherForeignAttribution(t *testing.T) {
 		8:   {ppid: 1, name: "gnome-keyring-d"},
 		1:   {ppid: 0, name: "systemd"},
 	}
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000}, src, prober, anc, nil)
+	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000}, src, prober, anc, nil, nil)
 
 	if len(r.Agents) != 1 || len(r.Agents[0].Ancestry) != 3 {
 		t.Fatalf("ancestry not populated: %+v", r.Agents)
@@ -210,7 +210,7 @@ func TestGatherReparentedToInitCgroupFallback(t *testing.T) {
 		1:   {ppid: 0, name: "systemd"},
 	}
 	cg := fakeCgroup{200: "app-gpg-agent.service"}
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000}, src, prober, anc, cg)
+	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000}, src, prober, anc, cg, nil)
 
 	if !hasFinding(r, "systemd unit: app-gpg-agent.service") {
 		t.Errorf("findings = %v, want the cgroup-fallback unit named", r.Findings)
