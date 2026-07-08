@@ -76,6 +76,22 @@ func TestAgentFingerprints(t *testing.T) {
 	})
 }
 
+func TestRunnerFingerprinter(t *testing.T) {
+	r := newFakeRunner().
+		on("ssh-keygen", stdout("256 SHA256:abc123 user@host (ED25519)\n", 0)).
+		on("ssh-add", stdout("256 SHA256:abc123 one (ED25519)\n", 0))
+	f := RunnerFingerprinter{Runner: r}
+
+	fp, err := f.FileFingerprint("/home/u/.ssh/id_ed25519")
+	if err != nil || fp != "SHA256:abc123" {
+		t.Fatalf("FileFingerprint = (%q, %v), want (SHA256:abc123, nil)", fp, err)
+	}
+	set, err := f.AgentFingerprints()
+	if err != nil || !set["SHA256:abc123"] {
+		t.Fatalf("AgentFingerprints = (%v, %v), want a set containing SHA256:abc123", set, err)
+	}
+}
+
 func TestFingerprintField(t *testing.T) {
 	cases := map[string]string{
 		"256 SHA256:abc user@host (ED25519)": "SHA256:abc",
