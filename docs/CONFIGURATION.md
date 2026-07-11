@@ -160,9 +160,14 @@ so re-adding the key never asks you to retype it.
   on the terminal — and a passphrase typed at that fallback is then stored in the
   wallet for next time.
 
-The askpass routing is enabled only when a graphical secret prompter is available.
-A headless session keeps ssh's own terminal prompting, and non-interactive
-sessions (such as `scp`, `rsync`, or `git` in scripts) are never touched.
+The askpass routing is wired into every login shell — interactive or not — but
+only when a graphical secret prompter is available; a headless session always
+keeps ssh's own terminal prompting. It is passive plumbing (it only matters if
+ssh later asks for a passphrase), so a `scp`/`rsync`/`git` script run from a
+login shell can still be refilled from the wallet silently instead of failing
+outright for lack of a tty; proactive key loading (re-adding expired keys from
+the wallet on its own) remains interactive-only, since it may prompt and write
+to the terminal.
 
 A short lifetime keeps the window in which a key sits in the agent small. Because
 the wallet refills the key silently, you can keep that window short without ever

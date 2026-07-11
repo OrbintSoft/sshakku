@@ -5,10 +5,12 @@
 # This is a thin hook around the sshakku core. `sshakku shell-init`, evaluated
 # below, keeps an ssh-agent healthy on a fixed socket and prints the runtime
 # paths to use; the fixed socket means the SSH_AUTH_SOCK we export never goes
-# stale even if the agent is restarted. In interactive shells `sshakku load-keys`
-# then adds the user's keys, pulling each passphrase from the OS secret store and
-# skipping any key already in the agent. All the logic lives in the core; this
-# script only pins the shell to the socket and invokes it.
+# stale even if the agent is restarted. `sshakku askpass-env` then routes this
+# shell's ssh passphrase prompts through sshakku's wallet-aware askpass broker.
+# In interactive shells `sshakku load-keys` also adds the user's keys, pulling
+# each passphrase from the OS secret store and skipping any key already in the
+# agent. All the logic lives in the core; this script only pins the shell to
+# the socket and invokes it.
 
 sshakku_bin="/usr/local/bin/sshakku"
 
@@ -27,12 +29,15 @@ fi
 export SSH_AUTH_SOCK="$agent_sock"
 unset SSH_AGENT_PID
 
+# Wired in every login shell, not just interactive ones: some environments
+# resolve a terminal's inherited environment via a non-interactive login shell,
+# so gating this on interactivity would silently drop it there. It only prints
+# two export lines and is a no-op without a graphical prompter, so it stays
+# cheap for non-interactive logins too.
+eval "$("$sshakku_bin" askpass-env)"
+
 # Load keys only in interactive shells: key loading may prompt and writes to the
 # terminal, which must never happen for non-interactive sessions (scp/rsync/git).
 if [[ $- == *i* ]]; then
 	"$sshakku_bin" load-keys
-	# Route this shell's ssh passphrase prompts through sshakku's wallet-aware
-	# askpass, so a key that expires from the agent is refilled from the wallet
-	# without a terminal prompt. Emitted only when a graphical prompter exists.
-	eval "$("$sshakku_bin" askpass-env)"
 fi
