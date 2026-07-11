@@ -448,7 +448,14 @@ func keyStatus(k KeyView) string {
 		if remaining >= 0 {
 			return fmt.Sprintf("loaded, expires in %s", remaining.Round(time.Second))
 		}
-		return fmt.Sprintf("loaded, expired %s ago (a new shell will refill it)", (-remaining).Round(time.Second))
+		// sshakku's own record says this key's lifetime elapsed, yet the agent
+		// still has it: our record can no longer be trusted for it (the agent
+		// only drops a key exactly at its ssh-add -t deadline, so something
+		// re-added or extended it since — outside sshakku's tracking, since a
+		// key sshakku itself reloads would have a fresh record). A new shell
+		// will not "refill" it either: the loader dedups on an already-loaded
+		// fingerprint and skips it.
+		return fmt.Sprintf("loaded, TTL unknown (sshakku's record expired %s ago, but the agent still has it — likely refreshed outside sshakku)", (-remaining).Round(time.Second))
 	default:
 		return "loaded, TTL unknown (not added by sshakku, or added before a reboot)"
 	}

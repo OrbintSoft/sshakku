@@ -167,8 +167,17 @@ func TestGatherKeysExpired(t *testing.T) {
 
 	var b strings.Builder
 	Format(&b, r)
-	if !strings.Contains(b.String(), "expired 1h0m0s ago") {
-		t.Fatalf("Format output missing expired line, got:\n%s", b.String())
+	out := b.String()
+	// The key is still Loaded (the fake agent reports its fingerprint), so the
+	// record's elapsed lifetime doesn't mean the agent actually dropped it —
+	// report it as no-longer-trustworthy TTL tracking, not a confident
+	// "expired" that also wrongly promises a new shell will refill it (it
+	// won't: the loader dedups on an already-loaded fingerprint and skips).
+	if !strings.Contains(out, "TTL unknown") || !strings.Contains(out, "record expired 1h0m0s ago") {
+		t.Fatalf("Format output missing the stale-record TTL-unknown line, got:\n%s", out)
+	}
+	if strings.Contains(out, "a new shell will refill it") {
+		t.Fatalf("Format output makes a false refill promise for a key the loader would just skip, got:\n%s", out)
 	}
 }
 
