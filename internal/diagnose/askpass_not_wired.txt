@@ -1,0 +1,1 @@
+a graphical prompter is available but SSH_ASKPASS is not wired into this shell — ssh will prompt for passphrases on the raw terminal instead of routing them through the wallet; re-source your shell profile or open a new terminal

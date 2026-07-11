@@ -6,6 +6,7 @@
 package diagnose
 
 import (
+	_ "embed"
 	"fmt"
 	"io"
 	"os"
@@ -17,6 +18,14 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/agent"
 	"github.com/OrbintSoft/sshakku/internal/keystate"
 )
+
+//go:embed askpass_not_wired.txt
+var askpassNotWiredMsgFile string
+
+// askpassNotWiredMsg is the finding text for the askpass-wiring check, kept as
+// its own file so the prose can be read and edited as plain text rather than a
+// Go string literal.
+var askpassNotWiredMsg = strings.TrimSpace(askpassNotWiredMsgFile)
 
 // logTailLines is how many trailing session-log lines the report shows.
 const logTailLines = 10
@@ -334,9 +343,7 @@ func findings(in Inputs, r Report) []string {
 		f = append(f, fmt.Sprintf("could not enumerate processes: %v (report is partial)", r.InspectErr))
 	}
 	if in.GUIAvailable && (in.EnvAskpass == "" || in.EnvAskpassRequire == "") {
-		f = append(f, "a graphical prompter is available but SSH_ASKPASS is not wired into this shell — "+
-			"ssh will prompt for passphrases on the raw terminal instead of routing them through the wallet; "+
-			"re-source your shell profile or open a new terminal")
+		f = append(f, askpassNotWiredMsg)
 	}
 
 	if len(f) == 0 {
