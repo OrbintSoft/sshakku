@@ -90,3 +90,11 @@ appending. See `docs/THREAT-MODEL.md` for the threat model and the June 2026 inc
     before opening or updating a PR, confirm every commit on the branch is signed
     off. See `CONTRIBUTING.md` / `CLA.md` for the DCO 1.1 + CLA mechanism this
     supports.
+
+18. **Comments stay local to what the file itself controls.** Don't describe, in
+    one file, behaviour that another file actually decides (e.g. a Dockerfile
+    shouldn't say how often CI triggers it — that's the workflow's job; a config
+    file shouldn't restate a default owned by the code that reads it). Such a
+    comment drifts out of sync the moment the owning file changes, and nothing
+    forces the two edits to happen together. State only what this file itself does
+    or decides; extends Rule 15.
