@@ -35,6 +35,21 @@ func AgentFingerprints(r Runner) (map[string]bool, error) {
 	return set, nil
 }
 
+// RunnerFingerprinter adapts a Runner to the object-style fingerprint lookups
+// callers outside this package (such as the diagnostic tool) want, without
+// depending on Runner or Cmd directly.
+type RunnerFingerprinter struct{ Runner Runner }
+
+// FileFingerprint returns path's fingerprint via FileFingerprint(r.Runner, path).
+func (r RunnerFingerprinter) FileFingerprint(path string) (string, error) {
+	return FileFingerprint(r.Runner, path)
+}
+
+// AgentFingerprints returns the agent's loaded set via AgentFingerprints(r.Runner).
+func (r RunnerFingerprinter) AgentFingerprints() (map[string]bool, error) {
+	return AgentFingerprints(r.Runner)
+}
+
 // fingerprintField extracts the hash field of a single `ssh-keygen -lf` /
 // `ssh-add -l` line, whose format is "<bits> <HASH> <comment> (<type>)". It
 // returns "" when the line carries no hash (e.g. "The agent has no identities."),

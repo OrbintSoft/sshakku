@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 const (
@@ -50,6 +51,16 @@ type GiveupStore interface {
 	Clear(key string) error
 }
 
+// KeyState records, per key, when it was added to the agent and for how long
+// — so `sshakku doctor` can later report its remaining time there, which the
+// ssh-agent protocol itself has no query for. A nil KeyState disables
+// recording.
+type KeyState interface {
+	// Save records that key was just added to the agent with lifetime (zero
+	// meaning no expiry).
+	Save(key string, lifetime time.Duration) error
+}
+
 // Notifier surfaces a user-facing notice — to the terminal of the interactive
 // shell that ran the loader — about a problem the user should act on, such as a
 // key that could not be loaded. A nil Notifier suppresses notices; the success
@@ -77,20 +88,25 @@ type Config struct {
 	// excluded key is simply never considered here — it can still be added on
 	// demand via the askpass broker, which does not consult this policy.
 	AutoLoad func(keyname string) bool
+	// KeyLifetime is the value handed to the agent for each key added here
+	// (mirroring ExecKeyAdder.KeyLifetime, which actually enforces it); the
+	// Loader only needs it to record what it asked for in KeyState.
+	KeyLifetime time.Duration
 }
 
 // Loader loads the user's keys into the agent, skipping any already present and
 // pulling passphrases from the secret store (or prompting) when needed.
 type Loader struct {
-	Keys   KeyLister
-	Runner Runner
-	Secret SecretBackend
-	Prompt Prompter
-	Adder  KeyAdder
-	Log    Logger
-	Notify Notifier
-	Giveup GiveupStore
-	Config Config
+	Keys     KeyLister
+	Runner   Runner
+	Secret   SecretBackend
+	Prompt   Prompter
+	Adder    KeyAdder
+	Log      Logger
+	Notify   Notifier
+	Giveup   GiveupStore
+	KeyState KeyState
+	Config   Config
 }
 
 // LoadKeys enumerates the keys, snapshots the agent's loaded fingerprints once,
@@ -213,6 +229,7 @@ func (l Loader) addWithRetries(keyfile, keyname string) {
 	switch {
 	case loaded:
 		l.clearGiveup(keyname)
+		l.saveKeyState(keyname)
 	case exhausted:
 		l.logf("ERROR", "giving up on %s after %d attempts", keyname, max)
 		l.notify("could not load key %s after %d attempts", keyname, max)
@@ -351,6 +368,18 @@ func (l Loader) clearGiveup(keyname string) {
 	}
 	if err := l.Giveup.Clear(keyname); err != nil {
 		l.logf("ERROR", "clear give-up for %s: %v", keyname, err)
+	}
+}
+
+// saveKeyState records that keyname was just added to the agent with the
+// configured lifetime, best-effort: a failure to persist this bookkeeping
+// must not fail an otherwise-successful key load.
+func (l Loader) saveKeyState(keyname string) {
+	if l.KeyState == nil {
+		return
+	}
+	if err := l.KeyState.Save(keyname, l.Config.KeyLifetime); err != nil {
+		l.logf("ERROR", "record key state for %s: %v", keyname, err)
 	}
 }
 

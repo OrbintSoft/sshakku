@@ -3,6 +3,7 @@ package keys
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/godbus/dbus/v5"
 )
@@ -201,6 +202,25 @@ func (g *fakeGiveup) Record(key string) error {
 func (g *fakeGiveup) Clear(key string) error {
 	g.cleared = append(g.cleared, key)
 	delete(g.given, key)
+	return nil
+}
+
+// fakeKeyState is an in-memory KeyState that records every Save call.
+type fakeKeyState struct {
+	err   error
+	saved []keyStateCall
+}
+
+type keyStateCall struct {
+	key      string
+	lifetime time.Duration
+}
+
+func (k *fakeKeyState) Save(key string, lifetime time.Duration) error {
+	if k.err != nil {
+		return k.err
+	}
+	k.saved = append(k.saved, keyStateCall{key, lifetime})
 	return nil
 }
 

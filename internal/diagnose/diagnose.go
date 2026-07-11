@@ -12,17 +12,51 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/OrbintSoft/sshakku/internal/agent"
+	"github.com/OrbintSoft/sshakku/internal/keystate"
 )
 
 // logTailLines is how many trailing session-log lines the report shows.
 const logTailLines = 10
 
+// now is the clock Format uses to render a loaded key's remaining time; a
+// var, not a hard dependency, so tests can pin it.
+var now = time.Now
+
 // AgentSource enumerates the ssh-agent processes currently visible.
 // agent.Inspector satisfies it; tests supply a fake.
 type AgentSource interface {
 	Agents() ([]agent.AgentProc, error)
+}
+
+// KeyLister lists the private-key files to consider; keys.Enumerator
+// satisfies it.
+type KeyLister interface {
+	Keys() ([]string, error)
+}
+
+// KeyFingerprinter resolves a key file's fingerprint and the set currently
+// loaded in the agent; keys.RunnerFingerprinter satisfies it.
+type KeyFingerprinter interface {
+	FileFingerprint(path string) (string, error)
+	AgentFingerprints() (map[string]bool, error)
+}
+
+// KeyStateSource looks up the lifetime sshakku recorded for a key it added;
+// keystate.Store satisfies it.
+type KeyStateSource interface {
+	Load(key string) (keystate.Record, bool)
+}
+
+// KeySource bundles the collaborators needed to inspect ~/.ssh keys and their
+// agent/TTL state. A nil KeySource (the Gather parameter) skips the keys
+// section entirely; a nil Lister field does the same.
+type KeySource struct {
+	Lister      KeyLister
+	Fingerprint KeyFingerprinter
+	State       KeyStateSource
 }
 
 // Inputs are the facts Gather reasons over, injected so it stays pure and
@@ -57,6 +91,16 @@ type AgentView struct {
 	Cgroup    string     // systemd unit the agent's cgroup names, or "" if none/unknown
 }
 
+// KeyView is one ~/.ssh key file as the report presents it.
+type KeyView struct {
+	Name        string // base filename, e.g. "id_ed25519"
+	Fingerprint string // "" when ssh-keygen could not read the file
+	Loaded      bool   // whether Fingerprint is currently in the agent
+	Tracked     bool   // whether sshakku recorded adding this key itself
+	NoExpiry    bool   // Tracked, but recorded with no expiry (lifetime 0)
+	ExpiresAt   time.Time
+}
+
 // Report is the read-only picture the doctor presents.
 type Report struct {
 	FixedSock    string
@@ -69,14 +113,16 @@ type Report struct {
 	Findings     []string
 	LogTail      []string
 	InspectErr   error // enumeration failed; the report is partial
+	Keys         []KeyView
+	KeysErr      error // key enumeration failed; Keys is empty
 }
 
 // Gather inspects the agent situation described by in and returns the report,
 // reading everything through src, prober, anc, and cg so it never touches the
 // real /proc or sockets in a test. A nil anc skips ancestry attribution; a nil
-// cg skips the cgroup fallback used when ancestry dead-ends at init. It
-// mutates nothing.
-func Gather(in Inputs, src AgentSource, prober agent.Prober, anc AncestrySource, cg CgroupSource) Report {
+// cg skips the cgroup fallback used when ancestry dead-ends at init. A nil
+// keys skips the ~/.ssh key/TTL section entirely. It mutates nothing.
+func Gather(in Inputs, src AgentSource, prober agent.Prober, anc AncestrySource, cg CgroupSource, keys *KeySource) Report {
 	r := Report{
 		FixedSock: in.FixedSock,
 		EnvSock:   in.EnvSock,
@@ -113,7 +159,49 @@ func Gather(in Inputs, src AgentSource, prober agent.Prober, anc AncestrySource,
 	r.State = classifyState(r)
 	r.LogTail = tailLines(in.LogFile, logTailLines)
 	r.Findings = findings(in, r)
+	if keys != nil {
+		r.Keys, r.KeysErr = gatherKeys(*keys)
+	}
 	return r
+}
+
+// gatherKeys enumerates ~/.ssh keys through ks.Lister, cross-references each
+// one's fingerprint against the agent's loaded set, and — for a loaded key —
+// looks up how long sshakku recorded it as living there. A nil Fingerprint or
+// State collaborator degrades gracefully: fingerprints/loaded state or
+// tracked/TTL info is simply left at its zero value rather than failing the
+// whole report.
+func gatherKeys(ks KeySource) ([]KeyView, error) {
+	files, err := ks.Lister.Keys()
+	if err != nil {
+		return nil, err
+	}
+
+	var agentFPs map[string]bool
+	if ks.Fingerprint != nil {
+		agentFPs, _ = ks.Fingerprint.AgentFingerprints()
+	}
+
+	views := make([]KeyView, 0, len(files))
+	for _, f := range files {
+		kv := KeyView{Name: filepath.Base(f)}
+		if ks.Fingerprint != nil {
+			kv.Fingerprint, _ = ks.Fingerprint.FileFingerprint(f)
+		}
+		kv.Loaded = kv.Fingerprint != "" && agentFPs[kv.Fingerprint]
+		if kv.Loaded && ks.State != nil {
+			if rec, ok := ks.State.Load(kv.Name); ok {
+				kv.Tracked = true
+				if expiresAt, hasExpiry := rec.ExpiresAt(); hasExpiry {
+					kv.ExpiresAt = expiresAt
+				} else {
+					kv.NoExpiry = true
+				}
+			}
+		}
+		views = append(views, kv)
+	}
+	return views, nil
 }
 
 // differentUser reports whether a is owned by a real uid other than the one
@@ -288,6 +376,16 @@ func Format(w io.Writer, r Report) {
 		}
 	}
 
+	if len(r.Keys) > 0 || r.KeysErr != nil {
+		p("\n~/.ssh keys (%d):\n", len(r.Keys))
+		for _, k := range r.Keys {
+			p("  %-28s %s\n", k.Name, keyStatus(k))
+		}
+		if r.KeysErr != nil {
+			p("  could not enumerate ~/.ssh: %v\n", r.KeysErr)
+		}
+	}
+
 	p("\nfindings:\n")
 	for _, s := range r.Findings {
 		p("  - %s\n", s)
@@ -328,6 +426,25 @@ func envReachSuffix(sock string, reachable bool) string {
 		return "  (reachable)"
 	}
 	return "  (not answering)"
+}
+
+// keyStatus renders one KeyView's loaded/TTL status for the report.
+func keyStatus(k KeyView) string {
+	if !k.Loaded {
+		return "not loaded"
+	}
+	switch {
+	case k.NoExpiry:
+		return "loaded, no expiry"
+	case k.Tracked:
+		remaining := k.ExpiresAt.Sub(now())
+		if remaining >= 0 {
+			return fmt.Sprintf("loaded, expires in %s", remaining.Round(time.Second))
+		}
+		return fmt.Sprintf("loaded, expired %s ago (a new shell will refill it)", (-remaining).Round(time.Second))
+	default:
+		return "loaded, TTL unknown (not added by sshakku, or added before a reboot)"
+	}
 }
 
 func orNone(s string) string {
