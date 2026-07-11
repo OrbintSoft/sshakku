@@ -520,6 +520,7 @@ Per-file-type lint decisions (rule 12):
 | Shell — bats tests (`*.bats`) | Deferred to Phase 1.5 when test files enter the repo |
 | Go (`*.go`) | `gofmt -l` + `go vet ./...` + `golangci-lint` (config `.golangci.yml`, standard set); compiled by `make build`. Wired into `make lint` as `lint-go` and installed in CI (pinned). License (rule 16): the Go toolchain, its standard library (BSD-3-Clause) and `golangci-lint` are EUPL-1.2 compatible and don't obstruct relicensing — build/dev tools follow the 0.3 precedent (no bundled obligations); the third-party module list (`golang.org/x/sys`, BSD-3-Clause) is recorded in `COPYRIGHT.md`. |
 | TOML (`*.toml`) | `taplo lint` + `taplo format --check`, wired into `make lint` as `lint-toml` and installed in CI (pinned `@taplo/cli`); config `.taplo.toml` excludes only the deliberately malformed test fixture (the parser's error path, covered by Go tests). License (rule 16): the runtime parser `github.com/BurntSushi/toml` (MIT) is EUPL-1.2 compatible and doesn't obstruct relicensing, recorded in `COPYRIGHT.md`; `taplo` is a CI-only dev tool (0.3 precedent). |
+| Dockerfile (`test/containers/*.Dockerfile`, Phase 4.1) | `hadolint`, wired into `make lint` as `lint-docker` and installed in CI (pinned release binary); config `.hadolint.yaml` ignores DL3008 (pin apt package versions — not viable against a rolling Debian suite without snapshot pinning; the base image tag is the point-in-time anchor instead). License (rule 16): GPL-3.0, same as `shellcheck` — a CI-only dev tool, not bundled or runtime-invoked (0.3 precedent), so it carries no EUPL-1.2 obligations. |
 
 ### Phase 1 — Harden the primary target: shell plumbing (still bash)
 
@@ -776,6 +777,22 @@ Sub-phases (detailed steps written when we start each one):
   verified/added. Tier 3 (the full Vagrant Gentoo/OpenRC/KDE box) stays
   deferred to Phase 6 — it's a login/session check, not something a new
   backend needs. → open decisions 7, 20; goal 16.
+  **Progress (tier 1 scaffolding):** `test/containers/debian.Dockerfile`
+  (Go fetched at the "stable" release, matching `actions/setup-go` elsewhere)
+  plus a `container-test` matrix job in `test.yml`, running `make test`
+  inside it on every push alongside the existing bare-runner job. Gentoo was
+  evaluated and dropped from the matrix: with no OpenRC service actually
+  running inside a plain container, it added only a different toolchain/libc
+  over Debian, not primary-target coverage — further distros and desktop
+  environments (KDE/GNOME/XFCE, X11/Wayland) are left to a dedicated
+  extensibility pass rather than decided ad hoc here. Building the image
+  surfaced a real, environment-dependent bug: `TestResolveTargetUser`'s
+  `SUDO_UID` subtests assumed the test process itself is never uid 0, which
+  broke running as root in a container; fixed by skipping those two subtests
+  when the process is already root, since a real `sudo` invocation never sets
+  `SUDO_UID=0`. New file type (`test/containers/*.Dockerfile`) → `hadolint`,
+  see the Phase 0 per-file-type table. Tier 2 and the tier-summary docs are
+  still open.
 - **4.2 — Secret backend survey & priority list.** Candidates surveyed, most to
   least likely to need new code:
   1. **GNOME Keyring** (`gnome-keyring-daemon`) — same Secret Service D-Bus API

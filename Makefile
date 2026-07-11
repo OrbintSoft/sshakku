@@ -57,11 +57,12 @@ print-paths:
 	@echo "SSH_INIT_INSTALL_PATH: $(SSH_INIT_INSTALL_PATH)"
 
 # Linting. Requires: shellcheck, shfmt, markdownlint-cli2, taplo, checkmake,
-# actionlint, editorconfig-checker. Each tool reads its own config file where it
-# has one.
+# actionlint, editorconfig-checker, hadolint. Each tool reads its own config
+# file where it has one.
 SH_SCRIPTS = $(wildcard *.sh) $(wildcard .githooks/*)
+DOCKERFILES = $(wildcard test/containers/*.Dockerfile)
 
-lint: lint-sh lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go
+lint: lint-sh lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go lint-docker
 
 lint-sh:
 	shellcheck $(SH_SCRIPTS)
@@ -88,5 +89,8 @@ lint-go:
 	$(GO) vet ./...
 	golangci-lint run
 
-.PHONY: install uninstall build test print-paths lint lint-sh lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go
+lint-docker:
+	hadolint $(DOCKERFILES)
+
+.PHONY: install uninstall build test print-paths lint lint-sh lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go lint-docker
 .DEFAULT_GOAL := install

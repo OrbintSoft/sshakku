@@ -1,0 +1,6 @@
+# hadolint configuration. Rules: https://github.com/hadolint/hadolint#configure
+ignored:
+  # Pinning exact apt package versions against a rolling Debian suite (no
+  # snapshot pinning) breaks the build within weeks as the version ages out of
+  # the mirror; the base image tag is the point-in-time anchor instead.
+  - DL3008

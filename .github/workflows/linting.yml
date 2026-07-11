@@ -34,6 +34,7 @@ jobs:
           GOLANGCI_LINT_VERSION: 2.12.2
           MARKDOWNLINT_CLI2_VERSION: 0.22.1
           TAPLO_CLI_VERSION: 0.7.0
+          HADOLINT_VERSION: 2.14.0
         run: |
           set -euxo pipefail
 
@@ -41,6 +42,10 @@ jobs:
           # $RUNNER_TEMP so the unpacked tree stays out of the linted workspace.
           curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.x86_64.tar.xz" | tar -xJ -C "$RUNNER_TEMP"
           sudo install "${RUNNER_TEMP}/shellcheck-v${SHELLCHECK_VERSION}/shellcheck" /usr/local/bin/shellcheck
+
+          # Pinned hadolint release binary.
+          curl -fsSL -o "${RUNNER_TEMP}/hadolint" "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-linux-x86_64"
+          sudo install "${RUNNER_TEMP}/hadolint" /usr/local/bin/hadolint
 
           # Go-based tools into $(go env GOPATH)/bin
           go install "mvdan.cc/sh/v3/cmd/shfmt@v${SHFMT_VERSION}"

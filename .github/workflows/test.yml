@@ -25,3 +25,22 @@ jobs:
 
       - name: Run make test
         run: make test
+
+  container-test:
+    name: make test (container / ${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: debian
+            dockerfile: test/containers/debian.Dockerfile
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Build ${{ matrix.name }} test image
+        run: docker build -f ${{ matrix.dockerfile }} -t sshakku-test-${{ matrix.name }} .
+
+      - name: Run make test in ${{ matrix.name }}
+        run: docker run --rm -v "${{ github.workspace }}":/src:ro -w /src sshakku-test-${{ matrix.name }} make test
