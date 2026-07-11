@@ -115,9 +115,17 @@ func (m Manager) EnsureAgent(cfg EnsureConfig, log Logger) (EnsureResult, error)
 		return EnsureResult{}, err
 	}
 
-	// No other healthy agent: start our own on the fixed socket.
+	// No other healthy agent: start our own on the fixed socket. A stale
+	// socket file can still be here with no process to show for it — its
+	// owning ssh-agent may already have been reaped by init after dying,
+	// which Reap (process-based) never saw — so this still counts as a
+	// zombie recovery, not a clean one.
 	if len(foreign) == 0 {
-		clearStalePath(cfg.FixedSock)
+		if clearStalePath(cfg.FixedSock) {
+			reap.RemovedSockets = append(reap.RemovedSockets, cfg.FixedSock)
+			reaped = true
+			logf("INFO", "removed stale socket with no live owner: %s", cfg.FixedSock)
+		}
 		pid, err := m.Start(cfg.FixedSock, cfg.StatePath)
 		if err != nil {
 			return EnsureResult{}, fmt.Errorf("start agent: %w", err)
@@ -133,7 +141,15 @@ func (m Manager) EnsureAgent(cfg EnsureConfig, log Logger) (EnsureResult, error)
 	// A healthy agent we did not start exists: adopt the lowest-pid one by
 	// pointing the fixed socket at it, keep the shell on the fixed path, and
 	// report the anomaly. Several candidates, or adoption after a reap, is a
-	// disaster-grade landscape worth the louder report.
+	// disaster-grade landscape worth the louder report. adoptSymlink's rename
+	// will replace a stale socket at the fixed path regardless, but note it
+	// here too — its owning ssh-agent may already be gone with no process
+	// left for Reap to have found, same as the no-foreign branch above.
+	if isStaleSocketOrSymlink(cfg.FixedSock) {
+		reap.RemovedSockets = append(reap.RemovedSockets, cfg.FixedSock)
+		reaped = true
+		logf("INFO", "replacing stale socket with no live owner: %s", cfg.FixedSock)
+	}
 	adopt := foreign[0]
 	if err := adoptSymlink(cfg.FixedSock, adopt.Socket); err != nil {
 		return EnsureResult{}, fmt.Errorf("adopt agent pid %d: %w", adopt.PID, err)
@@ -178,16 +194,25 @@ func (m Manager) healthyForeign(fixedSock string) ([]AgentProc, error) {
 	return out, nil
 }
 
-// clearStalePath removes a leftover socket or symlink at path so a fresh agent
-// can bind there. It never disturbs a regular file or a directory.
-func clearStalePath(path string) {
+// isStaleSocketOrSymlink reports whether path exists as a socket or symlink —
+// the leftover shapes a dead ssh-agent (or a dangling prior adoption) can
+// leave — without removing it.
+func isStaleSocketOrSymlink(path string) bool {
 	fi, err := os.Lstat(path)
 	if err != nil {
-		return
+		return false
 	}
-	if fi.Mode()&(os.ModeSocket|os.ModeSymlink) != 0 {
-		_ = os.Remove(path)
+	return fi.Mode()&(os.ModeSocket|os.ModeSymlink) != 0
+}
+
+// clearStalePath removes a leftover socket or symlink at path so a fresh agent
+// can bind there, and reports whether it removed one. It never disturbs a
+// regular file or a directory.
+func clearStalePath(path string) bool {
+	if !isStaleSocketOrSymlink(path) {
+		return false
 	}
+	return os.Remove(path) == nil
 }
 
 // adoptSymlink points fixedSock at target through an atomic symlink swap, so

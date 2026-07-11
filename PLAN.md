@@ -753,6 +753,52 @@ privilege drop is out of scope. Documented in `docs/DIAGNOSTICS.md`;
 live-verified against an isolated `HOME`/`ssh-agent` sandbox with throwaway
 keys before merging (not just unit tests).
 
+**✅ Done — false "expired... a new shell will refill it" report, and a
+real-ssh-agent integration test tier.** Bug report: `doctor` kept reporting a
+key as `loaded, expired <duration> ago (a new shell will refill it)` for a key
+that had demonstrably been working for hours past that point. Live
+investigation (an isolated throwaway agent, plus a new integration test
+driving the real `AddWithAskpass` code path against a real `ssh-agent`)
+confirmed sshakku's own `ssh-add -t` handling correctly expires a key it
+loaded — so the record wasn't lying about sshakku's own add, but the promise
+was still false: once a key is later refreshed by *anything other than*
+`load-keys` (a manual `ssh-add`, an IDE's own SSH integration), the loader's
+fingerprint dedup means a new shell will just skip it, not refill it, since
+it's already present. `keyStatus` (`internal/diagnose`) no longer asserts a
+confident "expired" + refill promise it can't keep in that case; it reports
+`loaded, TTL unknown (sshakku's record expired <duration> ago, but the agent
+still has it — likely refreshed outside sshakku)` instead — an honest "our
+tracking is stale," not a false guarantee. Documented in
+`docs/DIAGNOSTICS.md`.
+
+Prompted by this, `internal/agent` and `internal/diagnose` gained real
+(non-fake) integration tests that drive an actual `ssh-agent` through the
+five-state lifecycle (open decision 15) and `sshakku doctor` end to end —
+complementing the existing fake-based unit tests for the state machine itself
+with tests of the real collaborators (`ExecRunner`, `SocketProber`,
+`SysSignaler`, `Inspector` over real `/proc`) those fakes stand in for. They
+need an isolated PID namespace (no other reachable `ssh-agent` in `/proc`) to
+give deterministic results, so they skip themselves on a live desktop session
+and are the tier-1 container's job to actually run (`test/containers/debian.Dockerfile`
+gained `openssh-client` and `keyutils`; `test.yml`'s `container-test` job
+gained `--init` so a daemonizing `ssh-agent` is actually reaped instead of
+leaking zombies with no init process to collect them).
+
+One real bug surfaced immediately by testing the real collaborators instead
+of fakes:
+
+- `EnsureAgent` mislabelled a dead-ours recovery as `SituationClean` instead
+  of `SituationZombie` whenever the dead agent's process had already vanished
+  from `/proc` (e.g. reaped by a real init) by the time `Reap` inspected it —
+  `Reap` only credits process-level signalling, so the *separate* stale-socket
+  removal in the "no foreign, start fresh" and "adopt foreign" branches went
+  unrecorded. `clearStalePath` now reports whether it actually removed
+  something, in both branches, folded into the same `reaped` signal `Reap`
+  already contributes to the `Situation` call — SituationZombie was
+  effectively unreachable on any system where something reaps orphans
+  promptly (i.e. most real systems).
+→ goal 16; open decisions 15, 20.
+
 ### Phase 4 — Configurability & pluggable secret backends
 
 Make the secret store pluggable (secret-service first, then others) and the
