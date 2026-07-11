@@ -90,6 +90,14 @@ func TestResolveTargetUser(t *testing.T) {
 	})
 
 	t.Run("SUDO_UID auto-detected only when invoking as root", func(t *testing.T) {
+		if selfUID == 0 {
+			// The test process itself is root (e.g. a container test run), so
+			// there's no non-root uid left to fake as SUDO_UID: a real sudo
+			// invocation never sets SUDO_UID=0, and resolveTargetUser correctly
+			// treats a lookup that resolves back to uid 0 as "no cross-user
+			// target", the very thing this subtest exists to rule out.
+			t.Skip("test process is already root: can't fake a distinct non-root SUDO_UID")
+		}
 		t.Setenv("SUDO_UID", strconv.Itoa(selfUID))
 		got, err := resolveTargetUser("", paths.Env{UID: 0})
 		if err != nil {
@@ -101,6 +109,9 @@ func TestResolveTargetUser(t *testing.T) {
 	})
 
 	t.Run("SUDO_UID ignored when not invoking as root", func(t *testing.T) {
+		if selfUID == 0 {
+			t.Skip("test process is already root: can't fake a distinct non-root SUDO_UID")
+		}
 		t.Setenv("SUDO_UID", strconv.Itoa(selfUID))
 		got, err := resolveTargetUser("", paths.Env{UID: selfUID})
 		if err != nil {
