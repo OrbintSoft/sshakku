@@ -754,10 +754,52 @@ keys before merging (not just unit tests).
 
 ### Phase 4 — Configurability & pluggable secret backends
 
-Make the secret store pluggable (secret-service first, then 1Password) and the
+Make the secret store pluggable (secret-service first, then others) and the
 tool highly parametrizable via a config file under `$XDG_CONFIG_HOME/sshakku/`
 (default `~/.config/sshakku/`), into which the current `SSHAKKU_*` environment
-knobs migrate. → goals 11, 15; open decisions 7, 13, 17, 18, 19.
+knobs migrate. Most of the config-file/env migration already landed as part of
+Phase 2/3 (open decisions 13, 17–19: `config.toml`, wallet-store and auto-load
+policy, `forget`); what remains is the pluggable-backend half. → goals 11, 15;
+open decisions 7, 8, 13, 17, 18, 19, 20.
+
+Sub-phases (detailed steps written when we start each one):
+
+- **4.1 — Container test infrastructure, brought forward (open decision 20,
+  tiers 1–2).** Stand up the container tiers *before* adding new backends: the
+  dev machine only has KDE installed, so GNOME/KeePassXC/1Password paths can't
+  be validated locally without this. **Tier 1** (multi-distro headless
+  containers — Gentoo/OpenRC, a systemd distro) runs the existing Go
+  unit/integration suite in CI on every push. **Tier 2** (a real desktop
+  secret stack, headless via Xvfb or weston) covers KDE (`ksecretd` +
+  `kwalletd6`, already exercised manually) as a manually-triggered
+  (`workflow_dispatch`) job, extended in 4.2 to each further backend as it is
+  verified/added. Tier 3 (the full Vagrant Gentoo/OpenRC/KDE box) stays
+  deferred to Phase 6 — it's a login/session check, not something a new
+  backend needs. → open decisions 7, 20; goal 16.
+- **4.2 — Secret backend survey & priority list.** Candidates surveyed, most to
+  least likely to need new code:
+  1. **GNOME Keyring** (`gnome-keyring-daemon`) — same Secret Service D-Bus API
+     as KDE (open decision 7's premise). Expected to already work via the
+     existing `SecretServiceBackend`; verify in tier 2 rather than assume,
+     since the spec being shared doesn't guarantee the daemon behaves
+     identically (precedent: the `ksecretd` async-prompt handling already
+     needed backend-specific code).
+  2. **KeePassXC** — also exposes a Secret Service D-Bus API (its "freedesktop
+     secret service integration" setting), so likely covered the same way as
+     GNOME; falls back to its own CLI (`keepassxc-cli`) if the D-Bus path
+     doesn't hold up.
+  3. **1Password** — CLI `op` (`op read`/`op item get`), cross-platform so
+     also needed later for Phase 5 (macOS/Windows); the first backend
+     expected to need real new code (no Secret Service shim).
+  4. **Bitwarden** — CLI `bw`, official and actively maintained, widely used
+     on Linux, self-hostable (Vaultwarden-compatible); similar shape to
+     1Password's CLI backend.
+  5. **`pass` / `gopass`** (GPG-based, no D-Bus) — deferred: different trust
+     model (GPG agent, not a secret-store daemon) and no current user demand;
+     revisit only if requested.
+  6. **LastPass / Dashlane / Enpass / NordPass** — deferred: CLI support on
+     Linux is thin or unmaintained; revisit only if requested.
+  → open decisions 7, 8.
 
 ### Phase 5 — Widen the OS targets
 
@@ -766,9 +808,10 @@ macOS as a wide port, never trust Apple; then Windows last as the most divergent
 ### Phase 6 — Full test matrix
 
 Extend CI to macOS and Windows runners and complete the cross-platform test
-matrix. Also where tiers 2 and 3 of open decision 20 (real-desktop-secret-stack
-containers; the Vagrant Gentoo/OpenRC/KDE box) get their manually-triggered
-CI workflows. → goal 16; open decisions 9, 20.
+matrix. Tier 2 of open decision 20 (real-desktop-secret-stack containers) was
+brought forward to Phase 4.1; this phase adds tier 3 (the full Vagrant
+Gentoo/OpenRC/KDE box) as a manually-triggered CI workflow. → goal 16; open
+decisions 9, 20.
 
 ### Phase 7 — CI review & dependency hardening
 
