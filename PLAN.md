@@ -839,6 +839,29 @@ Sub-phases (detailed steps written when we start each one):
   `SUDO_UID=0`. New file type (`test/containers/*.Dockerfile`) → `hadolint`,
   see the Phase 0 per-file-type table. Tier 2 and the tier-summary docs are
   still open.
+  **Tier 2/3 breadth matrix (planned, not yet built).** The specific axes
+  tier 2 and tier 3 need to cover, decided now so 4.1/4.2 don't re-litigate it
+  per backend:
+  - **Secret backend / desktop session**, not "desktop environment" — XFCE,
+    LXQt and similar have no secret daemon of their own and pair with either
+    GNOME Keyring or none, so they don't need a dedicated row. Candidates:
+    KDE (`ksecretd`+`kwalletd6`, already exercised manually), GNOME Keyring
+    (`gnome-keyring-daemon`, 4.2's #1 candidate), KeePassXC's Secret Service
+    mode (4.2's #2, paired with either session above), and no-backend/plain
+    askpass (the always-primary fallback path).
+  - **Display protocol**: X11 (via Xvfb) and Wayland (via weston) headless
+    servers, since askpass/prompt rendering (`kdialog`, `zenity`, polkit
+    agents) is the part of the stack most likely to diverge between them.
+    Start each tier-2 backend on X11 and add a Wayland variant only where its
+    prompt path is shown to actually depend on the protocol, not
+    preemptively.
+  - **Init system**: systemd is already covered headless in tier 1 (Debian).
+    OpenRC has nothing sshakku-specific to exercise without a real login
+    (PAM, a display manager) — a headless OpenRC container would just be a
+    different toolchain/libc, as Gentoo already turned out to be in this
+    tier-1 pass — so OpenRC coverage stays tier 3 only (Vagrant
+    Gentoo/OpenRC/KDE, Phase 6), not a second tier-1 matrix entry.
+  → open decision 20; goals 15, 16.
 - **4.2 — Secret backend survey & priority list.** Candidates surveyed, most to
   least likely to need new code:
   1. **GNOME Keyring** (`gnome-keyring-daemon`) — same Secret Service D-Bus API
