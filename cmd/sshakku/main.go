@@ -398,6 +398,18 @@ func (n stderrNotifier) Notify(message string) {
 	_, _ = fmt.Fprintf(n.w, "sshakku: %s\n", message)
 }
 
+// detectGUIAvailable reports whether a graphical passphrase prompt can be shown
+// in this environment, by the same test askpassEnv and doctor's askpass finding
+// both rely on: a reachable display server and an installed prompter.
+func detectGUIAvailable() bool {
+	runner := keys.ExecRunner{}
+	guiEnv := keys.GUIEnv{
+		WaylandDisplay: os.Getenv("WAYLAND_DISPLAY"),
+		Display:        os.Getenv("DISPLAY"),
+	}
+	return keys.GUIAvailable(guiEnv, runner, keys.KDialogPrompter{Runner: runner})
+}
+
 // askpassEnv prints the export lines that route this interactive shell's ssh
 // passphrase prompts through sshakku's wallet-aware broker, so a key that expires
 // from the agent is refilled from the wallet without a terminal prompt. It emits
@@ -405,12 +417,7 @@ func (n stderrNotifier) Notify(message string) {
 // ssh's own terminal prompting — and the login entrypoint evals it in interactive
 // shells only, never for non-interactive sessions (scp/rsync/git).
 func askpassEnv(stdout, stderr io.Writer) int {
-	runner := keys.ExecRunner{}
-	guiEnv := keys.GUIEnv{
-		WaylandDisplay: os.Getenv("WAYLAND_DISPLAY"),
-		Display:        os.Getenv("DISPLAY"),
-	}
-	if !keys.GUIAvailable(guiEnv, runner, keys.KDialogPrompter{Runner: runner}) {
+	if !detectGUIAvailable() {
 		return 0
 	}
 	self, err := os.Executable()
@@ -652,12 +659,15 @@ func doctorCrossUser(stdout, stderr io.Writer, invoking paths.Env, target target
 // it so they present the situation identically.
 func gatherReport(env paths.Env, layout paths.Layout) diagnose.Report {
 	return diagnose.Gather(diagnose.Inputs{
-		FixedSock: layout.AgentSock,
-		LegacyDir: filepath.Join(env.Home, ".ssh", "agent"),
-		StatePath: filepath.Join(filepath.Dir(layout.AgentSock), "agent.state"),
-		EnvSock:   os.Getenv("SSH_AUTH_SOCK"),
-		LogFile:   layout.LogFile,
-		OurUID:    env.UID,
+		FixedSock:         layout.AgentSock,
+		LegacyDir:         filepath.Join(env.Home, ".ssh", "agent"),
+		StatePath:         filepath.Join(filepath.Dir(layout.AgentSock), "agent.state"),
+		EnvSock:           os.Getenv("SSH_AUTH_SOCK"),
+		LogFile:           layout.LogFile,
+		OurUID:            env.UID,
+		GUIAvailable:      detectGUIAvailable(),
+		EnvAskpass:        os.Getenv("SSH_ASKPASS"),
+		EnvAskpassRequire: os.Getenv("SSH_ASKPASS_REQUIRE"),
 	}, agent.Inspector{}, agent.SocketProber{}, diagnose.ProcfsAncestry{}, diagnose.ProcfsCgroup{})
 }
 

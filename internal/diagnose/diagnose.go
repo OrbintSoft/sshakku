@@ -34,6 +34,16 @@ type Inputs struct {
 	EnvSock   string // SSH_AUTH_SOCK as this shell sees it
 	LogFile   string // session log to tail
 	OurUID    int    // the invoking user's uid, to tell same-user agents apart
+
+	// GUIAvailable, EnvAskpass, and EnvAskpassRequire describe whether this
+	// shell's ssh passphrase prompts are routed through sshakku's wallet-aware
+	// askpass broker, mirroring the same condition `sshakku askpass-env` uses
+	// to decide whether to wire it in. GUIAvailable is computed by the caller
+	// (see keys.GUIAvailable) rather than here, keeping this package free of
+	// any dependency on a display server or an external prompter binary.
+	GUIAvailable      bool
+	EnvAskpass        string // SSH_ASKPASS as this shell sees it
+	EnvAskpassRequire string // SSH_ASKPASS_REQUIRE as this shell sees it
 }
 
 // AgentView is one ssh-agent process as the report presents it.
@@ -234,6 +244,11 @@ func findings(in Inputs, r Report) []string {
 	}
 	if r.InspectErr != nil {
 		f = append(f, fmt.Sprintf("could not enumerate processes: %v (report is partial)", r.InspectErr))
+	}
+	if in.GUIAvailable && (in.EnvAskpass == "" || in.EnvAskpassRequire == "") {
+		f = append(f, "a graphical prompter is available but SSH_ASKPASS is not wired into this shell — "+
+			"ssh will prompt for passphrases on the raw terminal instead of routing them through the wallet; "+
+			"re-source your shell profile or open a new terminal")
 	}
 
 	if len(f) == 0 {
