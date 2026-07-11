@@ -43,4 +43,4 @@ jobs:
         run: docker build -f ${{ matrix.dockerfile }} -t sshakku-test-${{ matrix.name }} .
 
       - name: Run make test in ${{ matrix.name }}
-        run: docker run --rm -v "${{ github.workspace }}":/src:ro -w /src sshakku-test-${{ matrix.name }} make test
+        run: docker run --init --rm -v "${{ github.workspace }}":/src:ro -w /src sshakku-test-${{ matrix.name }} make test

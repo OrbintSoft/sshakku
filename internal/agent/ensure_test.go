@@ -239,7 +239,9 @@ func TestClearStalePath(t *testing.T) {
 
 	sock := filepath.Join(dir, "a.sock")
 	makeSocketFile(t, sock)
-	clearStalePath(sock)
+	if !clearStalePath(sock) {
+		t.Error("clearStalePath(socket) = false, want true")
+	}
 	if _, err := os.Lstat(sock); !os.IsNotExist(err) {
 		t.Errorf("socket should be cleared, lstat err = %v", err)
 	}
@@ -248,7 +250,9 @@ func TestClearStalePath(t *testing.T) {
 	if err := os.Symlink("/dangling", link); err != nil {
 		t.Fatal(err)
 	}
-	clearStalePath(link)
+	if !clearStalePath(link) {
+		t.Error("clearStalePath(symlink) = false, want true")
+	}
 	if _, err := os.Lstat(link); !os.IsNotExist(err) {
 		t.Errorf("symlink should be cleared, lstat err = %v", err)
 	}
@@ -257,9 +261,15 @@ func TestClearStalePath(t *testing.T) {
 	if err := os.WriteFile(reg, []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	clearStalePath(reg)
+	if clearStalePath(reg) {
+		t.Error("clearStalePath(regular file) = true, want false")
+	}
 	if _, err := os.Lstat(reg); err != nil {
 		t.Errorf("regular file must survive clearStalePath, err = %v", err)
+	}
+
+	if clearStalePath(filepath.Join(dir, "missing")) {
+		t.Error("clearStalePath(missing path) = true, want false")
 	}
 }
 

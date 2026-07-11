@@ -84,14 +84,20 @@ A loaded key can also show:
 
 - `loaded, no expiry` — added with `key_lifetime`/`SSHAKKU_KEY_LIFETIME` set to
   a non-positive value, so it never expires from the agent on its own.
-- `loaded, expired <duration> ago` — past its recorded lifetime but the agent
-  hasn't reaped it yet; the next new shell (or the reactive askpass broker in
-  an already-open one) refills it from the secret store.
 - `loaded, TTL unknown (not added by sshakku, or added before a reboot)` — the
   key is in the agent but sshakku has no record for it: it was added by
   something other than `load-keys` (a manual `ssh-add`, forwarded from
   elsewhere), or the record was lost when the runtime directory was wiped
   while the agent itself survived.
+- `loaded, TTL unknown (sshakku's record expired <duration> ago, but the agent
+  still has it — likely refreshed outside sshakku)` — sshakku *does* have a
+  record for this key, and by that record it should have expired, but the
+  agent only ever drops a key exactly at its `ssh-add -t` deadline — so
+  something re-added or extended it after sshakku's own load, without going
+  through `load-keys` (a manual `ssh-add`, an IDE's own SSH integration).
+  `doctor` no longer trusts the stale record once this happens: a new shell
+  will **not** refill the key either, since the loader dedups on an
+  already-loaded fingerprint and skips it.
 
 ## `sshakku doctor --fix`
 
