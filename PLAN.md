@@ -837,8 +837,31 @@ Sub-phases (detailed steps written when we start each one):
   broke running as root in a container; fixed by skipping those two subtests
   when the process is already root, since a real `sudo` invocation never sets
   `SUDO_UID=0`. New file type (`test/containers/*.Dockerfile`) → `hadolint`,
-  see the Phase 0 per-file-type table. Tier 2 and the tier-summary docs are
-  still open.
+  see the Phase 0 per-file-type table. The tier-summary docs are still open.
+  **Progress (tier 2, KDE row).** `test/containers/kde-tier2.Dockerfile`,
+  a `workflow_dispatch`-only `tier2-desktop.yml` (not `test.yml`, per open
+  decision 20). Debian doesn't package `ksecretd` (only the classic
+  `kwalletd6`/KWallet API, not `org.freedesktop.secrets`) even on `trixie`;
+  switched the tier-2 base image to Fedora 44, which does. `ksecretd`
+  unlocks the same non-interactive way a real login does — driven through
+  `pamtester` (`kwallet-pam`'s `pam_kwallet5.so`, `force_run` plus running
+  in both the `auth` and `session` stacks, `pam_env.so` to carry
+  `QT_QPA_PLATFORM=offscreen`/`XDG_RUNTIME_DIR`/`DBUS_SESSION_BUS_ADDRESS`
+  into its PAM-only exec environment, and a `socat`-driven handshake
+  standing in for the real `pam_kwallet_init` autostart script) — and a
+  `kwalletrc` pre-seeded with `Default Wallet=sshakku` plus a matching
+  Secret Service alias lets PAM's own hash-based auto-open create and
+  unlock the "sshakku" collection with no display server and no interactive
+  dialog at all, unlike the collection's normal first-use flow. The real
+  round-trip test (`TestSecretServiceBackendRealDaemon`, gated behind
+  `SSHAKKU_TEST_ALLOW_REAL_SECRETSERVICE=1`) now passes deterministically
+  inside this container. New file types (`test/containers/*.sh`,
+  `test/containers/kde-tier2-kwalletrc`, `test/containers/kde-tier2.env`) →
+  extended the existing `lint-sh` glob for the scripts; the two plain
+  config files need no dedicated linter (no established INI/env-file linter
+  in the project's toolchain, and their syntax is trivial enough that
+  `shellcheck`/`hadolint`-style validation wouldn't add coverage a review
+  doesn't already give).
   **Tier 2/3 breadth matrix (planned, not yet built).** The specific axes
   tier 2 and tier 3 need to cover, decided now so 4.1/4.2 don't re-litigate it
   per backend:

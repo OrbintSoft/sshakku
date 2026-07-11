@@ -4,3 +4,6 @@ ignored:
   # snapshot pinning) breaks the build within weeks as the version ages out of
   # the mirror; the base image tag is the point-in-time anchor instead.
   - DL3008
+  # Same rationale as DL3008 above, for dnf package versions against a
+  # rolling Fedora suite.
+  - DL3041
