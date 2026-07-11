@@ -935,3 +935,20 @@ manifests exist. Pin all third-party actions by full commit SHA with version
 comments, and pin tool/runtime versions (Go, Node, the linters) for reproducible
 builds. Re-evaluate per-file-type lint coverage (rule 12) against whatever file
 types the repo has grown by then. → goal 16; open decisions 9, 11; rules 12, 14.
+
+### Phase 8 — Release pipeline
+
+Automate cutting a release once CI is solid across every target. Planned
+flow (decided now, detailed steps written when this phase starts):
+
+1. Merge to `master`.
+2. Run the full unit test suite.
+3. Run the fast integration tests (tier 1).
+4. If those pass, run the slow integration tests (tier 2/3) — parallelized
+   where it makes sense, since they're independent of each other.
+5. If those pass too, tag with an incremented version and cut a release,
+   building the various packages.
+
+Until this phase starts, tier 2/3 stay manually-triggered
+(`workflow_dispatch`) jobs (open decision 20) — not part of any automated
+pipeline yet. → open decisions 9, 20.
