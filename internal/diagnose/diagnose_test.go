@@ -252,6 +252,48 @@ func TestGatherRecordedPID(t *testing.T) {
 	}
 }
 
+func TestGatherAskpassNotWired(t *testing.T) {
+	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000, GUIAvailable: true},
+		fakeSource{}, fakeProber{up: map[string]bool{fixed: true}}, nil, nil, nil)
+	if !hasFinding(r, "SSH_ASKPASS is not wired") {
+		t.Errorf("findings = %v, want an askpass-not-wired finding", r.Findings)
+	}
+}
+
+func TestGatherAskpassPartiallyWired(t *testing.T) {
+	r := Gather(Inputs{
+		FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000,
+		GUIAvailable: true, EnvAskpass: "/usr/bin/sshakku",
+	}, fakeSource{}, fakeProber{up: map[string]bool{fixed: true}}, nil, nil, nil)
+	if !hasFinding(r, "SSH_ASKPASS is not wired") {
+		t.Errorf("findings = %v, want an askpass-not-wired finding when REQUIRE is missing", r.Findings)
+	}
+}
+
+func TestGatherAskpassWired(t *testing.T) {
+	src := fakeSource{procs: []agent.AgentProc{
+		{PID: 100, UID: 1000, Socket: fixed, Args: []string{"ssh-agent", "-a", fixed}},
+	}}
+	r := Gather(Inputs{
+		FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000,
+		GUIAvailable: true, EnvAskpass: "/usr/bin/sshakku", EnvAskpassRequire: "prefer",
+	}, src, fakeProber{up: map[string]bool{fixed: true}}, nil, nil, nil)
+	if hasFinding(r, "SSH_ASKPASS is not wired") {
+		t.Errorf("findings = %v, want no askpass finding when fully wired", r.Findings)
+	}
+	if !hasFinding(r, "no problems detected") {
+		t.Errorf("findings = %v, want a clean bill", r.Findings)
+	}
+}
+
+func TestGatherAskpassNoGUI(t *testing.T) {
+	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000, GUIAvailable: false},
+		fakeSource{}, fakeProber{up: map[string]bool{fixed: true}}, nil, nil, nil)
+	if hasFinding(r, "SSH_ASKPASS is not wired") {
+		t.Errorf("findings = %v, want no askpass finding in a headless session", r.Findings)
+	}
+}
+
 func TestTailLines(t *testing.T) {
 	dir := t.TempDir()
 

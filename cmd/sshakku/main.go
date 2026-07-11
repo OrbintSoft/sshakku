@@ -42,10 +42,10 @@ const internalReadSocketTokenCmd = "__read-socket-token"
 // knownSubcommands lists every argv[1] value run dispatches below. main checks
 // it before trusting EnvAskpassMode: ssh always execs the SSH_ASKPASS helper
 // with just the prompt text as its one argument, never one of these exact
-// names, but askpass-env exports EnvAskpassMode into the whole interactive
-// shell (nn-ssh-init-linux.sh), so it stays set for anything the user later
-// types by hand in that same shell — a real subcommand must win over it. Keep
-// this in sync with the switch in run.
+// names, but askpass-env exports EnvAskpassMode into the whole login shell
+// (nn-ssh-init-linux.sh), so it stays set for anything the user later types by
+// hand in that same shell — a real subcommand must win over it. Keep this in
+// sync with the switch in run.
 var knownSubcommands = map[string]bool{
 	"shell-init":               true,
 	"ensure-agent":             true,
@@ -91,7 +91,7 @@ func main() {
 // wantsAskpass reports whether main should treat this invocation as ssh's
 // SSH_ASKPASS helper rather than dispatch args as a subcommand. askpassEnvSet
 // is EnvAskpassMode's presence in the environment; it alone is not enough,
-// because askpass-env exports it into the whole interactive shell
+// because askpass-env exports it into the whole login shell
 // (nn-ssh-init-linux.sh) so it stays set for anything typed by hand afterward
 // too — a real ssh invocation always execs the helper with just the prompt
 // text as its one argument, never one of our own subcommand names, so a known
@@ -402,19 +402,26 @@ func (n stderrNotifier) Notify(message string) {
 	_, _ = fmt.Fprintf(n.w, "sshakku: %s\n", message)
 }
 
-// askpassEnv prints the export lines that route this interactive shell's ssh
-// passphrase prompts through sshakku's wallet-aware broker, so a key that expires
-// from the agent is refilled from the wallet without a terminal prompt. It emits
-// them only when a graphical prompter is available — a headless session keeps
-// ssh's own terminal prompting — and the login entrypoint evals it in interactive
-// shells only, never for non-interactive sessions (scp/rsync/git).
-func askpassEnv(stdout, stderr io.Writer) int {
+// detectGUIAvailable reports whether a graphical passphrase prompt can be shown
+// in this environment, by the same test askpassEnv and doctor's askpass finding
+// both rely on: a reachable display server and an installed prompter.
+func detectGUIAvailable() bool {
 	runner := keys.ExecRunner{}
 	guiEnv := keys.GUIEnv{
 		WaylandDisplay: os.Getenv("WAYLAND_DISPLAY"),
 		Display:        os.Getenv("DISPLAY"),
 	}
-	if !keys.GUIAvailable(guiEnv, runner, keys.KDialogPrompter{Runner: runner}) {
+	return keys.GUIAvailable(guiEnv, runner, keys.KDialogPrompter{Runner: runner})
+}
+
+// askpassEnv prints the export lines that route this shell's ssh passphrase
+// prompts through sshakku's wallet-aware broker, so a key that expires from the
+// agent is refilled from the wallet without a terminal prompt. It emits them
+// only when a graphical prompter is available — a headless session keeps ssh's
+// own terminal prompting — and the login entrypoint evals it in every login
+// shell, interactive or not, since it only ever prints two export lines.
+func askpassEnv(stdout, stderr io.Writer) int {
+	if !detectGUIAvailable() {
 		return 0
 	}
 	self, err := os.Executable()
@@ -672,12 +679,15 @@ func gatherReport(env paths.Env, layout paths.Layout) diagnose.Report {
 		State:       keystate.Store{Dir: keystateDir(layout)},
 	}
 	return diagnose.Gather(diagnose.Inputs{
-		FixedSock: layout.AgentSock,
-		LegacyDir: filepath.Join(env.Home, ".ssh", "agent"),
-		StatePath: filepath.Join(filepath.Dir(layout.AgentSock), "agent.state"),
-		EnvSock:   os.Getenv("SSH_AUTH_SOCK"),
-		LogFile:   layout.LogFile,
-		OurUID:    env.UID,
+		FixedSock:         layout.AgentSock,
+		LegacyDir:         filepath.Join(env.Home, ".ssh", "agent"),
+		StatePath:         filepath.Join(filepath.Dir(layout.AgentSock), "agent.state"),
+		EnvSock:           os.Getenv("SSH_AUTH_SOCK"),
+		LogFile:           layout.LogFile,
+		OurUID:            env.UID,
+		GUIAvailable:      detectGUIAvailable(),
+		EnvAskpass:        os.Getenv("SSH_ASKPASS"),
+		EnvAskpassRequire: os.Getenv("SSH_ASKPASS_REQUIRE"),
 	}, agent.Inspector{}, agent.SocketProber{}, diagnose.ProcfsAncestry{}, diagnose.ProcfsCgroup{}, keySource)
 }
 

@@ -53,6 +53,18 @@ instead of only saying "not our fixed socket". These services never run under
 the `ssh-agent` binary name, so they cannot appear as an agent in the process
 list above; the socket path is the only signal available for them.
 
+### Askpass wiring
+
+When a graphical prompter is available (the same check `sshakku askpass-env`
+uses) but this shell's `SSH_ASKPASS`/`SSH_ASKPASS_REQUIRE` aren't set, the
+report flags it: ssh will fall back to prompting on the raw terminal instead of
+routing passphrases through the wallet-aware broker. This typically means the
+shell-init script never ran for this particular shell — e.g. it wasn't started
+as a login shell, so `/etc/profile.d` was never sourced — re-source your shell
+profile or open a new terminal. This check only applies to your own
+session; `--user` reports never inspect it, since it describes the invoking
+shell's environment, not the target's.
+
 ### Keys and their remaining time
 
 The ssh-agent protocol has no query for a key's remaining lifetime, so sshakku
