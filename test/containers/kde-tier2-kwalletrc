@@ -1,0 +1,7 @@
+[Wallet]
+Default Wallet=sshakku
+Enabled=true
+First Use=false
+
+[org.freedesktop.secrets.aliases]
+sshakku=sshakku
