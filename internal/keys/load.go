@@ -15,7 +15,7 @@ const (
 
 // DefaultServicePrefix is the secret-store service prefix used when no
 // per-config override is set (Config.ServicePrefix is always "" today; a
-// config-file override is future work — PLAN.md open decision 18).
+// config-file override is future work).
 const DefaultServicePrefix = defaultServicePrefix
 
 // Logger records one level-tagged line. A nil Logger disables logging.

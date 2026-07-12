@@ -29,9 +29,8 @@ install -m 644 "${SCRIPT_DIR}/kde-tier2.env" /etc/environment
 install -m 644 "${SCRIPT_DIR}/kde-tier2-pam.conf" "/etc/pam.d/${PAM_SERVICE}"
 
 # Makes "sshakku" (not "kdewallet") the wallet PAM's hash-based unlock opens,
-# and pre-registers its Secret Service alias — see phase4-tier2-kde-steps.md
-# for why this, not an interactive create dialog, is what makes the real
-# round-trip test deterministic.
+# and pre-registers its Secret Service alias — this, not an interactive
+# create dialog, is what makes the real round-trip test deterministic.
 install -m 644 -o "${TEST_USER}" -g "${TEST_USER}" -D \
 	"${SCRIPT_DIR}/kde-tier2-kwalletrc" "/home/${TEST_USER}/.config/kwalletrc"
 

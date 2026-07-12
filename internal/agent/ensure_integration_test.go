@@ -211,9 +211,9 @@ func TestEnsureAgentRealHealthyReuse(t *testing.T) {
 	}
 }
 
-// TestEnsureAgentRealReachableButEmptyIsHealthy is the Phase 1.5 regression
-// checklist's D1 case: an agent with zero keys loaded (ssh-add -l exits 1)
-// must still be treated as healthy, never killed and replaced.
+// TestEnsureAgentRealReachableButEmptyIsHealthy covers the D1 case: an
+// agent with zero keys loaded (ssh-add -l exits 1) must still be treated as
+// healthy, never killed and replaced.
 func TestEnsureAgentRealReachableButEmptyIsHealthy(t *testing.T) {
 	requireIsolatedAgentEnvironment(t)
 	m := newRealManager()

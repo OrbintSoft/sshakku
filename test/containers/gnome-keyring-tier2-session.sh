@@ -3,9 +3,8 @@
 # starts a private D-Bus session bus, a headless X server, and
 # gnome-keyring-daemon, drives the one-time "create the sshakku collection
 # with a blank password" dialog via xdotool (gnome-keyring has no
-# non-interactive equivalent of KDE's kwalletrc pre-seed — see
-# phase4.2-gnome-keyring-tier2-steps.md), then runs the given command against
-# the now prompt-free collection.
+# non-interactive equivalent of KDE's kwalletrc pre-seed), then runs the
+# given command against the now prompt-free collection.
 set -euo pipefail
 
 readonly DISPLAY_NUM=":99"
