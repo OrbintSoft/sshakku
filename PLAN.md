@@ -909,6 +909,58 @@ Sub-phases (detailed steps written when we start each one):
   6. **LastPass / Dashlane / Enpass / NordPass** — deferred: CLI support on
      Linux is thin or unmaintained; revisit only if requested.
   → open decisions 7, 8.
+  **Progress (GNOME Keyring, ✅ verified — and a real product-code fix, not
+  just a test gap).** The "expected to already work" premise above turned
+  out to be wrong in a way tier-1/2 testing exists to catch: verified live
+  against a real `gnome-keyring-daemon` (Debian trixie 48.0-1) that
+  `internal/secretservice.Client.Collection`'s exact call sequence —
+  `ReadAlias("sshakku")` then `CreateCollection(props, "sshakku")` — failed
+  **immediately** with `org.freedesktop.DBus.Error.NotSupported` ("Only the
+  'default' alias is supported"), not a prompt. GNOME Keyring's alias
+  mechanism supports exactly one alias ("default"), unlike KDE's `ksecretd`
+  which accepts an arbitrary one; sshakku's dedicated-collection design
+  (open decision 17) had only ever been live-tested against KDE. Fixed in
+  `internal/secretservice/secretservice.go`: `Collection` now falls back,
+  on that specific error, to finding an existing collection by its `Label`
+  property (`Service.Collections` enumeration) and, failing that, creating
+  one unaliased (`alias=""`, spec-legal) — the KDE fast path is untouched.
+  Covered by new `TestClientCollection` subtests against an extended fake
+  Secret Service peer (`fakeService.restrictAlias`).
+
+  A second, real (not test-only) limitation surfaced during the same
+  investigation and is now recorded as threat I11
+  (`docs/THREAT-MODEL.md`): GNOME Keyring's only non-interactive unlock
+  path is a **blank password**, which GNOME itself stores unencrypted on
+  disk — unlike KDE, there's no PAM-hash auto-unlock for a non-default
+  collection, so a GNOME user who wants encryption at rest trades it for an
+  interactive prompt on every new shell. sshakku does not yet warn about
+  this at collection-creation time; deferred, tracked in the threat model
+  rather than assumed obvious.
+
+  Tier 2 row: `test/containers/gnome-keyring-tier2.Dockerfile` (Debian
+  trixie — confirmed to package everything needed, unlike KDE which forced
+  a Fedora switch), added to `tier2-desktop.yml`'s existing matrix. GNOME
+  Keyring has no config-file equivalent of KDE's `kwalletrc` pre-seed (the
+  alias restriction above is structural, not a missing setting), so the
+  one-time "Choose password for new keyring" dialog is driven headlessly
+  via Xvfb + `xdotool` (blank password) instead — chosen over the
+  KDE-tier-2 pass's rejected approach (driving *every* unlock) because here
+  it only has to succeed once per container lifetime, after which the
+  blank-password auto-unlock above makes every later `Unlock()`
+  prompt-free; retried up to 5 times if the dialog hasn't rendered yet
+  rather than failing outright. Verified over 4 consecutive clean-container
+  `make test` runs: 4/4 passed (~23s each), each recovering from one missed
+  first-attempt window search via the retry loop — no KDE-style multi-second
+  variance observed. Two environment bugs found only by running the full
+  container: `/tmp/.X11-unix` (normally created at boot, missing in a
+  container, and unwritable by the unprivileged test account) needed
+  pre-creating as root; the X-server-ready check depended on `xdpyinfo`
+  (`x11-utils`) which was never added to the image, replaced with a direct
+  socket-file check instead of adding the package. See
+  `phase4.2-gnome-keyring-tier2-steps.md` (used during development) for the
+  full investigation, including why the CreateCollection alias restriction
+  was missed by source-reading alone and only found by testing against the
+  real daemon.
 
 ### Phase 5 — Widen the OS targets
 
