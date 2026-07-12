@@ -17,6 +17,8 @@ jobs:
         include:
           - name: kde
             dockerfile: test/containers/kde-tier2.Dockerfile
+          - name: gnome-keyring
+            dockerfile: test/containers/gnome-keyring-tier2.Dockerfile
     steps:
       - name: Check out the repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
