@@ -75,6 +75,73 @@ func TestClientCollection(t *testing.T) {
 			t.Fatal("expected an error for a dismissed prompt")
 		}
 	})
+
+	// GNOME Keyring rejects CreateCollection for any alias other than ""
+	// or "default" (errNotSupported) — unlike KDE's ksecretd, which accepts
+	// an arbitrary alias. These reproduce that against the real wire
+	// protocol via fakeService.restrictAlias.
+	t.Run("falls back to an unaliased create when the alias is not supported", func(t *testing.T) {
+		client, svc := newTestClient(t, "")
+		svc.mu.Lock()
+		svc.restrictAlias = true
+		svc.mu.Unlock()
+
+		got, err := client.Collection("sshakku", "sshakku")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got == "" || got == noPrompt {
+			t.Fatalf("Collection = %v, want a real object path", got)
+		}
+		svc.mu.Lock()
+		_, aliased := svc.aliases["sshakku"]
+		svc.mu.Unlock()
+		if aliased {
+			t.Fatal("collection was created with an alias despite restrictAlias")
+		}
+	})
+
+	t.Run("falls back to a completed prompt when the alias is not supported", func(t *testing.T) {
+		client, svc := newTestClient(t, "ok")
+		svc.mu.Lock()
+		svc.restrictAlias = true
+		svc.mu.Unlock()
+
+		got, err := client.Collection("sshakku", "sshakku")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got == "" || got == noPrompt {
+			t.Fatalf("Collection = %v, want a real object path", got)
+		}
+	})
+
+	t.Run("finds an existing collection by label when the alias is not supported", func(t *testing.T) {
+		client, svc := newTestClient(t, "")
+		svc.mu.Lock()
+		svc.restrictAlias = true
+		svc.mu.Unlock()
+
+		first, err := client.Collection("sshakku", "sshakku")
+		if err != nil {
+			t.Fatalf("first Collection call: unexpected error: %v", err)
+		}
+
+		second, err := client.Collection("sshakku", "sshakku")
+		if err != nil {
+			t.Fatalf("second Collection call: unexpected error: %v", err)
+		}
+		if second != first {
+			t.Fatalf("second Collection = %v, want the same path as the first %v (found by label, not recreated)", second, first)
+		}
+
+		svc.mu.Lock()
+		n := len(svc.collections)
+		svc.mu.Unlock()
+		if n != 1 {
+			t.Fatalf("collections created = %d, want 1 (second call should have found the first by label)", n)
+		}
+	})
 }
 
 func TestClientUnlockLock(t *testing.T) {

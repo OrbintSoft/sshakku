@@ -7,6 +7,7 @@
 package secretservice
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -23,10 +24,19 @@ const (
 	promptIface     = "org.freedesktop.Secret.Prompt"
 	sessionIface    = "org.freedesktop.Secret.Session"
 
-	collectionLabelProp = "org.freedesktop.Secret.Collection.Label"
-	collectionItemsProp = "org.freedesktop.Secret.Collection.Items"
-	itemLabelProp       = "org.freedesktop.Secret.Item.Label"
-	itemAttributesProp  = "org.freedesktop.Secret.Item.Attributes"
+	serviceCollectionsProp = "org.freedesktop.Secret.Service.Collections"
+	collectionLabelProp    = "org.freedesktop.Secret.Collection.Label"
+	collectionItemsProp    = "org.freedesktop.Secret.Collection.Items"
+	itemLabelProp          = "org.freedesktop.Secret.Item.Label"
+	itemAttributesProp     = "org.freedesktop.Secret.Item.Attributes"
+
+	// errNotSupported is the D-Bus error name a Secret Service implementation
+	// returns for a CreateCollection call it structurally cannot satisfy —
+	// observed live against GNOME Keyring 48 ("Only the 'default' alias is
+	// supported") for any alias other than "" or "default", unlike KDE's
+	// ksecretd, which accepts an arbitrary alias. Collection falls back to
+	// Label-based lookup/unaliased creation only for this specific error.
+	errNotSupported = "org.freedesktop.DBus.Error.NotSupported"
 
 	// noPrompt is the sentinel object path the Secret Service returns in
 	// place of a real prompt path when no interactive confirmation is needed.
@@ -86,7 +96,13 @@ func (c *Client) Close() error {
 
 // Collection resolves the object path of the named collection (matched by
 // alias), creating it — with a matching alias — if it does not already
-// exist.
+// exist. Some Secret Service implementations only ever accept the "default"
+// alias (GNOME Keyring, confirmed live: CreateCollection with any other alias
+// fails with errNotSupported before even offering a prompt); on that specific
+// error, Collection falls back to finding an already-created collection by
+// its Label property instead, and to creating a new, unaliased one
+// (alias "") if none exists yet — the alias fast path above still applies
+// unchanged for a backend like KDE's ksecretd that supports it.
 func (c *Client) Collection(alias, label string) (dbus.ObjectPath, error) {
 	var existing dbus.ObjectPath
 	if err := c.service.Call(serviceIface+".ReadAlias", 0, alias).Store(&existing); err != nil {
@@ -96,13 +112,18 @@ func (c *Client) Collection(alias, label string) (dbus.ObjectPath, error) {
 		return existing, nil
 	}
 
-	props := map[string]dbus.Variant{collectionLabelProp: dbus.MakeVariant(label)}
-	var (
-		collection dbus.ObjectPath
-		prompt     dbus.ObjectPath
-	)
-	call := c.service.Call(serviceIface+".CreateCollection", 0, props, alias)
-	if err := call.Store(&collection, &prompt); err != nil {
+	collection, prompt, err := c.createCollection(alias, label)
+	if isAliasNotSupported(err) {
+		found, ferr := c.findCollectionByLabel(label)
+		if ferr != nil {
+			return "", ferr
+		}
+		if found != noPrompt {
+			return found, nil
+		}
+		collection, prompt, err = c.createCollection("", label)
+	}
+	if err != nil {
 		return "", fmt.Errorf("secret service: create collection %q: %w", alias, err)
 	}
 	if prompt == noPrompt {
@@ -118,6 +139,50 @@ func (c *Client) Collection(alias, label string) (dbus.ObjectPath, error) {
 		return "", fmt.Errorf("secret service: create collection %q: unexpected prompt result: %w", alias, err)
 	}
 	return created, nil
+}
+
+// createCollection is the raw CreateCollection call, factored out so
+// Collection can retry it with a different alias on isAliasNotSupported.
+func (c *Client) createCollection(alias, label string) (collection, prompt dbus.ObjectPath, err error) {
+	props := map[string]dbus.Variant{collectionLabelProp: dbus.MakeVariant(label)}
+	err = c.service.Call(serviceIface+".CreateCollection", 0, props, alias).Store(&collection, &prompt)
+	return collection, prompt, err
+}
+
+// isAliasNotSupported reports whether err is the D-Bus error a Secret
+// Service implementation returns when it rejects a CreateCollection alias
+// outright, rather than one of the many other reasons the call can fail
+// (session bus unreachable, permission denied, …) that must still surface as
+// a real error instead of triggering the Label-based fallback.
+func isAliasNotSupported(err error) bool {
+	var dbusErr dbus.Error
+	return errors.As(err, &dbusErr) && dbusErr.Name == errNotSupported
+}
+
+// findCollectionByLabel searches every collection the service currently
+// knows about for one whose Label property matches label, for backends where
+// Collection's alias could not be set (isAliasNotSupported) so ReadAlias can
+// never find it on a later call. Returns noPrompt, not an error, when
+// nothing matches.
+func (c *Client) findCollectionByLabel(label string) (dbus.ObjectPath, error) {
+	v, err := c.service.GetProperty(serviceCollectionsProp)
+	if err != nil {
+		return "", fmt.Errorf("secret service: list collections: %w", err)
+	}
+	collections, ok := v.Value().([]dbus.ObjectPath)
+	if !ok {
+		return "", fmt.Errorf("secret service: list collections: unexpected property type %T", v.Value())
+	}
+	for _, collection := range collections {
+		v, err := c.conn.Object(busName, collection).GetProperty(collectionLabelProp)
+		if err != nil {
+			continue
+		}
+		if l, ok := v.Value().(string); ok && l == label {
+			return collection, nil
+		}
+	}
+	return noPrompt, nil
 }
 
 // Unlock unlocks the given objects (typically a single collection),

@@ -26,6 +26,13 @@ type fakeService struct {
 	conn     *dbus.Conn
 	behavior string
 
+	// restrictAlias, when true, makes CreateCollection reject any alias
+	// other than "" or "default" with errNotSupported — reproducing GNOME
+	// Keyring's real behavior (unlike KDE's ksecretd, which accepts an
+	// arbitrary alias) so Client's Label-based fallback can be exercised
+	// against the real wire protocol.
+	restrictAlias bool
+
 	mu          sync.Mutex
 	aliases     map[string]dbus.ObjectPath
 	collections map[dbus.ObjectPath]*fakeCollection
@@ -48,6 +55,9 @@ func startFakeSecretService(t *testing.T, conn *dbus.Conn, behavior string) *fak
 	if err := conn.Export(svc, rootPath, serviceIface); err != nil {
 		t.Fatalf("export fake service: %v", err)
 	}
+	if err := conn.Export(svc, rootPath, propsIface); err != nil {
+		t.Fatalf("export fake service properties: %v", err)
+	}
 	reply, err := conn.RequestName(busName, dbus.NameFlagDoNotQueue)
 	if err != nil {
 		t.Fatalf("request name %s: %v", busName, err)
@@ -65,6 +75,15 @@ func (s *fakeService) getBehavior() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.behavior
+}
+
+// getRestrictAlias reads restrictAlias under the lock — set-after-setup, same
+// as behavior above, since it's a plain field a test assigns directly rather
+// than a constructor argument.
+func (s *fakeService) getRestrictAlias() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.restrictAlias
 }
 
 func (s *fakeService) nextPath(prefix string) dbus.ObjectPath {
@@ -102,7 +121,27 @@ func (s *fakeService) ReadAlias(name string) (dbus.ObjectPath, *dbus.Error) {
 	return noPrompt, nil
 }
 
+// Get answers org.freedesktop.DBus.Properties.Get for the service's
+// Collections property, the one Client.findCollectionByLabel reads.
+func (s *fakeService) Get(iface, prop string) (dbus.Variant, *dbus.Error) {
+	if iface == serviceIface && prop == "Collections" {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		collections := make([]dbus.ObjectPath, 0, len(s.collections))
+		for path := range s.collections {
+			collections = append(collections, path)
+		}
+		return dbus.MakeVariant(collections), nil
+	}
+	return dbus.Variant{}, dbus.MakeFailedError(fmt.Errorf("unknown property %s.%s", iface, prop))
+}
+
 func (s *fakeService) CreateCollection(props map[string]dbus.Variant, alias string) (dbus.ObjectPath, dbus.ObjectPath, *dbus.Error) {
+	if s.getRestrictAlias() && alias != "" && alias != "default" {
+		err := dbus.NewError(errNotSupported, []any{"Only the 'default' alias is supported"})
+		return noPrompt, noPrompt, err
+	}
+
 	label, _ := props[collectionLabelProp].Value().(string)
 
 	create := func() dbus.ObjectPath {
@@ -158,8 +197,8 @@ type fakeCollection struct {
 	items map[dbus.ObjectPath]*fakeItem
 }
 
-// Get answers org.freedesktop.DBus.Properties.Get for the Items property, the
-// only one Client reads from a collection.
+// Get answers org.freedesktop.DBus.Properties.Get for the Items and Label
+// properties — the ones Client reads from a collection.
 func (c *fakeCollection) Get(iface, prop string) (dbus.Variant, *dbus.Error) {
 	if iface == collectionIface && prop == "Items" {
 		c.mu.Lock()
@@ -169,6 +208,9 @@ func (c *fakeCollection) Get(iface, prop string) (dbus.Variant, *dbus.Error) {
 			items = append(items, path)
 		}
 		return dbus.MakeVariant(items), nil
+	}
+	if iface == collectionIface && prop == "Label" {
+		return dbus.MakeVariant(c.label), nil
 	}
 	return dbus.Variant{}, dbus.MakeFailedError(fmt.Errorf("unknown property %s.%s", iface, prop))
 }
