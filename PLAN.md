@@ -903,11 +903,6 @@ Sub-phases (detailed steps written when we start each one):
   4. **Bitwarden** — CLI `bw`, official and actively maintained, widely used
      on Linux, self-hostable (Vaultwarden-compatible); similar shape to
      1Password's CLI backend.
-  5. **`pass` / `gopass`** (GPG-based, no D-Bus) — deferred: different trust
-     model (GPG agent, not a secret-store daemon) and no current user demand;
-     revisit only if requested.
-  6. **LastPass / Dashlane / Enpass / NordPass** — deferred: CLI support on
-     Linux is thin or unmaintained; revisit only if requested.
   → open decisions 7, 8.
   **Progress (GNOME Keyring, ✅ verified — and a real product-code fix, not
   just a test gap).** The "expected to already work" premise above turned
@@ -961,6 +956,56 @@ Sub-phases (detailed steps written when we start each one):
   full investigation, including why the CreateCollection alias restriction
   was missed by source-reading alone and only found by testing against the
   real daemon.
+
+  **Progress (KeePassXC, ✅ verified — no product-code fix needed, but a
+  much heavier tier-2 to automate).** Unlike GNOME Keyring, KeePassXC
+  accepts arbitrary D-Bus aliases (confirmed against
+  `keepassxreboot/keepassxc@develop` source and live), so
+  `internal/secretservice.Client.Collection`'s existing fast path — the
+  same one KDE uses — works correctly as-is: verified live with a real
+  `PASS` of `TestSecretServiceBackendRealDaemon` against a real KeePassXC
+  (Fedora 44, 2.7.12) driven through the actual D-Bus `CreateCollection`
+  call. KeePassXC's architecture is fundamentally different from
+  KDE/GNOME's dedicated daemons, though: a Secret Service "collection" is
+  an open database tab inside the full GUI app, so `CreateCollection`
+  opens the real multi-page "Create New Database" wizard the first time
+  (name, master password, encryption settings, a save-file dialog) rather
+  than a single dialog, and KeePassXC has no non-interactive re-unlock
+  path at all (unlike ksecretd's PAM-hash trick or GNOME's blank-password
+  auto-unlock) — every lock/unlock cycle needs the same interactive
+  password prompt as the very first one.
+
+  A real, Debian-trixie-specific bug was found and ruled out as a product
+  concern: `keepassxc <db> --pw-stdin` segfaults (confirmed via `strace`,
+  null-pointer deref) whenever launched as a backgrounded process on
+  Debian trixie's package (2.7.10) — reproduced 5/5, independent of
+  `--pw-stdin` specifically (a key-file-only database crashes the same
+  way) and independent of the `offscreen` vs. a real `Xvfb` display.
+  Matches a known but "not reproducible" upstream report
+  ([keepassxreboot/keepassxc#9799](https://github.com/keepassxreboot/keepassxc/issues/9799)).
+  Confirmed absent on Fedora 44's newer build (2.7.12) — same base-image
+  swap already forced by KDE's row (Debian doesn't package `ksecretd`
+  either) — so no upstream issue was filed.
+
+  Tier 2 row: `test/containers/keepassxc-tier2.Dockerfile` (Fedora 44).
+  Since KeePassXC has no non-interactive re-unlock, the one-shot "answer
+  it once before the real command starts" shape used for KDE/GNOME isn't
+  enough — `make test` runs the real-daemon test twice (once as this
+  row's own creation trigger, once again naturally inside
+  `go test -race ./...`), and the second run needs its own interactive
+  unlock answered too. `keepassxc-tier2-create-collection.sh` instead
+  runs a persistent background watcher for the whole container lifetime,
+  distinguishing the one-time creation wizard from the plain unlock
+  screen by whether the database file already exists, and re-launching
+  KeePassXC if an unanswered prompt ever makes it quit. Verified over 4
+  consecutive clean-container `make test` runs: 4/4 passed (~27–35s
+  each), `internal/keys` consistently ~2s (no timeout). See
+  `phase4.2-keepassxc-steps.md` (used during development) for the full
+  investigation, including three real automation bugs found only by
+  running the container repeatedly: a `pkill`/`pgrep` substring match
+  that killed the script's own process, a password field never cleared
+  between retries, and click coordinates calibrated against the wrong
+  (post-error-banner) screen layout.
 
 ### Phase 5 — Widen the OS targets
 

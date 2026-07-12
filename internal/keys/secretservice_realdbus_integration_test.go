@@ -29,9 +29,9 @@ const allowRealSecretServiceEnv = "SSHAKKU_TEST_ALLOW_REAL_SECRETSERVICE"
 // sshakku-managed items even when it does run, and it deletes what it
 // created regardless of outcome — but see allowRealSecretServiceEnv for why
 // it still must not run outside a disposable environment: creating the
-// "sshakku" collection the first time relies on that environment's ksecretd
-// having "sshakku" pre-configured as its PAM-opened default wallet (see
-// phase4-tier2-kde-steps.md), which a real desktop session never has.
+// "sshakku" collection the first time needs it either pre-configured or
+// driven through a one-time interactive dialog, neither of which a real
+// desktop session has arranged.
 //
 // It drives the whole test through one SecretSession Unlock/Lock, exactly
 // as Loader does for a batch of keys, rather than each call's own implicit

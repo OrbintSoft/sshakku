@@ -2,11 +2,10 @@
 # Drives the one-time "Choose password for new keyring" / "Store passwords
 # unencrypted?" gcr-prompter dialog pair headlessly via xdotool, answering
 # with a blank password. Unlike KDE's ksecretd, GNOME Keyring has no config
-# file that lets an unattended container pre-seed a custom collection alias
-# (see phase4.2-gnome-keyring-tier2-steps.md); a blank password is also what
-# makes every later Unlock() call prompt-free, not just this one-time
-# creation. Must run from the module root (go.mod) with DISPLAY/D-Bus/
-# gnome-keyring-daemon already up.
+# file that lets an unattended container pre-seed a custom collection alias;
+# a blank password is also what makes every later Unlock() call prompt-free,
+# not just this one-time creation. Must run from the module root (go.mod)
+# with DISPLAY/D-Bus/gnome-keyring-daemon already up.
 set -euo pipefail
 
 wait_for() {

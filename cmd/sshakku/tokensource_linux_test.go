@@ -10,8 +10,8 @@ import (
 
 // TestExecTokenSourceRequiresRoot exercises only the non-root guard: the actual
 // privilege-drop path needs a real root process and another real uid to exec
-// as, so it is verified manually / in a multi-user container instead (see
-// doctor-cross-user-steps.md), not here.
+// as, so it is verified manually / in a multi-user container instead, not
+// here.
 func TestExecTokenSourceRequiresRoot(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("running as root: the requires-root guard cannot be exercised here")
