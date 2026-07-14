@@ -1007,6 +1007,66 @@ Sub-phases (detailed steps written when we start each one):
   between retries, and click coordinates calibrated against the wrong
   (post-error-banner) screen layout.
 
+  **Progress (1Password, ✅ verified — the first backend needing new
+  code, and no container tier).** `OnePasswordBackend`
+  (`internal/keys/secret_onepassword.go`) shells out to the `op` CLI
+  rather than speaking Secret Service D-Bus at all — the first backend
+  candidate to need real new code, as anticipated above. `op` has no
+  in-place edit of an existing item's concealed field without either an
+  assignment-statement argument (visible in argv, which the passphrase
+  must never touch) or a template file on disk, so `Store` deletes any
+  existing item for the service and recreates it from a JSON template on
+  stdin instead; `Lookup` reads back via a `op://<vault>/<service>/password`
+  secret reference. `Vault` is assumed dedicated to sshakku, the same
+  simplification the dedicated Secret Service collection design (decision
+  17) made, so every item is addressed, listed, and deleted by its title
+  with no separate attribute search.
+
+  Unlike KDE/GNOME/KeePassXC, a 1Password account is a cloud account, not
+  a disposable local daemon a container can stand up from nothing, so
+  this needed a different verification shape rather than a tier-2 row:
+  `TestOnePasswordBackendRealAccount`
+  (`internal/keys/secret_onepassword_realaccount_test.go`, gated behind
+  `SSHAKKU_TEST_ALLOW_REAL_ONEPASSWORD=1`, mirroring the other real-daemon
+  tests) creates its own throwaway vault per run (a timestamp-suffixed
+  name, so it can never collide with or touch an existing one), exercises
+  `Store`/`Lookup`/`List`/`Delete`, and deletes the vault in `t.Cleanup`
+  regardless of outcome. It never runs `op signin` and never accepts,
+  logs, or prints a credential — authentication is entirely external to
+  the test, via whichever of two paths already left `op` authenticated:
+  a developer's own signed-in session locally, or `OP_SERVICE_ACCOUNT_TOKEN`
+  in CI. The auth check itself is `op user get --me` rather than
+  `op whoami`, which — like `op signin` — is unsupported for service
+  accounts.
+
+  The CI path uses a dedicated 1Password service account ("SSHakku",
+  Business-plan trial) rather than the developer's personal account, so
+  the run never touches real personal vault data; its token is a GitHub
+  Actions repository secret (`OP_SERVICE_TOKEN`). Verified locally against
+  the developer's own account first (both auth paths share the same test
+  code), then end to end in CI:
+  `.github/workflows/tier2-onepassword.yml`, `workflow_dispatch`-only like
+  the container tier-2 jobs — not on every push, since this hits a real
+  external account with its own rate limits rather than a disposable
+  in-container daemon. Installs the official `1Password/install-cli-action`
+  (MIT, pinned by commit SHA per the existing Actions convention) rather
+  than a container image; no desktop/Xvfb needed since `op` itself is
+  headless. `permissions: contents: read`, matching every other workflow
+  in the repo.
+
+  A real, packaging-only bug was found and fixed along the way, on the
+  developer's own machine rather than in this repo: 1Password's Linux
+  binaries silently reject a setgid IPC helper whose group id is below
+  1000 (undocumented upstream behaviour, also reported by other
+  distributions' users hitting the same default system-range GID
+  allocation) — the developer's Gentoo overlay's `acct-group/1password`
+  and `acct-group/onepassword-cli` ebuilds used the eclass's
+  auto-allocated system range, landing below that threshold, which broke
+  both the CLI and the browser-extension integration with a "connection
+  reset" error and no attributable cause on sshakku's side. Fixed
+  upstream in the overlay (`OrbintSoft/orbintsoft-ebuild#66`), unrelated
+  to sshakku's own code or this repo's history.
+
 ### Phase 5 — Widen the OS targets
 
 macOS as a wide port, never trust Apple; then Windows last as the most divergent target (service + named pipe, no socket, use win32 safe API). → goals 12, 13; open decision 8.
