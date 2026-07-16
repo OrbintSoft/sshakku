@@ -5,6 +5,10 @@ goals are reviewed and agreed. See `CLAUDE.md` for the project rules and
 `docs/THREAT-MODEL.md` for the threat model and the June 2026 incident that
 motivated the rewrite.
 
+Entries below are kept short by design (rule 2): full investigation detail for
+anything marked done lives in `git log -p -- PLAN.md` and the commit that
+introduced it, not here.
+
 ---
 
 ## Goals
@@ -111,147 +115,88 @@ still to be made.
 ## Open decisions
 
 Points raised during goal review that need a decision (or an explicit constraint
-honoured) before or during the phases. Each notes the related goal.
+honoured) before or during the phases. Each notes the related goal. Entries marked
+done are summarised; see the note at the top of this file for full detail.
 
-1. **Threat model (goal 2, 7).** State, in two lines, what the secret handling
-   protects against and what it does not. The user keyring (`keyctl @u`) and the
-   secret store do **not** protect against other processes of the same user — by
-   design, since those processes must be able to use the key. Decide the target
-   (other local users / root / swap & coredumps / logs) — it drives the design.
-   **Decided (Phase 0) — see `docs/THREAT-MODEL.md` (source of truth).** In two
-   lines: *protects* the passphrase from logs, shell history, `argv`
-   (`ps` / `/proc/<pid>/cmdline`) and plaintext on disk — at rest only in the OS
-   secret store, in transit only via a short-lived `keyctl` entry / stdin.
-   Same-user processes, root, swap/coredumps and physical access are **enumerated as
-   deferred decisions, not excluded by design**: each is settled per threat and
-   confirmed at a final security evaluation.
+1. **Threat model (goal 2, 7). Decided (Phase 0)** — see `docs/THREAT-MODEL.md`
+   (source of truth). In two lines: *protects* the passphrase from logs, shell
+   history, `argv` and plaintext on disk — at rest only in the OS secret store, in
+   transit only via a short-lived `keyctl` entry / stdin. Same-user processes,
+   root, swap/coredumps and physical access are deferred decisions, settled per
+   threat rather than excluded by design.
 
 2. **No passphrase in `argv` (goal 2).** Never pass the passphrase as a
-   command-line argument (visible via `ps` / `/proc/<pid>/cmdline`). Feed it
-   through stdin instead (e.g. `keyctl padd … <<<"$passphrase"`). Audit every tool
-   invocation that touches the passphrase.
+   command-line argument. Feed it through stdin/env instead. Audit every tool
+   invocation that touches a passphrase — an invariant every secret backend since
+   has followed (`SecretToolBackend`, `SecretServiceBackend`, `OnePasswordBackend`,
+   `BitwardenBackend`).
 
 3. **"Silent" means zero stdout/stderr when non-interactive (goal 3).** Anything
    sourced from `profile.d` runs for non-interactive SSH sessions too; a single
-   byte on stdout corrupts `scp` / `rsync` / `git`-over-ssh. The success path must
-   emit nothing on stdout/stderr — only the log file.
+   byte on stdout corrupts `scp`/`rsync`/`git`-over-ssh. The success path emits
+   nothing on stdout/stderr — only the log file.
 
 4. **Recovery has a hard limit (goal 6).** A child process cannot rewrite the
-   environment of an already-running parent (the session / GUI). "Fix mismatched
-   env vars" can only fix the current shell and its descendants; already-open GUI
-   apps are reachable only via the fixed socket path (plus a dangling-socket
-   symlink as a last resort). Don't promise more. The same symlink is how a healthy
-   foreign agent is adopted (open decision 15): the fixed path points at the
-   foreign socket so the session's pinned `SSH_AUTH_SOCK` resolves to it.
+   environment of an already-running parent. "Fix mismatched env vars" only fixes
+   the current shell and its descendants; already-open GUI apps are reached only
+   via the fixed socket path (plus a dangling-socket symlink as a last resort).
+   Same symlink mechanism adopts a healthy foreign agent (open decision 15).
 
-5. **Give-up state & opt-out (goal 4).** Bounded retries need a persistent text
-   sentinel ("gave up on key X") with a defined reset (next login? time-based?) and
-   an opt-out switch (config flag / sentinel file). Define lifetime and reset rule.
+5. **Give-up state & opt-out (goal 4). Decided** — see Phase 2 slice 4
+   (`internal/giveup`, `SSHAKKU_GIVEUP_TTL`/`SSHAKKU_NO_GIVEUP`).
 
-6. **Key-expiry semantics (goal 2).** Confirm: expire the *key inside the agent*
-   (`ssh-add -t <lifetime>`), keep the passphrase in the vault, and let a new shell
-   re-add it silently — rather than expiring the stored passphrase itself.
+6. **Key-expiry semantics (goal 2). Decided** — expire the *key inside the agent*
+   (`ssh-add -t`), keep the passphrase in the vault, and let a new shell re-add it
+   silently. See Phase 2 slice 4.
 
-7. **Secret backend abstraction (goal 11).** KDE and GNOME are the *same* backend:
-   both implement the D-Bus Secret Service API (`secret-tool`/libsecret). The real
-   backends are ~4: `secret-service` (KDE + GNOME), macOS Keychain, Windows
-   Credential Manager, 1Password CLI (`op`). Define a `SecretBackend` interface
-   early — it is also what makes integration tests mockable (goal 16).
+7. **Secret backend abstraction (goal 11).** KDE and GNOME are the *same* backend
+   (Secret Service D-Bus). Backends: `secret-service` (KDE + GNOME + KeePassXC),
+   1Password (`op`), Bitwarden (`bw`), plus macOS Keychain and Windows Credential
+   Manager still to come. `SecretBackend` interface defined early (also makes
+   tests mockable) — all four Linux backends are done, see Phase 4.2.
 
 8. **Thin platform ports (goals 12, 13).** macOS already does silent passphrase
    caching natively via launchd + `ssh-add --apple-use-keychain`; the macOS port
-   may reduce to "add keys with keychain", so avoid over-engineering it. Windows is
-   the most divergent (service + named pipe, no socket) — keep it last.
+   may reduce to "add keys with keychain". Windows is the most divergent
+   (service + named pipe, no socket) — keep it last.
 
-9. **CI vs containers for non-Linux (goal 16).** Use GitHub Actions `macos-*` /
-   `windows-*` runners for those platforms (more realistic than containers); keep
-   Linux containers for the rest, noting that `keyctl` / D-Bus need setup there —
-   another reason for the mockable backend interface.
+9. **CI vs containers for non-Linux (goal 16).** Use GitHub Actions `macos-*`/
+   `windows-*` runners for those platforms; keep Linux containers for the rest.
 
-10. **Phasing (rules 1, 9).** Harden the primary target first (Gentoo / OpenRC /
-    KDE), then the Go core, then widen to other backends and OSes; each step stays
-    committable. **Decided:** the "possibly still in bash" hedge is settled as a
-    **bash/Go split** — Phase 1 ships only the permanent shell plumbing in
-    cleaned-up bash (paths, install modes, silence, agent lifecycle) as a stable
-    baseline, and the branchy, stateful logic (retries / give-up, key-expiry,
-    Wayland detection, secret-handling) moves to the Go core in Phase 2, written
-    once rather than re-written from throwaway bash. The diagnostic tool follows
-    the core (Phase 3) so it reuses Go primitives. **Brought forward:** rather than
-    a wholesale Phase 2, the Go core is grown incrementally (strangler) starting
-    with the path/token/dir/log slice, so no more throwaway bash accumulates — see
-    the Phase 2 note for the slice breakdown.
+10. **Phasing (rules 1, 9). Decided:** bash/Go split — Phase 1 ships only the
+    permanent shell plumbing; the branchy, stateful logic moves to a Go core grown
+    incrementally (strangler), slice by slice, rather than one wholesale rewrite —
+    see Phase 2. The diagnostic tool follows the core (Phase 3).
 
-11. **CI least-privilege & lint coverage (rule 14, 12).** The existing
-    `.github/workflows/linting.yml` has no explicit `permissions:` block (it runs
-    on the repository default). Add a least-privilege block — verifying which
-    scopes `reviewdog`/`shfmt` actually need before tightening, so CI doesn't
-    break. While there, decide the lint story: wire a `make lint` target
-    (shellcheck + a Markdown linter) and align CI with it. Go and a Markdown linter
-    will be new file types needing a lint decision.
-    **Decided (Phase 0):** `make lint` runs `shellcheck` + `shfmt -d` +
-    `markdownlint-cli2` + `checkmake` + `actionlint`; CI declares `permissions:
-    contents: read` and invokes the same `make lint`, replacing the per-tool actions
-    (which would need write scopes for inline annotations). Per-file-type lint
-    decisions are recorded under Phase 0.
+11. **CI least-privilege & lint coverage (rule 14, 12). Decided (Phase 0):**
+    `make lint` runs `shellcheck`+`shfmt`+`markdownlint-cli2`+`checkmake`+
+    `actionlint`(+`editorconfig-checker`, `golangci-lint`, `taplo`, `hadolint` as
+    each file type entered the repo); CI declares `permissions: contents: read`
+    and invokes the same `make lint`. See the per-file-type table under Phase 0.
 
-12. **Install modes & path layout (goals 17–19).** Realise the two install modes
-    and the XDG/FHS path layout in Phase 1 (steps 1.1–1.2) — config in `/etc` or
-    `$XDG_CONFIG_HOME`, state/logs in `$XDG_STATE_HOME`, agent socket in
-    `$XDG_RUNTIME_DIR`, nothing under `~/.ssh`. Open within: the per-user mode can't
-    write `/etc/profile.d`, so its bootstrap hook moves to `~/.bashrc` /
-    `~/.config/plasma-workspace/env/` — pick the per-user hook in step 1.2.
-    **Decided (step 1.1):** config **and** the session log live together under
-    `${XDG_CONFIG_HOME:-~/.config}/sshakku` (one discoverable tree, not the
-    `$XDG_STATE_HOME` split sketched above). The agent socket goes in the per-user
-    tmpfs, resolved independently of the desktop/display server:
-    `$XDG_RUNTIME_DIR/sshakku` → `/run/user/$UID/sshakku` (probed, owned by us)
-    → `${XDG_CACHE_HOME:-~/.cache}/sshakku` when no logind exists. An
-    unpredictable per-login token from the `@u` user keyring is inserted as a path
-    component (`<runtime_dir>/<token>/agent.sock`) so the path is not reproducible
-    across logins/reboots — defense-in-depth above the ownership+`0700` boundary;
-    it degrades to the plain runtime dir when `keyctl` is absent. Deferred to the
-    Go core (which owns path computation behind the entrypoint seam): keyring via
-    syscalls (no `keyctl` binary), a `/dev/shm/sshakku/$UID/<token>/` tmpfs
-    fallback with parent-validation (`lstat`/owner/no-symlink) + a `tmpfiles.d`
-    entry for the system install, optional `boot_id` rotation for the `~/.cache`
-    fallback, and optional per-login agent isolation as a config flag. The
-    per-user bootstrap hook stays open for step 1.2.
+12. **Install modes & path layout (goals 17–19). Decided (step 1.1):** config
+    **and** the session log live under `${XDG_CONFIG_HOME:-~/.config}/sshakku`;
+    the agent socket resolves `$XDG_RUNTIME_DIR/sshakku` →
+    `/run/user/$UID/sshakku` → `${XDG_CACHE_HOME:-~/.cache}/sshakku`, with an
+    unpredictable per-login `@u`-keyring token as a path component (defense in
+    depth above the `0700` boundary). The per-user bootstrap hook (`~/.bashrc` vs
+    a desktop-session env file) stays open.
 
 13. **Which keys to auto-load is configurable (goals 1, 2, 15). ✅ Done.**
-    `config.toml` gains three keys, config-file only — no `SSHAKKU_*` twin, same
-    reasoning as decision 18's wallet-store keys: `auto_load_mode` (`"all"`
-    default, `"include"`, or `"exclude"`), `auto_load_include`, and
-    `auto_load_exclude`. The mode is authoritative, so the two lists never
-    conflict, mirroring `StoresWallet` exactly
-    (`config.Settings.AutoLoads(keyname) bool`). `keys.Config` gained an
-    `AutoLoad func(keyname string) bool` predicate (nil loads every key,
-    preserving prior behaviour), checked at the top of `Loader.loadOne` — before
-    the fingerprint lookup, so an excluded key never runs `ssh-keygen` or
-    touches the agent at all. A security-conscious user narrows the auto-load
-    set to shrink the agent's blast radius (A2): fewer keys sitting in the agent
-    means fewer credentials exposed to same-user processes and to agent
-    forwarding. Independent of decision 18: an auto-load-excluded key is not
-    proactively added at shell-init, but the askpass broker still answers for it
-    normally on demand (e.g. `ssh -i`), since the broker never calls
-    `Loader.LoadKeys`.
+    `config.toml`: `auto_load_mode` (`all`/`include`/`exclude`) +
+    `auto_load_include`/`auto_load_exclude`, the same shape as decision 18's
+    wallet-store keys (`config.Settings.AutoLoads`, `keys.Config.AutoLoad`,
+    checked before the fingerprint lookup). An excluded key is simply not
+    proactively loaded; the askpass broker still answers for it on demand.
 
-14. **Project name (goal identity).** **Decided:** the project is named
-    **SSHakku** (from Akkadian *iššakku*, a steward who administers an estate on
-    behalf of its owner — here it tends the SSH agent and guards the keys, pulling
-    each passphrase from the OS secret store; the name also surfaces `ssh`). It
-    replaces the original `ssh-profile-config`, which mislabelled the tool as an
-    `~/.ssh/config` manager (it manages neither SSH connection profiles nor
-    `~/.ssh/config`) and described the bootstrap mechanism (`profile.d`) rather than
-    the purpose. An earlier working name, *sshepherd*, was dropped to avoid a clash
-    with an active registered trademark (FullArmor's **SSHepherd®**) in the
-    SSH-security space. The `<name>` placeholder in the path layout (goal 19, open
-    decision 12) resolves to `sshakku`. A short command alias `shak` is to be
-    provided by the CLI when it lands. The GitHub repository and the Gentoo package
-    are renamed to match.
+14. **Project name (goal identity). Decided:** **SSHakku** (Akkadian *iššakku*, a
+    steward who administers an estate on behalf of its owner). Replaces the
+    original `ssh-profile-config` (mislabelled the tool as a `~/.ssh/config`
+    manager) and the interim working name *sshepherd* (dropped over a trademark
+    clash with FullArmor's SSHepherd®). CLI alias: `shak`.
 
 15. **Agent lifecycle: self-healing & foreign-agent adoption (goals 5, 6, 8).** At
-    shell-init the world is in one of five states; sshakku resolves them in
-    precedence order rather than only "never kill a healthy agent":
+    shell-init the world is in one of five states, resolved in precedence order:
 
     - **A — clean** (nothing reachable): reap any dead socket at our path, start
       *our* agent on the fixed socket, load the keys.
@@ -259,150 +204,61 @@ honoured) before or during the phases. Each notes the related goal.
       missing keys (fingerprint dedup), stay silent.
     - **C — ours zombie** (our socket/process dead, including the legacy
       `~/.ssh/agent`): reap what is ours, restart on the fixed socket.
-    - **D — foreign healthy** (a reachable agent we did not start, env points
-      elsewhere): never spawn a competitor — adopt it and **report the anomaly**.
-    - **E — disaster** (mixed stale env, dead sockets, several agents): be
-      maximally resilient — use any healthy agent (ours first, then a foreign one
-      with a report), reap the dead, never leave the shell on a dead socket.
+    - **D — foreign healthy** (a reachable agent we did not start): never spawn a
+      competitor — adopt it by symlink (fixed socket → foreign socket, keep
+      `SSH_AUTH_SOCK` on the fixed path) and **report the anomaly**, accepting the
+      widened blast radius as exactly why it's reported, not the steady state.
+    - **E — disaster** (mixed stale env, dead sockets, several agents): use any
+      healthy agent (ours first), reap the dead, never leave the shell on a dead
+      socket.
 
-    Identity: "ours" = the agent listening on our fixed socket (PID recorded in a
-    state file when we start it); "legacy-ours" = `ssh-agent -a ~/.ssh/agent/…`;
-    anything else is foreign. The hard limit of open decision 4 still holds — we fix
-    only the current shell and its descendants; already-open GUI apps are reached
-    only via the fixed-socket symlink.
-
-    **Decided (this discussion):**
-    - **Adopt a foreign healthy agent by symlink** (case D): point the fixed socket
-      at the foreign socket (`fixed → foreign`), keep `SSH_AUTH_SOCK` on the fixed
-      path, and load our keys into the foreign agent — accepting that this widens
-      the keys' blast radius, which is exactly why it is reported as an anomaly, not
-      the steady state. If the foreign agent dies the fixed path is left dangling
-      and handled like any other dead socket.
-    - **Reap dead foreign sockets/agents too**, not only ours — but *only the dead*
-      (no listener / unreachable process); a healthy foreign agent is never killed
-      (that is case D). Automatic reaping stays within the invoking user's
-      privileges (rule 18); deeper cleanup across users is the diagnostic tool's job
-      under `sudo`.
-
-    The reporting/attribution side — who started the foreign agent, and how to
-    return to the clean state where only we run the agent — is the diagnostic tool's
-    mandate (goal 8, Phase 3).
+    "Ours" = the agent on our fixed socket (PID recorded when we start it);
+    "legacy-ours" = `ssh-agent -a ~/.ssh/agent/…`; anything else is foreign. Dead
+    foreign sockets/agents are reaped too (never a *healthy* one — that's case D),
+    within the invoking user's own privileges; deeper cross-user cleanup is the
+    diagnostic tool's job under `sudo`. Reporting/attribution of a foreign agent is
+    the diagnostic tool's mandate (goal 8, Phase 3). ✅ Implemented as Go slice 2.
 
 17. **Scoped, explicit-lock unlock window per collection (goals 2, 11; open
-    decision 7; threat I6). ✅ Done.** Gave sshakku its own Secret Service
-    collection (label and alias `sshakku`), separate from the desktop's default
-    (`kdewallet` / login keyring). Rather than relying on the desktop's fixed idle
-    timeout to bound the unlocked window, sshakku unlocks only its own collection
-    right before a lookup or store and locks it again immediately after —
-    collapsing the exposure window from minutes to the seconds the operation
-    actually takes. `secret-tool` only ever targets the default collection and has
-    no lock/unlock verbs, so this needed a native D-Bus Secret Service client
-    (`internal/secretservice`, using `github.com/godbus/dbus/v5`) rather than
-    shelling out; `SecretServiceBackend` (`internal/keys/secret.go`) wraps it
-    behind the existing `SecretBackend` interface and is now the default in
-    `cmd/sshakku`, falling back to `SecretToolBackend` if the D-Bus session bus is
-    unreachable (the same underlying dependency secret-tool always had, so no new
-    failure mode). Verified live against the user's `ksecretd`: `CreateCollection`
-    with a custom alias works, and `Unlock` can complete either synchronously or
-    via the async `Prompt`/`Completed` flow depending on session state, so the
-    client handles both — confirmed by a white-box test suite
-    (`internal/secretservice`) exporting a fake Secret Service over a private
-    `dbus-daemon` session bus, reproducing every completion mode observed live.
-    Does **not** close threat I6 (`docs/THREAT-MODEL.md`: any process of the same
-    UID can still query the collection while it happens to be unlocked, and a
-    process killed between unlock and the deferred lock leaves it open until the
-    desktop's idle timeout) — it only shrinks the window during which that
-    exposure exists. **No migration** from the old default-collection storage: an
-    already-stored key re-prompts once on the first load after upgrading, then
-    lands in `sshakku` and behaves normally — simpler than a dual-collection read
-    fallback or a copy/delete migration, for a single-user deployment today.
-    **Follow-up (rule 2, noticed in passing):** the Go test suite had no CI
-    entrypoint (`linting.yml` only ran `make lint`); added `make test` (`go test
-    -race ./...`) and a `test.yml` workflow so it actually runs on push.
-    **Follow-up (bug report): batch the unlock across `load-keys`.** Per-key
-    unlock/lock meant a shell with N keys prompted the wallet password up to N
-    times. `SecretServiceBackend` gained an explicit `Unlock`/`Lock` pair
-    (`SecretSession` interface) that a caller can hold across several
-    `Lookup`/`Store` calls; `Loader.LoadKeys` uses it to unlock lazily on the
-    first key that actually needs the wallet and lock once after the whole
-    batch, rather than once per key or waiting out the wallet's own idle
-    timeout — see `docs/THREAT-MODEL.md` I6 for the resulting exposure window.
-    The reactive askpass-broker path (a single expired key re-added outside
-    `load-keys`) is unaffected: it still opens and closes for that one lookup.
+    decision 7; threat I6). ✅ Done.** sshakku uses its own Secret Service
+    collection (label/alias `sshakku`), unlocked only for the seconds around each
+    lookup/store rather than relying on the desktop's idle timeout —
+    `internal/secretservice` (native D-Bus client, since `secret-tool` can't do
+    this) behind `SecretServiceBackend`, falling back to `SecretToolBackend` if
+    the session bus is unreachable. Does **not** close threat I6 (a same-UID
+    process can still query the collection while unlocked); only shrinks the
+    window. `SecretSession` (`Unlock`/`Lock`) lets `Loader.LoadKeys` batch one
+    unlock per shell instead of one per key — every later multi-key secret backend
+    (`BitwardenBackend`) reuses this same interface with zero changes to
+    `load.go`.
 
 18. **Which keys' passphrases are stored in the wallet is configurable (goals 2,
-    7; open decision 13). ✅ Done.** `config.toml` gains three keys, config-file
-    only — no `SSHAKKU_*` twin, since the include/exclude lists don't fit a
-    single environment variable cleanly: `wallet_store_mode` (`"all"` default,
-    `"include"`, or `"exclude"`), `wallet_store_include`, and
-    `wallet_store_exclude`. The mode is authoritative, so the two lists never
-    conflict — `"include"` consults only `wallet_store_include` and
-    `"exclude"` consults only `wallet_store_exclude`; the other list, if
-    present, is simply not read. An unrecognised mode falls back to `"all"`
-    and is logged (`config.Settings.StoresWallet(keyname) bool`). The policy
-    is consulted at every wallet write: `keys.Config` gained a `WalletStore
-    func(keyname string) bool` predicate (nil stores everything, preserving
-    prior behaviour), checked by both `Loader.storePassphrase` (the load-keys
-    prompt-then-store path) and `Broker.storePassphrase` (the askpass
-    broker's miss-then-store fallback) before every `SecretBackend.Store`
-    call. An excluded key is still used normally in the session — only the
-    persistent store is skipped. Scoping this surfaced a real gap: the
-    askpass broker never loaded `config.toml` at all, so none of the
-    file-based settings — not just this one — reached it; `cmd/sshakku` now
-    shares one `loadSettings` helper between `load-keys` and the askpass
-    broker so both read the same config.
+    7; open decision 13). ✅ Done.** `config.toml`: `wallet_store_mode`
+    (`all`/`include`/`exclude`) + `wallet_store_include`/`wallet_store_exclude`
+    (`config.Settings.StoresWallet`, `keys.Config.WalletStore`), consulted by both
+    `Loader.storePassphrase` and `Broker.storePassphrase` before every
+    `SecretBackend.Store`. Surfaced a real gap fixed at the same time: the askpass
+    broker hadn't been loading `config.toml` at all; `cmd/sshakku` now shares one
+    `loadSettings` helper between `load-keys` and the broker.
 
 19. **Command to forget stored passphrases (goals 2, 15). ✅ Done.** `sshakku
-    forget <keyname>...` deletes one or more stored passphrases; `sshakku forget
-    --all` clears every sshakku-managed entry. Useful for testing, for revoking
-    a passphrase after suspecting exposure, or for opting a key out of
-    persistent storage after it was already saved (decision 18 only stops
-    *future* stores). `SecretBackend` (`internal/keys/secret.go`) gained
-    `Delete(service string) error` (a miss is success, not an error) and
-    `List() ([]string, error)`. `SecretServiceBackend.List` enumerates the
-    dedicated `sshakku` collection's items directly (`secretservice.Client`
-    gained `Items`/`ItemAttributes`/`DeleteItem`) — since the collection is
-    sshakku's own (decision 17), every item in it is sshakku-managed, so no
-    separate prefix filter is needed. `SecretToolBackend.List` returns
-    `ErrListUnsupported`: `secret-tool` has no generic enumeration verb, so
-    `--all` only works with the native Secret Service backend; the fallback
-    path still supports deleting named keys via `secret-tool clear`. Field note
-    from manual testing during scoping: `secret-tool clear` failed silently
-    (exit 1, no stderr) against a real stored entry, while a direct D-Bus
-    `Item.Delete` call succeeded — this is why `SecretServiceBackend.Delete`
-    goes through `DeleteItem`/D-Bus rather than shelling out, and why the
-    fallback's `secret-tool clear` path is documented as not fully trustworthy.
+    forget <keyname>...` / `--all`. `SecretBackend` gained `Delete`/`List`;
+    `SecretServiceBackend.List` enumerates the dedicated collection directly.
+    `SecretToolBackend.List` returns `ErrListUnsupported` (`secret-tool` has no
+    enumeration verb) — `--all` needs the native backend. Field note:
+    `secret-tool clear` was observed to fail silently against a real entry, which
+    is why `SecretServiceBackend.Delete` goes through D-Bus `Item.Delete` directly.
 
-20. **Three-tier container/VM test strategy (goal 16; open decision 9).**
-    Prompted by a real incident: the kernel user keyring behaves differently
-    without a PAM-established session (Add succeeds, a same-process Read is
-    denied — see the `internal/keyring`/`internal/paths` fix that shipped
-    alongside open decision 17), which a plain headless container missed
-    until it was hit in CI. Bare container matrices are necessary but not
-    sufficient; real desktop-session behaviour (wallet prompts, PAM-linked
-    keyrings, a real login) needs a heavier tier. Three tiers, increasing in
-    fidelity and cost:
-    1. **Headless, multi-distro containers** (Gentoo/OpenRC, systemd
-       distros, …), no desktop: the agent five-state lifecycle (Phase 1.5),
-       Go unit/integration tests (already how `internal/secretservice`'s
-       fake-D-Bus-peer suite and `internal/agent` run). Cheap and fast —
-       every push, in the existing `test.yml` workflow or one like it.
-    2. **Containers with a real desktop secret stack** (`ksecretd` +
-       `kwalletd6` or GNOME Keyring, `kdialog`, a headless display via Xvfb
-       or weston) exercising the actual wallet prompt/unlock flow end to
-       end, not the fake server. Heavier and more brittle.
-    3. **Vagrant, a full Gentoo/OpenRC/KDE box** doing a real login (SDDM,
-       PAM, an actual user session) for the truest end-to-end check —
-       reproducing, automatically and repeatably, the same kind of live
-       install today only done by hand on the user's own PC — the slowest
-       and most maintenance-heavy tier.
-    **Decided:** cost is not a blocker — thoroughness wins. Tiers 2 and 3 are
-    too heavy/flaky for every push, so they run as **manually-triggered CI
-    workflows** (`workflow_dispatch`), not on every push like tier 1's
-    `test.yml`; run on demand or before a release rather than gating every
-    commit. Detailed sub-steps (which distros, which container images, the
-    Vagrant box definition) are written when the phase that needs them is
-    reached — this decision fixes the shape, not the implementation.
+20. **Three-tier container/VM test strategy (goal 16; open decision 9). Decided:**
+    cost is not a blocker — thoroughness wins.
+    1. **Tier 1** — headless, multi-distro containers, no desktop: the fake-backed
+       unit/integration suite, run on every push (`test.yml`).
+    2. **Tier 2** — a real desktop secret stack (or, for a self-hostable backend,
+       the real backend daemon itself) headless via Xvfb/weston, exercising the
+       real prompt/unlock flow. `workflow_dispatch`-only (heavier, more brittle).
+    3. **Tier 3** — a full Vagrant Gentoo/OpenRC/KDE box doing a real login (SDDM,
+       PAM). Deferred to Phase 6; a login/session check, not something a new
+       backend needs.
 
 ---
 
@@ -416,759 +272,202 @@ phase that needs them (not up front).
 The ordering follows open decision 10: harden the primary target first (possibly
 still in bash), then introduce the Go core, then widen to other backends and OSes.
 
-### Phase 0 — Foundations & repo hygiene
+### Phase 0 — Foundations & repo hygiene ✅ Done
 
-Lint and CI baseline with no behaviour change: a `make lint` target (shellcheck +
-a Markdown linter) aligned with CI, and an explicit least-privilege `permissions:`
-block in every workflow. Write the threat model down in two lines, since it drives
-the later design. Settle contributor licensing (a CLA preserving the holder's
-freedom to relicense) while the project has no external contributors yet.
-→ goals 16; open decisions 1, 11; rules 12, 14, 16.
+Lint and CI baseline with no behaviour change, the threat model, and contributor
+licensing. → goals 16; open decisions 1, 11; rules 12, 14, 16.
 
-Sub-phases (detailed steps written when we start each one):
+- **0.1 — Repo hygiene.** `makefile` → `Makefile`, `.editorconfig`,
+  `.gitattributes` (LF everywhere).
+- **0.2 — Threat model.** `docs/THREAT-MODEL.md` (STRIDE: assets, trust
+  boundaries, threats, derived invariants). Two-line summary in open decision 1.
+- **0.3 — `make lint` target.** `lint-sh`/`lint-md`/`lint-make`/`lint-yaml`/
+  `lint-editorconfig`, each with its own config file (rule 13); disabled Markdown
+  rules MD013/MD029/MD060 (hand-wrapped prose, numbered goals, author-controlled
+  table spacing). Lint tools are CI-only, never bundled — no EUPL-1.2 obligations
+  (rule 16), a precedent every later lint tool follows.
+- **0.4 — CI alignment & least-privilege.** `linting.yml` → `permissions:
+  contents: read` + one job running `make lint`; Actions pinned by commit SHA;
+  Dependabot enabled for `github-actions`.
+- **0.5 — Contributor licensing & CLA.** `CONTRIBUTING.md`/`CLA.md`/`DCO.txt`:
+  DCO 1.1 sign-off + acceptance-by-PR of an adapted Harmony HA-CLA-I (CC BY 3.0),
+  contributors keep copyright, holder keeps a non-exclusive relicensing right.
+  Governing law: EUPL Art. 15 (EU member state where the holder is established;
+  Belgium as fallback).
+- **0.6 — Contributor DX for sign-off.** `.githooks/prepare-commit-msg` (opt-in,
+  `git interpret-trailers`), a rebase recovery recipe in `CONTRIBUTING.md`, a PR
+  template. A custom "comment on DCO failure" bot action was rejected — the DCO
+  app already links its own remediation, and it would need `pull-requests: write`
+  against the least-privilege default.
 
-- **0.1 — Repo hygiene. ✅ Done.** Renamed `makefile` → `Makefile`; added an
-  `.editorconfig` (UTF-8, LF line endings, final newline, trim trailing whitespace,
-  per-file-type indentation) and a `.gitattributes` (`* text=auto eol=lf`, explicit
-  handling for shell scripts) to fix one formatting/line-ending standard across the
-  repo. `.gitignore` already covers scratch/step files.
-- **0.2 — Threat model. ✅ Done.** `docs/THREAT-MODEL.md` — a formal STRIDE model
-  (assets, trust boundaries, threats tagged present/presumed/future, and the derived
-  security invariants) to anchor the rewrite and the platform ports. The two-line
-  summary stays in open decision 1 above.
-- **0.3 — `make lint` target (rule 12). ✅ Done.** `make lint` runs `lint-sh`
-  (`shellcheck` + `shfmt -d`), `lint-md` (`markdownlint-cli2`), `lint-make`
-  (`checkmake`), `lint-yaml` (`actionlint`) and `lint-editorconfig`
-  (`editorconfig-checker`). Renamed `ssh-init-macos.sh` → `ssh-init-macos.zsh`
-  (zsh linting deferred to the macOS phase). `editorconfig-checker` **adopted**
-  (whole tree; it honours `.gitignore`, so scratch files are skipped). Each tool
-  reads its own config file (rule 13): `.markdownlint-cli2.yaml` (disables
-  MD013/MD029/MD060 — see below), `checkmake.ini` (relaxes
-  `minphony`/`maxbodylength`),
-  `.editorconfig-checker.json` (excludes `LICENSE` verbatim and the deferred
-  `*.zsh`). To satisfy the new linters with no behaviour change: shell scripts
-  reformatted with `shfmt -w`, `.vscode/settings.json` reindented to 2 spaces, and
-  `.editorconfig` marks Markdown indentation `unset` (content-driven). The lint
-  tools are external dev/CI tools (separate processes, not bundled or
-  distributed), so they carry no EUPL-1.2 obligations and don't obstruct
-  relicensing (rule 16). `linting.yml`'s `ignore_names` was updated to the `.zsh`
-  name (the shellcheck action scans `*.zsh`); the full CI rework (permissions
-  block + running `make lint`) stays in 0.4.
-  - Disabled Markdown rules: `MD013` (line-length — prose is hand-wrapped, tables
-    and URLs legitimately exceed 80), `MD029` (ol-prefix — goals are numbered
-    continuously across sub-sections and referenced by number), `MD060`
-    (table-column-style — pipe spacing left to the author).
-- **0.4 — CI alignment & least-privilege (open decision 11, rule 14). ✅ Done.**
-  `linting.yml` now declares top-level `permissions: contents: read` and runs a
-  single `lint` job that installs the six tools and invokes `make lint`,
-  replacing the per-tool actions (`ludeeus/action-shellcheck`,
-  `reviewdog/action-shfmt`) and dropping the `ignore_names` workaround. GitHub
-  Actions are pinned by full commit SHA with a `# vX.Y.Z` comment (minor+patch),
-  and a new `.github/dependabot.yml` enables the `github-actions` ecosystem to
-  keep them current. The lint tools are pinned to explicit versions in the
-  install step (shellcheck via release tarball; shfmt, checkmake, actionlint and
-  editorconfig-checker via `go install`; markdownlint-cli2 via `npm`); auto-bump
-  of those waits for the `go.mod`/`package.json` that arrive with the Go core
-  (Phase 3). `dependabot.yml` is non-workflow YAML, already covered by the 0.3
-  lint decision (editorconfig-checker for formatting; GitHub validates the schema
-  server-side), so it needs no new per-file-type decision.
-- **0.5 — Contributor licensing & CLA (rule 16). ✅ Done.** Added `CONTRIBUTING.md`,
-  `CLA.md` and `DCO.txt` so contributors **keep the copyright** in their work while
-  granting the copyright holder a **non-exclusive** licence to also distribute the
-  project under other licences (e.g. proprietary/OEM) alongside the permanent public
-  EUPL-1.2 release — no copyright assignment, no commit reverts. Mechanism: **DCO 1.1
-  sign-off** (`Signed-off-by`) **+ acceptance-by-action** of the CLA (no signing
-  bot); opening a PR with a sign-off certifies the DCO and accepts the CLA. The CLA
-  adapts the **Harmony HA-CLA-I** (individual; HA-CLA-E noted for entities). The
-  Harmony text is **CC BY 3.0 Unported**, adapted with attribution — a contract
-  document, not runtime code or a dependency, so it imposes no terms on the software
-  and does not obstruct relicensing (rule 16). `COPYRIGHT.md`, `AUTHORS.md` and
-  `README.md` were updated to match. The new files are Markdown / plain text, already
-  covered by `markdownlint-cli2` and `editorconfig-checker`, so no new per-file-type
-  linter (rule 12). Governing law follows EUPL Art. 15 (law of the EU Member State
-  where the holder is established, with Belgian law as the fallback), interpreted
-  consistently with Union law and the EUPL — not a hard-coded national choice. A
-  final IP-lawyer review is advisable before the first non-EUPL (OEM) sale. **Follow-up (rule 2):** propose a Rule 17 —
-  "every contribution requires a DCO sign-off and CLA acceptance before merge" — to
-  be formalised when the contribution flow is enforced.
-- **0.6 — Contributor DX for the sign-off flow. ✅ Done.** Lower the friction a
-  contributor meets with the DCO/CLA sign-off requirement. `CONTRIBUTING.md` gains
-  a recovery recipe (`git rebase --signoff origin/master` + `git push
-  --force-with-lease`) for when the DCO check fails on an earlier commit, plus an
-  opt-in `prepare-commit-msg` hook under `.githooks/` (enabled with `git config
-  core.hooksPath .githooks`) that adds the trailer automatically via `git
-  interpret-trailers`, never duplicating one and skipping merge/squash messages. A
-  `.github/pull_request_template.md` checklist nudges sign-off, `make lint`, scope
-  and English before a PR is opened. The hook is an extensionless shell script, so
-  it is wired into `make lint`'s `lint-sh` (`SH_SCRIPTS` now also globs
-  `.githooks/*`) and given a tab-indent `.editorconfig` rule (`[.githooks/*]`) so
-  shellcheck, shfmt and editorconfig-checker all cover it consistently (rule 12). A
-  custom "comment on DCO failure" action was **rejected**: the DCO app already
-  links its own remediation, and the action would widen the workflow token to
-  `pull-requests: write` against the least-privilege default (rule 14).
-
-Per-file-type lint decisions (rule 12):
+Per-file-type lint decisions (rule 12), current as of the last file type added:
 
 | File type | Decision |
 |---|---|
 | Shell — bash (`*.sh`) | `shellcheck` + `shfmt` |
-| Shell — macOS (`*.zsh`) | Renamed in 0.3; linting deferred to the macOS phase (also removes the shellcheck by-name exclusion) |
+| Shell — macOS (`*.zsh`) | Linting deferred to the macOS phase |
 | Markdown (`*.md`) | `markdownlint-cli2` (config `.markdownlint-cli2.yaml`) |
 | Makefile | `checkmake` (config `checkmake.ini`) |
-| YAML / GitHub workflows | `actionlint`; non-workflow YAML/INI/JSON configs have no dedicated linter — `editorconfig-checker` enforces their charset/EOL/indent/final-newline |
-| All committed files | `editorconfig-checker` **adopted in 0.3** (config `.editorconfig-checker.json` excludes `LICENSE` verbatim, the deferred `*.zsh`, and `*.go` — gofmt owns Go formatting and legitimately allows spaces inside string literals; `.gitignore` is honoured) |
-| Shell — bats tests (`*.bats`) | Deferred to Phase 1.5 when test files enter the repo |
-| Go (`*.go`) | `gofmt -l` + `go vet ./...` + `golangci-lint` (config `.golangci.yml`, standard set); compiled by `make build`. Wired into `make lint` as `lint-go` and installed in CI (pinned). License (rule 16): the Go toolchain, its standard library (BSD-3-Clause) and `golangci-lint` are EUPL-1.2 compatible and don't obstruct relicensing — build/dev tools follow the 0.3 precedent (no bundled obligations); the third-party module list (`golang.org/x/sys`, BSD-3-Clause) is recorded in `COPYRIGHT.md`. |
-| TOML (`*.toml`) | `taplo lint` + `taplo format --check`, wired into `make lint` as `lint-toml` and installed in CI (pinned `@taplo/cli`); config `.taplo.toml` excludes only the deliberately malformed test fixture (the parser's error path, covered by Go tests). License (rule 16): the runtime parser `github.com/BurntSushi/toml` (MIT) is EUPL-1.2 compatible and doesn't obstruct relicensing, recorded in `COPYRIGHT.md`; `taplo` is a CI-only dev tool (0.3 precedent). |
-| Dockerfile (`test/containers/*.Dockerfile`, Phase 4.1) | `hadolint`, wired into `make lint` as `lint-docker` and installed in CI (pinned release binary); config `.hadolint.yaml` ignores DL3008 (pin apt package versions — not viable against a rolling Debian suite without snapshot pinning; the base image tag is the point-in-time anchor instead). License (rule 16): GPL-3.0, same as `shellcheck` — a CI-only dev tool, not bundled or runtime-invoked (0.3 precedent), so it carries no EUPL-1.2 obligations. |
+| YAML / GitHub workflows | `actionlint`; other YAML/INI/JSON has no dedicated linter — `editorconfig-checker` covers charset/EOL/indent/final-newline |
+| All committed files | `editorconfig-checker` (config excludes `LICENSE` verbatim, `*.zsh`, and `*.go` — gofmt owns Go formatting) |
+| Shell — bats tests (`*.bats`) | Deferred until test files enter the repo |
+| Go (`*.go`) | `gofmt -l` + `go vet` + `golangci-lint` (config `.golangci.yml`); `golang.org/x/sys` (BSD-3-Clause) recorded in `COPYRIGHT.md` |
+| TOML (`*.toml`) | `taplo lint` + `taplo format --check`; runtime parser `github.com/BurntSushi/toml` (MIT) recorded in `COPYRIGHT.md` |
+| Dockerfile (`test/containers/*.Dockerfile`) | `hadolint` (config ignores DL3008 — no viable apt-pin story against a rolling suite; the base image tag is the point-in-time anchor) |
 
 ### Phase 1 — Harden the primary target: shell plumbing (still bash)
 
 Gentoo / OpenRC / KDE. Scope narrowed by the bash/Go split (open decision 10):
-Phase 1 ships only the **permanent shell plumbing** in cleaned-up bash — a stable,
-committable baseline on the primary box — while the branchy, stateful logic moves
-to the Go core in Phase 2 (written once, not twice). Fixed agent socket and
-never-kill-a-healthy-agent (already shipped), clean exit with no keys, best-effort
-recovery, silent-on-success output discipline, and the standard path/install
-layout that gets our files out of `~/.ssh`. The login entrypoint is shaped so the
-Go core slots in behind it. → goals 3, 5, 6, 10, 17–19; open decisions 3, 4, 12.
+only the **permanent shell plumbing** stays in bash; the branchy, stateful logic
+moved to the Go core in Phase 2 instead (1.3's seam and 1.4's lifecycle both ended
+up as Go slices there — see Phase 2). → goals 3, 5, 6, 10, 17–19; open decisions
+3, 4, 12.
 
-Sub-phases (detailed steps written when we start each one):
+- **1.1 — XDG path layout, out of `~/.ssh`.** → goal 19; open decision 12.
+- **1.2 — Two install modes + bootstrap hook.** → goals 17, 18; open decision 12.
+- **1.3 — Silent-on-success & shell safety.** Superseded by the Go seam (`eval
+  "$(sshakku shell-init)"`); the remaining bash-side work is `set -u` hardening.
+- **1.4 — Agent lifecycle & recovery.** Moved into the Go core — see Phase 2 slice
+  2.
+- **1.5 — Shell test harness (rule 12).** `bats` + tier-1 containers (open
+  decision 20). Plumbing regression checklist, still the right manual check after
+  any lifecycle change:
+  1. Fresh login, two terminals: both see the key in `ssh-add -l`, no second
+     prompt.
+  2. `SSH_AUTH_SOCK` is the fixed socket path everywhere, including a GUI app.
+  3. Kill the agent → a new terminal restarts it at the **same** socket and
+     reloads the key.
+  4. First-ever run, empty vault: prompts once, silent thereafter.
+  5. A reachable-but-empty agent (`ssh-add -l` exit 1) is **healthy**, never
+     killed.
 
-- **1.1 — XDG path layout, out of `~/.ssh`.** Move our files to standard paths:
-  socket + lock to `$XDG_RUNTIME_DIR/<name>/` (0700, with a fallback for when it
-  is unset — possible under OpenRC/elogind), log/state to `$XDG_STATE_HOME/<name>/`
-  (0600 files), config under `$XDG_CONFIG_HOME/<name>/` or `/etc/<name>/`. The keys
-  stay in `~/.ssh` (OpenSSH's domain; we only read them). Align the askpass log to
-  the same state dir. → goal 19; open decision 12; threats I7, I10, D2; invariant 3.
-- **1.2 — Two install modes + bootstrap hook.** System-wide (`sudo`,
-  `/etc/profile.d`, `$BINDIR`) vs per-user (no root, everything under `$HOME`); the
-  same logic, only the paths and the bootstrap hook differ. Resolves the per-user
-  hook left open in open decision 12 (`~/.bashrc` vs
-  `~/.config/plasma-workspace/env/`). → goals 17, 18; open decision 12; threat E3.
-- **1.3 — Silent-on-success & shell safety, with the Go seam.** Zero stdout/stderr
-  on the success path; `set -u`-clean; degrade gracefully when `keyctl` / `flock`
-  are absent. The seam is now real: the entrypoint evals the Go core
-  (`sshakku shell-init`, Phase 2 slice 1), so the remaining 1.3 work is the
-  silence / `set -u` hardening layered on top. → goal 3; open decision 3; threat
-  I4; invariant 2.
-- **1.4 — Agent lifecycle & recovery.** The five-state self-healing policy (open
-  decision 15): never kill a healthy agent (`ssh-add -l` exit 0 and 1 both healthy),
-  clean exit with no keys, reap dead sockets/agents (ours and dead foreign ones),
-  adopt-by-symlink a healthy foreign agent with an anomaly report, and a last-resort
-  dangling-socket symlink for already-open GUI apps. **Now Go slice 2** (see the
-  Phase 2 note): this lifecycle logic moves into the Go core rather than staying in
-  bash. → goals 5, 6, 8; threats D1, D5.
-- **1.5 — Shell test harness (rule 12).** `bats` unit tests + container integration
-  tests covering the plumbing regression scenarios below — tier 1 of open
-  decision 20 (headless multi-distro containers). `bats` is a new file
-  type — evaluate a linter and record the decision (including a deliberate "no
-  linter") here. → goal 16.
+### Phase 2 — Go logic core ✅ Done
 
-  Plumbing regression checklist (post-change):
+Moved the branchy, stateful logic out of bash into a small Go core behind the
+thin shell entrypoint, grown incrementally (strangler) rather than one wholesale
+rewrite. → goals 1, 2, 4, 9, 14, 16; open decisions 2, 5, 6, 7, 9.
 
-  1. Fresh login → two terminals → both see the key in `ssh-add -l`, with **no**
-     passphrase prompt the second time.
-  2. `SSH_AUTH_SOCK` is the fixed socket path in every terminal and in a GUI app
-     (e.g. inspect `/proc/<plasmashell-pid>/environ`).
-  3. Kill the agent (`ssh-agent -k` / `pkill ssh-agent`) → a new terminal restarts
-     it at the **same** socket path and reloads the key.
-  4. First-ever run with an empty vault → prompts once, then `secret-tool lookup`
-     returns the passphrase on later logins (no prompt).
-  5. Reachable-but-empty agent (`ssh-add -l` exit 1) must be treated as **healthy**
-     and never killed (the D1 regression).
-
-### Phase 2 — Go logic core
-
-Move the branchy, stateful logic out of bash into a small Go core behind the thin
-shell entrypoint, minimizing duplication: bounded retries with a persistent
-give-up sentinel and an opt-out, key-expiry semantics (`ssh-add -t`, silent re-add
-from the vault), GUI / secret-prompt detection that works under Wayland and
-headless, and secret-handling hardening (no passphrase in env or argv, absolute
-`SSH_ASKPASS` + `SSH_ASKPASS_REQUIRE=force`, clean child env). Define the
-`SecretBackend` interface (it also makes the tests mockable) and stand up unit
-tests plus container integration tests on Linux. Go entered the repo early (slice
-1 below), where the Go lint decision (`gofmt` / `go vet` / `golangci-lint`,
-`make build`) and `go.mod` were already made (rule 12). → goals 1, 2, 4, 9, 14,
-16; open decisions 2, 5, 6, 7, 9.
-
-**Brought forward — Go core grown incrementally (strangler).** Instead of one
-wholesale rewrite, the Go core is added slice by slice behind the entrypoint seam
-while the bash shrinks toward a thin `eval "$(sshakku shell-init)"`. Each slice
-is committable and the bash keeps working until each piece moves.
-
-- **Slice 1 — path / token / dir / log core. ✅ Done.** `cmd/sshakku` +
-  `internal/paths` + `internal/sessionlog`: path resolution (config dir; runtime
-  dir XDG_RUNTIME_DIR → /run/user/$UID owned → ~/.cache), the per-login `@u`
-  keyring token via the `keyctl(2)` syscall (`golang.org/x/sys`, no `keyctl`
-  binary), 0700/0600 dir+log creation with a symlinked-leaf guard, legacy
-  `~/.ssh/agent` cleanup, and a bounded session log. `shell-init` prints
-  `agent_sock`/`agent_lock`/`log_file`; the entrypoint evals them. The Go lint and
-  `golang.org/x/sys` (BSD-3-Clause) licence decisions are recorded (rules 12, 16).
-  Follow-up: the session log had shipped under `ConfigDir` instead of a
-  dedicated state dir, missing the `$XDG_STATE_HOME` split called for in 1.1.
-  Closed by adding a `StateDir` field, defaulting to `~/.local/state`, and moving
-  `LogFile` under it. `internal/config` no longer resolves its own config dir; it
-  now reuses the `ConfigDir` already computed by `paths.Resolve`.
-- **Slice 2 — agent lifecycle. ✅ Done.** (the Phase 1.4 work, in Go): reachability
-  plus the five-state self-healing policy of open decision 15 — start on the fixed
-  socket when clean, attach when ours is healthy, reap dead sockets/agents (ours and
-  dead foreign ones), and adopt-by-symlink a healthy foreign agent while reporting
-  the anomaly. Never kill a healthy agent. `internal/agent` (probe/inspect/manage/
-  ensure, flock-serialised); `shell-init` is the sole owner of the lifecycle.
-- **Slice 3 — key loading + `askpass`. ✅ Done.** `internal/keys` +
-  `internal/keyring`: enumerate `~/.ssh/id_*`, skip fingerprints already in the
-  agent (`ssh-keygen`/`ssh-add -l`), and add the rest via the secret store
-  (`secret-tool`) or a prompt (`kdialog`), handing each passphrase to ssh-add out of
-  band through the `@u` keyring (payload never in argv) + an SSH_ASKPASS helper
-  marked by `SSHAKKU_ASKPASS`. `sshakku load-keys` is driven from the login hook in
-  interactive shells; the bash askpass script is retired. GUI detection covers
-  Wayland and X11.
-- **Slice 4 — retries / give-up + key-expiry. ✅ Done.** Resolves open decisions
-  5 and 6. Keys expire in the agent via `ssh-add -t` (default 8h, configurable
-  with `SSHAKKU_KEY_LIFETIME`; `0` disables); a new terminal silently re-adds an
-  expired key from the wallet, and in a still-open shell the wallet-aware
-  SSH_ASKPASS broker refills it without a terminal prompt, falling back to
-  `/dev/tty` only on a wallet miss (and storing what is typed there). A wrong
-  passphrase retries up to `SSHAKKU_MAX_ATTEMPTS`, a stale stored passphrase being
-  re-prompted and replaced; after exhaustion the key is given up — notified on the
-  terminal unless `SSHAKKU_QUIET` — and skipped in new shells for
-  `SSHAKKU_GIVEUP_TTL` (per-login, tmpfs-backed; `SSHAKKU_NO_GIVEUP` opts out).
-  `internal/giveup` + `internal/keys`; the env knobs are documented in
-  `docs/CONFIGURATION.md` and the bash is now just the thin hook.
-  Follow-up: `askpass-env` exports `SSHAKKU_ASKPASS` into the whole
-  interactive shell (so ssh's own later exec of the helper carries it too),
-  which meant it stayed set for anything the user then typed by hand in that
-  same shell — a plain `sshakku doctor` silently turned into an askpass
-  prompt instead of running, since `main` trusted the env marker alone. Fixed
-  by giving a known subcommand name in `argv[1]` priority over the marker
-  (`wantsAskpass`): ssh always execs the helper with only the prompt text as
-  its one argument, never one of sshakku's own subcommand names.
+- **Slice 1 — path / token / dir / log core.** `cmd/sshakku` + `internal/paths` +
+  `internal/sessionlog`: path resolution, the per-login `@u` keyring token via the
+  `keyctl(2)` syscall (no `keyctl` binary), 0700/0600 dir+log creation with a
+  symlinked-leaf guard, legacy `~/.ssh/agent` cleanup. `shell-init` prints the
+  paths; the bash entrypoint evals them.
+- **Slice 2 — agent lifecycle.** The five-state policy (open decision 15) in
+  `internal/agent` (probe/inspect/manage/ensure, flock-serialised); `shell-init`
+  is the sole owner of the lifecycle.
+- **Slice 3 — key loading + `askpass`.** `internal/keys` + `internal/keyring`:
+  enumerate `~/.ssh/id_*`, skip fingerprints already in the agent, add the rest
+  via the secret store or a prompt, passphrase handed to `ssh-add` out of band via
+  the `@u` keyring + an `SSH_ASKPASS` helper. GUI detection covers Wayland and
+  X11.
+- **Slice 4 — retries / give-up + key-expiry.** Resolves open decisions 5, 6.
+  `ssh-add -t` expiry (default 8h, `SSHAKKU_KEY_LIFETIME`); the askpass broker
+  refills an expired key silently from the wallet, falling back to `/dev/tty` only
+  on a wallet miss. Bounded retries (`SSHAKKU_MAX_ATTEMPTS`); give-up is
+  per-login/tmpfs-backed (`SSHAKKU_GIVEUP_TTL`, `SSHAKKU_NO_GIVEUP`).
+  `internal/giveup` + `internal/keys`; knobs documented in
+  `docs/CONFIGURATION.md`.
 
 ### Phase 3 — Diagnostic tool ✅ Done
 
-The currently-missing diagnostic that reports who started the agent, why it isn't
-working, and which processes are involved — runnable under `sudo` for the full
-picture. It attributes a foreign agent (open decision 15, case D) to the process or
-tool that started it, and guides — or applies — the fix back to the clean state in
-which only sshakku runs the agent. Now lands after the Go core, so it is built in Go
-reusing the core's inspection primitives rather than as throwaway bash. → goal 8;
-threat E1.
+`sshakku doctor` (`internal/diagnose`, reusing `internal/agent`'s inspection
+primitives): a read-only report naming the agent-lifecycle state (A–E, open
+decision 15), classifying every `ssh-agent` as ours/legacy/foreign, comparing
+`SSH_AUTH_SOCK` against the fixed socket, tailing the session log, and listing
+each `~/.ssh` key with its remaining agent TTL. `doctor --fix` re-runs the same
+self-heal the login path uses. `doctor --user <name|uid>` diagnoses another
+user's session under `sudo` via a kernel-mediated privilege drop
+(`exec.Cmd.SysProcAttr.Credential`, never in-process `setuid`); `--fix` is
+refused cross-user by design (read-only elevation only). Documented in
+`docs/DIAGNOSTICS.md`. → goal 8; threat E1.
 
-**✅ Done.** `sshakku doctor` (`internal/diagnose`, reusing the `agent` package's
-inspection primitives): a read-only report that names the agent-lifecycle state
-(the five states of open decision 15, A–E), classifies every `ssh-agent` process
-as ours/legacy/foreign, probes reachability, compares `SSH_AUTH_SOCK` against the
-fixed socket, tails the session log, and derives plain findings with a
-recommendation. It attributes each agent to its launcher by walking the `/proc`
-PPid ancestry (systemd, KDE Plasma, GNOME/GDM/SDDM/LightDM, sshd, login shells);
-because `ssh-agent` daemonizes and reparents to `init`, ancestry frequently
-dead-ends at pid 1, and the report says so rather than crediting init.
-`doctor --fix` applies the same self-heal the login path runs (`EnsureAgent`:
-reap dead, start on the fixed socket, or adopt a healthy foreign agent — never
-killing a healthy one) and re-reports; it warns that it cannot rewrite the calling
-shell's `SSH_AUTH_SOCK`. Documented in `docs/DIAGNOSTICS.md` (linked from the
-README). No new file type — the docs are Markdown, already covered by
-`markdownlint-cli2` + `editorconfig-checker` (rule 12).
-
-**✅ Done — cross-user inspection under `sudo`.** `sshakku doctor --user
-<name|uid>` diagnoses another user's session instead of the invoking one
-(auto-detected from `SUDO_UID` when invoked as root with no `--user`), closing
-the gap noted below. It confirms the target's own fixed socket by reading
-their per-login token from their own kernel keyring — reached by re-executing
-the binary as a child process under their credentials (a kernel-mediated
-privilege drop via `exec.Cmd.SysProcAttr.Credential`, never in-process
-`setuid`/`seteuid`), so the confirmation is real, not a filesystem-shape
-guess. Requires root; `--fix` is refused cross-user (threat model E1:
-elevation is for read-only inspection, never for writing as root) — fixing
-another user's session is `sudo -u <user> -H sshakku doctor --fix` instead,
-which needs none of this machinery. Root also bypasses unix-socket
-permissions, which was inflating "reachable" for an agent the target could
-never actually reach themselves; `agent.UIDGatedProber` closes that, and
-`classifyState`/`findings` no longer let a different real user's agent drive
-this account's own state or foreign-agent wording — which is what actually
-fixes a plain `sudo sshakku doctor` (no `--user` at all) misreporting the
-invoking-as-root case as state D. Documented in `docs/DIAGNOSTICS.md`.
-
-**✅ Done — orphaned-ours attribution heuristic.** While validating the
-cross-user work above, even a correct same-user diagnosis kept alarmingly
-reporting "started by an unknown launcher... investigate" for an agent whose
-socket had sshakku's own naming shape
-(`.../sshakku/<hex>/agent.sock`) but an unrecognised token. The initial
-hypothesis — that the per-login token's kernel `@u` user-keyring doesn't
-survive across logins/reboots — was investigated empirically on the affected
-machine and **disproved**: no reboot had occurred, and `keyctl show` from two
-independent shells (this session's and the user's own real terminal) showed
-identical keyring serials, confirming the keyring is in fact persistent and
-shared correctly. The far more mundane explanation: a leftover agent from
-manual testing or an older build, from earlier in this project's own
-development. `findings()` now recognises the shape
-(`looksLikeOrphanedOurs`) and says so — wording only, no change to
-state/reap/adopt. See `orphaned-agent-token-steps.md` (used during
-development) for the investigation.
-
-**✅ Done — foreign-agent shape attribution.** `Inspector.Agents` only
-enumerates processes literally named `ssh-agent`, so gnome-keyring, gpg-agent,
-and a systemd `ssh-agent.socket` unit never appear in the process list at all —
-the only place their presence is visible is `SSH_AUTH_SOCK` itself, when it is
-reachable but not the fixed socket. `knownForeignShape` recognises each
-service's fixed socket path there (`S.gpg-agent.ssh`, `.../keyring/ssh`,
-`ssh-agent.socket`) and names it instead of only saying "not our fixed
-socket" — wording only, no change to state/reap/adopt. See
-`foreign-agent-shape-steps.md` (used during development).
-
-**✅ Done — systemd cgroup attribution fallback.** `/proc/<pid>/environ`
-(investigated as a candidate signal) turned out to be blocked by Yama
-`ptrace_scope=1` even for a same-uid, non-ancestor reader, so it cannot
-recover a launcher lost to the daemonize/reparent. `/proc/<pid>/cgroup` is
-world-readable and unaffected by Yama, and a process's cgroup membership
-survives being reparented to init, so `startedBy` now falls back to naming
-the systemd unit (service or transient scope) the agent's own cgroup still
-belongs to when ancestry dead-ends at `init` — wording only, no change to
-state/reap/adopt, and no `systemctl` shell-out. See
-`agent-cgroup-attribution-steps.md` (used during development).
-
-**✅ Done — `doctor` lists `~/.ssh` keys with their remaining agent TTL.**
-Prompted by a user report of a wallet-unlock prompt roughly every 5 minutes;
-investigating turned up no such interval anywhere in sshakku (the agent key
-lifetime default is correctly 8h) — the real cause was `gh`/VSCode's own
-credential storage hitting the *default* Secret Service collection's 5-minute
-idle-lock (`~/.config/kwalletrc`), unrelated to sshakku's own dedicated
-`sshakku` collection (decision 17) and its already-scoped unlock/lock. While
-investigating, the real gap surfaced: `doctor` had no way to show which keys
-are loaded or how long they have left, since the ssh-agent protocol itself
-has no query for a key's remaining lifetime. New `internal/keystate` records,
-per key, when `load-keys` added it and for how long (`ssh-add -t`'s value) —
-one small file per key under the per-login runtime directory, alongside the
-give-up sentinels: tmpfs-backed, wiped on logout/reboot, holding no secret.
-`internal/diagnose` gained an optional `KeySource` (nil skips the section)
-that cross-references every `~/.ssh` key's fingerprint against the agent's
-loaded set and, for a loaded key sshakku tracked, resolves its remaining time
-via `keystate.Record.ExpiresAt()`; `doctor`'s report now lists each key as not
-loaded, loaded with a countdown, loaded with no expiry, loaded but expired, or
-loaded with an unknown TTL (added outside sshakku, or before a reboot wiped
-the record while the agent itself survived). Cross-user `doctor --user`
-reports omit the section — reading another user's `~/.ssh`/key-state under a
-privilege drop is out of scope. Documented in `docs/DIAGNOSTICS.md`;
-live-verified against an isolated `HOME`/`ssh-agent` sandbox with throwaway
-keys before merging (not just unit tests).
-
-**✅ Done — false "expired... a new shell will refill it" report, and a
-real-ssh-agent integration test tier.** Bug report: `doctor` kept reporting a
-key as `loaded, expired <duration> ago (a new shell will refill it)` for a key
-that had demonstrably been working for hours past that point. Live
-investigation (an isolated throwaway agent, plus a new integration test
-driving the real `AddWithAskpass` code path against a real `ssh-agent`)
-confirmed sshakku's own `ssh-add -t` handling correctly expires a key it
-loaded — so the record wasn't lying about sshakku's own add, but the promise
-was still false: once a key is later refreshed by *anything other than*
-`load-keys` (a manual `ssh-add`, an IDE's own SSH integration), the loader's
-fingerprint dedup means a new shell will just skip it, not refill it, since
-it's already present. `keyStatus` (`internal/diagnose`) no longer asserts a
-confident "expired" + refill promise it can't keep in that case; it reports
-`loaded, TTL unknown (sshakku's record expired <duration> ago, but the agent
-still has it — likely refreshed outside sshakku)` instead — an honest "our
-tracking is stale," not a false guarantee. Documented in
-`docs/DIAGNOSTICS.md`.
-
-Prompted by this, `internal/agent` and `internal/diagnose` gained real
-(non-fake) integration tests that drive an actual `ssh-agent` through the
-five-state lifecycle (open decision 15) and `sshakku doctor` end to end —
-complementing the existing fake-based unit tests for the state machine itself
-with tests of the real collaborators (`ExecRunner`, `SocketProber`,
-`SysSignaler`, `Inspector` over real `/proc`) those fakes stand in for. They
-need an isolated PID namespace (no other reachable `ssh-agent` in `/proc`) to
-give deterministic results, so they skip themselves on a live desktop session
-and are the tier-1 container's job to actually run (`test/containers/debian.Dockerfile`
-gained `openssh-client` and `keyutils`; `test.yml`'s `container-test` job
-gained `--init` so a daemonizing `ssh-agent` is actually reaped instead of
-leaking zombies with no init process to collect them).
-
-One real bug surfaced immediately by testing the real collaborators instead
-of fakes:
-
-- `EnsureAgent` mislabelled a dead-ours recovery as `SituationClean` instead
-  of `SituationZombie` whenever the dead agent's process had already vanished
-  from `/proc` (e.g. reaped by a real init) by the time `Reap` inspected it —
-  `Reap` only credits process-level signalling, so the *separate* stale-socket
-  removal in the "no foreign, start fresh" and "adopt foreign" branches went
-  unrecorded. `clearStalePath` now reports whether it actually removed
-  something, in both branches, folded into the same `reaped` signal `Reap`
-  already contributes to the `Situation` call — SituationZombie was
-  effectively unreachable on any system where something reaps orphans
-  promptly (i.e. most real systems).
-→ goal 16; open decisions 15, 20.
+A handful of real bugs were found and fixed while building and using this, each
+a one-line lesson: `EnsureAgent` mislabelled a dead-ours recovery as "clean" when
+the dead process had already been reaped from `/proc`; agent attribution needed a
+`/proc/<pid>/cgroup` fallback once Yama `ptrace_scope` was found to block
+`/proc/<pid>/environ` even for a same-UID reader; a "expired, will refill" report
+could be wrong once *something other than* sshakku refreshed a key, since the
+loader's fingerprint dedup then silently skips it instead; and `internal/agent`/
+`internal/diagnose` gained real (non-fake) `ssh-agent` integration tests,
+which is what caught the `EnsureAgent` bug above in the first place — they need
+an isolated PID namespace, so they run in the tier-1 container, not on a live
+desktop session. → goal 16; open decisions 15, 20.
 
 ### Phase 4 — Configurability & pluggable secret backends
 
-Make the secret store pluggable (secret-service first, then others) and the
-tool highly parametrizable via a config file under `$XDG_CONFIG_HOME/sshakku/`
-(default `~/.config/sshakku/`), into which the current `SSHAKKU_*` environment
-knobs migrate. Most of the config-file/env migration already landed as part of
-Phase 2/3 (open decisions 13, 17–19: `config.toml`, wallet-store and auto-load
-policy, `forget`); what remains is the pluggable-backend half. → goals 11, 15;
-open decisions 7, 8, 13, 17, 18, 19, 20.
+Make the secret store pluggable and the tool highly parametrizable via
+`config.toml` under `$XDG_CONFIG_HOME/sshakku/`. Most of the config-file/env
+migration landed in Phase 2/3 (open decisions 13, 17–19); what remained was the
+pluggable-backend half. → goals 11, 15; open decisions 7, 8, 13, 17, 18, 19, 20.
 
-Sub-phases (detailed steps written when we start each one):
-
-- **4.1 — Container test infrastructure, brought forward (open decision 20,
-  tiers 1–2).** Stand up the container tiers *before* adding new backends: the
-  dev machine only has KDE installed, so GNOME/KeePassXC/1Password paths can't
-  be validated locally without this. **Tier 1** (multi-distro headless
-  containers — Gentoo/OpenRC, a systemd distro) runs the existing Go
-  unit/integration suite in CI on every push. **Tier 2** (a real desktop
-  secret stack, headless via Xvfb or weston) covers KDE (`ksecretd` +
-  `kwalletd6`, already exercised manually) as a manually-triggered
-  (`workflow_dispatch`) job, extended in 4.2 to each further backend as it is
-  verified/added. Tier 3 (the full Vagrant Gentoo/OpenRC/KDE box) stays
-  deferred to Phase 6 — it's a login/session check, not something a new
-  backend needs. → open decisions 7, 20; goal 16.
-  **Progress (tier 1 scaffolding):** `test/containers/debian.Dockerfile`
-  (Go fetched at the "stable" release, matching `actions/setup-go` elsewhere)
-  plus a `container-test` matrix job in `test.yml`, running `make test`
-  inside it on every push alongside the existing bare-runner job. Gentoo was
-  evaluated and dropped from the matrix: with no OpenRC service actually
-  running inside a plain container, it added only a different toolchain/libc
-  over Debian, not primary-target coverage — further distros and desktop
-  environments (KDE/GNOME/XFCE, X11/Wayland) are left to a dedicated
-  extensibility pass rather than decided ad hoc here. Building the image
-  surfaced a real, environment-dependent bug: `TestResolveTargetUser`'s
-  `SUDO_UID` subtests assumed the test process itself is never uid 0, which
-  broke running as root in a container; fixed by skipping those two subtests
-  when the process is already root, since a real `sudo` invocation never sets
-  `SUDO_UID=0`. New file type (`test/containers/*.Dockerfile`) → `hadolint`,
-  see the Phase 0 per-file-type table. The tier-summary docs are still open.
-  **Progress (tier 2, KDE row).** `test/containers/kde-tier2.Dockerfile`,
-  a `workflow_dispatch`-only `tier2-desktop.yml` (not `test.yml`, per open
-  decision 20). Debian doesn't package `ksecretd` (only the classic
-  `kwalletd6`/KWallet API, not `org.freedesktop.secrets`) even on `trixie`;
-  switched the tier-2 base image to Fedora 44, which does. `ksecretd`
-  unlocks the same non-interactive way a real login does — driven through
-  `pamtester` (`kwallet-pam`'s `pam_kwallet5.so`, `force_run` plus running
-  in both the `auth` and `session` stacks, `pam_env.so` to carry
-  `QT_QPA_PLATFORM=offscreen`/`XDG_RUNTIME_DIR`/`DBUS_SESSION_BUS_ADDRESS`
-  into its PAM-only exec environment, and a `socat`-driven handshake
-  standing in for the real `pam_kwallet_init` autostart script) — and a
-  `kwalletrc` pre-seeded with `Default Wallet=sshakku` plus a matching
-  Secret Service alias lets PAM's own hash-based auto-open create and
-  unlock the "sshakku" collection with no display server and no interactive
-  dialog at all, unlike the collection's normal first-use flow. The real
-  round-trip test (`TestSecretServiceBackendRealDaemon`, gated behind
-  `SSHAKKU_TEST_ALLOW_REAL_SECRETSERVICE=1`) now passes deterministically
-  inside this container. New file types (`test/containers/*.sh`,
-  `test/containers/kde-tier2-kwalletrc`, `test/containers/kde-tier2.env`) →
-  extended the existing `lint-sh` glob for the scripts; the two plain
-  config files need no dedicated linter (no established INI/env-file linter
-  in the project's toolchain, and their syntax is trivial enough that
-  `shellcheck`/`hadolint`-style validation wouldn't add coverage a review
-  doesn't already give).
-  **Tier 2/3 breadth matrix (planned, not yet built).** The specific axes
-  tier 2 and tier 3 need to cover, decided now so 4.1/4.2 don't re-litigate it
-  per backend:
-  - **Secret backend / desktop session**, not "desktop environment" — XFCE,
-    LXQt and similar have no secret daemon of their own and pair with either
-    GNOME Keyring or none, so they don't need a dedicated row. Candidates:
-    KDE (`ksecretd`+`kwalletd6`, already exercised manually), GNOME Keyring
-    (`gnome-keyring-daemon`, 4.2's #1 candidate), KeePassXC's Secret Service
-    mode (4.2's #2, paired with either session above), and no-backend/plain
-    askpass (the always-primary fallback path).
-  - **Display protocol**: X11 (via Xvfb) and Wayland (via weston) headless
-    servers, since askpass/prompt rendering (`kdialog`, `zenity`, polkit
-    agents) is the part of the stack most likely to diverge between them.
-    Start each tier-2 backend on X11 and add a Wayland variant only where its
-    prompt path is shown to actually depend on the protocol, not
-    preemptively.
-  - **Init system**: systemd is already covered headless in tier 1 (Debian).
-    OpenRC has nothing sshakku-specific to exercise without a real login
-    (PAM, a display manager) — a headless OpenRC container would just be a
-    different toolchain/libc, as Gentoo already turned out to be in this
-    tier-1 pass — so OpenRC coverage stays tier 3 only (Vagrant
-    Gentoo/OpenRC/KDE, Phase 6), not a second tier-1 matrix entry.
-  → open decision 20; goals 15, 16.
-- **4.2 — Secret backend survey & priority list.** Candidates surveyed, most to
-  least likely to need new code:
-  1. **GNOME Keyring** (`gnome-keyring-daemon`) — same Secret Service D-Bus API
-     as KDE (open decision 7's premise). Expected to already work via the
-     existing `SecretServiceBackend`; verify in tier 2 rather than assume,
-     since the spec being shared doesn't guarantee the daemon behaves
-     identically (precedent: the `ksecretd` async-prompt handling already
-     needed backend-specific code).
-  2. **KeePassXC** — also exposes a Secret Service D-Bus API (its "freedesktop
-     secret service integration" setting), so likely covered the same way as
-     GNOME; falls back to its own CLI (`keepassxc-cli`) if the D-Bus path
-     doesn't hold up.
-  3. **1Password** — CLI `op` (`op read`/`op item get`), cross-platform so
-     also needed later for Phase 5 (macOS/Windows); the first backend
-     expected to need real new code (no Secret Service shim).
-  4. **Bitwarden** — CLI `bw`, official and actively maintained, widely used
-     on Linux, self-hostable (Vaultwarden-compatible); similar shape to
-     1Password's CLI backend.
+- **4.1 — Container test infrastructure (open decision 20, tiers 1–2).**
+  **Tier 1**: `test/containers/debian.Dockerfile`, running the existing suite in
+  CI on every push (`test.yml`). Gentoo was evaluated and dropped from the
+  matrix — no OpenRC service actually runs in a plain container, so it only added
+  a different toolchain/libc, not primary-target coverage. **Tier 2**:
+  `tier2-desktop.yml` (`workflow_dispatch`-only), starting with a KDE row
+  (`ksecretd`/`kwalletd6` via Fedora — Debian doesn't package `ksecretd` — driven
+  non-interactively through `pamtester`/`pam_kwallet5.so` and a pre-seeded
+  `kwalletrc`). **Tier 2/3 breadth matrix, decided so 4.1/4.2 wouldn't
+  re-litigate it per backend:** cover secret backend/desktop session (not
+  "desktop environment" — XFCE/LXQt pair with GNOME Keyring or nothing) ×
+  display protocol (X11 now, Wayland only where shown to matter) × init system
+  (OpenRC has nothing to exercise without a real login, so it stays tier 3 only).
+  **Still open:** a tier-summary doc pulling the now-complete tier-1/tier-2 story
+  (4 backend rows plus 1Password's service-account alternative) together in one
+  place — noted here since it has never been picked up. → open decisions 7, 20;
+  goals 15, 16.
+- **4.2 — Secret backend survey. ✅ Done — all four Linux backends verified.**
+  Candidates, most to least likely to need new code: GNOME Keyring, KeePassXC,
+  1Password, Bitwarden.
+  - **GNOME Keyring** — same Secret Service API as KDE, but its alias mechanism
+    supports only `"default"` (unlike KDE), which a real `gnome-keyring-daemon`
+    caught immediately as a hard D-Bus error, not a prompt; `Collection` now
+    falls back to a label-based lookup, then an unaliased create. Its only
+    non-interactive unlock is a **blank password**, itself unencrypted on disk —
+    recorded as threat I11, not yet warned about at creation time. Tier 2 row:
+    Debian trixie, one-time keyring-creation dialog driven via Xvfb + `xdotool`.
+  - **KeePassXC** — accepts arbitrary D-Bus aliases (unlike GNOME), so the
+    existing fast path just works; needed no product-code fix. Architecturally a
+    "collection" is an open database tab in the full GUI app (no headless daemon
+    mode, no non-interactive re-unlock at all). A Debian-trixie-specific
+    segfault in backgrounded `--pw-stdin`/keyfile unlock (confirmed via `strace`,
+    absent on Fedora's newer build) forced the tier-2 base image to Fedora.
+    `keepassxc-tier2-create-collection.sh` runs a persistent watcher answering
+    both the one-time creation wizard and every later unlock.
+  - **1Password** — `OnePasswordBackend` shells out to `op`; no in-place item
+    edit without argv/file exposure, so `Store` deletes and recreates from a
+    stdin JSON template. Unlike the other three, a 1Password account is a cloud
+    account, not a disposable local daemon, so it has no container tier: a
+    dedicated service account ("SSHakku") authenticates in CI via
+    `OP_SERVICE_ACCOUNT_TOKEN` (`op user get --me`, not `op whoami`/`op signin`,
+    both unsupported for service accounts) — `tier2-onepassword.yml`,
+    `workflow_dispatch`-only. A real packaging bug was found and fixed on the
+    developer's own machine, unrelated to this repo: 1Password's Linux binaries
+    reject a setgid IPC helper group id below 1000, which Gentoo's `acct-group`
+    eclass auto-allocates into by default (`OrbintSoft/orbintsoft-ebuild#66`).
+  - **Bitwarden** — `BitwardenBackend` shells out to `bw`; unlike `op`, `bw edit
+    item <id>` supports a true in-place update via base64-encoded stdin JSON.
+    Bitwarden **is** self-hostable (Vaultwarden, AGPL-3.0), so it gets a real
+    tier-2 container despite needing no desktop/Xvfb. `bw` has no
+    account-registration command (the master-password KDF + RSA keypair
+    generation exist only in the web-vault UI, which itself refuses plain HTTP
+    even on `localhost`) — the disposable test account was registered once via a
+    self-signed-TLS Vaultwarden + headless Playwright, and the resulting
+    empty-vault SQLite DB is shipped as a fixture
+    (`test/containers/vaultwarden-tier2-fixture/`) rather than re-registered
+    every run. Unlike the other three backends, `bw` has no official
+    non-interactive unlock path at all (only an unofficial third-party wrapper,
+    not adopted) — **decided**: `BitwardenBackend` prompts for the master
+    password itself, every time, and never caches or stores it (a cached master
+    password would unlock every credential the backend holds, well past this
+    project's threat model for one SSH key passphrase); it implements
+    `SecretSession` so `Loader.LoadKeys` still batches one prompt per shell, the
+    same machinery decision 17 already built. Verified end to end against the
+    real Vaultwarden container, `Unlock` driven for real via a fixed-answer
+    `Prompter`; a real bug (`bw` refuses `config server` while already logged
+    in) was found only by that run and fixed.
   → open decisions 7, 8.
-  **Progress (GNOME Keyring, ✅ verified — and a real product-code fix, not
-  just a test gap).** The "expected to already work" premise above turned
-  out to be wrong in a way tier-1/2 testing exists to catch: verified live
-  against a real `gnome-keyring-daemon` (Debian trixie 48.0-1) that
-  `internal/secretservice.Client.Collection`'s exact call sequence —
-  `ReadAlias("sshakku")` then `CreateCollection(props, "sshakku")` — failed
-  **immediately** with `org.freedesktop.DBus.Error.NotSupported` ("Only the
-  'default' alias is supported"), not a prompt. GNOME Keyring's alias
-  mechanism supports exactly one alias ("default"), unlike KDE's `ksecretd`
-  which accepts an arbitrary one; sshakku's dedicated-collection design
-  (open decision 17) had only ever been live-tested against KDE. Fixed in
-  `internal/secretservice/secretservice.go`: `Collection` now falls back,
-  on that specific error, to finding an existing collection by its `Label`
-  property (`Service.Collections` enumeration) and, failing that, creating
-  one unaliased (`alias=""`, spec-legal) — the KDE fast path is untouched.
-  Covered by new `TestClientCollection` subtests against an extended fake
-  Secret Service peer (`fakeService.restrictAlias`).
-
-  A second, real (not test-only) limitation surfaced during the same
-  investigation and is now recorded as threat I11
-  (`docs/THREAT-MODEL.md`): GNOME Keyring's only non-interactive unlock
-  path is a **blank password**, which GNOME itself stores unencrypted on
-  disk — unlike KDE, there's no PAM-hash auto-unlock for a non-default
-  collection, so a GNOME user who wants encryption at rest trades it for an
-  interactive prompt on every new shell. sshakku does not yet warn about
-  this at collection-creation time; deferred, tracked in the threat model
-  rather than assumed obvious.
-
-  Tier 2 row: `test/containers/gnome-keyring-tier2.Dockerfile` (Debian
-  trixie — confirmed to package everything needed, unlike KDE which forced
-  a Fedora switch), added to `tier2-desktop.yml`'s existing matrix. GNOME
-  Keyring has no config-file equivalent of KDE's `kwalletrc` pre-seed (the
-  alias restriction above is structural, not a missing setting), so the
-  one-time "Choose password for new keyring" dialog is driven headlessly
-  via Xvfb + `xdotool` (blank password) instead — chosen over the
-  KDE-tier-2 pass's rejected approach (driving *every* unlock) because here
-  it only has to succeed once per container lifetime, after which the
-  blank-password auto-unlock above makes every later `Unlock()`
-  prompt-free; retried up to 5 times if the dialog hasn't rendered yet
-  rather than failing outright. Verified over 4 consecutive clean-container
-  `make test` runs: 4/4 passed (~23s each), each recovering from one missed
-  first-attempt window search via the retry loop — no KDE-style multi-second
-  variance observed. Two environment bugs found only by running the full
-  container: `/tmp/.X11-unix` (normally created at boot, missing in a
-  container, and unwritable by the unprivileged test account) needed
-  pre-creating as root; the X-server-ready check depended on `xdpyinfo`
-  (`x11-utils`) which was never added to the image, replaced with a direct
-  socket-file check instead of adding the package. See
-  `phase4.2-gnome-keyring-tier2-steps.md` (used during development) for the
-  full investigation, including why the CreateCollection alias restriction
-  was missed by source-reading alone and only found by testing against the
-  real daemon.
-
-  **Progress (KeePassXC, ✅ verified — no product-code fix needed, but a
-  much heavier tier-2 to automate).** Unlike GNOME Keyring, KeePassXC
-  accepts arbitrary D-Bus aliases (confirmed against
-  `keepassxreboot/keepassxc@develop` source and live), so
-  `internal/secretservice.Client.Collection`'s existing fast path — the
-  same one KDE uses — works correctly as-is: verified live with a real
-  `PASS` of `TestSecretServiceBackendRealDaemon` against a real KeePassXC
-  (Fedora 44, 2.7.12) driven through the actual D-Bus `CreateCollection`
-  call. KeePassXC's architecture is fundamentally different from
-  KDE/GNOME's dedicated daemons, though: a Secret Service "collection" is
-  an open database tab inside the full GUI app, so `CreateCollection`
-  opens the real multi-page "Create New Database" wizard the first time
-  (name, master password, encryption settings, a save-file dialog) rather
-  than a single dialog, and KeePassXC has no non-interactive re-unlock
-  path at all (unlike ksecretd's PAM-hash trick or GNOME's blank-password
-  auto-unlock) — every lock/unlock cycle needs the same interactive
-  password prompt as the very first one.
-
-  A real, Debian-trixie-specific bug was found and ruled out as a product
-  concern: `keepassxc <db> --pw-stdin` segfaults (confirmed via `strace`,
-  null-pointer deref) whenever launched as a backgrounded process on
-  Debian trixie's package (2.7.10) — reproduced 5/5, independent of
-  `--pw-stdin` specifically (a key-file-only database crashes the same
-  way) and independent of the `offscreen` vs. a real `Xvfb` display.
-  Matches a known but "not reproducible" upstream report
-  ([keepassxreboot/keepassxc#9799](https://github.com/keepassxreboot/keepassxc/issues/9799)).
-  Confirmed absent on Fedora 44's newer build (2.7.12) — same base-image
-  swap already forced by KDE's row (Debian doesn't package `ksecretd`
-  either) — so no upstream issue was filed.
-
-  Tier 2 row: `test/containers/keepassxc-tier2.Dockerfile` (Fedora 44).
-  Since KeePassXC has no non-interactive re-unlock, the one-shot "answer
-  it once before the real command starts" shape used for KDE/GNOME isn't
-  enough — `make test` runs the real-daemon test twice (once as this
-  row's own creation trigger, once again naturally inside
-  `go test -race ./...`), and the second run needs its own interactive
-  unlock answered too. `keepassxc-tier2-create-collection.sh` instead
-  runs a persistent background watcher for the whole container lifetime,
-  distinguishing the one-time creation wizard from the plain unlock
-  screen by whether the database file already exists, and re-launching
-  KeePassXC if an unanswered prompt ever makes it quit. Verified over 4
-  consecutive clean-container `make test` runs: 4/4 passed (~27–35s
-  each), `internal/keys` consistently ~2s (no timeout). See
-  `phase4.2-keepassxc-steps.md` (used during development) for the full
-  investigation, including three real automation bugs found only by
-  running the container repeatedly: a `pkill`/`pgrep` substring match
-  that killed the script's own process, a password field never cleared
-  between retries, and click coordinates calibrated against the wrong
-  (post-error-banner) screen layout.
-
-  **Progress (1Password, ✅ verified — the first backend needing new
-  code, and no container tier).** `OnePasswordBackend`
-  (`internal/keys/secret_onepassword.go`) shells out to the `op` CLI
-  rather than speaking Secret Service D-Bus at all — the first backend
-  candidate to need real new code, as anticipated above. `op` has no
-  in-place edit of an existing item's concealed field without either an
-  assignment-statement argument (visible in argv, which the passphrase
-  must never touch) or a template file on disk, so `Store` deletes any
-  existing item for the service and recreates it from a JSON template on
-  stdin instead; `Lookup` reads back via a `op://<vault>/<service>/password`
-  secret reference. `Vault` is assumed dedicated to sshakku, the same
-  simplification the dedicated Secret Service collection design (decision
-  17) made, so every item is addressed, listed, and deleted by its title
-  with no separate attribute search.
-
-  Unlike KDE/GNOME/KeePassXC, a 1Password account is a cloud account, not
-  a disposable local daemon a container can stand up from nothing, so
-  this needed a different verification shape rather than a tier-2 row:
-  `TestOnePasswordBackendRealAccount`
-  (`internal/keys/secret_onepassword_realaccount_test.go`, gated behind
-  `SSHAKKU_TEST_ALLOW_REAL_ONEPASSWORD=1`, mirroring the other real-daemon
-  tests) creates its own throwaway vault per run (a timestamp-suffixed
-  name, so it can never collide with or touch an existing one), exercises
-  `Store`/`Lookup`/`List`/`Delete`, and deletes the vault in `t.Cleanup`
-  regardless of outcome. It never runs `op signin` and never accepts,
-  logs, or prints a credential — authentication is entirely external to
-  the test, via whichever of two paths already left `op` authenticated:
-  a developer's own signed-in session locally, or `OP_SERVICE_ACCOUNT_TOKEN`
-  in CI. The auth check itself is `op user get --me` rather than
-  `op whoami`, which — like `op signin` — is unsupported for service
-  accounts.
-
-  The CI path uses a dedicated 1Password service account ("SSHakku",
-  Business-plan trial) rather than the developer's personal account, so
-  the run never touches real personal vault data; its token is a GitHub
-  Actions repository secret (`OP_SERVICE_TOKEN`). Verified locally against
-  the developer's own account first (both auth paths share the same test
-  code), then end to end in CI:
-  `.github/workflows/tier2-onepassword.yml`, `workflow_dispatch`-only like
-  the container tier-2 jobs — not on every push, since this hits a real
-  external account with its own rate limits rather than a disposable
-  in-container daemon. Installs the official `1Password/install-cli-action`
-  (MIT, pinned by commit SHA per the existing Actions convention) rather
-  than a container image; no desktop/Xvfb needed since `op` itself is
-  headless. `permissions: contents: read`, matching every other workflow
-  in the repo.
-
-  A real, packaging-only bug was found and fixed along the way, on the
-  developer's own machine rather than in this repo: 1Password's Linux
-  binaries silently reject a setgid IPC helper whose group id is below
-  1000 (undocumented upstream behaviour, also reported by other
-  distributions' users hitting the same default system-range GID
-  allocation) — the developer's Gentoo overlay's `acct-group/1password`
-  and `acct-group/onepassword-cli` ebuilds used the eclass's
-  auto-allocated system range, landing below that threshold, which broke
-  both the CLI and the browser-extension integration with a "connection
-  reset" error and no attributable cause on sshakku's side. Fixed
-  upstream in the overlay (`OrbintSoft/orbintsoft-ebuild#66`), unrelated
-  to sshakku's own code or this repo's history.
-
-  **Progress (Bitwarden, ✅ verified — a real tier-2 container, unlike
-  1Password).** `BitwardenBackend` (`internal/keys/secret_bitwarden.go`)
-  shells out to the `bw` CLI. Unlike `op`, `bw edit item <id>` supports a
-  true in-place update via base64-encoded JSON on stdin, so `Store` edits
-  an existing item instead of deleting and recreating it; the id comes
-  from `bw get item <service>` (name-search, like `get password`), since
-  `bw edit`/`bw delete` — unlike `get` — take only an id, not a name. The
-  account is assumed dedicated to sshakku, the same simplification the
-  dedicated Secret Service collection design made, so `bw list items`
-  needs no tag filter.
-
-  Unlike 1Password, Bitwarden **is** self-hostable — Vaultwarden
-  (`dani-garcia/vaultwarden`, AGPL-3.0, a from-scratch reimplementation of
-  the Bitwarden server API) runs as an ordinary disposable container
-  daemon, so this backend gets a real tier-2 container row after all,
-  added to `tier2-desktop.yml`'s matrix despite needing no desktop/Xvfb —
-  it fits the "real backend, not just a fake" spirit of tier 2 more than
-  tier 1's headless fake-peer suite. The `bw` CLI itself has no
-  account-registration command: the master-password key derivation and
-  RSA keypair generation only exist in the web-vault UI, and other
-  attempts found online to script Vaultwarden registration without a
-  browser (direct API calls, reimplementing the client-side crypto) were
-  documented as impractical even by people who tried. Registering
-  headlessly via Playwright (matching the Xvfb-driven GUI automation
-  already used for KDE/GNOME/KeePassXC) hit a second real obstacle first:
-  the web-vault refuses to run over plain HTTP even against `localhost`,
-  so Vaultwarden needed a self-signed TLS cert before signup would even
-  load. **Decided:** register the disposable test account **once** (done
-  during this work, not at container build/run time) and ship the
-  resulting empty-vault SQLite database as a committed fixture
-  (`test/containers/vaultwarden-tier2-fixture/db.sqlite3` +
-  `rsa_key.pem`, WAL-checkpointed into one file) — the same "pre-seed
-  known state instead of re-driving a GUI every run" shape already used
-  for KDE's `kwalletrc`. The fixed test email/master password protect
-  nothing but this empty fixture vault and are not secrets; they live
-  only in `vaultwarden-tier2-session.sh`, never in the Go code (the
-  backend only ever receives an already-obtained `BW_SESSION`, the same
-  separation of concerns `SecretServiceBackend` has from the desktop's
-  own wallet unlock).
-
-  Two real, environment-specific bugs surfaced only by actually building
-  and running the image (same lesson as every prior tier-2 row): the
-  `vaultwarden` binary copied from the upstream image is dynamically
-  linked against `libmariadb.so.3` and `libpq.so.5` even when SQLite is
-  the only backend actually used, needing `libmariadb3`/`libpq5` on the
-  Debian base regardless; and Vaultwarden refuses to start at all without
-  a `web-vault/` directory present, unrelated to whether anything ever
-  requests it — `WEB_VAULT_ENABLED=false` disables the check instead of
-  shipping the unused web assets. Verified over 4 consecutive clean-container
-  `make test` runs: 4/4 passed (~40s each). Licence (rule 16): Vaultwarden
-  is only ever run transiently inside this disposable CI container, never
-  modified or offered as a network service to anyone, so AGPL-3.0's
-  network-copyleft clause does not apply — same CI-only-tool precedent as
-  `hadolint`/`shellcheck` (0.3).
-
-  **Decided (Bitwarden session lifecycle).** Unlike SecretServiceBackend
-  (PAM-linked wallet unlock) and OnePasswordBackend (the 1Password desktop
-  app's own system-auth integration), `bw` has no official non-interactive
-  unlock path today — biometric/system-auth CLI integration is only a
-  community wrapper
-  ([jeanregisser/bitwarden-cli-bio](https://github.com/jeanregisser/bitwarden-cli-bio)),
-  not an official `bw` feature, and adopting an unofficial third-party tool
-  for core secret handling was rejected outright. Two designs were
-  weighed: (a) sshakku stores the Bitwarden master password itself, in
-  whichever backend already has a real OS-level unlock, and uses it to
-  bootstrap a cached, expiring `BW_SESSION`; or (b) `BitwardenBackend`
-  prompts for the master password itself, every time, and never caches or
-  stores it. **(b) was chosen deliberately**: caching or storing the
-  master password would let a single stolen secret unlock every
-  credential this backend holds, a materially bigger blast radius than
-  the threat model accepts for one SSH key passphrase (goal 2). The
-  accepted cost is exactly one password to type per fresh sshakku
-  invocation that actually touches Bitwarden — never the *SSH* key's own
-  passphrase again, which is the whole point.
-
-  `BitwardenBackend` now takes a `Prompter` (the same interface
-  `KDialogPrompter` already implements), `Email`, and an optional `Server`
-  (self-hosted Vaultwarden), and implements `SecretSession`
-  (`Unlock`/`Lock`) — so `Loader.LoadKeys`'s existing batch-unlock
-  machinery (decision 17's follow-up) picks it up with **zero changes to
-  `load.go`**: one prompt per `load-keys` run, not one per key, exactly
-  mirroring how Secret Service already batches its own unlock. The
-  reactive askpass-broker path (a single expired key re-added outside
-  `load-keys`) uses the same standalone prompt/unlock/lock bracket
-  `SecretServiceBackend` uses when not held open by a batching caller —
-  deliberately, on request: a lone Bitwarden-backed key refresh re-prompts
-  for the master password too, a real cost Secret Service doesn't have
-  (its unlock is silent), accepted as "not sshakku's fault to fix" rather
-  than adding the caching decision (a) rejected. The master password
-  reaches `bw login`/`bw unlock` only via `--passwordenv`, never argv.
-
-  Verified end to end against the real Vaultwarden container (`make test`
-  now drives `BitwardenBackend.Unlock` itself via a fixed-answer
-  `Prompter`, not a pre-made session — see
-  `vaultwarden-tier2-session.sh`/`secret_bitwarden_realaccount_test.go`),
-  3/3 consecutive clean-container runs (~94s each — several full
-  login/unlock/lock round trips per run now, not one). A real bug
-  surfaced only by this: `bw` refuses `bw config server` while already
-  logged in ("Logout required before server config update"), so `Unlock`
-  originally broke on its second call in the same process tree; fixed by
-  only ever configuring the server as part of the *first* login, guarded
-  by the same `login --check` already used to skip a redundant login.
 
 ### Phase 5 — Widen the OS targets
 
