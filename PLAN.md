@@ -1067,6 +1067,61 @@ Sub-phases (detailed steps written when we start each one):
   upstream in the overlay (`OrbintSoft/orbintsoft-ebuild#66`), unrelated
   to sshakku's own code or this repo's history.
 
+  **Progress (Bitwarden, ✅ verified — a real tier-2 container, unlike
+  1Password).** `BitwardenBackend` (`internal/keys/secret_bitwarden.go`)
+  shells out to the `bw` CLI. Unlike `op`, `bw edit item <id>` supports a
+  true in-place update via base64-encoded JSON on stdin, so `Store` edits
+  an existing item instead of deleting and recreating it; the id comes
+  from `bw get item <service>` (name-search, like `get password`), since
+  `bw edit`/`bw delete` — unlike `get` — take only an id, not a name. The
+  account is assumed dedicated to sshakku, the same simplification the
+  dedicated Secret Service collection design made, so `bw list items`
+  needs no tag filter.
+
+  Unlike 1Password, Bitwarden **is** self-hostable — Vaultwarden
+  (`dani-garcia/vaultwarden`, AGPL-3.0, a from-scratch reimplementation of
+  the Bitwarden server API) runs as an ordinary disposable container
+  daemon, so this backend gets a real tier-2 container row after all,
+  added to `tier2-desktop.yml`'s matrix despite needing no desktop/Xvfb —
+  it fits the "real backend, not just a fake" spirit of tier 2 more than
+  tier 1's headless fake-peer suite. The `bw` CLI itself has no
+  account-registration command: the master-password key derivation and
+  RSA keypair generation only exist in the web-vault UI, and other
+  attempts found online to script Vaultwarden registration without a
+  browser (direct API calls, reimplementing the client-side crypto) were
+  documented as impractical even by people who tried. Registering
+  headlessly via Playwright (matching the Xvfb-driven GUI automation
+  already used for KDE/GNOME/KeePassXC) hit a second real obstacle first:
+  the web-vault refuses to run over plain HTTP even against `localhost`,
+  so Vaultwarden needed a self-signed TLS cert before signup would even
+  load. **Decided:** register the disposable test account **once** (done
+  during this work, not at container build/run time) and ship the
+  resulting empty-vault SQLite database as a committed fixture
+  (`test/containers/vaultwarden-tier2-fixture/db.sqlite3` +
+  `rsa_key.pem`, WAL-checkpointed into one file) — the same "pre-seed
+  known state instead of re-driving a GUI every run" shape already used
+  for KDE's `kwalletrc`. The fixed test email/master password protect
+  nothing but this empty fixture vault and are not secrets; they live
+  only in `vaultwarden-tier2-session.sh`, never in the Go code (the
+  backend only ever receives an already-obtained `BW_SESSION`, the same
+  separation of concerns `SecretServiceBackend` has from the desktop's
+  own wallet unlock).
+
+  Two real, environment-specific bugs surfaced only by actually building
+  and running the image (same lesson as every prior tier-2 row): the
+  `vaultwarden` binary copied from the upstream image is dynamically
+  linked against `libmariadb.so.3` and `libpq.so.5` even when SQLite is
+  the only backend actually used, needing `libmariadb3`/`libpq5` on the
+  Debian base regardless; and Vaultwarden refuses to start at all without
+  a `web-vault/` directory present, unrelated to whether anything ever
+  requests it — `WEB_VAULT_ENABLED=false` disables the check instead of
+  shipping the unused web assets. Verified over 4 consecutive clean-container
+  `make test` runs: 4/4 passed (~40s each). Licence (rule 16): Vaultwarden
+  is only ever run transiently inside this disposable CI container, never
+  modified or offered as a network service to anyone, so AGPL-3.0's
+  network-copyleft clause does not apply — same CI-only-tool precedent as
+  `hadolint`/`shellcheck` (0.3).
+
 ### Phase 5 — Widen the OS targets
 
 macOS as a wide port, never trust Apple; then Windows last as the most divergent target (service + named pipe, no socket, use win32 safe API). → goals 12, 13; open decision 8.
