@@ -1122,6 +1122,54 @@ Sub-phases (detailed steps written when we start each one):
   network-copyleft clause does not apply — same CI-only-tool precedent as
   `hadolint`/`shellcheck` (0.3).
 
+  **Decided (Bitwarden session lifecycle).** Unlike SecretServiceBackend
+  (PAM-linked wallet unlock) and OnePasswordBackend (the 1Password desktop
+  app's own system-auth integration), `bw` has no official non-interactive
+  unlock path today — biometric/system-auth CLI integration is only a
+  community wrapper
+  ([jeanregisser/bitwarden-cli-bio](https://github.com/jeanregisser/bitwarden-cli-bio)),
+  not an official `bw` feature, and adopting an unofficial third-party tool
+  for core secret handling was rejected outright. Two designs were
+  weighed: (a) sshakku stores the Bitwarden master password itself, in
+  whichever backend already has a real OS-level unlock, and uses it to
+  bootstrap a cached, expiring `BW_SESSION`; or (b) `BitwardenBackend`
+  prompts for the master password itself, every time, and never caches or
+  stores it. **(b) was chosen deliberately**: caching or storing the
+  master password would let a single stolen secret unlock every
+  credential this backend holds, a materially bigger blast radius than
+  the threat model accepts for one SSH key passphrase (goal 2). The
+  accepted cost is exactly one password to type per fresh sshakku
+  invocation that actually touches Bitwarden — never the *SSH* key's own
+  passphrase again, which is the whole point.
+
+  `BitwardenBackend` now takes a `Prompter` (the same interface
+  `KDialogPrompter` already implements), `Email`, and an optional `Server`
+  (self-hosted Vaultwarden), and implements `SecretSession`
+  (`Unlock`/`Lock`) — so `Loader.LoadKeys`'s existing batch-unlock
+  machinery (decision 17's follow-up) picks it up with **zero changes to
+  `load.go`**: one prompt per `load-keys` run, not one per key, exactly
+  mirroring how Secret Service already batches its own unlock. The
+  reactive askpass-broker path (a single expired key re-added outside
+  `load-keys`) uses the same standalone prompt/unlock/lock bracket
+  `SecretServiceBackend` uses when not held open by a batching caller —
+  deliberately, on request: a lone Bitwarden-backed key refresh re-prompts
+  for the master password too, a real cost Secret Service doesn't have
+  (its unlock is silent), accepted as "not sshakku's fault to fix" rather
+  than adding the caching decision (a) rejected. The master password
+  reaches `bw login`/`bw unlock` only via `--passwordenv`, never argv.
+
+  Verified end to end against the real Vaultwarden container (`make test`
+  now drives `BitwardenBackend.Unlock` itself via a fixed-answer
+  `Prompter`, not a pre-made session — see
+  `vaultwarden-tier2-session.sh`/`secret_bitwarden_realaccount_test.go`),
+  3/3 consecutive clean-container runs (~94s each — several full
+  login/unlock/lock round trips per run now, not one). A real bug
+  surfaced only by this: `bw` refuses `bw config server` while already
+  logged in ("Logout required before server config update"), so `Unlock`
+  originally broke on its second call in the same process tree; fixed by
+  only ever configuring the server as part of the *first* login, guarded
+  by the same `login --check` already used to skip a redundant login.
+
 ### Phase 5 — Widen the OS targets
 
 macOS as a wide port, never trust Apple; then Windows last as the most divergent target (service + named pipe, no socket, use win32 safe API). → goals 12, 13; open decision 8.

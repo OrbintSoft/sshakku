@@ -1,8 +1,10 @@
 #!/bin/bash
 # Runs as the disposable test account (see vaultwarden-tier2-entrypoint.sh):
 # starts a private Vaultwarden instance from the pre-registered test-account
-# fixture (see vaultwarden-tier2-fixture/), logs the bw CLI into it, then
-# runs the given command against it with a ready BW_SESSION.
+# fixture (see vaultwarden-tier2-fixture/), then runs the given command
+# against it. Login and unlock are BitwardenBackend.Unlock's own job (see
+# secret_bitwarden_realaccount_test.go), not this script's — it only hands
+# over the fixture account's identity via environment variables.
 set -euo pipefail
 
 readonly VAULTWARDEN_PORT="8443"
@@ -45,9 +47,10 @@ DATA_FOLDER="${DATA_DIR}" \
 	/usr/local/bin/vaultwarden &
 wait_for "Vaultwarden" wget -q --no-check-certificate -O /dev/null "${VAULTWARDEN_URL}/alive"
 
-export NODE_EXTRA_CA_CERTS="${SSL_DIR}/cert.pem"
-bw config server "${VAULTWARDEN_URL}" >/dev/null
-bw login "${TEST_EMAIL}" "${TEST_MASTER_PASSWORD}" >/dev/null
-SESSION=$(bw unlock "${TEST_MASTER_PASSWORD}" --raw)
-
-exec env SSHAKKU_TEST_ALLOW_REAL_BITWARDEN="1" BW_SESSION="${SESSION}" "$@"
+exec env \
+	SSHAKKU_TEST_ALLOW_REAL_BITWARDEN="1" \
+	SSHAKKU_TEST_BW_EMAIL="${TEST_EMAIL}" \
+	SSHAKKU_TEST_BW_PASSWORD="${TEST_MASTER_PASSWORD}" \
+	SSHAKKU_TEST_BW_SERVER="${VAULTWARDEN_URL}" \
+	NODE_EXTRA_CA_CERTS="${SSL_DIR}/cert.pem" \
+	"$@"
