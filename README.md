@@ -2,17 +2,70 @@
 
 Tends your SSH agent so every shell can use SSH without retyping the passphrase:
 it starts and watches the agent (lifecycle, health checks, diagnostics, recovery)
-and loads your keys, pulling each passphrase from the OS secret store.
+and loads your keys, pulling each passphrase from the OS secret store — never
+from an environment variable or a file on disk.
 
-## Configuration
+## How it works
 
-Key lifetime, retry, and notification behaviour are tuned through environment
-variables — see [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
+Every login shell keeps one `ssh-agent` alive on a fixed socket, so
+`SSH_AUTH_SOCK` never goes stale even if the agent is restarted. The first time
+a key is used, SSHakku prompts for its passphrase and stores it in a dedicated
+collection in your desktop's secret store (KDE Wallet, GNOME Keyring, or
+KeePassXC — see [Requirements](#requirements)). Every time after that, the key
+is loaded silently: open a terminal, the key is already there. If something
+goes wrong, `sshakku doctor` explains what and, with `--fix`, repairs it.
 
-## Diagnostics
+## Requirements
 
-`sshakku doctor` reports the state of your SSH agent, and `sshakku doctor --fix`
-repairs it — see [docs/DIAGNOSTICS.md](docs/DIAGNOSTICS.md).
+- **Linux**, with a login shell sourcing `/etc/profile.d` (the default on
+  every mainstream distribution).
+- **A secret store**: KDE Wallet, GNOME Keyring, or KeePassXC (any Secret
+  Service implementation), or, if you'd rather use a password manager you
+  already run, the 1Password or Bitwarden CLI — see
+  [Choosing the secret backend](docs/CONFIGURATION.md#choosing-the-secret-backend).
+- **Go 1.25+**, only to build from source (see Installation).
+
+## Installation
+
+### From source
+
+```sh
+git clone https://github.com/OrbintSoft/sshakku.git
+cd sshakku
+sudo make install
+```
+
+This builds the `sshakku` binary and installs it to `/usr/local/bin`, plus a
+login hook to `/etc/profile.d` that wires it into every shell. `sudo` is
+needed because both locations are root-owned; `sshakku` itself never runs with
+elevated privileges — only the one-time install does.
+
+To remove it: `sudo make uninstall`.
+
+Override `PREFIX`/`BINDIR`/`DESTDIR`/`ETC_PROFILE_D` on the `make install`
+command line to install elsewhere (e.g. packaging into a staging root).
+
+### Gentoo
+
+The maintainer runs SSHakku from a personal ebuild overlay,
+[`orbintsoft-ebuild`](https://github.com/OrbintSoft/orbintsoft-ebuild), kept in
+sync with this repository.
+
+## First run
+
+Install, then open a new terminal (or log out and back in). The first `ssh` to
+a key you haven't used yet prompts for its passphrase once; every use after
+that — in this terminal and every new one — is silent. If a key ever stops
+refilling silently, run `sshakku doctor` to see why.
+
+## Documentation
+
+| Guide | Covers |
+| --- | --- |
+| [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Every setting: key lifetime, retries, which secret backend to use, which keys are stored/auto-loaded, and where passphrases live. |
+| [docs/DIAGNOSTICS.md](docs/DIAGNOSTICS.md) | `sshakku doctor`: reading the report, `--fix`, `--user`, and `--test-backend`. |
+| [docs/HARDENING.md](docs/HARDENING.md) | Practical steps outside SSHakku itself that keep your keys safer: a short key lifetime, not leaving the wallet unlocked, disk encryption, and `/tmp`. |
+| [docs/THREAT-MODEL.md](docs/THREAT-MODEL.md) | What SSHakku protects against, what it doesn't, and why — for anyone evaluating it for a security-sensitive setup. |
 
 ## Contributing
 

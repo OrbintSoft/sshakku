@@ -132,8 +132,7 @@ Every check that cannot be determined (a network filesystem, an unreadable
 concerning result also appears under **findings**, always phrased as
 advisory: `doctor` reports these, it never configures anything or refuses to
 run because of them. Fixing what these checks flag is outside sshakku's
-scope — see your distribution's disk-encryption setup (LUKS) and `/tmp`
-mount configuration.
+scope — see [Hardening](HARDENING.md) for what to do about each one.
 
 ## `sshakku doctor --fix`
 

@@ -207,9 +207,8 @@ outright for lack of a tty; proactive key loading (re-adding expired keys from
 the wallet on its own) remains interactive-only, since it may prompt and write
 to the terminal.
 
-A short lifetime keeps the window in which a key sits in the agent small. Because
-the wallet refills the key silently, you can keep that window short without ever
-retyping a passphrase from memory — which also makes rotating keys cheaper.
+See [Hardening](HARDENING.md#a-short-key-lifetime) for why a short lifetime is
+worth keeping.
 
 ## Retries and giving up
 
