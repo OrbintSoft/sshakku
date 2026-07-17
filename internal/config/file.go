@@ -31,6 +31,17 @@ type File struct {
 	AutoLoadMode    *string  `toml:"auto_load_mode"`
 	AutoLoadInclude []string `toml:"auto_load_include"`
 	AutoLoadExclude []string `toml:"auto_load_exclude"`
+
+	// SecretBackend and the three fields below are config-file only, for the
+	// same reason as wallet_store_mode/auto_load_mode: which backend to use,
+	// and its account identity, don't fit a single environment variable
+	// cleanly, and an env var would leave the account identity (an email
+	// address, a vault name) sitting in the process environment for no
+	// benefit over the file.
+	SecretBackend    *string `toml:"secret_backend"`
+	OnePasswordVault *string `toml:"onepassword_vault"`
+	BitwardenEmail   *string `toml:"bitwarden_email"`
+	BitwardenServer  *string `toml:"bitwarden_server"`
 }
 
 // Settings is the configuration resolved from environment, file, and defaults.
@@ -50,6 +61,18 @@ type Settings struct {
 	AutoLoadMode    string
 	AutoLoadInclude []string // key names consulted only when mode is "include"
 	AutoLoadExclude []string // key names consulted only when mode is "exclude"
+
+	// SecretBackend selects which SecretBackend implementation the caller
+	// should construct; one of the SecretBackend* constants.
+	SecretBackend string
+	// OnePasswordVault is the vault name or ID passed to OnePasswordBackend;
+	// consulted only when SecretBackend is SecretBackendOnePassword.
+	OnePasswordVault string
+	// BitwardenEmail and BitwardenServer are passed to BitwardenBackend;
+	// consulted only when SecretBackend is SecretBackendBitwarden.
+	// BitwardenServer is empty for the default bitwarden.com.
+	BitwardenEmail  string
+	BitwardenServer string
 }
 
 // Wallet-store policy modes for Settings.WalletStoreMode.
@@ -64,6 +87,13 @@ const (
 	AutoLoadModeAll     = "all"
 	AutoLoadModeInclude = "include"
 	AutoLoadModeExclude = "exclude"
+)
+
+// Secret backend choices for Settings.SecretBackend.
+const (
+	SecretBackendSecretService = "secret-service"
+	SecretBackendOnePassword   = "1password"
+	SecretBackendBitwarden     = "bitwarden"
 )
 
 // StoresWallet reports whether keyname's passphrase should be persisted to the
@@ -172,6 +202,15 @@ func Resolve(file File, lookup func(string) (string, bool)) (Settings, []error) 
 	s.AutoLoadInclude = file.AutoLoadInclude
 	s.AutoLoadExclude = file.AutoLoadExclude
 
+	backend, err := resolveSecretBackend(file.SecretBackend)
+	if err != nil {
+		errs = append(errs, err)
+	}
+	s.SecretBackend = backend
+	s.OnePasswordVault = derefString(file.OnePasswordVault)
+	s.BitwardenEmail = derefString(file.BitwardenEmail)
+	s.BitwardenServer = derefString(file.BitwardenServer)
+
 	return s, errs
 }
 
@@ -203,6 +242,31 @@ func resolveAutoLoadMode(fileVal *string) (string, error) {
 	default:
 		return AutoLoadModeAll, fmt.Errorf("invalid auto_load_mode %q, using %q", *fileVal, AutoLoadModeAll)
 	}
+}
+
+// resolveSecretBackend is config-file only (no environment override, per
+// File's doc comment: the account identity fields it's paired with don't fit
+// an env var cleanly either). An absent or empty value defaults to
+// SecretBackendSecretService (today's only behaviour); an unrecognised value
+// falls back to the same default, reported as an error to log.
+func resolveSecretBackend(fileVal *string) (string, error) {
+	if fileVal == nil || *fileVal == "" {
+		return SecretBackendSecretService, nil
+	}
+	switch *fileVal {
+	case SecretBackendSecretService, SecretBackendOnePassword, SecretBackendBitwarden:
+		return *fileVal, nil
+	default:
+		return SecretBackendSecretService, fmt.Errorf("invalid secret_backend %q, using %q", *fileVal, SecretBackendSecretService)
+	}
+}
+
+// derefString returns "" for a nil pointer, else the pointed-to value.
+func derefString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 // coalesce returns the environment value when the variable is set, else the file

@@ -219,9 +219,9 @@ func askpass(stdout io.Writer, args []string) int {
 func askpassBroker(stdout io.Writer, args []string) int {
 	layout := paths.Resolve(paths.FromOS(), paths.ProbeDir)
 	log := sessionlog.New(layout.LogFile)
-	secret, closeSecret := newSecretBackend(currentUser(), log)
-	defer closeSecret()
 	settings := loadSettings(layout, "askpass", log)
+	secret, closeSecret := newSecretBackend(currentUser(), log, settings)
+	defer closeSecret()
 	broker := keys.Broker{
 		Secret: secret,
 		TTY:    ttyPrompter{},
@@ -326,7 +326,7 @@ func loadKeys(stderr io.Writer) int {
 		Display:        os.Getenv("DISPLAY"),
 	}
 
-	secret, closeSecret := newSecretBackend(currentUser(), log)
+	secret, closeSecret := newSecretBackend(currentUser(), log, settings)
 	defer closeSecret()
 
 	loader := keys.Loader{
@@ -376,22 +376,63 @@ func loadSettings(layout paths.Layout, tag string, log keys.Logger) config.Setti
 	return settings
 }
 
-// newSecretBackend opens the native Secret Service client and wraps it in a
+// newSecretBackend opens the secret backend settings.SecretBackend selects
+// (config.toml's secret_backend key; secret-service is the default). For
+// secret-service it opens the native Secret Service client and wraps it in a
 // SecretServiceBackend, which unlocks its own dedicated collection only for
 // the duration of each lookup/store rather than relying on the desktop's
 // idle timeout. If the session bus is unreachable (e.g. a headless session
 // with no D-Bus user session) it logs the failure and falls back to
 // SecretToolBackend, so a key can still be looked up or stored via the
-// desktop's default collection rather than aborting the caller outright. The
-// returned func releases the client's D-Bus connection, if any was opened,
-// and must always be called.
-func newSecretBackend(user string, log keys.Logger) (keys.SecretBackend, func()) {
-	client, err := secretservice.NewClient()
-	if err != nil {
-		_ = log.Log("ERROR", fmt.Sprintf("secret service: %v; falling back to secret-tool", err))
-		return keys.SecretToolBackend{Runner: keys.ExecRunner{}, User: user}, func() {}
+// desktop's default collection rather than aborting the caller outright.
+// 1password and bitwarden shell out to their own CLI instead, so neither
+// touches D-Bus. The returned func releases any resource newSecretBackend
+// opened (only the Secret Service client today) and must always be called.
+func newSecretBackend(user string, log keys.Logger, settings config.Settings) (keys.SecretBackend, func()) {
+	switch settings.SecretBackend {
+	case config.SecretBackendOnePassword:
+		return &keys.OnePasswordBackend{Runner: keys.ExecRunner{}, Vault: settings.OnePasswordVault}, func() {}
+	case config.SecretBackendBitwarden:
+		return &keys.BitwardenBackend{
+			Runner:   keys.ExecRunner{},
+			Prompter: newBitwardenPrompter(),
+			Email:    settings.BitwardenEmail,
+			Server:   settings.BitwardenServer,
+		}, func() {}
+	default:
+		client, err := secretservice.NewClient()
+		if err != nil {
+			_ = log.Log("ERROR", fmt.Sprintf("secret service: %v; falling back to secret-tool", err))
+			return keys.SecretToolBackend{Runner: keys.ExecRunner{}, User: user}, func() {}
+		}
+		return &keys.SecretServiceBackend{Client: client, User: user}, func() { _ = client.Close() }
 	}
-	return &keys.SecretServiceBackend{Client: client, User: user}, func() { _ = client.Close() }
+}
+
+// bitwardenMasterPrompter asks for BitwardenBackend's master password: via the
+// same graphical dialog as an SSH key's own passphrase when a display is
+// available, otherwise on the controlling terminal. This is a separate prompt
+// from the SSH key passphrase prompt — it never touches the wallet, and
+// unlike a wallet-backed key's passphrase it cannot be silently skipped, so
+// it needs a terminal fallback even where the SSH key prompt would just add
+// the key on the terminal directly instead.
+type bitwardenMasterPrompter struct {
+	kdialog keys.KDialogPrompter
+	gui     bool
+}
+
+func (p bitwardenMasterPrompter) Prompt(keyname string) (string, error) {
+	if p.gui {
+		return p.kdialog.Prompt(keyname)
+	}
+	return ttyPrompter{}.Prompt("Enter "+keyname, true)
+}
+
+func (bitwardenMasterPrompter) Available() bool { return true }
+
+func newBitwardenPrompter() keys.Prompter {
+	runner := keys.ExecRunner{}
+	return bitwardenMasterPrompter{kdialog: keys.KDialogPrompter{Runner: runner}, gui: detectGUIAvailable()}
 }
 
 // stderrNotifier surfaces a user-facing notice to the terminal of the
@@ -713,8 +754,10 @@ func forget(stdout, stderr io.Writer, args []string) int {
 		return 2
 	}
 
-	log := sessionlog.New(paths.Resolve(paths.FromOS(), paths.ProbeDir).LogFile)
-	secret, closeSecret := newSecretBackend(currentUser(), log)
+	layout := paths.Resolve(paths.FromOS(), paths.ProbeDir)
+	log := sessionlog.New(layout.LogFile)
+	settings := loadSettings(layout, "forget", log)
+	secret, closeSecret := newSecretBackend(currentUser(), log, settings)
 	defer closeSecret()
 
 	// forget always touches the secret store (listing and/or deleting), so —

@@ -48,9 +48,47 @@ the environment takes precedence, an exported variable overrides the file in
 either direction — for example `SSHAKKU_QUIET=0` re-enables the notice even when
 `quiet = true` in the file.
 
+## Choosing the secret backend
+
+By default SSHakku stores passphrases in a dedicated Secret Service collection
+(KDE Wallet, GNOME Keyring, or KeePassXC via its Secret Service integration —
+see the next section). `secret_backend` in `config.toml` switches to 1Password
+or Bitwarden instead. Like `wallet_store_mode`, these four keys are
+config-file only — an account identity (an email address, a vault name)
+doesn't fit a single environment variable, and there is no benefit to leaving
+it sitting in the process environment instead of the file:
+
+```toml
+secret_backend = "bitwarden"                  # "secret-service" (default), "1password", or "bitwarden"
+onepassword_vault = "sshakku"                  # consulted only when secret_backend = "1password"
+bitwarden_email = "you@example.com"            # consulted only when secret_backend = "bitwarden"
+bitwarden_server = "https://vault.example.com" # optional; a self-hosted Vaultwarden instance
+```
+
+- `"secret-service"` (the default) is described in the next section.
+- `"1password"` shells out to the `op` CLI. `onepassword_vault` names a vault
+  dedicated to SSHakku — every item in it is assumed to be SSHakku's own, the
+  same dedicated-collection assumption the default backend makes. `op` must
+  already be signed in (the desktop app's own integration, or, for a Business/
+  Teams account, `OP_SERVICE_ACCOUNT_TOKEN` in the environment) — SSHakku
+  never drives an interactive `op signin` itself.
+- `"bitwarden"` shells out to the `bw` CLI, against bitwarden.com or a
+  self-hosted Vaultwarden instance named by `bitwarden_server`. Unlike the
+  other backends, `bw` has no non-interactive unlock: SSHakku prompts for the
+  Bitwarden master password itself, fresh, every time it needs the vault —
+  graphically when a display is available, otherwise on the terminal — and
+  never caches or stores that password anywhere. This is a second, independent
+  password from any SSH key passphrase; the point of storing passphrases in
+  Bitwarden at all is that you still never retype an SSH key's own passphrase,
+  only the one Bitwarden master password, once per shell that actually touches
+  the vault.
+- An unrecognised `secret_backend` value falls back to `"secret-service"` and
+  is logged.
+
 ## Where passphrases are stored
 
-Passphrases live in their own Secret Service collection, labelled and aliased
+The default (`secret_backend = "secret-service"`) stores passphrases in their
+own Secret Service collection, labelled and aliased
 `sshakku`, separate from the desktop's default wallet (`kdewallet` on KDE, the
 login keyring on GNOME). SSHakku talks to the Secret Service D-Bus API
 (`org.freedesktop.secrets`) directly — the same API KDE Wallet and GNOME
