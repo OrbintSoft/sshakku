@@ -149,11 +149,13 @@ done are summarised; see the note at the top of this file for full detail.
    (`ssh-add -t`), keep the passphrase in the vault, and let a new shell re-add it
    silently. See Phase 2 slice 4.
 
-7. **Secret backend abstraction (goal 11).** KDE and GNOME are the *same* backend
-   (Secret Service D-Bus). Backends: `secret-service` (KDE + GNOME + KeePassXC),
-   1Password (`op`), Bitwarden (`bw`), plus macOS Keychain and Windows Credential
-   Manager still to come. `SecretBackend` interface defined early (also makes
-   tests mockable) — all four Linux backends are done, see Phase 4.2.
+7. **Secret backend abstraction (goal 11). Done for Linux (Phase 4.3).** KDE and
+   GNOME are the *same* backend (Secret Service D-Bus). Backends: `secret-service`
+   (KDE + GNOME + KeePassXC), 1Password (`op`), Bitwarden (`bw`), plus macOS
+   Keychain and Windows Credential Manager still to come. `SecretBackend`
+   interface defined early (also makes tests mockable) — all four Linux backends
+   are implemented (Phase 4.2) and selectable at runtime via `config.toml`'s
+   `secret_backend` key (Phase 4.3, see `docs/CONFIGURATION.md`).
 
 8. **Thin platform ports (goals 12, 13).** macOS already does silent passphrase
    caching natively via launchd + `ssh-add --apple-use-keychain`; the macOS port
@@ -393,12 +395,14 @@ which is what caught the `EnsureAgent` bug above in the first place — they nee
 an isolated PID namespace, so they run in the tier-1 container, not on a live
 desktop session. → goal 16; open decisions 15, 20.
 
-### Phase 4 — Configurability & pluggable secret backends
+### Phase 4 — Configurability & pluggable secret backends ✅ Done
 
 Make the secret store pluggable and the tool highly parametrizable via
 `config.toml` under `$XDG_CONFIG_HOME/sshakku/`. Most of the config-file/env
 migration landed in Phase 2/3 (open decisions 13, 17–19); what remained was the
-pluggable-backend half. → goals 11, 15; open decisions 7, 8, 13, 17, 18, 19, 20.
+pluggable-backend half: implementing every Linux backend (4.2) and making the
+choice reachable at runtime (4.3). → goals 11, 15; open decisions 7, 8, 13, 17,
+18, 19, 20.
 
 - **4.1 — Container test infrastructure (open decision 20, tiers 1–2).**
   **Tier 1**: `test/containers/debian.Dockerfile`, running the existing suite in
@@ -468,6 +472,15 @@ pluggable-backend half. → goals 11, 15; open decisions 7, 8, 13, 17, 18, 19, 2
     `Prompter`; a real bug (`bw` refuses `config server` while already logged
     in) was found only by that run and fixed.
   → open decisions 7, 8.
+- **4.3 — Runtime backend selection. ✅ Done.** `config.toml` gained
+  `secret_backend` (`secret-service`/`1password`/`bitwarden`, default
+  `secret-service`) plus the per-backend account fields (`onepassword_vault`,
+  `bitwarden_email`, `bitwarden_server`) — all four config-file only, same
+  reasoning as `wallet_store_mode`. `newSecretBackend` in `cmd/sshakku`
+  switches on it instead of hardcoding `SecretServiceBackend`/
+  `SecretToolBackend`; Bitwarden's master-password prompt reuses the same
+  graphical/terminal split the SSH-key passphrase prompt already uses. Closes
+  open decision 7 for every Linux backend. See `docs/CONFIGURATION.md`.
 
 ### Phase 5 — Widen the OS targets
 

@@ -87,7 +87,7 @@ func TestResolveDefaults(t *testing.T) {
 	if len(errs) != 0 {
 		t.Fatalf("unexpected errors: %v", errs)
 	}
-	want := Settings{KeyLifetime: DefaultKeyLifetime, GiveupTTL: DefaultGiveupTTL, WalletStoreMode: WalletStoreModeAll, AutoLoadMode: AutoLoadModeAll}
+	want := Settings{KeyLifetime: DefaultKeyLifetime, GiveupTTL: DefaultGiveupTTL, WalletStoreMode: WalletStoreModeAll, AutoLoadMode: AutoLoadModeAll, SecretBackend: SecretBackendSecretService}
 	if !reflect.DeepEqual(s, want) {
 		t.Errorf("Resolve(empty) = %+v, want %+v", s, want)
 	}
@@ -113,6 +113,7 @@ func TestResolveFileWins(t *testing.T) {
 		Quiet:           true,
 		WalletStoreMode: WalletStoreModeAll,
 		AutoLoadMode:    AutoLoadModeAll,
+		SecretBackend:   SecretBackendSecretService,
 	}
 	if !reflect.DeepEqual(s, want) {
 		t.Errorf("Resolve(file) = %+v, want %+v", s, want)
@@ -318,6 +319,72 @@ func TestResolveInvalidEnvMaxAttemptsFallsToFile(t *testing.T) {
 	s, _ := Resolve(file, lookupFrom(map[string]string{"SSHAKKU_MAX_ATTEMPTS": "0"}))
 	if s.MaxAttempts != 4 {
 		t.Errorf("MaxAttempts = %d, want 4 (invalid env falls through to file)", s.MaxAttempts)
+	}
+}
+
+func TestResolveSecretBackendDefaultsToSecretService(t *testing.T) {
+	s, errs := Resolve(File{}, lookupFrom(nil))
+	if len(errs) != 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if s.SecretBackend != SecretBackendSecretService {
+		t.Errorf("SecretBackend = %q, want %q", s.SecretBackend, SecretBackendSecretService)
+	}
+}
+
+func TestResolveSecretBackendFromFile(t *testing.T) {
+	for _, backend := range []string{SecretBackendSecretService, SecretBackendOnePassword, SecretBackendBitwarden} {
+		file := File{SecretBackend: ptr(backend)}
+		s, errs := Resolve(file, lookupFrom(nil))
+		if len(errs) != 0 {
+			t.Fatalf("backend %q: unexpected errors: %v", backend, errs)
+		}
+		if s.SecretBackend != backend {
+			t.Errorf("backend %q: SecretBackend = %q", backend, s.SecretBackend)
+		}
+	}
+}
+
+func TestResolveSecretBackendInvalidFallsBackToSecretService(t *testing.T) {
+	file := File{SecretBackend: ptr("bogus")}
+	s, errs := Resolve(file, lookupFrom(nil))
+	if len(errs) == 0 {
+		t.Fatal("an invalid secret_backend must be reported")
+	}
+	if s.SecretBackend != SecretBackendSecretService {
+		t.Errorf("SecretBackend = %q, want %q on an invalid value", s.SecretBackend, SecretBackendSecretService)
+	}
+}
+
+func TestResolveSecretBackendAccountFieldsPassThrough(t *testing.T) {
+	file := File{
+		SecretBackend:    ptr(SecretBackendBitwarden),
+		OnePasswordVault: ptr("sshakku-vault"),
+		BitwardenEmail:   ptr("user@example.invalid"),
+		BitwardenServer:  ptr("https://vault.example.invalid"),
+	}
+	s, errs := Resolve(file, lookupFrom(nil))
+	if len(errs) != 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if s.OnePasswordVault != "sshakku-vault" {
+		t.Errorf("OnePasswordVault = %q", s.OnePasswordVault)
+	}
+	if s.BitwardenEmail != "user@example.invalid" {
+		t.Errorf("BitwardenEmail = %q", s.BitwardenEmail)
+	}
+	if s.BitwardenServer != "https://vault.example.invalid" {
+		t.Errorf("BitwardenServer = %q", s.BitwardenServer)
+	}
+}
+
+func TestResolveSecretBackendAccountFieldsDefaultEmpty(t *testing.T) {
+	s, errs := Resolve(File{}, lookupFrom(nil))
+	if len(errs) != 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if s.OnePasswordVault != "" || s.BitwardenEmail != "" || s.BitwardenServer != "" {
+		t.Errorf("absent account fields must default empty, got %+v", s)
 	}
 }
 
