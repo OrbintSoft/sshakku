@@ -124,14 +124,18 @@ type Report struct {
 	InspectErr   error // enumeration failed; the report is partial
 	Keys         []KeyView
 	KeysErr      error // key enumeration failed; Keys is empty
+	Host         HostChecks
 }
 
 // Gather inspects the agent situation described by in and returns the report,
 // reading everything through src, prober, anc, and cg so it never touches the
 // real /proc or sockets in a test. A nil anc skips ancestry attribution; a nil
 // cg skips the cgroup fallback used when ancestry dead-ends at init. A nil
-// keys skips the ~/.ssh key/TTL section entirely. It mutates nothing.
-func Gather(in Inputs, src AgentSource, prober agent.Prober, anc AncestrySource, cg CgroupSource, keys *KeySource) Report {
+// keys skips the ~/.ssh key/TTL section entirely. A nil host skips the
+// environment-hardening section entirely (Report.Host stays its zero value,
+// which Format and findings both already treat as "nothing to say"). It
+// mutates nothing.
+func Gather(in Inputs, src AgentSource, prober agent.Prober, anc AncestrySource, cg CgroupSource, keys *KeySource, host HostSource) Report {
 	r := Report{
 		FixedSock: in.FixedSock,
 		EnvSock:   in.EnvSock,
@@ -167,6 +171,9 @@ func Gather(in Inputs, src AgentSource, prober agent.Prober, anc AncestrySource,
 
 	r.State = classifyState(r)
 	r.LogTail = tailLines(in.LogFile, logTailLines)
+	if host != nil {
+		r.Host = host.Checks()
+	}
 	r.Findings = findings(in, r)
 	if keys != nil {
 		r.Keys, r.KeysErr = gatherKeys(*keys)
@@ -345,6 +352,7 @@ func findings(in Inputs, r Report) []string {
 	if in.GUIAvailable && (in.EnvAskpass == "" || in.EnvAskpassRequire == "") {
 		f = append(f, askpassNotWiredMsg)
 	}
+	f = append(f, hostFindings(r.Host)...)
 
 	if len(f) == 0 {
 		f = append(f, "no problems detected")
@@ -391,6 +399,10 @@ func Format(w io.Writer, r Report) {
 		if r.KeysErr != nil {
 			p("  could not enumerate ~/.ssh: %v\n", r.KeysErr)
 		}
+	}
+
+	if line := hostChecksLine(r.Host); line != "" {
+		p("\nenvironment:\n  %s\n", line)
 	}
 
 	p("\nfindings:\n")
@@ -459,6 +471,89 @@ func keyStatus(k KeyView) string {
 	default:
 		return "loaded, TTL unknown (not added by sshakku, or added before a reboot)"
 	}
+}
+
+// minTmpBytes is the size below which a tmpfs /tmp is flagged as possibly
+// too small; advisory only, not a hard requirement.
+const minTmpBytes = 512 * 1024 * 1024
+
+// hostFindings turns h into advisory observations about conditions outside
+// sshakku's own control that materially weaken its threat model. Every line
+// says so explicitly: doctor reports these, it never configures or refuses
+// to run because of them. A nil field (undetermined) never produces a line.
+func hostFindings(h HostChecks) []string {
+	var f []string
+	if h.DiskEncrypted != nil && !*h.DiskEncrypted {
+		f = append(f, "the disk does not appear to be encrypted (best-effort LUKS check) — outside sshakku's control, but exposes the wallet database directly if the drive is lost, stolen, or discarded")
+	}
+	if h.TmpTmpfs != nil {
+		switch {
+		case !*h.TmpTmpfs:
+			f = append(f, "/tmp is not a dedicated tmpfs mount — outside sshakku's control, temporary files may persist to disk instead of memory")
+		case h.TmpSizeBytes > 0 && h.TmpSizeBytes < minTmpBytes:
+			f = append(f, fmt.Sprintf("/tmp is tmpfs but only %s — outside sshakku's control, may be too small under load", humanBytes(h.TmpSizeBytes)))
+		}
+	}
+	if h.TPMPresent != nil && !*h.TPMPresent {
+		f = append(f, "no TPM device detected — outside sshakku's control, a TPM enables stronger disk-encryption key protection where supported")
+	}
+	return f
+}
+
+// hostChecksLine renders h as a single summary line for Format, or "" when h
+// is the zero value (Gather was called with a nil HostSource).
+func hostChecksLine(h HostChecks) string {
+	if h.DiskEncrypted == nil && h.TmpTmpfs == nil && h.TPMPresent == nil {
+		return ""
+	}
+	parts := []string{
+		"disk encryption: " + triStateWord(h.DiskEncrypted),
+	}
+	switch {
+	case h.TmpTmpfs == nil:
+		parts = append(parts, "/tmp: undetermined")
+	case !*h.TmpTmpfs:
+		parts = append(parts, "/tmp: not tmpfs")
+	case h.TmpSizeBytes > 0:
+		parts = append(parts, fmt.Sprintf("/tmp: tmpfs, %s", humanBytes(h.TmpSizeBytes)))
+	default:
+		parts = append(parts, "/tmp: tmpfs, size undetermined")
+	}
+	if h.TPMPresent == nil {
+		parts = append(parts, "TPM: undetermined")
+	} else if *h.TPMPresent {
+		parts = append(parts, fmt.Sprintf("TPM: present (%s)", h.TPMVersion))
+	} else {
+		parts = append(parts, "TPM: not detected")
+	}
+	return strings.Join(parts, "  |  ")
+}
+
+// triStateWord renders a *bool as doctor's report prose expects.
+func triStateWord(b *bool) string {
+	switch {
+	case b == nil:
+		return "undetermined"
+	case *b:
+		return "yes"
+	default:
+		return "no"
+	}
+}
+
+// humanBytes renders n in the largest whole unit that keeps at least one
+// significant digit, GiB down to KiB.
+func humanBytes(n int64) string {
+	const unit = 1024
+	if n < unit {
+		return fmt.Sprintf("%d B", n)
+	}
+	div, exp := int64(unit), 0
+	for m := n / unit; m >= unit; m /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %ciB", float64(n)/float64(div), "KMGTPE"[exp])
 }
 
 func orNone(s string) string {

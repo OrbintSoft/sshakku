@@ -22,6 +22,9 @@ situation. It changes nothing. The report covers:
   process chain that launched it.
 - **Keys** — every key file under `~/.ssh`, whether it is currently loaded in
   the agent, and, for a loaded key, how much longer it has there.
+- **Environment** — best-effort checks on conditions outside sshakku's own
+  control that materially affect its threat model: disk encryption, `/tmp`,
+  and TPM presence.
 - **Findings** — plain-language observations (a stale environment, dead agents
   lingering, a foreign agent answering, and so on).
 - **Recommendation** — what to do about the current state.
@@ -99,6 +102,39 @@ A loaded key can also show:
   will **not** refill the key either, since the loader dedups on an
   already-loaded fingerprint and skips it.
 
+### Environment hardening checks
+
+sshakku's own threat model assumes the wallet database and any temporary
+files are reasonably protected by the surrounding system; none of that is
+sshakku's to configure, but a broken assumption there weakens everything it
+does. `doctor` reports three best-effort, read-only checks:
+
+```text
+environment:
+  disk encryption: no  |  /tmp: not tmpfs  |  TPM: present (2.0)
+```
+
+- **Disk encryption** — whether the block device backing your home directory
+  is LUKS-encrypted, detected via `/proc/mounts` and
+  `/sys/class/block/*/dm/uuid`, including one level of LUKS-under-LVM. An
+  unencrypted disk means anyone with physical access to the drive can read
+  the wallet database directly, bypassing sshakku entirely.
+- **`/tmp`** — whether `/tmp` is its own tmpfs mount (memory-backed) rather
+  than living on the root filesystem, and, when it is, whether it looks
+  large enough (512 MiB) to be reliable under load.
+- **TPM** — whether the kernel has a TPM device driver bound
+  (`/sys/class/tpm/tpm<N>`), and its rough version (1.2 or 2.0). A present
+  TPM can back a stronger disk-encryption setup than a plain passphrase-only
+  LUKS volume, where the platform supports it.
+
+Every check that cannot be determined (a network filesystem, an unreadable
+`/proc` or `/sys`) is reported as "undetermined" rather than guessed. A
+concerning result also appears under **findings**, always phrased as
+advisory: `doctor` reports these, it never configures anything or refuses to
+run because of them. Fixing what these checks flag is outside sshakku's
+scope — see your distribution's disk-encryption setup (LUKS) and `/tmp`
+mount configuration.
+
 ## `sshakku doctor --fix`
 
 `sshakku doctor --fix` first prints the diagnosis, then applies the same
@@ -110,6 +146,35 @@ A running program cannot change the environment of the shell that started it, so
 `--fix` cannot rewrite the current shell's `SSH_AUTH_SOCK`. When the shell still
 points somewhere other than the healed socket, the command prints an
 `export SSH_AUTH_SOCK=…` line to run — or you can simply open a new shell.
+
+## `sshakku doctor --test-backend [name]`
+
+A misconfigured secret backend otherwise only surfaces the first time `ssh`
+actually needs a passphrase. `sshakku doctor --test-backend` proves the
+configured backend works end to end instead: it stores a throwaway probe
+entry, looks it up back, and deletes it, reporting a clear pass or fail for
+each step:
+
+```text
+── testing secret backend ──
+backend: secret-service
+  unlock: ok
+  store: ok
+  lookup: ok
+  delete: ok
+backend test: PASS
+```
+
+With no name, it tests whichever backend `config.toml`'s `secret_backend`
+resolves to (see [`CONFIGURATION.md`](CONFIGURATION.md)). Naming one of
+`secret-service`, `1password`, or `bitwarden` explicitly tests that backend
+instead, using the same account fields (`onepassword_vault`,
+`bitwarden_email`, `bitwarden_server`) already in `config.toml` regardless of
+which backend is actually configured as the default — useful for checking a
+backend you're about to switch to before you switch. The probe entry is
+always deleted, even after an earlier step failed, so no test data is left
+behind in the wallet. Refused with `--user`: it acts on the secret store, so,
+like `--fix`, it must run as the account it acts for.
 
 ## Scope
 

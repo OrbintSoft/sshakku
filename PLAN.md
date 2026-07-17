@@ -551,21 +551,30 @@ Until this phase starts, tier 2/3 stay manually-triggered
 (`workflow_dispatch`) jobs (open decision 20) — not part of any automated
 pipeline yet. → open decisions 9, 20, 21.
 
-### Phase 9 — Diagnostics hardening
+### Phase 9 — Diagnostics hardening ✅ Done
 
 Extends `sshakku doctor` (Phase 3) with checks for conditions outside
 sshakku's own control but that materially weaken its threat model, plus a way
 to actually prove a configured secret backend works end to end instead of
 only discovering it's broken the first time `ssh` needs it.
 
-- Report whether the root/home filesystem is disk-encrypted (best-effort,
-  read-only — e.g. LUKS detection via `/proc/mounts`/block-device crypto
-  type), and whether `/tmp` is tmpfs-backed and reasonably sized. Advisory
-  only: doctor reports, it never configures or refuses to run.
-- `doctor --test-backend <name>` actively exercises the named (or, if
-  omitted, the configured) `SecretBackend` end to end — store, look up, and
-  delete a throwaway probe entry — surfacing a clear pass/fail instead of a
-  silent misconfiguration that only shows up as a broken `ssh` prompt later.
+- **Environment checks (`diagnose.HostChecks`, `internal/diagnose/
+  hostcheck.go`).** Best-effort, read-only, advisory only (doctor reports,
+  never configures or refuses to run): disk encryption via `/proc/mounts` +
+  `/sys/class/block/*/dm/uuid` LUKS detection (one level of
+  LUKS-under-LVM resolved through `slaves/*`); whether `/tmp` is its own
+  tmpfs mount and roughly how big; and **TPM presence/version**, detected
+  from the bound kernel driver at `/sys/class/tpm/tpm<N>` (never nil — an
+  absent device is a determination, not an unknown) rather than any
+  `tpm2-tools` dependency. A nil/undetermined field is never guessed.
+- `doctor --test-backend [name]` actively exercises the named (or, if
+  omitted, the configured) `SecretBackend` end to end — unlock (when the
+  backend implements `SecretSession`), store, look up, and delete a
+  throwaway probe entry (`sshakku-doctor-probe`, a fresh random value per
+  run) — surfacing a clear pass/fail per step instead of a silent
+  misconfiguration that only shows up as a broken `ssh` prompt later.
+  Refused cross-user (`--user`), same reasoning as `--fix`: it acts on the
+  secret store, it doesn't just read. Documented in `docs/DIAGNOSTICS.md`.
 
 → goal 8; open decisions 1, 7.
 

@@ -113,7 +113,7 @@ func TestDoctorDetectsAndFixesDeadOursAgent(t *testing.T) {
 	// findings reflect the agent's own health rather than an env mismatch.
 	in := Inputs{FixedSock: cfg.FixedSock, EnvSock: cfg.FixedSock, LegacyDir: cfg.LegacyDir, StatePath: cfg.StatePath, OurUID: cfg.OurUID}
 
-	before := Gather(in, agent.Inspector{}, agent.SocketProber{}, nil, nil, nil)
+	before := Gather(in, agent.Inspector{}, agent.SocketProber{}, nil, nil, nil, nil)
 	if before.State != StateOursHealthy {
 		t.Fatalf("before crash: State = %v, want ours-healthy", before.State)
 	}
@@ -125,7 +125,7 @@ func TestDoctorDetectsAndFixesDeadOursAgent(t *testing.T) {
 	_ = syscall.Kill(res1.Started, syscall.SIGKILL)
 	waitDead(t, res1.Started)
 
-	after := Gather(in, agent.Inspector{}, agent.SocketProber{}, nil, nil, nil)
+	after := Gather(in, agent.Inspector{}, agent.SocketProber{}, nil, nil, nil, nil)
 	if after.State != StateOursZombie {
 		t.Errorf("after crash: State = %v, want ours-zombie", after.State)
 	}
@@ -144,7 +144,7 @@ func TestDoctorDetectsAndFixesDeadOursAgent(t *testing.T) {
 		t.Errorf("fix Situation = %s, want zombie", res2.Situation)
 	}
 
-	fixed := Gather(in, agent.Inspector{}, agent.SocketProber{}, nil, nil, nil)
+	fixed := Gather(in, agent.Inspector{}, agent.SocketProber{}, nil, nil, nil, nil)
 	if fixed.State != StateOursHealthy {
 		t.Errorf("after fix: State = %v, want ours-healthy", fixed.State)
 	}
