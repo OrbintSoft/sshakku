@@ -50,7 +50,7 @@ func TestGatherHealthy(t *testing.T) {
 		LegacyDir: legacy,
 		EnvSock:   fixed,
 		OurUID:    1000,
-	}, src, prober, nil, nil, nil)
+	}, src, prober, nil, nil, nil, nil)
 
 	if len(r.Agents) != 1 {
 		t.Fatalf("got %d agents, want 1", len(r.Agents))
@@ -76,7 +76,7 @@ func TestGatherEnvUnset(t *testing.T) {
 	}}
 	prober := fakeProber{up: map[string]bool{fixed: true}}
 
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, src, prober, nil, nil, nil)
+	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, src, prober, nil, nil, nil, nil)
 	if !hasFinding(r, "SSH_AUTH_SOCK is unset") {
 		t.Errorf("findings = %v, want an unset-env finding", r.Findings)
 	}
@@ -85,7 +85,7 @@ func TestGatherEnvUnset(t *testing.T) {
 func TestGatherEnvNotAnswering(t *testing.T) {
 	src := fakeSource{}
 	prober := fakeProber{} // nothing up
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000}, src, prober, nil, nil, nil)
+	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000}, src, prober, nil, nil, nil, nil)
 
 	if r.EnvReachable {
 		t.Error("EnvReachable = true, want false")
@@ -104,7 +104,7 @@ func TestGatherEnvMismatch(t *testing.T) {
 		{PID: 100, UID: 1000, Socket: other},
 	}}
 	prober := fakeProber{up: map[string]bool{other: true}}
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: other, OurUID: 1000}, src, prober, nil, nil, nil)
+	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: other, OurUID: 1000}, src, prober, nil, nil, nil, nil)
 
 	if !hasFinding(r, "not our fixed socket") {
 		t.Errorf("findings = %v, want a mismatch finding", r.Findings)
@@ -119,7 +119,7 @@ func TestGatherMultipleAndDead(t *testing.T) {
 		{PID: 300, UID: 1000, Socket: legacy + "/ssh-agent.sock"}, // legacy, dead
 	}}
 	prober := fakeProber{up: map[string]bool{fixed: true, foreign: true}}
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000}, src, prober, nil, nil, nil)
+	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000}, src, prober, nil, nil, nil, nil)
 
 	if !hasFinding(r, "2 agents are answering") {
 		t.Errorf("findings = %v, want a multiple-agents finding", r.Findings)
@@ -143,7 +143,7 @@ func TestGatherDifferentUserAgent(t *testing.T) {
 		{PID: 100, UID: 1000, Socket: other}, // healthy, but not uid 0's
 	}}
 	prober := fakeProber{up: map[string]bool{other: true}}
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 0}, src, prober, nil, nil, nil)
+	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 0}, src, prober, nil, nil, nil, nil)
 
 	if r.State != StateClean {
 		t.Errorf("State = %v, want StateClean: a different user's agent isn't serving this account", r.State)
@@ -165,7 +165,7 @@ func TestGatherOrphanedOursAgent(t *testing.T) {
 		{PID: 100, UID: 1000, Socket: orphan},
 	}}
 	prober := fakeProber{up: map[string]bool{orphan: true}}
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, src, prober, nil, nil, nil)
+	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, src, prober, nil, nil, nil, nil)
 
 	if !hasFinding(r, "looks like a previous sshakku-managed agent") {
 		t.Errorf("findings = %v, want the orphaned-ours wording", r.Findings)
@@ -221,7 +221,7 @@ func TestKnownForeignShape(t *testing.T) {
 func TestGatherEnvSockKnownForeignShape(t *testing.T) {
 	const gpgSSH = "/run/user/1000/gnupg/S.gpg-agent.ssh"
 	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: gpgSSH, OurUID: 1000},
-		fakeSource{}, fakeProber{up: map[string]bool{gpgSSH: true}}, nil, nil, nil)
+		fakeSource{}, fakeProber{up: map[string]bool{gpgSSH: true}}, nil, nil, nil, nil)
 
 	if !hasFinding(r, "gpg-agent, with ssh support enabled") {
 		t.Errorf("findings = %v, want the gpg-agent shape identified", r.Findings)
@@ -231,7 +231,7 @@ func TestGatherEnvSockKnownForeignShape(t *testing.T) {
 func TestGatherInspectError(t *testing.T) {
 	src := fakeSource{err: errors.New("boom")}
 	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000},
-		src, fakeProber{up: map[string]bool{fixed: true}}, nil, nil, nil)
+		src, fakeProber{up: map[string]bool{fixed: true}}, nil, nil, nil, nil)
 	if r.InspectErr == nil {
 		t.Fatal("InspectErr = nil, want the enumeration error")
 	}
@@ -246,7 +246,7 @@ func TestGatherRecordedPID(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, StatePath: statePath, OurUID: 1000},
-		fakeSource{}, fakeProber{up: map[string]bool{fixed: true}}, nil, nil, nil)
+		fakeSource{}, fakeProber{up: map[string]bool{fixed: true}}, nil, nil, nil, nil)
 	if r.RecordedPID != 4242 {
 		t.Errorf("RecordedPID = %d, want 4242", r.RecordedPID)
 	}
@@ -254,7 +254,7 @@ func TestGatherRecordedPID(t *testing.T) {
 
 func TestGatherAskpassNotWired(t *testing.T) {
 	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000, GUIAvailable: true},
-		fakeSource{}, fakeProber{up: map[string]bool{fixed: true}}, nil, nil, nil)
+		fakeSource{}, fakeProber{up: map[string]bool{fixed: true}}, nil, nil, nil, nil)
 	if !hasFinding(r, "SSH_ASKPASS is not wired") {
 		t.Errorf("findings = %v, want an askpass-not-wired finding", r.Findings)
 	}
@@ -264,7 +264,7 @@ func TestGatherAskpassPartiallyWired(t *testing.T) {
 	r := Gather(Inputs{
 		FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000,
 		GUIAvailable: true, EnvAskpass: "/usr/bin/sshakku",
-	}, fakeSource{}, fakeProber{up: map[string]bool{fixed: true}}, nil, nil, nil)
+	}, fakeSource{}, fakeProber{up: map[string]bool{fixed: true}}, nil, nil, nil, nil)
 	if !hasFinding(r, "SSH_ASKPASS is not wired") {
 		t.Errorf("findings = %v, want an askpass-not-wired finding when REQUIRE is missing", r.Findings)
 	}
@@ -277,7 +277,7 @@ func TestGatherAskpassWired(t *testing.T) {
 	r := Gather(Inputs{
 		FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000,
 		GUIAvailable: true, EnvAskpass: "/usr/bin/sshakku", EnvAskpassRequire: "prefer",
-	}, src, fakeProber{up: map[string]bool{fixed: true}}, nil, nil, nil)
+	}, src, fakeProber{up: map[string]bool{fixed: true}}, nil, nil, nil, nil)
 	if hasFinding(r, "SSH_ASKPASS is not wired") {
 		t.Errorf("findings = %v, want no askpass finding when fully wired", r.Findings)
 	}
@@ -288,7 +288,7 @@ func TestGatherAskpassWired(t *testing.T) {
 
 func TestGatherAskpassNoGUI(t *testing.T) {
 	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000, GUIAvailable: false},
-		fakeSource{}, fakeProber{up: map[string]bool{fixed: true}}, nil, nil, nil)
+		fakeSource{}, fakeProber{up: map[string]bool{fixed: true}}, nil, nil, nil, nil)
 	if hasFinding(r, "SSH_ASKPASS is not wired") {
 		t.Errorf("findings = %v, want no askpass finding in a headless session", r.Findings)
 	}
@@ -319,6 +319,109 @@ func TestTailLines(t *testing.T) {
 	}
 	if got := tailLines(full, 10); len(got) != 4 {
 		t.Errorf("tailLines(all) = %v, want 4 lines", got)
+	}
+}
+
+func TestHostFindings(t *testing.T) {
+	no, yes := false, true
+
+	if got := hostFindings(HostChecks{}); got != nil {
+		t.Errorf("zero-value HostChecks: got %v, want no findings", got)
+	}
+
+	got := hostFindings(HostChecks{DiskEncrypted: &no})
+	if len(got) != 1 || !strings.Contains(got[0], "not appear to be encrypted") {
+		t.Errorf("unencrypted disk: got %v", got)
+	}
+
+	got = hostFindings(HostChecks{DiskEncrypted: &yes})
+	if len(got) != 0 {
+		t.Errorf("encrypted disk: got %v, want no findings", got)
+	}
+
+	got = hostFindings(HostChecks{TmpTmpfs: &no})
+	if len(got) != 1 || !strings.Contains(got[0], "not a dedicated tmpfs mount") {
+		t.Errorf("non-tmpfs /tmp: got %v", got)
+	}
+
+	got = hostFindings(HostChecks{TmpTmpfs: &yes, TmpSizeBytes: 64 * 1024 * 1024})
+	if len(got) != 1 || !strings.Contains(got[0], "too small") {
+		t.Errorf("undersized tmpfs /tmp: got %v", got)
+	}
+
+	got = hostFindings(HostChecks{TmpTmpfs: &yes, TmpSizeBytes: 2 * 1024 * 1024 * 1024})
+	if len(got) != 0 {
+		t.Errorf("adequately sized tmpfs /tmp: got %v, want no findings", got)
+	}
+
+	got = hostFindings(HostChecks{TPMPresent: &no})
+	if len(got) != 1 || !strings.Contains(got[0], "no TPM device detected") {
+		t.Errorf("no TPM: got %v", got)
+	}
+
+	got = hostFindings(HostChecks{TPMPresent: &yes, TPMVersion: "2.0"})
+	if len(got) != 0 {
+		t.Errorf("TPM present: got %v, want no findings", got)
+	}
+}
+
+func TestHostChecksLine(t *testing.T) {
+	no, yes := false, true
+
+	if got := hostChecksLine(HostChecks{}); got != "" {
+		t.Errorf("zero-value HostChecks: got %q, want empty (Gather called with nil HostSource)", got)
+	}
+
+	got := hostChecksLine(HostChecks{DiskEncrypted: &yes, TmpTmpfs: &yes, TmpSizeBytes: 1024 * 1024 * 1024, TPMPresent: &yes, TPMVersion: "2.0"})
+	for _, want := range []string{"disk encryption: yes", "/tmp: tmpfs, 1.0 GiB", "TPM: present (2.0)"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("hostChecksLine = %q, want it to contain %q", got, want)
+		}
+	}
+
+	got = hostChecksLine(HostChecks{DiskEncrypted: &no, TmpTmpfs: &no, TPMPresent: &no})
+	for _, want := range []string{"disk encryption: no", "/tmp: not tmpfs", "TPM: not detected"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("hostChecksLine = %q, want it to contain %q", got, want)
+		}
+	}
+}
+
+func TestHumanBytes(t *testing.T) {
+	cases := map[int64]string{
+		512:                "512 B",
+		2048:               "2.0 KiB",
+		512 * 1024 * 1024:  "512.0 MiB",
+		1024 * 1024 * 1024: "1.0 GiB",
+	}
+	for n, want := range cases {
+		if got := humanBytes(n); got != want {
+			t.Errorf("humanBytes(%d) = %q, want %q", n, got, want)
+		}
+	}
+}
+
+func TestFormatIncludesEnvironmentSection(t *testing.T) {
+	yes := true
+	r := Report{
+		FixedSock: fixed,
+		Findings:  []string{"no problems detected"},
+		Host:      HostChecks{DiskEncrypted: &yes, TmpTmpfs: &yes, TmpSizeBytes: 1024 * 1024 * 1024, TPMPresent: &yes, TPMVersion: "2.0"},
+	}
+	var buf bytes.Buffer
+	Format(&buf, r)
+	out := buf.String()
+	if !strings.Contains(out, "environment:") || !strings.Contains(out, "disk encryption: yes") {
+		t.Errorf("Format output missing environment section:\n%s", out)
+	}
+}
+
+func TestFormatOmitsEnvironmentSectionWhenUngathered(t *testing.T) {
+	r := Report{FixedSock: fixed, Findings: []string{"no problems detected"}}
+	var buf bytes.Buffer
+	Format(&buf, r)
+	if strings.Contains(buf.String(), "environment:") {
+		t.Errorf("Format output should omit the environment section when Host was never gathered:\n%s", buf.String())
 	}
 }
 

@@ -6,6 +6,8 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -70,7 +72,9 @@ commands:
   askpass-env    print exports routing ssh's askpass through sshakku (GUI only)
   doctor         report the ssh-agent situation; --fix applies the self-heal;
                  --user <name|uid> reports on another user's session (root only,
-                 read-only; auto-detected from SUDO_UID under sudo)
+                 read-only; auto-detected from SUDO_UID under sudo);
+                 --test-backend [name] stores/looks up/deletes a throwaway
+                 probe entry in the named (or configured) secret backend
   forget         delete stored passphrases: <keyname>... or --all
   help           show this help
 `
@@ -572,13 +576,18 @@ func lookupUser(nameOrUID string) (targetUser, error) {
 // cross-user (docs/THREAT-MODEL.md E1: elevation is for read-only inspection,
 // never for writing as root); reading another user's session requires euid 0,
 // since only root can assume another uid's identity to read their socket token.
-func crossUserGuard(target targetUser, fix bool, euid int) string {
+func crossUserGuard(target targetUser, fix, testBackend bool, euid int) string {
 	if target.Source == "" {
 		return ""
 	}
 	if fix {
 		return fmt.Sprintf(
 			"doctor --fix cannot act on another user's session (uid %d); run as that user instead, e.g.:\n  sudo -u %s -H sshakku doctor --fix",
+			target.UID, target.Username)
+	}
+	if testBackend {
+		return fmt.Sprintf(
+			"doctor --test-backend cannot act on another user's session (uid %d); run as that user instead, e.g.:\n  sudo -u %s -H sshakku doctor --test-backend",
 			target.UID, target.Username)
 	}
 	if euid != 0 {
@@ -599,9 +608,17 @@ func crossUserGuard(target targetUser, fix bool, euid int) string {
 // crossUserGuard), and confirms the target's own fixed socket by reading their
 // per-login token from their own kernel keyring — reached by re-executing this
 // binary under their credentials (execTokenSource), never by guessing.
+//
+// --test-backend [name] actively exercises the named secret backend (or, when
+// no name is given, whichever config.toml's secret_backend resolves to) end
+// to end: store, look up, and delete a throwaway probe entry, so a
+// misconfigured backend surfaces here instead of as a broken ssh prompt
+// later. Refused cross-user for the same reason as --fix (see
+// crossUserGuard): it acts, it does not just read.
 func doctor(stdout, stderr io.Writer, args []string) int {
 	fix := false
-	var userArg string
+	testBackend := false
+	var userArg, testBackendName string
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--fix":
@@ -613,10 +630,21 @@ func doctor(stdout, stderr io.Writer, args []string) int {
 				return 2
 			}
 			userArg = args[i]
+		case "--test-backend":
+			testBackend = true
+			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "--") {
+				i++
+				testBackendName = args[i]
+			}
 		default:
 			_, _ = fmt.Fprintf(stderr, "sshakku: doctor: unknown argument %q\n", args[i])
 			return 2
 		}
+	}
+	if testBackendName != "" && !validSecretBackendName(testBackendName) {
+		_, _ = fmt.Fprintf(stderr,
+			"sshakku: doctor --test-backend: unknown backend %q (want secret-service, 1password, or bitwarden)\n", testBackendName)
+		return 2
 	}
 
 	env := paths.FromOS()
@@ -625,7 +653,7 @@ func doctor(stdout, stderr io.Writer, args []string) int {
 		_, _ = fmt.Fprintf(stderr, "sshakku: doctor: %v\n", err)
 		return 2
 	}
-	if msg := crossUserGuard(target, fix, os.Geteuid()); msg != "" {
+	if msg := crossUserGuard(target, fix, testBackend, os.Geteuid()); msg != "" {
 		_, _ = fmt.Fprintf(stderr, "sshakku: doctor: %s\n", msg)
 		return 2
 	}
@@ -637,8 +665,15 @@ func doctor(stdout, stderr io.Writer, args []string) int {
 	layout := paths.Resolve(env, paths.ProbeDir).WithSocketToken(paths.SocketToken())
 
 	diagnose.Format(stdout, gatherReport(env, layout))
+
+	exitCode := 0
+	if testBackend {
+		_, _ = io.WriteString(stdout, "\n── testing secret backend ──\n")
+		log := sessionlog.New(layout.LogFile)
+		exitCode = testSecretBackend(stdout, stderr, layout, log, testBackendName)
+	}
 	if !fix {
-		return 0
+		return exitCode
 	}
 
 	// --fix heals agent state, but a child process cannot rewrite this shell's
@@ -662,7 +697,122 @@ func doctor(stdout, stderr io.Writer, args []string) int {
 			"\nthis shell still points elsewhere; open a new shell or run:\n  export SSH_AUTH_SOCK=%s\n",
 			shellSingleQuote(liveSock))
 	}
-	return 0
+	return exitCode
+}
+
+// validSecretBackendName reports whether name is one of the secret backends
+// newSecretBackend knows how to construct.
+func validSecretBackendName(name string) bool {
+	switch name {
+	case config.SecretBackendSecretService, config.SecretBackendOnePassword, config.SecretBackendBitwarden:
+		return true
+	default:
+		return false
+	}
+}
+
+// doctorProbeService is the throwaway entry testSecretBackend stores, looks
+// up, and deletes; distinguished from a real key's service id (which is
+// always keys.DefaultServicePrefix + "-" + a key filename) so it can never
+// collide with one.
+const doctorProbeService = "sshakku-doctor-probe"
+
+// testSecretBackend exercises name (or, when empty, settings.SecretBackend)
+// end to end: store a throwaway probe entry, look it up back, and delete it,
+// reporting a clear pass/fail for each step instead of a silent
+// misconfiguration that only shows up as a broken ssh prompt later. The
+// probe entry is always deleted before returning, even after a failure, so
+// no leftover test data survives in the wallet. Returns 0 on a clean pass, 1
+// on any failed step.
+func testSecretBackend(stdout, stderr io.Writer, layout paths.Layout, log keys.Logger, name string) int {
+	settings := loadSettings(layout, "doctor", log)
+	if name == "" {
+		name = settings.SecretBackend
+	}
+	settings.SecretBackend = name
+	_, _ = fmt.Fprintf(stdout, "backend: %s\n", name)
+
+	secret, closeSecret := newSecretBackend(currentUser(), log, settings)
+	defer closeSecret()
+
+	probe, err := randomProbeValue()
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "sshakku: doctor --test-backend: %v\n", err)
+		return 1
+	}
+	return probeSecretBackend(stdout, log, secret, probe)
+}
+
+// probeSecretBackend runs the unlock/store/lookup/delete probe against
+// secret, reporting a clear pass/fail per step. Split out from
+// testSecretBackend so the probe logic is testable against a fake
+// keys.SecretBackend, independent of which real backend newSecretBackend
+// would construct. The probe entry is always deleted before returning, even
+// after an earlier step failed, so no leftover test data survives in the
+// wallet.
+func probeSecretBackend(stdout io.Writer, log keys.Logger, secret keys.SecretBackend, probe string) int {
+	if sess, ok := secret.(keys.SecretSession); ok {
+		if err := sess.Unlock(); err != nil {
+			_, _ = fmt.Fprintf(stdout, "  unlock: FAILED: %v\n", err)
+			_, _ = fmt.Fprintln(stdout, "backend test: FAIL")
+			return 1
+		}
+		_, _ = fmt.Fprintln(stdout, "  unlock: ok")
+		defer func() {
+			if err := sess.Lock(); err != nil {
+				_ = log.Log("ERROR", fmt.Sprintf("doctor --test-backend: lock: %v", err))
+			}
+		}()
+	}
+
+	ok := true
+	if err := secret.Store(doctorProbeService, "sshakku doctor test probe", probe); err != nil {
+		_, _ = fmt.Fprintf(stdout, "  store: FAILED: %v\n", err)
+		ok = false
+	} else {
+		_, _ = fmt.Fprintln(stdout, "  store: ok")
+	}
+
+	if ok {
+		switch got, found, err := secret.Lookup(doctorProbeService); {
+		case err != nil:
+			_, _ = fmt.Fprintf(stdout, "  lookup: FAILED: %v\n", err)
+			ok = false
+		case !found:
+			_, _ = fmt.Fprintln(stdout, "  lookup: FAILED: probe entry not found after storing it")
+			ok = false
+		case got != probe:
+			_, _ = fmt.Fprintln(stdout, "  lookup: FAILED: value read back does not match what was stored")
+			ok = false
+		default:
+			_, _ = fmt.Fprintln(stdout, "  lookup: ok")
+		}
+	}
+
+	if err := secret.Delete(doctorProbeService); err != nil {
+		_, _ = fmt.Fprintf(stdout, "  delete: FAILED: %v\n", err)
+		ok = false
+	} else {
+		_, _ = fmt.Fprintln(stdout, "  delete: ok")
+	}
+
+	if ok {
+		_, _ = fmt.Fprintln(stdout, "backend test: PASS")
+		return 0
+	}
+	_, _ = fmt.Fprintln(stdout, "backend test: FAIL")
+	return 1
+}
+
+// randomProbeValue returns a fresh random hex string for testSecretBackend's
+// probe entry, so a lookup can only match what this run itself stored, never
+// a leftover from an earlier one.
+func randomProbeValue() (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("generate probe value: %w", err)
+	}
+	return hex.EncodeToString(b), nil
 }
 
 // doctorCrossUser reports on target's session instead of the invoking one.
@@ -697,6 +847,7 @@ func doctorCrossUser(stdout, stderr io.Writer, invoking paths.Env, target target
 		OurUID:    target.UID,
 	}, agent.Inspector{}, agent.UIDGatedProber{UID: target.UID, Prober: agent.SocketProber{}}, diagnose.ProcfsAncestry{}, diagnose.ProcfsCgroup{},
 		nil, // the keys section only covers the invoking user's own ~/.ssh (see gatherReport)
+		diagnose.ProcfsHostSource{Target: targetEnv.Home},
 	))
 	return 0
 }
@@ -729,7 +880,8 @@ func gatherReport(env paths.Env, layout paths.Layout) diagnose.Report {
 		GUIAvailable:      detectGUIAvailable(),
 		EnvAskpass:        os.Getenv("SSH_ASKPASS"),
 		EnvAskpassRequire: os.Getenv("SSH_ASKPASS_REQUIRE"),
-	}, agent.Inspector{}, agent.SocketProber{}, diagnose.ProcfsAncestry{}, diagnose.ProcfsCgroup{}, keySource)
+	}, agent.Inspector{}, agent.SocketProber{}, diagnose.ProcfsAncestry{}, diagnose.ProcfsCgroup{}, keySource,
+		diagnose.ProcfsHostSource{Target: env.Home})
 }
 
 // forget deletes stored passphrases: either the named keys, or every entry

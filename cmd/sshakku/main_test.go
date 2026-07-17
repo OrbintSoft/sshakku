@@ -32,6 +32,7 @@ func TestRun(t *testing.T) {
 		{"internal read socket token", []string{internalReadSocketTokenCmd}, 0},
 		{"doctor --user missing value", []string{"doctor", "--user"}, 2},
 		{"doctor --user unknown", []string{"doctor", "--user", "sshakku-test-no-such-user"}, 2},
+		{"doctor --test-backend unknown name", []string{"doctor", "--test-backend", "bogus"}, 2},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -127,20 +128,23 @@ func TestCrossUserGuard(t *testing.T) {
 	self := targetUser{Source: ""}
 	other := targetUser{Source: "the --user flag", UID: 1000, Username: "alice"}
 
-	if got := crossUserGuard(self, true, 0); got != "" {
+	if got := crossUserGuard(self, true, false, 0); got != "" {
 		t.Errorf("self, --fix: got %q, want \"\" (nothing cross-user applies)", got)
 	}
-	if got := crossUserGuard(self, false, 1000); got != "" {
+	if got := crossUserGuard(self, false, false, 1000); got != "" {
 		t.Errorf("self, non-root: got %q, want \"\"", got)
 	}
-	if got := crossUserGuard(other, true, 0); got == "" {
+	if got := crossUserGuard(other, true, false, 0); got == "" {
 		t.Error("other user, --fix, root: want a refusal, got \"\"")
 	}
-	if got := crossUserGuard(other, false, 1000); got == "" {
+	if got := crossUserGuard(other, false, false, 1000); got == "" {
 		t.Error("other user, no --fix, non-root: want a refusal (requires root), got \"\"")
 	}
-	if got := crossUserGuard(other, false, 0); got != "" {
+	if got := crossUserGuard(other, false, false, 0); got != "" {
 		t.Errorf("other user, no --fix, root: got %q, want \"\" (read-only cross-user is allowed)", got)
+	}
+	if got := crossUserGuard(other, false, true, 0); got == "" {
+		t.Error("other user, --test-backend, root: want a refusal, got \"\"")
 	}
 }
 

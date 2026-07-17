@@ -62,7 +62,7 @@ func TestGatherKeysLoadedAndTracked(t *testing.T) {
 			"id_ed25519": keystate.Record{AddedAt: fixedNow.Add(-1 * time.Hour), Lifetime: 8 * time.Hour},
 		},
 	}
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, fakeSource{}, fakeProber{}, nil, nil, ks)
+	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, fakeSource{}, fakeProber{}, nil, nil, ks, nil)
 
 	if len(r.Keys) != 1 {
 		t.Fatalf("Keys = %v, want 1 entry", r.Keys)
@@ -92,7 +92,7 @@ func TestGatherKeysNotLoaded(t *testing.T) {
 			agentFP: map[string]bool{},
 		},
 	}
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, fakeSource{}, fakeProber{}, nil, nil, ks)
+	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, fakeSource{}, fakeProber{}, nil, nil, ks, nil)
 
 	if len(r.Keys) != 1 || r.Keys[0].Loaded {
 		t.Fatalf("Keys = %+v, want one not-loaded key", r.Keys)
@@ -116,7 +116,7 @@ func TestGatherKeysLoadedNoExpiry(t *testing.T) {
 			"id_rsa": keystate.Record{AddedAt: time.Now(), Lifetime: 0},
 		},
 	}
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, fakeSource{}, fakeProber{}, nil, nil, ks)
+	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, fakeSource{}, fakeProber{}, nil, nil, ks, nil)
 
 	if len(r.Keys) != 1 || !r.Keys[0].Loaded || !r.Keys[0].NoExpiry {
 		t.Fatalf("Keys = %+v, want one loaded, no-expiry key", r.Keys)
@@ -137,7 +137,7 @@ func TestGatherKeysLoadedUntracked(t *testing.T) {
 		},
 		// no State collaborator: even a loaded key's TTL is unknown.
 	}
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, fakeSource{}, fakeProber{}, nil, nil, ks)
+	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, fakeSource{}, fakeProber{}, nil, nil, ks, nil)
 
 	if len(r.Keys) != 1 || !r.Keys[0].Loaded || r.Keys[0].Tracked {
 		t.Fatalf("Keys = %+v, want one loaded, untracked key", r.Keys)
@@ -163,7 +163,7 @@ func TestGatherKeysExpired(t *testing.T) {
 			"id_rsa": keystate.Record{AddedAt: fixedNow.Add(-9 * time.Hour), Lifetime: 8 * time.Hour},
 		},
 	}
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, fakeSource{}, fakeProber{}, nil, nil, ks)
+	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, fakeSource{}, fakeProber{}, nil, nil, ks, nil)
 
 	var b strings.Builder
 	Format(&b, r)
@@ -183,7 +183,7 @@ func TestGatherKeysExpired(t *testing.T) {
 
 func TestGatherKeysEnumerateError(t *testing.T) {
 	ks := &KeySource{Lister: fakeKeyLister{err: errors.New("boom")}}
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, fakeSource{}, fakeProber{}, nil, nil, ks)
+	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, fakeSource{}, fakeProber{}, nil, nil, ks, nil)
 
 	if r.KeysErr == nil {
 		t.Fatal("KeysErr = nil, want the enumeration error")
@@ -194,7 +194,7 @@ func TestGatherKeysEnumerateError(t *testing.T) {
 }
 
 func TestGatherNilKeySourceSkipsKeysSection(t *testing.T) {
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, fakeSource{}, fakeProber{}, nil, nil, nil)
+	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, fakeSource{}, fakeProber{}, nil, nil, nil, nil)
 	if r.Keys != nil || r.KeysErr != nil {
 		t.Fatalf("Keys/KeysErr = %v/%v, want both zero when KeySource is nil", r.Keys, r.KeysErr)
 	}
