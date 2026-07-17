@@ -262,6 +262,16 @@ done are summarised; see the note at the top of this file for full detail.
        PAM). Deferred to Phase 6; a login/session check, not something a new
        backend needs.
 
+21. **Distribution channel per Linux distro (goal 17; open).** Gentoo already
+    works via the maintainer's personal `orbintsoft-ebuild` overlay; eventual
+    submission to the community GURU overlay is the intended next step there,
+    once the project is stable enough. Debian/Ubuntu/Fedora/openSUSE and
+    friends have no channel decided yet — options include a self-hosted APT/RPM
+    repo, a Launchpad PPA, Fedora COPR, openSUSE OBS, or Snap/Flatpak's own
+    stores — and the project is explicitly **not** ready to submit to any
+    distro's official repository yet. Settle when Phase 8 (packaging) is
+    reached.
+
 ---
 
 ## Phases
@@ -506,7 +516,11 @@ pinned by hand in Phase 0.4 become auto-managed once the `go.mod`/`package.json`
 manifests exist. Pin all third-party actions by full commit SHA with version
 comments, and pin tool/runtime versions (Go, Node, the linters) for reproducible
 builds. Re-evaluate per-file-type lint coverage (rule 12) against whatever file
-types the repo has grown by then. → goal 16; open decisions 9, 11; rules 12, 14.
+types the repo has grown by then. Also rename `test/containers/*-tier2-*`
+files to drop the `tier2` infix — it leaked an internal test-strategy label
+(open decision 20) into filenames meant to describe *what* each script does,
+not *which test tier* runs it; update the workflows and any doc references at
+the same time. → goal 16; open decisions 9, 11, 20; rules 12, 14.
 
 ### Phase 8 — Release pipeline
 
@@ -521,6 +535,48 @@ flow (decided now, detailed steps written when this phase starts):
 5. If those pass too, tag with an incremented version and cut a release,
    building the various packages.
 
+Two refinements to settle when this phase starts:
+
+- **Change-gated releases.** Steps 1–5 should only actually cut a release when
+  the diff since the last tag touches release-relevant files — Go source, the
+  shell init scripts — not when only docs (`*.md`) or CI workflow files
+  changed; a docs-only commit must not bump the version or publish a package.
+- **Package formats.** Survey and build for the most common Linux package
+  formats — `.deb` (Debian/Ubuntu), `.rpm` (Fedora/openSUSE), plus a
+  distro-agnostic format (Snap or Flatpak, to be picked) — alongside the
+  Gentoo ebuild this project already ships by hand. Open decision 21 covers
+  *where* each gets published; this item is only about *building* them.
+
 Until this phase starts, tier 2/3 stay manually-triggered
 (`workflow_dispatch`) jobs (open decision 20) — not part of any automated
-pipeline yet. → open decisions 9, 20.
+pipeline yet. → open decisions 9, 20, 21.
+
+### Phase 9 — Diagnostics hardening
+
+Extends `sshakku doctor` (Phase 3) with checks for conditions outside
+sshakku's own control but that materially weaken its threat model, plus a way
+to actually prove a configured secret backend works end to end instead of
+only discovering it's broken the first time `ssh` needs it.
+
+- Report whether the root/home filesystem is disk-encrypted (best-effort,
+  read-only — e.g. LUKS detection via `/proc/mounts`/block-device crypto
+  type), and whether `/tmp` is tmpfs-backed and reasonably sized. Advisory
+  only: doctor reports, it never configures or refuses to run.
+- `doctor --test-backend <name>` actively exercises the named (or, if
+  omitted, the configured) `SecretBackend` end to end — store, look up, and
+  delete a throwaway probe entry — surfacing a clear pass/fail instead of a
+  silent misconfiguration that only shows up as a broken `ssh` prompt later.
+
+→ goal 8; open decisions 1, 7.
+
+### Phase 10 — Documentation pass & Linux hardening guide
+
+A README and `docs/` overhaul aimed at an end user, not a contributor: explain
+every feature, every `config.toml` key, and every secret backend in one place
+a first-time reader can follow start to finish (today's docs grew
+incrementally, phase by phase, and were never reviewed as a whole for a
+newcomer). Alongside it, a best-practices guide for things outside sshakku's
+own control that materially strengthen its threat model: a short key TTL, not
+leaving the desktop wallet permanently unlocked, full-disk encryption, and a
+properly configured `/tmp` — cross-referencing Phase 9's new `doctor` checks
+for the ones doctor can detect itself. → goals 2, 11, 15; open decision 1.
