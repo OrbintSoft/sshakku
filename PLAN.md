@@ -176,13 +176,17 @@ done are summarised; see the note at the top of this file for full detail.
     each file type entered the repo); CI declares `permissions: contents: read`
     and invokes the same `make lint`. See the per-file-type table under Phase 0.
 
-12. **Install modes & path layout (goals 17–19). Decided (step 1.1):** config
-    **and** the session log live under `${XDG_CONFIG_HOME:-~/.config}/sshakku`;
-    the agent socket resolves `$XDG_RUNTIME_DIR/sshakku` →
-    `/run/user/$UID/sshakku` → `${XDG_CACHE_HOME:-~/.cache}/sshakku`, with an
-    unpredictable per-login `@u`-keyring token as a path component (defense in
-    depth above the `0700` boundary). The per-user bootstrap hook (`~/.bashrc` vs
-    a desktop-session env file) stays open.
+12. **Install modes & path layout (goals 17–19). Decided (step 1.1 for paths,
+    Phase 1.2 for the bootstrap hook):** config **and** the session log live
+    under `${XDG_CONFIG_HOME:-~/.config}/sshakku`; the agent socket resolves
+    `$XDG_RUNTIME_DIR/sshakku` → `/run/user/$UID/sshakku` →
+    `${XDG_CACHE_HOME:-~/.cache}/sshakku`, with an unpredictable per-login
+    `@u`-keyring token as a path component (defense in depth above the `0700`
+    boundary). Per-user bootstrap hook: `$HOME/.bash_profile.d/` if that
+    directory already exists (just drop a file in it, existence is the only
+    check — no attempt to confirm it's actually sourced), else a
+    marker-delimited block appended to `$HOME/.bash_profile` (created if
+    absent) — see Phase 1.2.
 
 13. **Which keys to auto-load is configurable (goals 1, 2, 15). ✅ Done.**
     `config.toml`: `auto_load_mode` (`all`/`include`/`exclude`) +
@@ -336,7 +340,17 @@ up as Go slices there — see Phase 2). → goals 3, 5, 6, 10, 17–19; open dec
 3, 4, 12.
 
 - **1.1 — XDG path layout, out of `~/.ssh`.** → goal 19; open decision 12.
-- **1.2 — Two install modes + bootstrap hook.** → goals 17, 18; open decision 12.
+- **1.2 — Two install modes + bootstrap hook. Decided, not yet
+  implemented.** System-wide (already shipped: `make install`,
+  `/usr/local/bin`, `/etc/profile.d`, needs root) and per-user: binary at
+  `$HOME/.local/bin/sshakku`; the login hook goes into
+  `$HOME/.bash_profile.d/` if that directory already exists, else a
+  marker-delimited block (`# >>> sshakku >>> … # <<< sshakku <<<`) appended
+  to `$HOME/.bash_profile` (created if absent) — idempotent, removable on
+  uninstall. Implemented as a Go `sshakku install`/`sshakku uninstall`
+  subcommand (goal 14: branchy logic belongs in Go, not bash); the
+  Makefile's system-wide `install`/`uninstall` become thin wrappers around
+  it. → goals 17, 18; open decision 12.
 - **1.3 — Silent-on-success & shell safety.** Superseded by the Go seam (`eval
   "$(sshakku shell-init)"`); the remaining bash-side work is `set -u` hardening.
 - **1.4 — Agent lifecycle & recovery.** Moved into the Go core — see Phase 2 slice
@@ -584,8 +598,28 @@ A README and `docs/` overhaul aimed at an end user, not a contributor: explain
 every feature, every `config.toml` key, and every secret backend in one place
 a first-time reader can follow start to finish (today's docs grew
 incrementally, phase by phase, and were never reviewed as a whole for a
-newcomer). Alongside it, a best-practices guide for things outside sshakku's
-own control that materially strengthen its threat model: a short key TTL, not
-leaving the desktop wallet permanently unlocked, full-disk encryption, and a
-properly configured `/tmp` — cross-referencing Phase 9's new `doctor` checks
-for the ones doctor can detect itself. → goals 2, 11, 15; open decision 1.
+newcomer). Everything under this phase is Linux-only as written and will need
+a revisit once Phase 5 (macOS/Windows) lands.
+
+- **10.1 — README + hardening guide. ✅ Done.** README overhaul (what
+  sshakku is, requirements, installation, first run, a links table to every
+  guide) and a new `docs/HARDENING.md`: a short key lifetime, not leaving
+  the desktop wallet permanently unlocked, full-disk encryption, and a
+  properly configured `/tmp` — cross-referencing `doctor`'s environment
+  checks (Phase 9) for the ones it can detect itself, rather than
+  duplicating the reasoning in `docs/CONFIGURATION.md`/`docs/DIAGNOSTICS.md`.
+  Purely user-facing: no roadmap/phase language anywhere in end-user docs.
+- **10.2 — CLI & configuration reference.** `docs/CONFIGURATION.md` covers
+  most settings already; the CLI itself (`sshakku <command>` and every
+  flag, beyond what `--help` prints inline) still has no dedicated
+  reference.
+- **10.3 — Dependencies documentation.** What must be present on the system
+  to *run* sshakku (a Secret Service daemon, `secret-tool`, the `op`/`bw`
+  CLIs, `kdialog`, D-Bus) versus what's needed only to *build* it (the Go
+  toolchain) — for users and packagers alike.
+- **10.4 — Developer/contributor documentation.** Architecture, code
+  layout, how to build/test/run the container test suite.
+  `CONTRIBUTING.md` today covers only licensing/DCO, not how the code is
+  organized or how to work on it.
+
+→ goals 2, 8, 11, 14, 15, 16; open decision 1.
