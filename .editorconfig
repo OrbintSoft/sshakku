@@ -10,11 +10,15 @@ indent_style = space
 indent_size = 2
 
 # Shell scripts and Makefiles are tab-indented (Makefiles require it).
-[*.{sh,zsh}]
+[*.{sh,zsh,bash,bats}]
 indent_style = tab
 
 # Git hooks are extensionless shell scripts; keep them tab-indented too.
 [.githooks/*]
+indent_style = tab
+
+# Stub binaries under the bats fixtures are also extensionless shell scripts.
+[test/bats/fixtures/*]
 indent_style = tab
 
 [Makefile]

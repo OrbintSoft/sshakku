@@ -44,3 +44,6 @@ jobs:
 
       - name: Run make test in ${{ matrix.name }}
         run: docker run --init --rm -v "${{ github.workspace }}":/src:ro -w /src sshakku-test-${{ matrix.name }} make test
+
+      - name: Run make test-bats in ${{ matrix.name }}
+        run: docker run --init --rm -e SSHAKKU_TEST_ALLOW_BATS=1 -v "${{ github.workspace }}":/src:ro -w /src sshakku-test-${{ matrix.name }} make test-bats
