@@ -48,6 +48,27 @@ the environment takes precedence, an exported variable overrides the file in
 either direction — for example `SSHAKKU_QUIET=0` re-enables the notice even when
 `quiet = true` in the file.
 
+## Splitting the config across `config.d/`
+
+Settings can also be split across several files instead of one
+`config.toml`. Every `*.toml` file directly under
+`~/.config/sshakku/config.d/` is read in filename order, each overriding any
+key it sets on top of `config.toml` and the files before it — prefix the
+names with numbers (`00-defaults.toml`, `50-work.toml`) to control that
+order. A key a file doesn't mention is left untouched by that file; setting a
+list key (e.g. `wallet_store_include`) to `[]` explicitly clears it, rather
+than being treated as "not mentioned".
+
+```toml
+# ~/.config/sshakku/config.d/50-work.toml
+key_lifetime = "2h"
+```
+
+Both `config.toml` and `config.d/` are optional and can be used together or
+alone. A syntax error in one `config.d/` file discards only that file — every
+other file, and `config.toml`, still apply — logged to the session log the
+same way a problem in `config.toml` itself is.
+
 ## Choosing the secret backend
 
 By default SSHakku stores passphrases in a dedicated Secret Service collection

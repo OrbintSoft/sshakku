@@ -82,6 +82,86 @@ func TestLoadMalformedErrors(t *testing.T) {
 	}
 }
 
+func TestMergeOtherWinsWhenSet(t *testing.T) {
+	base := File{KeyLifetime: ptr("1h"), WalletStoreInclude: []string{"id_rsa"}}
+	other := File{KeyLifetime: ptr("2h")}
+	got := base.Merge(other)
+	if got.KeyLifetime == nil || *got.KeyLifetime != "2h" {
+		t.Errorf("KeyLifetime = %v, want 2h (other's value)", got.KeyLifetime)
+	}
+	if !reflect.DeepEqual(got.WalletStoreInclude, []string{"id_rsa"}) {
+		t.Errorf("WalletStoreInclude = %v, want base's untouched [id_rsa]", got.WalletStoreInclude)
+	}
+}
+
+func TestMergeExplicitEmptyListOverrides(t *testing.T) {
+	base := File{WalletStoreInclude: []string{"id_rsa"}}
+	other := File{WalletStoreInclude: []string{}}
+	got := base.Merge(other)
+	if got.WalletStoreInclude == nil || len(got.WalletStoreInclude) != 0 {
+		t.Errorf("WalletStoreInclude = %v, want an explicit empty list from other", got.WalletStoreInclude)
+	}
+}
+
+func TestLoadDirMergesInFilenameOrder(t *testing.T) {
+	f, errs := LoadDir(filepath.Join("testdata", "confd"))
+	if len(errs) != 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if f.KeyLifetime == nil || *f.KeyLifetime != "2h" {
+		t.Errorf("KeyLifetime = %v, want 2h (10-override.toml wins over 00-base.toml)", f.KeyLifetime)
+	}
+	if !reflect.DeepEqual(f.WalletStoreInclude, []string{"id_rsa"}) {
+		t.Errorf("WalletStoreInclude = %v, want [id_rsa] from 00-base.toml (10-override.toml never sets it)", f.WalletStoreInclude)
+	}
+}
+
+func TestLoadDirExplicitEmptyListOverrides(t *testing.T) {
+	f, errs := LoadDir(filepath.Join("testdata", "confd-emptylist"))
+	if len(errs) != 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if f.WalletStoreInclude == nil || len(f.WalletStoreInclude) != 0 {
+		t.Errorf("WalletStoreInclude = %v, want an explicit empty list from 10-clear.toml", f.WalletStoreInclude)
+	}
+}
+
+func TestLoadDirSkipsMalformedFileButKeepsOthers(t *testing.T) {
+	f, errs := LoadDir(filepath.Join("testdata", "confd-malformed"))
+	if len(errs) != 1 {
+		t.Fatalf("want exactly one error (the malformed file), got %v", errs)
+	}
+	if !strings.Contains(errs[0].Error(), "10-bad.toml") {
+		t.Errorf("error %v must name the offending file", errs[0])
+	}
+	if f.KeyLifetime == nil || *f.KeyLifetime != "3h" {
+		t.Errorf("KeyLifetime = %v, want 3h from 00-good.toml despite 10-bad.toml", f.KeyLifetime)
+	}
+	if f.Quiet == nil || !*f.Quiet {
+		t.Errorf("Quiet = %v, want true from 20-good2.toml despite 10-bad.toml", f.Quiet)
+	}
+}
+
+func TestLoadDirUnknownKeyErrorsButKeepsRecognisedField(t *testing.T) {
+	f, errs := LoadDir(filepath.Join("testdata", "confd-unknown"))
+	if len(errs) != 1 || !strings.Contains(errs[0].Error(), "bogus_key") {
+		t.Fatalf("want one error naming bogus_key, got %v", errs)
+	}
+	if f.KeyLifetime == nil || *f.KeyLifetime != "1h" {
+		t.Errorf("KeyLifetime = %v, want 1h (the recognised field must still merge)", f.KeyLifetime)
+	}
+}
+
+func TestLoadDirMissingIsZeroNoError(t *testing.T) {
+	f, errs := LoadDir(filepath.Join("testdata", "does-not-exist-dir"))
+	if len(errs) != 0 {
+		t.Fatalf("a missing dir must not error, got %v", errs)
+	}
+	if !reflect.DeepEqual(f, File{}) {
+		t.Errorf("a missing dir must give the zero File, got %+v", f)
+	}
+}
+
 func TestResolveDefaults(t *testing.T) {
 	s, errs := Resolve(File{}, lookupFrom(nil))
 	if len(errs) != 0 {
