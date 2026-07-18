@@ -61,7 +61,7 @@ func TestLoadKeysReloadsAfterRealExpiry(t *testing.T) {
 		Secret:   &fakeSecret{lookupPass: passphrase, lookupFound: true},
 		Adder:    ExecKeyAdder{AskpassProg: askpassScript, KeyLifetime: lifetime},
 		KeyState: state,
-		Config:   Config{GUI: true, KeyLifetime: lifetime},
+		Config:   Config{KeyLifetime: lifetime},
 	}
 
 	if err := loader.LoadKeys(); err != nil {

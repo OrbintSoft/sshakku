@@ -324,10 +324,18 @@ func loadKeys(stderr io.Writer) int {
 	}
 
 	runner := keys.ExecRunner{}
-	prompter := keys.KDialogPrompter{Runner: runner}
 	guiEnv := keys.GUIEnv{
 		WaylandDisplay: os.Getenv("WAYLAND_DISPLAY"),
 		Display:        os.Getenv("DISPLAY"),
+	}
+	kdialog := keys.KDialogPrompter{Runner: runner}
+	// The vault is always consulted first regardless of which of these is
+	// picked (see Loader.loadViaVaultThenPrompt); this only chooses how to
+	// ask when it misses — kdialog when a graphical session is usable,
+	// otherwise the terminal, which needs no external binary.
+	var prompter keys.Prompter = keys.TTYPrompter{}
+	if keys.GUIAvailable(guiEnv, runner, kdialog) {
+		prompter = kdialog
 	}
 
 	secret, closeSecret := newSecretBackend(currentUser(), log, settings)
@@ -344,7 +352,6 @@ func loadKeys(stderr io.Writer) int {
 		Giveup:   giveupStore,
 		KeyState: keyStateStore,
 		Config: keys.Config{
-			GUI:         keys.GUIAvailable(guiEnv, runner, prompter),
 			MaxAttempts: settings.MaxAttempts,
 			WalletStore: settings.StoresWallet,
 			AutoLoad:    settings.AutoLoads,

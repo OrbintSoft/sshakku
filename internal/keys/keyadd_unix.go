@@ -70,19 +70,13 @@ func (a ExecKeyAdder) AddWithAskpass(keyfile, passphrase string) (int, error) {
 	}
 	env = passThrough(env, "PATH", "HOME", "USER", "DISPLAY", "WAYLAND_DISPLAY",
 		"SSH_AUTH_SOCK", "XDG_RUNTIME_DIR", "XDG_CONFIG_HOME", "DBUS_SESSION_BUS_ADDRESS")
-	return a.runSSHAdd(env, keyfile, true)
+	return a.runSSHAdd(env, keyfile)
 }
 
-// AddInteractive runs ssh-add attached to the terminal so it can prompt the user
-// directly — the path taken when no graphical prompter is available.
-func (a ExecKeyAdder) AddInteractive(keyfile string) (int, error) {
-	return a.runSSHAdd(os.Environ(), keyfile, false)
-}
-
-// runSSHAdd runs `ssh-add <keyfile>` with env, returning its exit code. With
-// askpass, ssh-add is detached (setsid, no stdin) so it uses SSH_ASKPASS and its
-// chatter is discarded; otherwise it inherits the terminal to prompt.
-func (a ExecKeyAdder) runSSHAdd(env []string, keyfile string, askpass bool) (int, error) {
+// runSSHAdd runs `ssh-add <keyfile>` with env, detached from any terminal
+// (setsid, no stdin) so it fetches the passphrase via SSH_ASKPASS and its own
+// chatter is discarded, returning its exit code.
+func (a ExecKeyAdder) runSSHAdd(env []string, keyfile string) (int, error) {
 	to := a.AddTimeout
 	if to == 0 {
 		to = defaultAddTimeout
@@ -92,16 +86,10 @@ func (a ExecKeyAdder) runSSHAdd(env []string, keyfile string, askpass bool) (int
 
 	cmd := exec.CommandContext(ctx, "ssh-add", sshAddArgs(a.KeyLifetime, keyfile)...)
 	cmd.Env = env
-	if askpass {
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-		cmd.Stdin = nil
-		cmd.Stdout = io.Discard
-		cmd.Stderr = io.Discard
-	} else {
-		cmd.Stdin = os.Stdin
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-	}
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	cmd.Stdin = nil
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
 
 	err := cmd.Run()
 	if err != nil {

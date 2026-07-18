@@ -35,8 +35,6 @@ type KeyAdder interface {
 	// AddWithAskpass adds keyfile, handing passphrase to ssh-add out of band
 	// through the keyring + SSH_ASKPASS helper, so it never appears in argv.
 	AddWithAskpass(keyfile, passphrase string) (int, error)
-	// AddInteractive adds keyfile, letting ssh-add prompt on the terminal.
-	AddInteractive(keyfile string) (int, error)
 }
 
 // GiveupStore persists, per key, that loading was abandoned after the bounded
@@ -71,9 +69,6 @@ type Notifier interface {
 
 // Config tunes a Loader.
 type Config struct {
-	// GUI is true when a graphical session and prompter are available, selecting
-	// the secret-store path over a terminal prompt.
-	GUI bool
 	// ServicePrefix prefixes the per-key secret-store service; "" uses "SSH-Key".
 	ServicePrefix string
 	// MaxAttempts bounds the retries per key; <1 uses 3.
@@ -211,20 +206,16 @@ func (l Loader) loadOne(keyfile string, loaded map[string]bool) {
 
 // addWithRetries loads keyfile, retrying on a wrong passphrase up to MaxAttempts
 // times. On success it clears any give-up record; when the attempts are
-// exhausted it gives up persistently and notifies the user. A canceled prompt or
-// a hard error abandons the key without recording a give-up.
+// exhausted it gives up persistently and notifies the user. A canceled prompt,
+// no terminal to prompt on, or a hard error abandons the key without recording
+// a give-up.
 func (l Loader) addWithRetries(keyfile, keyname string) {
 	max := l.Config.MaxAttempts
 	if max < 1 {
 		max = defaultMaxAttempts
 	}
 
-	var loaded, exhausted bool
-	if l.Config.GUI {
-		loaded, exhausted = l.loadViaVaultThenPrompt(keyfile, keyname, max)
-	} else {
-		loaded, exhausted = l.loadInteractive(keyfile, keyname, max)
-	}
+	loaded, exhausted := l.loadViaVaultThenPrompt(keyfile, keyname, max)
 
 	switch {
 	case loaded:
@@ -261,9 +252,15 @@ func (l Loader) loadViaVaultThenPrompt(keyfile, keyname string, max int) (loaded
 	for attempt := 1; attempt <= max; attempt++ {
 		pass, err := l.Prompt.Prompt(keyname)
 		if err != nil {
-			if errors.Is(err, ErrPromptCanceled) {
+			switch {
+			case errors.Is(err, ErrPromptCanceled):
 				l.logf("ERROR", "passphrase prompt canceled for %s", keyname)
-			} else {
+			case errors.Is(err, ErrNoTerminal):
+				// No GUI and no controlling terminal are both normal, expected
+				// deployments — not surfaced to the user, and not logged as an
+				// operator problem.
+				l.logf("INFO", "no terminal available to prompt for %s", keyname)
+			default:
 				l.failPrompt(keyname, err)
 			}
 			return false, false
@@ -283,31 +280,15 @@ func (l Loader) loadViaVaultThenPrompt(keyfile, keyname string, max int) (loaded
 	return false, true
 }
 
-// loadInteractive lets ssh-add prompt on the terminal, retrying up to max times.
-// It is the path taken when no graphical prompter is available.
-func (l Loader) loadInteractive(keyfile, keyname string, max int) (loaded, exhausted bool) {
-	l.logf("INFO", "no GUI detected, adding %s on the terminal", keyname)
-	for attempt := 1; attempt <= max; attempt++ {
-		rc, err := l.Adder.AddInteractive(keyfile)
-		if err != nil {
-			l.failAdd(keyname, err)
-			return false, false
-		}
-		if rc == 0 {
-			l.logf("INFO", "added %s to agent", keyname)
-			return true, false
-		}
-		l.logf("ERROR", "failed to add %s (attempt %d/%d)", keyname, attempt, max)
-	}
-	return false, true
-}
-
 // storedPassphrase returns the stored passphrase for service and whether a
-// non-empty one was found; a lookup error is logged and treated as a miss.
+// non-empty one was found. A lookup error is logged at INFO, not ERROR: it is
+// usually just the configured backend not being reachable in this
+// environment (no D-Bus session, no GUI) — an expected, recoverable miss, not
+// an operator problem — and is treated the same way as "no entry found".
 func (l Loader) storedPassphrase(service, keyname string) (string, bool) {
 	pass, found, err := l.Secret.Lookup(service)
 	if err != nil {
-		l.logf("ERROR", "secret lookup for %s: %v", keyname, err)
+		l.logf("INFO", "secret lookup for %s: %v", keyname, err)
 		return "", false
 	}
 	if found && strings.TrimSpace(pass) != "" {

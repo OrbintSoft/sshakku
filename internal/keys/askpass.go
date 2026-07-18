@@ -1,6 +1,7 @@
 package keys
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"regexp"
@@ -60,7 +61,14 @@ func (b Broker) Answer(prompt string) (reply string, ok bool) {
 	if !isPassphrase {
 		ans, err := b.TTY.Prompt(prompt, !looksLikeConfirmation(prompt))
 		if err != nil {
-			b.logf("ERROR", "askpass: no terminal for prompt: %v", err)
+			// No controlling terminal is a normal, expected condition (a
+			// non-interactive invocation with nowhere to prompt), not an
+			// operator problem; anything else prompting failed for is.
+			if errors.Is(err, ErrNoTerminal) {
+				b.logf("INFO", "askpass: no terminal for prompt: %v", err)
+			} else {
+				b.logf("ERROR", "askpass: no terminal for prompt: %v", err)
+			}
 			return "", false
 		}
 		return ans, true
@@ -69,9 +77,13 @@ func (b Broker) Answer(prompt string) (reply string, ok bool) {
 	keyname := filepath.Base(keyfile)
 	service := servicePrefixOf(b.Config) + "-" + keyname
 
+	// A lookup failure is usually just the configured backend not being
+	// reachable in this environment (no D-Bus session, no GUI) — expected and
+	// recoverable, not an operator problem — so it is logged at INFO and
+	// treated the same as "no entry found".
 	pass, found, err := b.Secret.Lookup(service)
 	if err != nil {
-		b.logf("ERROR", "askpass: secret lookup for %s: %v", keyname, err)
+		b.logf("INFO", "askpass: secret lookup for %s: %v", keyname, err)
 	} else if found && strings.TrimSpace(pass) != "" {
 		b.logf("INFO", "askpass: provided passphrase for %s from the wallet", keyname)
 		return pass, true
@@ -81,7 +93,11 @@ func (b Broker) Answer(prompt string) (reply string, ok bool) {
 	// next expiry is silent.
 	typed, err := b.TTY.Prompt(prompt, true)
 	if err != nil {
-		b.logf("ERROR", "askpass: no terminal to prompt for %s: %v", keyname, err)
+		if errors.Is(err, ErrNoTerminal) {
+			b.logf("INFO", "askpass: no terminal to prompt for %s: %v", keyname, err)
+		} else {
+			b.logf("ERROR", "askpass: no terminal to prompt for %s: %v", keyname, err)
+		}
 		return "", false
 	}
 	if strings.TrimSpace(typed) != "" {
