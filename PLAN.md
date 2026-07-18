@@ -176,8 +176,8 @@ done are summarised; see the note at the top of this file for full detail.
     each file type entered the repo); CI declares `permissions: contents: read`
     and invokes the same `make lint`. See the per-file-type table under Phase 0.
 
-12. **Install modes & path layout (goals 17–19). Decided (step 1.1 for paths,
-    Phase 1.2 for the bootstrap hook):** config **and** the session log live
+12. **Install modes & path layout (goals 17–19). ✅ Done (step 1.1 for
+    paths, Phase 1.2 for the bootstrap hook):** config **and** the session log live
     under `${XDG_CONFIG_HOME:-~/.config}/sshakku`; the agent socket resolves
     `$XDG_RUNTIME_DIR/sshakku` → `/run/user/$UID/sshakku` →
     `${XDG_CACHE_HOME:-~/.cache}/sshakku`, with an unpredictable per-login
@@ -340,17 +340,23 @@ up as Go slices there — see Phase 2). → goals 3, 5, 6, 10, 17–19; open dec
 3, 4, 12.
 
 - **1.1 — XDG path layout, out of `~/.ssh`.** → goal 19; open decision 12.
-- **1.2 — Two install modes + bootstrap hook. Decided, not yet
-  implemented.** System-wide (already shipped: `make install`,
-  `/usr/local/bin`, `/etc/profile.d`, needs root) and per-user: binary at
-  `$HOME/.local/bin/sshakku`; the login hook goes into
-  `$HOME/.bash_profile.d/` if that directory already exists, else a
-  marker-delimited block (`# >>> sshakku >>> … # <<< sshakku <<<`) appended
-  to `$HOME/.bash_profile` (created if absent) — idempotent, removable on
-  uninstall. Implemented as a Go `sshakku install`/`sshakku uninstall`
-  subcommand (goal 14: branchy logic belongs in Go, not bash); the
-  Makefile's system-wide `install`/`uninstall` become thin wrappers around
-  it. → goals 17, 18; open decision 12.
+- **1.2 — Two install modes + bootstrap hook. ✅ Done.** System-wide
+  (`make install`/`make uninstall`, `/usr/local/bin`, `/etc/profile.d`,
+  needs root) and per-user (`make install-user`/`make uninstall-user`, no
+  root): binary at `$HOME/.local/bin/sshakku`; a new `install-user-hook.sh`
+  renders the same `nn-ssh-init-linux.sh` hook logic once to
+  `$HOME/.local/share/sshakku/shell-hook.sh` (binary path substituted in,
+  same `sed` mechanism the system-wide install already uses), so wiring it
+  in is always a single `source` line — dropped into
+  `$HOME/.bash_profile.d/` if that directory already exists (existence is
+  the only check), else idempotently upserted as a marker-delimited block
+  (`# >>> sshakku >>> … # <<< sshakku <<<`) into `$HOME/.bash_profile`
+  (created if absent), verified byte-for-byte idempotent across repeated
+  installs and fully reversible on uninstall. Kept in shell/Make rather
+  than a new Go subcommand: this is a one-shot, human-invoked operation,
+  not the always-running logic goal 14 targets, so the usual
+  move-it-to-Go argument doesn't carry the same weight here. → goals 17,
+  18; open decision 12.
 - **1.3 — Silent-on-success & shell safety.** Superseded by the Go seam (`eval
   "$(sshakku shell-init)"`); the remaining bash-side work is `set -u` hardening.
 - **1.4 — Agent lifecycle & recovery.** Moved into the Go core — see Phase 2 slice

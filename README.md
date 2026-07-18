@@ -27,23 +27,43 @@ goes wrong, `sshakku doctor` explains what and, with `--fix`, repairs it.
 
 ## Installation
 
-### From source
+Both modes build from source with the same `git clone` first:
 
 ```sh
 git clone https://github.com/OrbintSoft/sshakku.git
 cd sshakku
+```
+
+### System-wide
+
+```sh
 sudo make install
 ```
 
-This builds the `sshakku` binary and installs it to `/usr/local/bin`, plus a
-login hook to `/etc/profile.d` that wires it into every shell. `sudo` is
-needed because both locations are root-owned; `sshakku` itself never runs with
+Installs the `sshakku` binary to `/usr/local/bin`, plus a login hook to
+`/etc/profile.d` that wires it into every user's shell. `sudo` is needed
+because both locations are root-owned; `sshakku` itself never runs with
 elevated privileges — only the one-time install does.
 
 To remove it: `sudo make uninstall`.
 
 Override `PREFIX`/`BINDIR`/`DESTDIR`/`ETC_PROFILE_D` on the `make install`
 command line to install elsewhere (e.g. packaging into a staging root).
+
+### Per-user
+
+```sh
+make install-user
+```
+
+No `sudo` needed. Installs the binary to `$HOME/.local/bin/sshakku` and
+wires the same login hook into your own shell only: if
+`$HOME/.bash_profile.d/` already exists, a file is dropped there;
+otherwise a clearly delimited block is added to `$HOME/.bash_profile`
+(created if it doesn't exist yet), leaving the rest of the file untouched.
+Make sure `$HOME/.local/bin` is on your `PATH`.
+
+To remove it: `make uninstall-user`.
 
 ### Gentoo
 
