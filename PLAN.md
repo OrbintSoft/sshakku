@@ -633,10 +633,12 @@ a revisit once Phase 5 (macOS/Windows) lands.
   `docs/DIAGNOSTICS.md` for `doctor`'s full report detail and
   `docs/CONFIGURATION.md` for `forget`'s policy interactions rather than
   duplicating either.
-- **10.3 — Dependencies documentation.** What must be present on the system
-  to *run* sshakku (a Secret Service daemon, `secret-tool`, the `op`/`bw`
-  CLIs, `kdialog`, D-Bus) versus what's needed only to *build* it (the Go
-  toolchain) — for users and packagers alike.
+- **10.3 — Dependencies documentation. ✅ Done.** New `docs/DEPENDENCIES.md`:
+  what must be present to *run* sshakku (OpenSSH tools always; a D-Bus
+  session bus + Secret Service, `secret-tool`, `kdialog`, `op`, `bw`
+  conditionally, by backend/feature) versus what's needed only to *build* it
+  (the Go toolchain) — plus a packaging-oriented summary of which
+  dependencies are mandatory versus recommended-only.
 - **10.4 — Developer/contributor documentation.** Architecture, code
   layout, how to build/test/run the container test suite.
   `CONTRIBUTING.md` today covers only licensing/DCO, not how the code is
