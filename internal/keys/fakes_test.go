@@ -122,15 +122,13 @@ func (s *fakeSecret) Lock() error {
 // fakeKeyAdder records each add and returns scripted exit codes per call.
 type fakeKeyAdder struct {
 	withCodes []int // exit codes for successive AddWithAskpass calls
-	intCodes  []int // exit codes for successive AddInteractive calls
 	err       error
 	calls     []addCall
 }
 
 type addCall struct {
-	keyfile     string
-	passphrase  string
-	interactive bool
+	keyfile    string
+	passphrase string
 }
 
 func (a *fakeKeyAdder) AddWithAskpass(keyfile, passphrase string) (int, error) {
@@ -139,14 +137,6 @@ func (a *fakeKeyAdder) AddWithAskpass(keyfile, passphrase string) (int, error) {
 		return 0, a.err
 	}
 	return popCode(&a.withCodes), nil
-}
-
-func (a *fakeKeyAdder) AddInteractive(keyfile string) (int, error) {
-	a.calls = append(a.calls, addCall{keyfile: keyfile, interactive: true})
-	if a.err != nil {
-		return 0, a.err
-	}
-	return popCode(&a.intCodes), nil
 }
 
 // popCode returns and removes the first code, defaulting to 0 when exhausted.

@@ -120,12 +120,58 @@ func TestBrokerNonPassphrasePassThrough(t *testing.T) {
 	}
 }
 
+// TestBrokerNoTerminal confirms that no controlling terminal — a normal,
+// expected condition for a non-interactive invocation — declines the prompt
+// without ok, and is logged at INFO, not ERROR.
 func TestBrokerNoTerminal(t *testing.T) {
 	secret := &fakeSecret{lookupFound: false}
-	tty := &fakeTTY{err: errors.New("no tty")}
-	b := Broker{Secret: secret, TTY: tty, Log: &fakeLogger{}}
+	tty := &fakeTTY{err: ErrNoTerminal}
+	log := &fakeLogger{}
+	b := Broker{Secret: secret, TTY: tty, Log: log}
 
 	if reply, ok := b.Answer("Enter passphrase for key '/home/u/.ssh/id_rsa': "); ok || reply != "" {
 		t.Fatalf("Answer = (%q, %v), want (\"\", false) with no terminal", reply, ok)
+	}
+	if !log.contains("INFO askpass: no terminal") {
+		t.Fatalf("expected an INFO no-terminal log, got %v", log.lines)
+	}
+}
+
+// TestBrokerPromptFailureLogsError confirms that a genuine prompt failure —
+// anything other than no controlling terminal — still logs at ERROR.
+func TestBrokerPromptFailureLogsError(t *testing.T) {
+	secret := &fakeSecret{lookupFound: false}
+	tty := &fakeTTY{err: errors.New("terminal ioctl boom")}
+	log := &fakeLogger{}
+	b := Broker{Secret: secret, TTY: tty, Log: log}
+
+	if reply, ok := b.Answer("Enter passphrase for key '/home/u/.ssh/id_rsa': "); ok || reply != "" {
+		t.Fatalf("Answer = (%q, %v), want (\"\", false)", reply, ok)
+	}
+	if !log.contains("ERROR askpass: no terminal") {
+		t.Fatalf("expected an ERROR log for a genuine prompt failure, got %v", log.lines)
+	}
+}
+
+// TestBrokerLookupErrorLogsInfoNotError confirms a Secret.Lookup failure —
+// usually the configured backend not being reachable in this environment —
+// is logged at INFO and still falls through to the terminal prompt.
+func TestBrokerLookupErrorLogsInfoNotError(t *testing.T) {
+	secret := &fakeSecret{lookupErr: errors.New("dbus: not reachable")}
+	tty := &fakeTTY{answer: "typed-pass"}
+	log := &fakeLogger{}
+	b := Broker{Secret: secret, TTY: tty, Log: log}
+
+	reply, ok := b.Answer("Enter passphrase for key '/home/u/.ssh/id_rsa': ")
+	if !ok || reply != "typed-pass" {
+		t.Fatalf("Answer = (%q, %v), want (typed-pass, true)", reply, ok)
+	}
+	if !log.contains("INFO askpass: secret lookup") {
+		t.Fatalf("expected an INFO secret-lookup log, got %v", log.lines)
+	}
+	for _, l := range log.lines {
+		if len(l) >= 5 && l[:5] == "ERROR" {
+			t.Fatalf("an unreachable backend must not log at ERROR, got %v", log.lines)
+		}
 	}
 }

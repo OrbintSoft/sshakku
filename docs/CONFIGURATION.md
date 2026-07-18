@@ -219,14 +219,16 @@ so re-adding the key never asks you to retype it.
   on the terminal — and a passphrase typed at that fallback is then stored in the
   wallet for next time.
 
-The askpass routing is wired into every login shell — interactive or not — but
-only when a graphical secret prompter is available; a headless session always
-keeps ssh's own terminal prompting. It is passive plumbing (it only matters if
-ssh later asks for a passphrase), so a `scp`/`rsync`/`git` script run from a
-login shell can still be refilled from the wallet silently instead of failing
-outright for lack of a tty; proactive key loading (re-adding expired keys from
-the wallet on its own) remains interactive-only, since it may prompt and write
-to the terminal.
+The askpass routing is wired into every login shell — interactive or not —
+and always tries the wallet first, whether or not a graphical secret prompter
+is available: a GUI only changes *how* a wallet miss is then prompted for
+(a dialog versus the terminal), never whether the wallet is consulted at all.
+It is passive plumbing (it only matters if ssh later asks for a passphrase),
+so a `scp`/`rsync`/`git` script run from a login shell can still be refilled
+from the wallet silently instead of failing outright for lack of a tty;
+proactive key loading (re-adding expired keys from the wallet on its own)
+remains interactive-only, since a wallet-miss prompt may write to the
+terminal.
 
 See [Hardening](HARDENING.md#a-short-key-lifetime) for why a short lifetime is
 worth keeping.

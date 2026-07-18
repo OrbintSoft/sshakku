@@ -25,7 +25,7 @@ func TestLoadKeysSkipsLoaded(t *testing.T) {
 		Runner: r,
 		Adder:  adder,
 		Log:    log,
-		Config: Config{GUI: true},
+		Config: Config{},
 	}
 	if err := l.LoadKeys(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -46,12 +46,12 @@ func TestLoadKeysStoredPassphrase(t *testing.T) {
 	l := Loader{
 		Keys:   fakeLister{paths: []string{"/ssh/id_rsa"}},
 		Runner: r, Secret: secret, Prompt: &fakePrompter{}, Adder: adder, Log: log,
-		Config: Config{GUI: true},
+		Config: Config{},
 	}
 	if err := l.LoadKeys(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(adder.calls) != 1 || adder.calls[0].interactive || adder.calls[0].passphrase != "stored-pass" {
+	if len(adder.calls) != 1 || adder.calls[0].passphrase != "stored-pass" {
 		t.Fatalf("calls = %+v, want one askpass add with the stored pass", adder.calls)
 	}
 	if len(secret.stored) != 0 {
@@ -67,7 +67,7 @@ func TestLoadKeysPromptThenStore(t *testing.T) {
 	l := Loader{
 		Keys:   fakeLister{paths: []string{"/ssh/id_rsa"}},
 		Runner: r, Secret: secret, Prompt: prompter, Adder: adder, Log: &fakeLogger{},
-		Config: Config{GUI: true},
+		Config: Config{},
 	}
 	if err := l.LoadKeys(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -84,6 +84,37 @@ func TestLoadKeysPromptThenStore(t *testing.T) {
 	}
 }
 
+// TestLoadKeysLookupErrorLogsInfoNotError confirms a lookup error (the
+// backend being unreachable in this environment, e.g. no D-Bus session) is
+// logged at INFO and still falls through to prompting — not treated as an
+// operator-actionable ERROR the way a genuine failure later (a rejected
+// stored passphrase, an exhausted retry loop) still is.
+func TestLoadKeysLookupErrorLogsInfoNotError(t *testing.T) {
+	r := newFakeRunner().on("ssh-add", agentEmpty()).on("ssh-keygen", keygen("SHA256:NEW"))
+	secret := &fakeSecret{lookupErr: errors.New("dbus: not reachable")}
+	prompter := &fakePrompter{pass: "typed-pass"}
+	adder := &fakeKeyAdder{withCodes: []int{0}}
+	log := &fakeLogger{}
+	l := Loader{
+		Keys:   fakeLister{paths: []string{"/ssh/id_rsa"}},
+		Runner: r, Secret: secret, Prompt: prompter, Adder: adder, Log: log,
+	}
+	if err := l.LoadKeys(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(adder.calls) != 1 || adder.calls[0].passphrase != "typed-pass" {
+		t.Fatalf("calls = %+v, want a lookup error to fall through to prompting", adder.calls)
+	}
+	if !log.contains("INFO secret lookup") {
+		t.Fatalf("expected an INFO secret-lookup log, got %v", log.lines)
+	}
+	for _, l := range log.lines {
+		if strings.HasPrefix(l, "ERROR") {
+			t.Fatalf("an unreachable backend must not log at ERROR, got %v", log.lines)
+		}
+	}
+}
+
 func TestLoadKeysPromptThenStoreExcludedByPolicy(t *testing.T) {
 	r := newFakeRunner().on("ssh-add", agentEmpty()).on("ssh-keygen", keygen("SHA256:NEW"))
 	secret := &fakeSecret{lookupFound: false}
@@ -93,7 +124,7 @@ func TestLoadKeysPromptThenStoreExcludedByPolicy(t *testing.T) {
 	l := Loader{
 		Keys:   fakeLister{paths: []string{"/ssh/id_rsa"}},
 		Runner: r, Secret: secret, Prompt: prompter, Adder: adder, Log: log,
-		Config: Config{GUI: true, WalletStore: func(keyname string) bool { return keyname != "id_rsa" }},
+		Config: Config{WalletStore: func(keyname string) bool { return keyname != "id_rsa" }},
 	}
 	if err := l.LoadKeys(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -118,7 +149,7 @@ func TestLoadKeysAutoLoadExcludedByPolicyNeverAdded(t *testing.T) {
 	l := Loader{
 		Keys:   fakeLister{paths: []string{"/ssh/id_rsa"}},
 		Runner: r, Adder: adder, Log: log,
-		Config: Config{GUI: true, AutoLoad: func(keyname string) bool { return keyname != "id_rsa" }},
+		Config: Config{AutoLoad: func(keyname string) bool { return keyname != "id_rsa" }},
 	}
 	if err := l.LoadKeys(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -144,7 +175,7 @@ func TestLoadKeysRetriesThenGivesUp(t *testing.T) {
 	l := Loader{
 		Keys:   fakeLister{paths: []string{"/ssh/id_rsa"}},
 		Runner: r, Secret: secret, Prompt: prompter, Adder: adder, Log: log,
-		Config: Config{GUI: true},
+		Config: Config{},
 	}
 	if err := l.LoadKeys(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -166,7 +197,7 @@ func TestLoadKeysStaleStoredThenPromptStores(t *testing.T) {
 	l := Loader{
 		Keys:   fakeLister{paths: []string{"/ssh/id_rsa"}},
 		Runner: r, Secret: secret, Prompt: prompter, Adder: adder, Log: log,
-		Config: Config{GUI: true},
+		Config: Config{},
 	}
 	if err := l.LoadKeys(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -191,7 +222,7 @@ func TestLoadKeysNotifiesOnGiveup(t *testing.T) {
 	l := Loader{
 		Keys:   fakeLister{paths: []string{"/ssh/id_rsa"}},
 		Runner: r, Secret: secret, Prompt: prompter, Adder: adder, Log: &fakeLogger{},
-		Notify: notifier, Config: Config{GUI: true},
+		Notify: notifier, Config: Config{},
 	}
 	if err := l.LoadKeys(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -211,7 +242,7 @@ func TestLoadKeysPromptCanceled(t *testing.T) {
 	l := Loader{
 		Keys:   fakeLister{paths: []string{"/ssh/id_rsa"}},
 		Runner: r, Secret: secret, Prompt: prompter, Adder: adder, Log: log,
-		Notify: notifier, Config: Config{GUI: true},
+		Notify: notifier, Config: Config{},
 	}
 	if err := l.LoadKeys(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -227,23 +258,59 @@ func TestLoadKeysPromptCanceled(t *testing.T) {
 	}
 }
 
-func TestLoadKeysNoGUITerminalPath(t *testing.T) {
+// TestLoadKeysNoGUIStillUsesVault confirms the proactive loader consults the
+// secret backend regardless of any graphical prompter being available — a
+// headless interactive session with a CLI-only backend (op, bw) must still
+// benefit from a stored passphrase, not just kdialog-equipped sessions.
+func TestLoadKeysNoGUIStillUsesVault(t *testing.T) {
 	r := newFakeRunner().on("ssh-add", agentEmpty()).on("ssh-keygen", keygen("SHA256:NEW"))
-	adder := &fakeKeyAdder{intCodes: []int{0}}
+	secret := &fakeSecret{lookupPass: "stored-pass", lookupFound: true}
+	adder := &fakeKeyAdder{withCodes: []int{0}}
 	log := &fakeLogger{}
 	l := Loader{
 		Keys:   fakeLister{paths: []string{"/ssh/id_rsa"}},
-		Runner: r, Adder: adder, Log: log,
-		Config: Config{GUI: false},
+		Runner: r, Secret: secret, Prompt: &fakePrompter{}, Adder: adder, Log: log,
 	}
 	if err := l.LoadKeys(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(adder.calls) != 1 || !adder.calls[0].interactive {
-		t.Fatalf("calls = %+v, want one interactive add", adder.calls)
+	if len(adder.calls) != 1 || adder.calls[0].passphrase != "stored-pass" {
+		t.Fatalf("calls = %+v, want one add with the stored pass, no GUI needed", adder.calls)
 	}
-	if !log.contains("no GUI") || !log.contains("added id_rsa") {
-		t.Fatalf("expected no-GUI + added logs, got %v", log.lines)
+}
+
+// TestLoadKeysNoTerminalSkipsSilently confirms that having no controlling
+// terminal to prompt on — a normal, expected condition for a non-interactive
+// or otherwise detached invocation — never surfaces as a user-visible notice
+// and is logged at INFO, not ERROR.
+func TestLoadKeysNoTerminalSkipsSilently(t *testing.T) {
+	r := newFakeRunner().on("ssh-add", agentEmpty()).on("ssh-keygen", keygen("SHA256:NEW"))
+	secret := &fakeSecret{lookupFound: false}
+	prompter := &fakePrompter{err: ErrNoTerminal}
+	adder := &fakeKeyAdder{}
+	notifier := &fakeNotifier{}
+	log := &fakeLogger{}
+	l := Loader{
+		Keys:   fakeLister{paths: []string{"/ssh/id_rsa"}},
+		Runner: r, Secret: secret, Prompt: prompter, Adder: adder, Log: log,
+		Notify: notifier,
+	}
+	if err := l.LoadKeys(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(adder.calls) != 0 {
+		t.Fatalf("no terminal to prompt on must not add, got %d", len(adder.calls))
+	}
+	if !log.contains("INFO no terminal available") {
+		t.Fatalf("expected an INFO no-terminal log, got %v", log.lines)
+	}
+	for _, l := range log.lines {
+		if strings.HasPrefix(l, "ERROR") {
+			t.Fatalf("no terminal available must never log at ERROR, got %v", log.lines)
+		}
+	}
+	if len(notifier.msgs) != 0 {
+		t.Fatalf("no terminal available must never notify the user, got %v", notifier.msgs)
 	}
 }
 
@@ -256,7 +323,7 @@ func TestLoadKeysSkipsGivenUp(t *testing.T) {
 	l := Loader{
 		Keys:   fakeLister{paths: []string{"/ssh/id_rsa"}},
 		Runner: r, Secret: &fakeSecret{}, Prompt: &fakePrompter{}, Adder: adder, Log: log,
-		Giveup: give, Config: Config{GUI: true},
+		Giveup: give, Config: Config{},
 	}
 	if err := l.LoadKeys(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -278,7 +345,7 @@ func TestLoadKeysRecordsGiveupAfterRetries(t *testing.T) {
 	l := Loader{
 		Keys:   fakeLister{paths: []string{"/ssh/id_rsa"}},
 		Runner: r, Secret: secret, Prompt: prompter, Adder: adder, Log: &fakeLogger{},
-		Giveup: give, Config: Config{GUI: true},
+		Giveup: give, Config: Config{},
 	}
 	if err := l.LoadKeys(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -296,7 +363,7 @@ func TestLoadKeysClearsGiveupOnSuccess(t *testing.T) {
 	l := Loader{
 		Keys:   fakeLister{paths: []string{"/ssh/id_rsa"}},
 		Runner: r, Secret: secret, Prompt: &fakePrompter{}, Adder: adder, Log: &fakeLogger{},
-		Giveup: give, Config: Config{GUI: true},
+		Giveup: give, Config: Config{},
 	}
 	if err := l.LoadKeys(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -314,7 +381,7 @@ func TestLoadKeysSavesKeyStateOnSuccess(t *testing.T) {
 	l := Loader{
 		Keys:   fakeLister{paths: []string{"/ssh/id_rsa"}},
 		Runner: r, Secret: secret, Prompt: &fakePrompter{}, Adder: adder, Log: &fakeLogger{},
-		KeyState: ks, Config: Config{GUI: true, KeyLifetime: 8 * time.Hour},
+		KeyState: ks, Config: Config{KeyLifetime: 8 * time.Hour},
 	}
 	if err := l.LoadKeys(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -335,7 +402,7 @@ func TestLoadKeysSkipsLoadedNeverSavesKeyState(t *testing.T) {
 		Adder:    &fakeKeyAdder{},
 		Log:      &fakeLogger{},
 		KeyState: ks,
-		Config:   Config{GUI: true},
+		Config:   Config{},
 	}
 	if err := l.LoadKeys(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -354,7 +421,7 @@ func TestLoadKeysExhaustedRetriesNeverSavesKeyState(t *testing.T) {
 	l := Loader{
 		Keys:   fakeLister{paths: []string{"/ssh/id_rsa"}},
 		Runner: r, Secret: secret, Prompt: prompter, Adder: adder, Log: &fakeLogger{},
-		Giveup: newFakeGiveup(), KeyState: ks, Config: Config{GUI: true},
+		Giveup: newFakeGiveup(), KeyState: ks, Config: Config{},
 	}
 	if err := l.LoadKeys(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -371,7 +438,7 @@ func TestLoadKeysSessionUnlocksOnceAcrossKeys(t *testing.T) {
 	l := Loader{
 		Keys:   fakeLister{paths: []string{"/ssh/id_rsa", "/ssh/id_ed25519"}},
 		Runner: r, Secret: secret, Prompt: &fakePrompter{}, Adder: adder, Log: &fakeLogger{},
-		Config: Config{GUI: true},
+		Config: Config{},
 	}
 	if err := l.LoadKeys(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -393,7 +460,7 @@ func TestLoadKeysSessionSkipsUnlockWhenNothingNeeded(t *testing.T) {
 	l := Loader{
 		Keys:   fakeLister{paths: []string{"/ssh/id_x"}},
 		Runner: r, Secret: secret, Adder: &fakeKeyAdder{}, Log: &fakeLogger{},
-		Config: Config{GUI: true},
+		Config: Config{},
 	}
 	if err := l.LoadKeys(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -411,7 +478,7 @@ func TestLoadKeysSessionUnlockFailureFallsBackPerKey(t *testing.T) {
 	l := Loader{
 		Keys:   fakeLister{paths: []string{"/ssh/id_rsa", "/ssh/id_ed25519"}},
 		Runner: r, Secret: secret, Prompt: &fakePrompter{}, Adder: adder, Log: &fakeLogger{},
-		Config: Config{GUI: true},
+		Config: Config{},
 	}
 	if err := l.LoadKeys(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
