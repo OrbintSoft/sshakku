@@ -1,7 +1,9 @@
 # Contributing to SSHakku
 
 Thanks for your interest in contributing! This page explains the licensing terms
-every contribution must follow and how to send changes.
+every contribution must follow and how to send changes. For the code's
+architecture, how to build it, and how to run the test and lint suites, see
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
 ## Licensing and sign-off
 

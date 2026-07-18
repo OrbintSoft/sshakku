@@ -639,9 +639,12 @@ a revisit once Phase 5 (macOS/Windows) lands.
   conditionally, by backend/feature) versus what's needed only to *build* it
   (the Go toolchain) — plus a packaging-oriented summary of which
   dependencies are mandatory versus recommended-only.
-- **10.4 — Developer/contributor documentation.** Architecture, code
-  layout, how to build/test/run the container test suite.
-  `CONTRIBUTING.md` today covers only licensing/DCO, not how the code is
-  organized or how to work on it.
+- **10.4 — Developer/contributor documentation. ✅ Done.** New
+  `docs/DEVELOPMENT.md`: the package architecture, the shell-init →
+  ensure-agent → load-keys → askpass flow, building and running the unit
+  tests, the exact commands to run the tier-1/tier-2 container test suite
+  locally (no `make` target covered this before), the required lint tools,
+  and a recommended dev environment (Docker, the lint tools, VS Code).
+  Linked from `CONTRIBUTING.md`.
 
 → goals 2, 8, 11, 14, 15, 16; open decision 1.
