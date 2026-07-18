@@ -65,6 +65,12 @@ build:
 test:
 	$(GO) test -race ./...
 
+# Shell-level login-hook and agent-lifecycle regression suite. Requires
+# bats-core; only safe in a disposable environment (tier 1's own container
+# runs it in CI) — see test/bats/helpers.bash for the explicit opt-in gate.
+test-bats:
+	bats test/bats
+
 print-paths:
 	@echo "PREFIX: $(PREFIX)"
 	@echo "BINDIR: $(BINDIR)"
@@ -78,7 +84,7 @@ print-paths:
 # Linting. Requires: shellcheck, shfmt, markdownlint-cli2, taplo, checkmake,
 # actionlint, editorconfig-checker, hadolint. Each tool reads its own config
 # file where it has one.
-SH_SCRIPTS = $(wildcard *.sh) $(wildcard .githooks/*) $(wildcard test/containers/*.sh)
+SH_SCRIPTS = $(wildcard *.sh) $(wildcard .githooks/*) $(wildcard test/containers/*.sh) $(wildcard test/bats/*.bats) $(wildcard test/bats/*.bash) $(wildcard test/bats/fixtures/*)
 DOCKERFILES = $(wildcard test/containers/*.Dockerfile)
 
 lint: lint-sh lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go lint-docker
@@ -111,5 +117,5 @@ lint-go:
 lint-docker:
 	hadolint $(DOCKERFILES)
 
-.PHONY: install uninstall install-user uninstall-user build test print-paths lint lint-sh lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go lint-docker
+.PHONY: install uninstall install-user uninstall-user build test test-bats print-paths lint lint-sh lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go lint-docker
 .DEFAULT_GOAL := install

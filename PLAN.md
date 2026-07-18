@@ -361,17 +361,37 @@ up as Go slices there — see Phase 2). → goals 3, 5, 6, 10, 17–19; open dec
   "$(sshakku shell-init)"`); the remaining bash-side work is `set -u` hardening.
 - **1.4 — Agent lifecycle & recovery.** Moved into the Go core — see Phase 2 slice
   2.
-- **1.5 — Shell test harness (rule 12).** `bats` + tier-1 containers (open
-  decision 20). Plumbing regression checklist, still the right manual check after
-  any lifecycle change:
+- **1.5 — Shell test harness (rule 12). ✅ Done.** `bats` + tier-1
+  containers (open decision 20): `test/bats/` runs against real
+  `ssh-agent`/`ssh-add`, driven from `make test-bats` in the tier-1
+  container job (`SSHAKKU_TEST_ALLOW_BATS=1`, an explicit opt-in — the
+  suite must never run on a real machine, since it manipulates real
+  ssh-agent processes and login-hook plumbing; a first local iteration
+  learned this by actually triggering a real system-wide sshakku's
+  `kdialog` prompt via `bash -i` sourcing real shell rc files, fixed by
+  never using `-i` at all). A stub `secret-tool`
+  (`test/bats/fixtures/secret-tool`) stands in for a real Secret Service so
+  the vault is reachable without a desktop session. **Rule 12:** no new
+  lint tool — `shellcheck` (0.7+) and `shfmt` both parse `.bats`/`.bash`
+  natively, so `lint-sh`'s existing `SH_SCRIPTS` glob just grew to include
+  them. Original checklist, adapted to what a container with no controlling
+  terminal at all can actually drive (a live interactive prompt needs a
+  pty this harness doesn't have — that is covered instead by Phase 4.5's
+  Go-level headless integration tests):
   1. Fresh login, two terminals: both see the key in `ssh-add -l`, no second
-     prompt.
-  2. `SSH_AUTH_SOCK` is the fixed socket path everywhere, including a GUI app.
+     prompt. ✅ tested via the vault, not a live prompt.
+  2. `SSH_AUTH_SOCK` is the fixed socket path everywhere. ✅ tested by
+     sourcing the real hook non-interactively.
   3. Kill the agent → a new terminal restarts it at the **same** socket and
-     reloads the key.
-  4. First-ever run, empty vault: prompts once, silent thereafter.
+     reloads the key. ✅ tested — a direct regression test for Phase 4.5
+     (the reload is now silent because the vault is always tried, GUI or
+     not).
+  4. First-ever run, empty vault: prompts once, silent thereafter. Split:
+     empty vault → key not loaded, no hang/crash (✅ tested); "prompts
+     once" needs a live tty this harness doesn't have, so it stays a
+     Go-level concern.
   5. A reachable-but-empty agent (`ssh-add -l` exit 1) is **healthy**, never
-     killed.
+     killed. ✅ tested — adopted, not killed and replaced.
 
 ### Phase 2 — Go logic core ✅ Done
 
