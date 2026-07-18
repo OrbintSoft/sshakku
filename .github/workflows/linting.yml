@@ -2,6 +2,10 @@ name: Linting
 
 on: [push]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 # The workflow only reads the checked-out tree to lint it; no write scopes.
 permissions:
   contents: read

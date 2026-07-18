@@ -2,6 +2,10 @@ name: Tier 2 desktop secret stacks
 
 on: workflow_dispatch
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 # Only builds and runs the checked-out tree's test suite inside a container;
 # no write scopes.
 permissions:
