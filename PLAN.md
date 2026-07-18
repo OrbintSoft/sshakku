@@ -615,10 +615,12 @@ a revisit once Phase 5 (macOS/Windows) lands.
   checks (Phase 9) for the ones it can detect itself, rather than
   duplicating the reasoning in `docs/CONFIGURATION.md`/`docs/DIAGNOSTICS.md`.
   Purely user-facing: no roadmap/phase language anywhere in end-user docs.
-- **10.2 — CLI & configuration reference.** `docs/CONFIGURATION.md` covers
-  most settings already; the CLI itself (`sshakku <command>` and every
-  flag, beyond what `--help` prints inline) still has no dedicated
-  reference.
+- **10.2 — CLI & configuration reference. ✅ Done.** New `docs/CLI.md`:
+  every subcommand and flag with exit codes, which ones are wired in
+  automatically versus meant to be run by hand, cross-referencing
+  `docs/DIAGNOSTICS.md` for `doctor`'s full report detail and
+  `docs/CONFIGURATION.md` for `forget`'s policy interactions rather than
+  duplicating either.
 - **10.3 — Dependencies documentation.** What must be present on the system
   to *run* sshakku (a Secret Service daemon, `secret-tool`, the `op`/`bw`
   CLIs, `kdialog`, D-Bus) versus what's needed only to *build* it (the Go
