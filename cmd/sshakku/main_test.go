@@ -4,8 +4,10 @@ import (
 	"io"
 	"os"
 	"os/user"
+	"path/filepath"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/OrbintSoft/sshakku/internal/paths"
 )
@@ -184,5 +186,34 @@ func TestWantsAskpass(t *testing.T) {
 				t.Errorf("wantsAskpass(%v, %q) = %v, want %v", tc.askpassEnvSet, tc.args, got, tc.want)
 			}
 		})
+	}
+}
+
+// TestLoadSettingsMergesConfigD confirms config.d/*.toml files, in filename
+// order, override config.toml — end to end through loadSettings, not just
+// the config package's own Merge/LoadDir unit tests.
+func TestLoadSettingsMergesConfigD(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "config.toml"), "key_lifetime = \"1h\"\nquiet = true\n")
+	confD := filepath.Join(dir, "config.d")
+	if err := os.MkdirAll(confD, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	writeFile(t, filepath.Join(confD, "10-override.toml"), "key_lifetime = \"2h\"\n")
+
+	settings := loadSettings(paths.Layout{ConfigDir: dir}, "test", fakeLogger{})
+
+	if settings.KeyLifetime != 2*time.Hour {
+		t.Errorf("KeyLifetime = %v, want 2h (config.d/10-override.toml must win over config.toml)", settings.KeyLifetime)
+	}
+	if !settings.Quiet {
+		t.Errorf("Quiet = %v, want true (config.toml's own value, untouched by config.d/)", settings.Quiet)
+	}
+}
+
+func writeFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile(%s): %v", path, err)
 	}
 }

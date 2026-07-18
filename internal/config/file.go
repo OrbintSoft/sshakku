@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -137,6 +139,96 @@ func containsKey(keys []string, keyname string) bool {
 		}
 	}
 	return false
+}
+
+// Merge returns f with every field other sets applied on top, so other takes
+// precedence for any key it sets while f's value survives for a key other
+// leaves unset. A pointer field counts as set when non-nil; a slice field
+// (the wallet_store_*/auto_load_* lists) counts as set when non-nil, which is
+// how the TOML decoder leaves a key that never appeared in the source —
+// including other explicitly setting a list to [] overrides f's list with an
+// empty one, rather than being indistinguishable from "not mentioned".
+func (f File) Merge(other File) File {
+	merged := f
+
+	if other.KeyLifetime != nil {
+		merged.KeyLifetime = other.KeyLifetime
+	}
+	if other.MaxAttempts != nil {
+		merged.MaxAttempts = other.MaxAttempts
+	}
+	if other.GiveupTTL != nil {
+		merged.GiveupTTL = other.GiveupTTL
+	}
+	if other.NoGiveup != nil {
+		merged.NoGiveup = other.NoGiveup
+	}
+	if other.Quiet != nil {
+		merged.Quiet = other.Quiet
+	}
+
+	if other.WalletStoreMode != nil {
+		merged.WalletStoreMode = other.WalletStoreMode
+	}
+	if other.WalletStoreInclude != nil {
+		merged.WalletStoreInclude = other.WalletStoreInclude
+	}
+	if other.WalletStoreExclude != nil {
+		merged.WalletStoreExclude = other.WalletStoreExclude
+	}
+
+	if other.AutoLoadMode != nil {
+		merged.AutoLoadMode = other.AutoLoadMode
+	}
+	if other.AutoLoadInclude != nil {
+		merged.AutoLoadInclude = other.AutoLoadInclude
+	}
+	if other.AutoLoadExclude != nil {
+		merged.AutoLoadExclude = other.AutoLoadExclude
+	}
+
+	if other.SecretBackend != nil {
+		merged.SecretBackend = other.SecretBackend
+	}
+	if other.OnePasswordVault != nil {
+		merged.OnePasswordVault = other.OnePasswordVault
+	}
+	if other.BitwardenEmail != nil {
+		merged.BitwardenEmail = other.BitwardenEmail
+	}
+	if other.BitwardenServer != nil {
+		merged.BitwardenServer = other.BitwardenServer
+	}
+
+	return merged
+}
+
+// LoadDir reads every *.toml file directly under dir, in lexicographic
+// filename order, merging each on top of the ones before it (Merge) so a
+// later file overrides a key an earlier one set. A dir with no matching
+// files — including one that doesn't exist — returns the zero File and no
+// error, the same "nothing configured" case Load gives for a missing single
+// file. A malformed or partially-unrecognised file contributes whatever Load
+// decoded from it (zero for a syntax error, the recognised fields for an
+// unrecognised-key file) and its error is collected, path-tagged, rather
+// than aborting the rest of the directory.
+func LoadDir(dir string) (File, []error) {
+	matches, err := filepath.Glob(filepath.Join(dir, "*.toml"))
+	if err != nil {
+		return File{}, []error{err}
+	}
+	sort.Strings(matches)
+
+	var merged File
+	var errs []error
+	for _, path := range matches {
+		f, err := Load(path)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", path, err))
+		}
+		merged = merged.Merge(f)
+	}
+	return merged, errs
 }
 
 // Load reads and decodes the TOML config at path. A missing file is not an

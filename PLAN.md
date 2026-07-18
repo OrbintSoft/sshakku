@@ -511,7 +511,7 @@ choice reachable at runtime (4.3). → goals 11, 15; open decisions 7, 8, 13, 17
   `SecretToolBackend`; Bitwarden's master-password prompt reuses the same
   graphical/terminal split the SSH-key passphrase prompt already uses. Closes
   open decision 7 for every Linux backend. See `docs/CONFIGURATION.md`.
-- **4.4 — Modular config: `config.d/`.** Let settings be split across
+- **4.4 — Modular config: `config.d/`. ✅ Done.** Let settings be split across
   `$XDG_CONFIG_HOME/sshakku/config.d/*.toml` in addition to the single
   `config.toml`. **Decided:** `config.toml` (if present) loads first as the
   base; files under `config.d/` then apply in lexicographic filename order,

@@ -1,4 +1,5 @@
-# taplo configuration. One test fixture is deliberately malformed (it exercises
-# the parser's error path and is checked by the config package's Go tests), so it
-# is excluded; the valid fixtures are linted and format-checked like any config.
-exclude = ["**/testdata/malformed.toml"]
+# taplo configuration. Some test fixtures are deliberately malformed (they
+# exercise the parser's error path and are checked by the config package's Go
+# tests), so they are excluded; the valid fixtures are linted and
+# format-checked like any config.
+exclude = ["**/testdata/malformed.toml", "**/testdata/confd-malformed/10-bad.toml"]
