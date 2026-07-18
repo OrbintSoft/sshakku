@@ -6,6 +6,9 @@ DESTDIR ?=
 ETC_PROFILE_D ?= /etc/profile.d/
 NN ?= 001
 
+USER_HOME ?= $(HOME)
+USER_BINDIR ?= $(USER_HOME)/.local/bin
+
 GO ?= go
 GO_MAIN = ./cmd/sshakku
 GO_BIN = bin/sshakku
@@ -35,9 +38,23 @@ uninstall:
 	@rm -f $(SSH_INIT_INSTALL_PATH)
 	@echo "Uninstallation complete."
 
+install-user: build
+	@echo "Installing $(GO_BIN) to $(USER_BINDIR)/sshakku"
+	@install -Dm755 $(GO_BIN) $(USER_BINDIR)/sshakku
+	@echo "Wiring the per-user login hook"
+	@./install-user-hook.sh install "$(USER_HOME)" "$(USER_BINDIR)/sshakku" "$(NN)"
+	@echo "Installation complete."
+
+uninstall-user:
+	@echo "Uninstalling $(USER_BINDIR)/sshakku"
+	@rm -f $(USER_BINDIR)/sshakku
+	@echo "Removing the per-user login hook"
+	@./install-user-hook.sh uninstall "$(USER_HOME)" "$(NN)"
+	@echo "Uninstallation complete."
+
 else
 
-install uninstall:
+install uninstall install-user uninstall-user:
 	@echo "$(UNAME) is not supported."
 	@exit 1
 endif
@@ -55,6 +72,8 @@ print-paths:
 	@echo "SSHAKKU_INSTALL_PATH: $(SSHAKKU_INSTALL_PATH)"
 	@echo "SSHAKKU_RUNTIME_PATH: $(SSHAKKU_RUNTIME_PATH)"
 	@echo "SSH_INIT_INSTALL_PATH: $(SSH_INIT_INSTALL_PATH)"
+	@echo "USER_HOME: $(USER_HOME)"
+	@echo "USER_BINDIR: $(USER_BINDIR)"
 
 # Linting. Requires: shellcheck, shfmt, markdownlint-cli2, taplo, checkmake,
 # actionlint, editorconfig-checker, hadolint. Each tool reads its own config
@@ -92,5 +111,5 @@ lint-go:
 lint-docker:
 	hadolint $(DOCKERFILES)
 
-.PHONY: install uninstall build test print-paths lint lint-sh lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go lint-docker
+.PHONY: install uninstall install-user uninstall-user build test print-paths lint lint-sh lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go lint-docker
 .DEFAULT_GOAL := install
