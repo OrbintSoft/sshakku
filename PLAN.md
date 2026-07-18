@@ -523,6 +523,67 @@ choice reachable at runtime (4.3). → goals 11, 15; open decisions 7, 8, 13, 17
   file under `config.d/` is skipped and logged, without discarding the rest
   (`config.toml` or the other `config.d/` files); an absent `config.d/` is
   not an error, same as an absent `config.toml` today.
+- **4.5 — Vault-backed proactive load without a GUI.** `Loader.addWithRetries`
+  currently picks between `loadViaVaultThenPrompt` (consult the configured
+  secret backend, prompt via `kdialog` on a miss) and `loadInteractive` (skip
+  the backend entirely, let `ssh-add` prompt straight on the terminal) purely
+  on `Config.GUI` (a reachable Wayland/X session plus `kdialog`) — so an
+  interactive headless login never consults the backend at all, even one that
+  needs no display or D-Bus (`op`, `bw`). The reactive askpass broker
+  (`internal/keys/askpass.go`) already gets this right: it tries the backend
+  unconditionally and only falls back to a terminal prompt on a miss, no GUI
+  check anywhere. **Decided:**
+  - Drop the GUI branch from the vault-usage decision: `addWithRetries`
+    always tries the configured backend first. A D-Bus-only backend (Secret
+    Service) simply misses when D-Bus is unreachable — recoverable, not
+    fatal, exactly like today's handling of a lookup error.
+  - **Having no GUI and having no controlling terminal are both perfectly
+    normal, expected deployments — never surfaced to the user as an error.**
+    A lookup miss because the backend can't be reached here (no D-Bus
+    session, no GUI, a backend this environment isn't set up for) is logged
+    at `INFO`, not `ERROR` — in both this loader path and the reactive
+    askpass broker, which logs the same lookup failure at `ERROR` today
+    (`internal/keys/askpass.go`'s `Broker.Answer`) and gets the same
+    downgrade for consistency. Likewise, the new terminal prompter failing
+    because there is no controlling terminal at all is logged at `INFO` and,
+    critically, **never reaches `Notifier.Notify`** (the user-visible
+    stderr line) — that channel stays reserved for what the user can
+    actually act on: exhausted retries after a wrong passphrase, or
+    `ssh-add` rejecting what was entered. A backend that can't be reached at
+    all is already diagnosable on demand via `sshakku doctor --test-backend`
+    (Phase 9) rather than by notifying on every load.
+  - `Config.GUI` now only picks *how* to prompt on a miss: `KDialogPrompter`
+    when available, otherwise a new terminal `Prompter` reading `/dev/tty`
+    directly (factoring out the echo-disabling logic the reactive broker's
+    `ttyPrompter` already has, so neither copy duplicates the raw termios
+    calls) — so sshakku captures what was typed and stores it via the
+    existing best-effort `storePassphrase`, instead of leaving `ssh-add` to
+    own the whole prompt with no way to save it. `AddWithAskpass`
+    (keyring-stashed, `SSH_ASKPASS`-driven, detached from any terminal)
+    already works identically with or without a GUI, so this unifies onto it
+    in both cases. `loadInteractive`/`ExecKeyAdder.AddInteractive` become
+    unused once every path can prompt through the new terminal `Prompter`
+    and are removed rather than kept as a second fallback.
+  - **Must never block waiting for input that cannot come.** Opening
+    `/dev/tty` with no controlling terminal fails immediately (`ENXIO`), not
+    by hanging — the same guarantee the reactive broker's `ttyPrompter`
+    already relies on — so a missing terminal fails the prompt attempt right
+    away and the loader treats it as "key not loaded this round" (not
+    exhausted, no user-visible notice, per above), never a hang. Verified
+    with a test that calls the new `Prompter` with no controlling terminal at
+    all (e.g. under `setsid`) and asserts it returns promptly rather than
+    blocking.
+  - **Verified with integration tests, not unit tests alone** — the same
+    `requireRealSSHTools`-style approach `internal/keys/keyadd_ttl_test.go`
+    already uses (a real `ssh-agent`/`ssh-add`/`ssh-keygen`, tier 1's
+    container), covering: a headless `Config.GUI=false` load that still
+    round-trips a passphrase through a real (fake-backed) `SecretBackend`;
+    the no-controlling-terminal case actually returning promptly under
+    `setsid` rather than merely asserting it in isolation; and a real
+    `op`/`bw` CLI-backed round trip staying under `tier2-onepassword.yml`'s
+    existing real-account gate rather than `make test`.
+
+  → open decisions 7, 8.
 
 ### Phase 5 — Widen the OS targets
 
@@ -610,7 +671,7 @@ only discovering it's broken the first time `ssh` needs it.
 
 → goal 8; open decisions 1, 7.
 
-### Phase 10 — Documentation pass & Linux hardening guide
+### Phase 10 — Documentation pass & Linux hardening guide ✅ Done
 
 A README and `docs/` overhaul aimed at an end user, not a contributor: explain
 every feature, every `config.toml` key, and every secret backend in one place
