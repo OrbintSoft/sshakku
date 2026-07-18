@@ -82,6 +82,7 @@ refilling silently, run `sshakku doctor` to see why.
 
 | Guide | Covers |
 | --- | --- |
+| [docs/CLI.md](docs/CLI.md) | Every subcommand and flag, with exit codes. |
 | [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Every setting: key lifetime, retries, which secret backend to use, which keys are stored/auto-loaded, and where passphrases live. |
 | [docs/DIAGNOSTICS.md](docs/DIAGNOSTICS.md) | `sshakku doctor`: reading the report, `--fix`, `--user`, and `--test-backend`. |
 | [docs/HARDENING.md](docs/HARDENING.md) | Practical steps outside SSHakku itself that keep your keys safer: a short key lifetime, not leaving the wallet unlocked, disk encryption, and `/tmp`. |
