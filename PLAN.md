@@ -331,7 +331,7 @@ Per-file-type lint decisions (rule 12), current as of the last file type added:
 | TOML (`*.toml`) | `taplo lint` + `taplo format --check`; runtime parser `github.com/BurntSushi/toml` (MIT) recorded in `COPYRIGHT.md` |
 | Dockerfile (`test/containers/*.Dockerfile`) | `hadolint` (config ignores DL3008 — no viable apt-pin story against a rolling suite; the base image tag is the point-in-time anchor) |
 
-### Phase 1 — Harden the primary target: shell plumbing (still bash)
+### Phase 1 — Harden the primary target: shell plumbing (still bash) ✅ Done
 
 Gentoo / OpenRC / KDE. Scope narrowed by the bash/Go split (open decision 10):
 only the **permanent shell plumbing** stays in bash; the branchy, stateful logic
@@ -339,7 +339,13 @@ moved to the Go core in Phase 2 instead (1.3's seam and 1.4's lifecycle both end
 up as Go slices there — see Phase 2). → goals 3, 5, 6, 10, 17–19; open decisions
 3, 4, 12.
 
-- **1.1 — XDG path layout, out of `~/.ssh`.** → goal 19; open decision 12.
+- **1.1 — XDG path layout, out of `~/.ssh`. ✅ Done.** Scope is SSHakku's own
+  files only (config, log, agent socket) — never the user's private keys,
+  which stay exactly where OpenSSH creates them, under `~/.ssh`. Delivered as
+  part of open decision 12: config and the session log under
+  `${XDG_CONFIG_HOME:-~/.config}/sshakku`, the agent socket under
+  `$XDG_RUNTIME_DIR/sshakku` (falling back to `/run/user/$UID/sshakku` or
+  `${XDG_CACHE_HOME:-~/.cache}/sshakku`). → goal 19; open decision 12.
 - **1.2 — Two install modes + bootstrap hook. ✅ Done.** System-wide
   (`make install`/`make uninstall`, `/usr/local/bin`, `/etc/profile.d`,
   needs root) and per-user (`make install-user`/`make uninstall-user`, no
