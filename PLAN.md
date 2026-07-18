@@ -511,6 +511,18 @@ choice reachable at runtime (4.3). → goals 11, 15; open decisions 7, 8, 13, 17
   `SecretToolBackend`; Bitwarden's master-password prompt reuses the same
   graphical/terminal split the SSH-key passphrase prompt already uses. Closes
   open decision 7 for every Linux backend. See `docs/CONFIGURATION.md`.
+- **4.4 — Modular config: `config.d/`.** Let settings be split across
+  `$XDG_CONFIG_HOME/sshakku/config.d/*.toml` in addition to the single
+  `config.toml`. **Decided:** `config.toml` (if present) loads first as the
+  base; files under `config.d/` then apply in lexicographic filename order,
+  each overriding a key it sets on top of what loaded before it (a `NN-`
+  filename prefix, mirroring the existing `NN` convention in
+  `nn-ssh-init-linux.sh`/`install-user-hook.sh`, controls the order). Merge is
+  per-key, whole-value replacement — the same semantics `env > file > default`
+  already uses — not a deep-merge of the include/exclude lists. A malformed
+  file under `config.d/` is skipped and logged, without discarding the rest
+  (`config.toml` or the other `config.d/` files); an absent `config.d/` is
+  not an error, same as an absent `config.toml` today.
 
 ### Phase 5 — Widen the OS targets
 
