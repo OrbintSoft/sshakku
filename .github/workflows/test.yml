@@ -2,6 +2,10 @@ name: Tests
 
 on: [push]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 # The workflow only builds and runs the checked-out tree's test suite; no
 # write scopes.
 permissions:
