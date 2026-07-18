@@ -14,6 +14,16 @@ jobs:
   lint:
     name: make lint
     runs-on: ubuntu-latest
+    env:
+      SHELLCHECK_VERSION: 0.11.0
+      SHFMT_VERSION: 3.13.1
+      CHECKMAKE_VERSION: 0.3.2
+      ACTIONLINT_VERSION: 1.7.12
+      EDITORCONFIG_CHECKER_VERSION: 3.7.0
+      GOLANGCI_LINT_VERSION: 2.12.2
+      MARKDOWNLINT_CLI2_VERSION: 0.22.1
+      TAPLO_CLI_VERSION: 0.7.0
+      HADOLINT_VERSION: 2.14.0
     steps:
       - name: Check out the repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -28,17 +38,20 @@ jobs:
         with:
           node-version: "24.18.0"
 
-      - name: Install lint tools
-        env:
-          SHELLCHECK_VERSION: 0.11.0
-          SHFMT_VERSION: 3.13.1
-          CHECKMAKE_VERSION: 0.3.2
-          ACTIONLINT_VERSION: 1.7.12
-          EDITORCONFIG_CHECKER_VERSION: 3.7.0
-          GOLANGCI_LINT_VERSION: 2.12.2
-          MARKDOWNLINT_CLI2_VERSION: 0.22.1
-          TAPLO_CLI_VERSION: 0.7.0
-          HADOLINT_VERSION: 2.14.0
+      # Keyed on every pinned tool version, so bumping any one of them
+      # invalidates the cache instead of silently reusing a stale binary.
+      - name: Cache native and Go-installed lint tool binaries
+        id: lint-tools-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            /usr/local/bin/shellcheck
+            /usr/local/bin/hadolint
+            ~/go/bin
+          key: lint-tools-${{ runner.os }}-shellcheck${{ env.SHELLCHECK_VERSION }}-hadolint${{ env.HADOLINT_VERSION }}-shfmt${{ env.SHFMT_VERSION }}-checkmake${{ env.CHECKMAKE_VERSION }}-actionlint${{ env.ACTIONLINT_VERSION }}-editorconfig-checker${{ env.EDITORCONFIG_CHECKER_VERSION }}-golangci-lint${{ env.GOLANGCI_LINT_VERSION }}
+
+      - name: Install native and Go-installed lint tools
+        if: steps.lint-tools-cache.outputs.cache-hit != 'true'
         run: |
           set -euxo pipefail
 
@@ -57,10 +70,12 @@ jobs:
           go install "github.com/rhysd/actionlint/cmd/actionlint@v${ACTIONLINT_VERSION}"
           go install "github.com/editorconfig-checker/editorconfig-checker/v3/cmd/editorconfig-checker@v${EDITORCONFIG_CHECKER_VERSION}"
           go install "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v${GOLANGCI_LINT_VERSION}"
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
-          # Node-based tools
-          npm install -g "markdownlint-cli2@${MARKDOWNLINT_CLI2_VERSION}" "@taplo/cli@${TAPLO_CLI_VERSION}"
+      - name: Add Go bin to PATH
+        run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Install Node-based lint tools
+        run: npm install -g "markdownlint-cli2@${MARKDOWNLINT_CLI2_VERSION}" "@taplo/cli@${TAPLO_CLI_VERSION}"
 
       - name: Run make lint
         run: make lint
