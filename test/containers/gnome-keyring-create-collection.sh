@@ -14,7 +14,7 @@ wait_for() {
 	until "$@" >/dev/null 2>&1; do
 		tries=$((tries - 1))
 		if [ "${tries}" -le 0 ]; then
-			echo "gnome-keyring-tier2-create-collection: timed out waiting for ${description}" >&2
+			echo "gnome-keyring-create-collection: timed out waiting for ${description}" >&2
 			return 1
 		fi
 		sleep 0.3
@@ -48,7 +48,7 @@ for _ in 1 2 3 4 5; do
 done
 
 if ! wait "${TRIGGER_PID}"; then
-	echo "gnome-keyring-tier2-create-collection: trigger test failed:" >&2
+	echo "gnome-keyring-create-collection: trigger test failed:" >&2
 	cat /tmp/create-collection-trigger.log >&2
 	exit 1
 fi

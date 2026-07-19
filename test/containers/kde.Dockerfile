@@ -18,9 +18,9 @@ RUN dnf install -y --setopt=install_weak_deps=False \
 
 ENV PATH="/usr/local/go/bin:${PATH}"
 
-COPY test/containers/kde-tier2-entrypoint.sh test/containers/kde-tier2-session.sh test/containers/kde-tier2.env test/containers/kde-tier2-pam.conf test/containers/kde-tier2-kwalletrc /opt/sshakku-tier2/
-RUN chmod +x /opt/sshakku-tier2/kde-tier2-entrypoint.sh /opt/sshakku-tier2/kde-tier2-session.sh
+COPY test/containers/kde-entrypoint.sh test/containers/kde-session.sh test/containers/kde.env test/containers/kde-pam.conf test/containers/kde-kwalletrc /opt/sshakku-tier2/
+RUN chmod +x /opt/sshakku-tier2/kde-entrypoint.sh /opt/sshakku-tier2/kde-session.sh
 
 WORKDIR /src
 
-ENTRYPOINT ["/opt/sshakku-tier2/kde-tier2-entrypoint.sh"]
+ENTRYPOINT ["/opt/sshakku-tier2/kde-entrypoint.sh"]

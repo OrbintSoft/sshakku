@@ -1,7 +1,7 @@
 #!/bin/bash
 # Container entrypoint, run as root: creates the disposable test account and
 # PAM service ksecretd's non-interactive unlock needs, then hands off to
-# kde-tier2-session.sh (as that account) to actually drive the test command.
+# kde-session.sh (as that account) to actually drive the test command.
 set -euo pipefail
 
 readonly TEST_USER="sshakku-kde-test"
@@ -25,14 +25,14 @@ mkdir -p "${RUNTIME_DIR}"
 chown "${TEST_USER}:${TEST_USER}" "${RUNTIME_DIR}"
 chmod 700 "${RUNTIME_DIR}"
 
-install -m 644 "${SCRIPT_DIR}/kde-tier2.env" /etc/environment
-install -m 644 "${SCRIPT_DIR}/kde-tier2-pam.conf" "/etc/pam.d/${PAM_SERVICE}"
+install -m 644 "${SCRIPT_DIR}/kde.env" /etc/environment
+install -m 644 "${SCRIPT_DIR}/kde-pam.conf" "/etc/pam.d/${PAM_SERVICE}"
 
 # Makes "sshakku" (not "kdewallet") the wallet PAM's hash-based unlock opens,
 # and pre-registers its Secret Service alias — this, not an interactive
 # create dialog, is what makes the real round-trip test deterministic.
 install -m 644 -o "${TEST_USER}" -g "${TEST_USER}" -D \
-	"${SCRIPT_DIR}/kde-tier2-kwalletrc" "/home/${TEST_USER}/.config/kwalletrc"
+	"${SCRIPT_DIR}/kde-kwalletrc" "/home/${TEST_USER}/.config/kwalletrc"
 
 exec runuser -u "${TEST_USER}" -- env -i \
 	HOME="/home/${TEST_USER}" \
@@ -43,4 +43,4 @@ exec runuser -u "${TEST_USER}" -- env -i \
 	SSHAKKU_TEST_ALLOW_REAL_SECRETSERVICE="1" \
 	SSHAKKU_TEST_KDE_PASSWORD="${TEST_PASSWORD}" \
 	SSHAKKU_TEST_KDE_PAM_SERVICE="${PAM_SERVICE}" \
-	"${SCRIPT_DIR}/kde-tier2-session.sh" "$@"
+	"${SCRIPT_DIR}/kde-session.sh" "$@"

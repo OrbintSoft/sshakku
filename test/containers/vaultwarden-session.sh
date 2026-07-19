@@ -1,7 +1,7 @@
 #!/bin/bash
-# Runs as the disposable test account (see vaultwarden-tier2-entrypoint.sh):
+# Runs as the disposable test account (see vaultwarden-entrypoint.sh):
 # starts a private Vaultwarden instance from the pre-registered test-account
-# fixture (see vaultwarden-tier2-fixture/), then runs the given command
+# fixture (see vaultwarden-fixture/), then runs the given command
 # against it. Login and unlock are BitwardenBackend.Unlock's own job (see
 # secret_bitwarden_realaccount_test.go), not this script's — it only hands
 # over the fixture account's identity via environment variables.
@@ -22,7 +22,7 @@ wait_for() {
 	until "$@"; do
 		tries=$((tries - 1))
 		if [ "${tries}" -le 0 ]; then
-			echo "vaultwarden-tier2-session: timed out waiting for ${description}" >&2
+			echo "vaultwarden-session: timed out waiting for ${description}" >&2
 			exit 1
 		fi
 		sleep 0.2

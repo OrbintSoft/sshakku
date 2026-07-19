@@ -1,9 +1,10 @@
 #!/bin/bash
-# Runs as the disposable test account (see keepassxc-tier2-entrypoint.sh):
+# Runs as the disposable test account (see keepassxc-entrypoint.sh):
 # starts a private D-Bus session bus and a headless X server, enables
 # KeePassXC's Secret Service integration (the only piece of this that has a
-# non-interactive config-file equivalent — see keepassxc-tier2-create-
-# collection.sh for the part that doesn't), then runs the given command
+# non-interactive config-file equivalent — see
+# keepassxc-create-collection.sh for the part that doesn't), then runs the
+# given command
 # against it.
 set -euo pipefail
 
@@ -15,7 +16,7 @@ wait_for() {
 	until "$@"; do
 		tries=$((tries - 1))
 		if [ "${tries}" -le 0 ]; then
-			echo "keepassxc-tier2-session: timed out waiting for ${description}" >&2
+			echo "keepassxc-session: timed out waiting for ${description}" >&2
 			exit 1
 		fi
 		sleep 0.2
@@ -31,11 +32,11 @@ wait_for "the D-Bus session bus socket" test -S "${DBUS_SESSION_BUS_ADDRESS#unix
 
 # The "enable Secret Service integration" toggle is a plain app-config
 # boolean, unlike the collection creation itself (see
-# keepassxc-tier2-create-collection.sh).
+# keepassxc-create-collection.sh).
 mkdir -p "${HOME}/.config/keepassxc"
 printf '[FdoSecrets]\nEnabled=true\n' >"${HOME}/.config/keepassxc/keepassxc.ini"
 
 cd /src
-"$(dirname "${BASH_SOURCE[0]}")/keepassxc-tier2-create-collection.sh"
+"$(dirname "${BASH_SOURCE[0]}")/keepassxc-create-collection.sh"
 
 exec "$@"

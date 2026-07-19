@@ -6,7 +6,7 @@
 # client-side master-password key derivation and RSA keypair generation only
 # exist in the web-vault UI), so this image ships a pre-registered,
 # already-empty test account as a SQLite fixture
-# (vaultwarden-tier2-fixture/) instead of registering one at container
+# (vaultwarden-fixture/) instead of registering one at container
 # startup — see PLAN.md 4.2 for how that fixture was produced. The
 # Vaultwarden binary is copied from the upstream image rather than built
 # here, at the same pinned version the fixture was produced against; only
@@ -33,10 +33,10 @@ ENV PATH="/usr/local/go/bin:${PATH}"
 
 COPY --from=vaultwarden /vaultwarden /usr/local/bin/vaultwarden
 
-COPY test/containers/vaultwarden-tier2-fixture/ /opt/sshakku-tier2/vaultwarden-fixture/
-COPY test/containers/vaultwarden-tier2-entrypoint.sh test/containers/vaultwarden-tier2-session.sh /opt/sshakku-tier2/
-RUN chmod +x /opt/sshakku-tier2/vaultwarden-tier2-entrypoint.sh /opt/sshakku-tier2/vaultwarden-tier2-session.sh
+COPY test/containers/vaultwarden-fixture/ /opt/sshakku-tier2/vaultwarden-fixture/
+COPY test/containers/vaultwarden-entrypoint.sh test/containers/vaultwarden-session.sh /opt/sshakku-tier2/
+RUN chmod +x /opt/sshakku-tier2/vaultwarden-entrypoint.sh /opt/sshakku-tier2/vaultwarden-session.sh
 
 WORKDIR /src
 
-ENTRYPOINT ["/opt/sshakku-tier2/vaultwarden-tier2-entrypoint.sh"]
+ENTRYPOINT ["/opt/sshakku-tier2/vaultwarden-entrypoint.sh"]

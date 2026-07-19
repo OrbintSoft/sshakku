@@ -1,6 +1,6 @@
 #!/bin/bash
 # Container entrypoint, run as root: creates the disposable test account and
-# its runtime dir, then hands off to vaultwarden-tier2-session.sh (as that
+# its runtime dir, then hands off to vaultwarden-session.sh (as that
 # account) to actually drive the test command.
 set -euo pipefail
 
@@ -20,4 +20,4 @@ exec runuser -u "${TEST_USER}" -- env -i \
 	HOME="/home/${TEST_USER}" \
 	PATH="/usr/local/go/bin:${PATH}" \
 	XDG_RUNTIME_DIR="${RUNTIME_DIR}" \
-	"${SCRIPT_DIR}/vaultwarden-tier2-session.sh" "$@"
+	"${SCRIPT_DIR}/vaultwarden-session.sh" "$@"

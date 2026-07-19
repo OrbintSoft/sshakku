@@ -27,7 +27,7 @@ wait_for() {
 	until "$@" >/dev/null 2>&1; do
 		tries=$((tries - 1))
 		if [ "${tries}" -le 0 ]; then
-			echo "keepassxc-tier2-create-collection: timed out waiting for ${description}" >&2
+			echo "keepassxc-create-collection: timed out waiting for ${description}" >&2
 			return 1
 		fi
 		sleep 0.3
@@ -40,7 +40,7 @@ wait_for() {
 # attempt needs the app itself relaunched, not just the dialog re-driven.
 #
 # pkill/pgrep -x (exact match): this script's own /proc/*/comm, when it runs
-# as a non-PID-1 child, is "keepassxc-tier2" — the shebang-exec'd basename of
+# as a non-PID-1 child, is "keepassxc-creat" — the shebang-exec'd basename of
 # this very file, truncated to 15 bytes by the kernel — which a substring
 # match against "keepassxc" also matches, killing this script itself.
 start_keepassxc() {
@@ -122,7 +122,7 @@ disown
 # the collection already exists and is unlocked (e.g. this script runs
 # again against a warm app).
 if ! SSHAKKU_TEST_ALLOW_REAL_SECRETSERVICE=1 go test ./internal/keys -run TestSecretServiceBackendRealDaemon -count=1 >/tmp/create-collection-trigger.log 2>&1; then
-	echo "keepassxc-tier2-create-collection: trigger test failed:" >&2
+	echo "keepassxc-create-collection: trigger test failed:" >&2
 	cat /tmp/create-collection-trigger.log >&2
 	exit 1
 fi

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Runs as the disposable test account (see gnome-keyring-tier2-entrypoint.sh):
+# Runs as the disposable test account (see gnome-keyring-entrypoint.sh):
 # starts a private D-Bus session bus, a headless X server, and
 # gnome-keyring-daemon, drives the one-time "create the sshakku collection
 # with a blank password" dialog via xdotool (gnome-keyring has no
@@ -15,7 +15,7 @@ wait_for() {
 	until "$@"; do
 		tries=$((tries - 1))
 		if [ "${tries}" -le 0 ]; then
-			echo "gnome-keyring-tier2-session: timed out waiting for ${description}" >&2
+			echo "gnome-keyring-session: timed out waiting for ${description}" >&2
 			exit 1
 		fi
 		sleep 0.2
@@ -43,6 +43,6 @@ export GNOME_KEYRING_CONTROL
 wait_for "gnome-keyring to register org.freedesktop.secrets" secrets_registered
 
 cd /src
-"$(dirname "${BASH_SOURCE[0]}")/gnome-keyring-tier2-create-collection.sh"
+"$(dirname "${BASH_SOURCE[0]}")/gnome-keyring-create-collection.sh"
 
 exec "$@"

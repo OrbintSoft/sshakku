@@ -493,7 +493,7 @@ choice reachable at runtime (4.3). → goals 11, 15; open decisions 7, 8, 13, 17
     mode, no non-interactive re-unlock at all). A Debian-trixie-specific
     segfault in backgrounded `--pw-stdin`/keyfile unlock (confirmed via `strace`,
     absent on Fedora's newer build) forced the tier-2 base image to Fedora.
-    `keepassxc-tier2-create-collection.sh` runs a persistent watcher answering
+    `keepassxc-create-collection.sh` runs a persistent watcher answering
     both the one-time creation wizard and every later unlock.
   - **1Password** — `OnePasswordBackend` shells out to `op`; no in-place item
     edit without argv/file exposure, so `Store` deletes and recreates from a
@@ -515,7 +515,7 @@ choice reachable at runtime (4.3). → goals 11, 15; open decisions 7, 8, 13, 17
     even on `localhost`) — the disposable test account was registered once via a
     self-signed-TLS Vaultwarden + headless Playwright, and the resulting
     empty-vault SQLite DB is shipped as a fixture
-    (`test/containers/vaultwarden-tier2-fixture/`) rather than re-registered
+    (`test/containers/vaultwarden-fixture/`) rather than re-registered
     every run. Unlike the other three backends, `bw` has no official
     non-interactive unlock path at all (only an unofficial third-party wrapper,
     not adopted) — **decided**: `BitwardenBackend` prompts for the master
