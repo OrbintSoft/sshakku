@@ -58,16 +58,16 @@ func ReadTTYLine(prompt string, secret bool) (string, error) {
 // the previous terminal state.
 func disableEcho(f *os.File) (func(), error) {
 	fd := int(f.Fd())
-	old, err := unix.IoctlGetTermios(fd, unix.TCGETS)
+	old, err := unix.IoctlGetTermios(fd, tcGetTermiosReq)
 	if err != nil {
 		return nil, err
 	}
 	raw := *old
 	raw.Lflag &^= unix.ECHO
-	if err := unix.IoctlSetTermios(fd, unix.TCSETS, &raw); err != nil {
+	if err := unix.IoctlSetTermios(fd, tcSetTermiosReq, &raw); err != nil {
 		return nil, err
 	}
-	return func() { _ = unix.IoctlSetTermios(fd, unix.TCSETS, old) }, nil
+	return func() { _ = unix.IoctlSetTermios(fd, tcSetTermiosReq, old) }, nil
 }
 
 // TTYPrompter prompts for a passphrase directly on /dev/tty — the fallback
