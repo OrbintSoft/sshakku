@@ -409,6 +409,8 @@ func loadSettings(layout paths.Layout, tag string, log keys.Logger) config.Setti
 // opened (only the Secret Service client today) and must always be called.
 func newSecretBackend(user string, log keys.Logger, settings config.Settings) (keys.SecretBackend, func()) {
 	switch settings.SecretBackend {
+	case config.SecretBackendKeychain:
+		return newKeychainBackend(user), func() {}
 	case config.SecretBackendOnePassword:
 		return &keys.OnePasswordBackend{Runner: keys.ExecRunner{}, Vault: settings.OnePasswordVault}, func() {}
 	case config.SecretBackendBitwarden:

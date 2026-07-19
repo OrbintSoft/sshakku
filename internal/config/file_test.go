@@ -413,7 +413,7 @@ func TestResolveSecretBackendDefaultsToSecretService(t *testing.T) {
 }
 
 func TestResolveSecretBackendFromFile(t *testing.T) {
-	for _, backend := range []string{SecretBackendSecretService, SecretBackendOnePassword, SecretBackendBitwarden} {
+	for _, backend := range []string{SecretBackendSecretService, SecretBackendOnePassword, SecretBackendBitwarden, SecretBackendKeychain} {
 		file := File{SecretBackend: ptr(backend)}
 		s, errs := Resolve(file, lookupFrom(nil))
 		if len(errs) != 0 {

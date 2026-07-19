@@ -96,6 +96,7 @@ const (
 	SecretBackendSecretService = "secret-service"
 	SecretBackendOnePassword   = "1password"
 	SecretBackendBitwarden     = "bitwarden"
+	SecretBackendKeychain      = "keychain"
 )
 
 // StoresWallet reports whether keyname's passphrase should be persisted to the
@@ -346,7 +347,7 @@ func resolveSecretBackend(fileVal *string) (string, error) {
 		return SecretBackendSecretService, nil
 	}
 	switch *fileVal {
-	case SecretBackendSecretService, SecretBackendOnePassword, SecretBackendBitwarden:
+	case SecretBackendSecretService, SecretBackendOnePassword, SecretBackendBitwarden, SecretBackendKeychain:
 		return *fileVal, nil
 	default:
 		return SecretBackendSecretService, fmt.Errorf("invalid secret_backend %q, using %q", *fileVal, SecretBackendSecretService)
