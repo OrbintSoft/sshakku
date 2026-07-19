@@ -60,7 +60,7 @@ func cfRelease(ref unsafe.Pointer) {
 
 // goCFString converts a CFStringRef to a Go string; a nil ref yields "".
 func goCFString(s C.CFStringRef) string {
-	if s == nil {
+	if unsafe.Pointer(s) == nil {
 		return ""
 	}
 	n := C.CFStringGetLength(s)
@@ -104,7 +104,7 @@ func newQuery(account, service string) C.CFMutableDictionaryRef {
 // SecCopyErrorMessageString for a human-readable message when available.
 func secError(op string, status C.OSStatus) error {
 	msg := C.SecCopyErrorMessageString(status, nil)
-	if msg == nil {
+	if unsafe.Pointer(msg) == nil {
 		return fmt.Errorf("%s: OSStatus %d", op, int(status))
 	}
 	defer cfRelease(unsafe.Pointer(msg))
