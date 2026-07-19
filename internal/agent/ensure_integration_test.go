@@ -78,7 +78,7 @@ func newRealManager() Manager {
 }
 
 func realCfg(t *testing.T) EnsureConfig {
-	dir := t.TempDir()
+	dir := shortDir(t)
 	return EnsureConfig{
 		FixedSock: filepath.Join(dir, "agent.sock"),
 		LegacyDir: filepath.Join(dir, "legacy"),
@@ -281,7 +281,7 @@ func TestEnsureAgentRealForeignAdopted(t *testing.T) {
 	m := newRealManager()
 	cfg := realCfg(t)
 
-	foreignSock := filepath.Join(t.TempDir(), "foreign.sock")
+	foreignSock := filepath.Join(shortDir(t), "foreign.sock")
 	foreignPID := startForeignAgent(t, foreignSock)
 
 	res, err := m.EnsureAgent(cfg, nil)
@@ -324,8 +324,8 @@ func TestEnsureAgentRealDisasterReapsAndAdoptsLowestPID(t *testing.T) {
 	}
 	killAgentLeavingSocket(t, res1.Started) // now dead-ours
 
-	sockA := filepath.Join(t.TempDir(), "foreign-a.sock")
-	sockB := filepath.Join(t.TempDir(), "foreign-b.sock")
+	sockA := filepath.Join(shortDir(t), "foreign-a.sock")
+	sockB := filepath.Join(shortDir(t), "foreign-b.sock")
 	pidA := startForeignAgent(t, sockA)
 	pidB := startForeignAgent(t, sockB)
 	lowest := pidA
