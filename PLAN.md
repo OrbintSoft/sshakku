@@ -286,6 +286,50 @@ done are summarised; see the note at the top of this file for full detail.
     distro's official repository yet. Settle when Phase 8 (packaging) is
     reached.
 
+22. **macOS packaging & distribution (goal 12; open).** Raised 2026-07-19,
+    settle when Phase 11 starts (after Phase 8's Linux release pipeline is
+    solid — Linux is the primary target, goal 10). Open questions:
+    - **Codesigning & notarization.** A Developer ID-signed, Apple-notarized
+      binary/installer so Gatekeeper doesn't block it — needed for anything
+      distributed as a prebuilt binary or `.pkg` (a Homebrew formula that
+      builds from source may not need this; a bottled/precompiled one would).
+    - **Installer format.** Whether to ship a `.pkg` installer alongside (or
+      instead of) the Homebrew path.
+    - **Architecture.** Apple Silicon (`arm64`) only, Intel (`amd64`) only, or
+      a universal2 fat binary/package — cost/benefit not yet weighed.
+    - **Installer configurability.** Whether a `.pkg` can/should expose the
+      same install-time options `make install`/`install-user` already do
+      (system-wide vs per-user, `WIRE_ZSHRC`, etc.) via installer choices, or
+      whether the `.pkg` only ever applies fixed defaults and further
+      customization stays CLI/`config.toml`-only, same as today.
+    - **Homebrew.** A project-owned custom tap first, to validate the
+      formula/cask in the wild; submission to homebrew-core (the public,
+      unmaintained-by-us tap) only once proven stable — the same
+      own-channel-first-then-upstream shape open decision 21 already uses for
+      Gentoo's GURU overlay.
+
+23. **macOS secret backend support (goals 11, 12; open).** Raised
+    2026-07-19. Target backend set: Apple Keychain, 1Password, KeePassXC,
+    Bitwarden.
+    - **Keychain. ✅ Done** — Phase 5 step 2, `internal/keys/secret_keychain_darwin.go`.
+    - **1Password / Bitwarden.** Both backends (`internal/keys/secret_onepassword.go`,
+      `secret_bitwarden.go`) shell out to the `op`/`bw` CLIs and carry no
+      build tag — already OS-portable code, same as `internal/agent` looked
+      before Phase 5 step 3 found the real `/proc` gap underneath the
+      "no work needed" assumption. Treat as **unverified, not proven** until
+      exercised for real on macOS CI — do not assume they just work.
+    - **KeePassXC.** On Linux this is *not* its own `SecretBackend` — it's
+      reached generically through the `secret-service` backend, because
+      KeePassXC implements the freedesktop Secret Service D-Bus API itself
+      (open decision 7). macOS has no D-Bus/Secret Service, so that path
+      doesn't carry over; KeePassXC support there needs its own design from
+      scratch. Candidates to research, not yet decided between: KeePassXC's
+      local native-messaging socket protocol (the same one its browser
+      extension uses — a defined JSON-over-Unix-socket protocol, no D-Bus
+      involved) versus shelling out to `keepassxc-cli` (need to check
+      whether it supports a stdin-fed passphrase the way this project's
+      argv rule, open decision 2, already requires of every other backend).
+
 ---
 
 ## Phases
@@ -760,3 +804,16 @@ a revisit once Phase 5 (macOS/Windows) lands.
   Linked from `CONTRIBUTING.md`.
 
 → goals 2, 8, 11, 14, 15, 16; open decision 1.
+
+### Phase 11 — macOS packaging & distribution
+
+Starts after Phase 8's Linux release pipeline is solid — Linux stays the
+primary target (goal 10), macOS the secondary one (goal 12). Covers
+codesigning/notarization, installer format, architecture, installer
+configurability, and the Homebrew tap-then-public-tap path (open decision
+22), plus finishing out the secret backend set beyond Keychain — verifying
+1Password/Bitwarden for real on macOS and designing KeePassXC support from
+scratch, since it has no Secret-Service-equivalent path there (open decision
+23). Detailed steps written when this phase starts.
+
+→ goal 12; open decisions 22, 23.
