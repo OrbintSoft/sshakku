@@ -4,10 +4,15 @@ PREFIX ?= /usr/local
 BINDIR ?= $(PREFIX)/bin
 DESTDIR ?=
 ETC_PROFILE_D ?= /etc/profile.d/
+# The non-login-shell equivalent of /etc/profile.d: some bash builds source
+# every file in here for every interactive shell, login or not. Not every
+# system has one; WIRE_BASHRC below checks it exists before relying on it.
+BASH_BASHRC_D ?= /etc/bash/bashrc.d/
 NN ?= 001
-# Opt-in: also wire install-user's login hook into .bashrc.d/.bashrc, so
-# non-login interactive shells (e.g. a new terminal tab) pick it up too, not
-# just login shells. Off by default; set to any non-empty value to enable.
+# Opt-in: also wire the login hook into a non-login shell's startup files
+# (.bashrc.d/.bashrc per-user, /etc/bash/bashrc.d/ system-wide), so a plain
+# new terminal tab (which often doesn't start a login shell) picks it up
+# too. Off by default; set to any non-empty value to enable.
 WIRE_BASHRC ?=
 
 USER_HOME ?= $(HOME)
@@ -23,6 +28,7 @@ INSTALL_PATH = $(DESTDIR)$(BINDIR)
 SSH_INIT_NAME= $(NN)-ssh-init.sh
 SSH_INIT_BIND_PATH = $(ETC_PROFILE_D)$(SSH_INIT_NAME)
 SSH_INIT_INSTALL_PATH = $(DESTDIR)$(SSH_INIT_BIND_PATH)
+SSH_INIT_BASHRC_INSTALL_PATH = $(DESTDIR)$(BASH_BASHRC_D)$(SSH_INIT_NAME)
 SSHAKKU_INSTALL_PATH = $(INSTALL_PATH)/sshakku
 SSHAKKU_RUNTIME_PATH = $(BINDIR)/sshakku
 
@@ -33,6 +39,15 @@ install: build
 	@install -Dm755 $(SSH_INIT_INSTALL_SCRIPT) $(SSH_INIT_INSTALL_PATH)
 	@echo "Setting binary paths in $(SSH_INIT_INSTALL_PATH)"
 	@sed -i 's|/usr/local/bin/sshakku|$(SSHAKKU_RUNTIME_PATH)|g' $(SSH_INIT_INSTALL_PATH)
+ifneq ($(WIRE_BASHRC),)
+	@if [ ! -d "$(BASH_BASHRC_D)" ]; then \
+		echo "WIRE_BASHRC is set but $(BASH_BASHRC_D) does not exist -- this system has no non-login bash rc drop-in to wire into; override BASH_BASHRC_D if yours lives elsewhere." >&2; \
+		exit 1; \
+	fi
+	@echo "Installing $(SSH_INIT_INSTALL_SCRIPT) to $(SSH_INIT_BASHRC_INSTALL_PATH)"
+	@install -Dm755 $(SSH_INIT_INSTALL_SCRIPT) $(SSH_INIT_BASHRC_INSTALL_PATH)
+	@sed -i 's|/usr/local/bin/sshakku|$(SSHAKKU_RUNTIME_PATH)|g' $(SSH_INIT_BASHRC_INSTALL_PATH)
+endif
 	@echo "Installation complete."
 
 uninstall:
@@ -40,6 +55,7 @@ uninstall:
 	@rm -f $(SSHAKKU_INSTALL_PATH)
 	@echo "Uninstalling $(SSH_INIT_INSTALL_PATH)"
 	@rm -f $(SSH_INIT_INSTALL_PATH)
+	@rm -f $(SSH_INIT_BASHRC_INSTALL_PATH)
 	@echo "Uninstallation complete."
 
 install-user: build

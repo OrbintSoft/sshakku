@@ -46,10 +46,19 @@ Installs the `sshakku` binary to `/usr/local/bin`, plus a login hook to
 because both locations are root-owned; `sshakku` itself never runs with
 elevated privileges — only the one-time install does.
 
+A login shell doesn't fire for every new terminal (see
+[docs/DIAGNOSTICS.md](docs/DIAGNOSTICS.md)). If this system's bash also
+provides a non-login rc drop-in directory (`/etc/bash/bashrc.d` by
+default), opt in with `sudo make install WIRE_BASHRC=1` to additionally
+wire the hook there too, so non-login interactive shells pick it up as
+well; fails loudly instead of silently doing nothing if that directory
+doesn't exist. Additive to the login hook above, never a replacement.
+
 To remove it: `sudo make uninstall`.
 
-Override `PREFIX`/`BINDIR`/`DESTDIR`/`ETC_PROFILE_D` on the `make install`
-command line to install elsewhere (e.g. packaging into a staging root).
+Override `PREFIX`/`BINDIR`/`DESTDIR`/`ETC_PROFILE_D`/`BASH_BASHRC_D` on the
+`make install` command line to install elsewhere (e.g. packaging into a
+staging root).
 
 ### Per-user
 

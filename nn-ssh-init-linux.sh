@@ -1,6 +1,7 @@
 #!/bin/bash
 
-# SSH bootstrap, sourced from /etc/profile.d.
+# SSH bootstrap, sourced from /etc/profile.d (every login shell) and,
+# optionally, /etc/bash/bashrc.d (every non-login interactive shell too).
 #
 # This is a thin hook around the sshakku core. `sshakku shell-init`, evaluated
 # below, keeps an ssh-agent healthy on a fixed socket and prints the runtime
