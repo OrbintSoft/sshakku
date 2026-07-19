@@ -108,9 +108,11 @@ SSHAKKU_RUNTIME_PATH = $(BINDIR)/sshakku
 
 install: build
 	@echo "Installing $(GO_BIN) to $(SSHAKKU_INSTALL_PATH)"
-	@install -Dm755 $(GO_BIN) $(SSHAKKU_INSTALL_PATH)
+	@mkdir -p "$(dir $(SSHAKKU_INSTALL_PATH))"
+	@install -m755 $(GO_BIN) $(SSHAKKU_INSTALL_PATH)
 	@echo "Rendering $(SSH_INIT_INSTALL_SCRIPT) to $(SSH_INIT_HOOK_RENDERED_PATH)"
-	@install -Dm755 $(SSH_INIT_INSTALL_SCRIPT) $(SSH_INIT_HOOK_RENDERED_PATH)
+	@mkdir -p "$(dir $(SSH_INIT_HOOK_RENDERED_PATH))"
+	@install -m755 $(SSH_INIT_INSTALL_SCRIPT) $(SSH_INIT_HOOK_RENDERED_PATH)
 	@sed -i '' 's|/usr/local/bin/sshakku|$(SSHAKKU_RUNTIME_PATH)|g' $(SSH_INIT_HOOK_RENDERED_PATH)
 	@echo "Wiring the login hook into $(SSH_INIT_ZPROFILE_PATH)"
 	@mkdir -p "$(dir $(SSH_INIT_ZPROFILE_PATH))"
@@ -142,7 +144,8 @@ uninstall:
 
 install-user: build
 	@echo "Installing $(GO_BIN) to $(USER_BINDIR)/sshakku"
-	@install -Dm755 $(GO_BIN) $(USER_BINDIR)/sshakku
+	@mkdir -p "$(USER_BINDIR)"
+	@install -m755 $(GO_BIN) $(USER_BINDIR)/sshakku
 	@echo "Wiring the per-user login hook"
 	@./install-user-hook.sh install "$(USER_HOME)" "$(USER_BINDIR)/sshakku" "$(NN)" "$(WIRE_ZSHRC)" zsh
 	@echo "Installation complete."
