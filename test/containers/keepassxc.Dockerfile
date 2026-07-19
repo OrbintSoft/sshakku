@@ -22,9 +22,9 @@ RUN dnf install -y --setopt=install_weak_deps=False \
 
 ENV PATH="/usr/local/go/bin:${PATH}"
 
-COPY test/containers/keepassxc-tier2-entrypoint.sh test/containers/keepassxc-tier2-session.sh test/containers/keepassxc-tier2-create-collection.sh /opt/sshakku-tier2/
-RUN chmod +x /opt/sshakku-tier2/keepassxc-tier2-entrypoint.sh /opt/sshakku-tier2/keepassxc-tier2-session.sh /opt/sshakku-tier2/keepassxc-tier2-create-collection.sh
+COPY test/containers/keepassxc-entrypoint.sh test/containers/keepassxc-session.sh test/containers/keepassxc-create-collection.sh /opt/sshakku-tier2/
+RUN chmod +x /opt/sshakku-tier2/keepassxc-entrypoint.sh /opt/sshakku-tier2/keepassxc-session.sh /opt/sshakku-tier2/keepassxc-create-collection.sh
 
 WORKDIR /src
 
-ENTRYPOINT ["/opt/sshakku-tier2/keepassxc-tier2-entrypoint.sh"]
+ENTRYPOINT ["/opt/sshakku-tier2/keepassxc-entrypoint.sh"]

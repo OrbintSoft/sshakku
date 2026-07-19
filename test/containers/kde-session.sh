@@ -1,5 +1,5 @@
 #!/bin/bash
-# Runs as the disposable test account (see kde-tier2-entrypoint.sh): starts a
+# Runs as the disposable test account (see kde-entrypoint.sh): starts a
 # private D-Bus session bus, opens a real PAM session to unlock ksecretd the
 # same way a real login does, then forwards this session's environment over
 # ksecretd's own handshake socket — the step a desktop's pam_kwallet_init
@@ -15,7 +15,7 @@ wait_for() {
 	until "$@"; do
 		tries=$((tries - 1))
 		if [ "${tries}" -le 0 ]; then
-			echo "kde-tier2-session: timed out waiting for ${description}" >&2
+			echo "kde-session: timed out waiting for ${description}" >&2
 			exit 1
 		fi
 		sleep 0.2

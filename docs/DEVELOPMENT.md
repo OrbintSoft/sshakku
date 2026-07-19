@@ -89,12 +89,12 @@ only on demand (`workflow_dispatch` in CI, not on every push, since each one
 drives a full desktop stack headlessly and takes noticeably longer):
 
 ```sh
-docker build -f test/containers/kde-tier2.Dockerfile -t sshakku-test-tier2-kde .
+docker build -f test/containers/kde.Dockerfile -t sshakku-test-tier2-kde .
 docker run --init --rm -v "$PWD":/src:ro sshakku-test-tier2-kde make test
 ```
 
-Swap `kde-tier2` for `gnome-keyring-tier2`, `keepassxc-tier2`, or
-`vaultwarden-tier2` for the other backends. Each Dockerfile's header comment
+Swap `kde` for `gnome-keyring`, `keepassxc`, or `vaultwarden` for the other
+backends. Each Dockerfile's header comment
 explains why that particular distro/version was chosen (e.g. KDE's
 `ksecretd` isn't packaged on Debian; Debian's KeePassXC 2.7.10 segfaults on a
 backgrounded unlock where Fedora's 2.7.12 doesn't).

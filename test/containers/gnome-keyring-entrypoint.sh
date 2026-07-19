@@ -1,10 +1,10 @@
 #!/bin/bash
 # Container entrypoint, run as root: creates the disposable test account and
-# its runtime dir, then hands off to keepassxc-tier2-session.sh (as that
+# its runtime dir, then hands off to gnome-keyring-session.sh (as that
 # account) to actually drive the test command.
 set -euo pipefail
 
-readonly TEST_USER="sshakku-keepassxc-test"
+readonly TEST_USER="sshakku-gnome-test"
 readonly TEST_UID="1000"
 readonly RUNTIME_DIR="/run/user/${TEST_UID}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -34,4 +34,4 @@ exec runuser -u "${TEST_USER}" -- env -i \
 	XDG_RUNTIME_DIR="${RUNTIME_DIR}" \
 	DBUS_SESSION_BUS_ADDRESS="unix:path=${RUNTIME_DIR}/bus" \
 	SSHAKKU_TEST_ALLOW_REAL_SECRETSERVICE="1" \
-	"${SCRIPT_DIR}/keepassxc-tier2-session.sh" "$@"
+	"${SCRIPT_DIR}/gnome-keyring-session.sh" "$@"

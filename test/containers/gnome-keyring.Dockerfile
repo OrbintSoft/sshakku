@@ -20,9 +20,9 @@ RUN apt-get update \
 
 ENV PATH="/usr/local/go/bin:${PATH}"
 
-COPY test/containers/gnome-keyring-tier2-entrypoint.sh test/containers/gnome-keyring-tier2-session.sh test/containers/gnome-keyring-tier2-create-collection.sh /opt/sshakku-tier2/
-RUN chmod +x /opt/sshakku-tier2/gnome-keyring-tier2-entrypoint.sh /opt/sshakku-tier2/gnome-keyring-tier2-session.sh /opt/sshakku-tier2/gnome-keyring-tier2-create-collection.sh
+COPY test/containers/gnome-keyring-entrypoint.sh test/containers/gnome-keyring-session.sh test/containers/gnome-keyring-create-collection.sh /opt/sshakku-tier2/
+RUN chmod +x /opt/sshakku-tier2/gnome-keyring-entrypoint.sh /opt/sshakku-tier2/gnome-keyring-session.sh /opt/sshakku-tier2/gnome-keyring-create-collection.sh
 
 WORKDIR /src
 
-ENTRYPOINT ["/opt/sshakku-tier2/gnome-keyring-tier2-entrypoint.sh"]
+ENTRYPOINT ["/opt/sshakku-tier2/gnome-keyring-entrypoint.sh"]

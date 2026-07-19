@@ -16,7 +16,7 @@ import (
 // on (see the design note on BitwardenBackend), so this test needs the
 // account's identity up front: SSHAKKU_TEST_BW_EMAIL and
 // SSHAKKU_TEST_BW_PASSWORD (a fixed, disposable-fixture password — never a
-// real secret; see vaultwarden-tier2-session.sh) and, for a self-hosted
+// real secret; see vaultwarden-session.sh) and, for a self-hosted
 // server, SSHAKKU_TEST_BW_SERVER. It never runs `op signin`-equivalent setup
 // itself beyond that: Unlock is the exact production code path, exercised
 // here for real rather than assumed correct because it round-trips through
