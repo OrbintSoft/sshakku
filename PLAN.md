@@ -633,23 +633,38 @@ brought forward to Phase 4.1; this phase adds tier 3 (the full Vagrant
 Gentoo/OpenRC/KDE box) as a manually-triggered CI workflow. → goal 16; open
 decisions 9, 20.
 
-### Phase 7 — CI review & dependency hardening
+### Phase 7 — CI review & dependency hardening ✅ Done
 
-A final pass over the whole CI once it spans every platform and language. Audit
-each workflow for least-privilege `permissions:` (rule 14), de-duplicate the
-lint/test jobs, add dependency caching and sensible `concurrency`, and confirm
-`make lint` and the test suites stay the single entrypoints CI invokes. Settle
-dependency automation: choose Dependabot vs Renovate (open) and extend it to
-*every* ecosystem — `github-actions`, `gomod`, `npm` — so the lint-tool versions
-pinned by hand in Phase 0.4 become auto-managed once the `go.mod`/`package.json`
-manifests exist. Pin all third-party actions by full commit SHA with version
-comments, and pin tool/runtime versions (Go, Node, the linters) for reproducible
-builds. Re-evaluate per-file-type lint coverage (rule 12) against whatever file
-types the repo has grown by then. Also rename `test/containers/*-tier2-*`
-files to drop the `tier2` infix — it leaked an internal test-strategy label
-(open decision 20) into filenames meant to describe *what* each script does,
-not *which test tier* runs it; update the workflows and any doc references at
-the same time. → goal 16; open decisions 9, 11, 20; rules 12, 14.
+A final pass over the whole CI once it spanned every platform and language.
+
+- **Least-privilege & structure.** Every workflow already declared top-level
+  `permissions: contents: read` and pinned third-party actions by commit SHA
+  (done in Phase 0) — confirmed still true, no gaps found. Added a
+  `concurrency` group (cancel-in-progress) to all 4 workflows; pinned
+  `go-version`/`node-version` to exact versions instead of `stable`/`lts/*`;
+  added `actions/cache` for the native/Go lint tools, keyed on their pinned
+  versions; deduplicated the repeated `setup-go` steps into a local composite
+  action (`.github/actions/setup-go-env`).
+- **Dependency automation.** `dependabot.yml` gained a `gomod` ecosystem entry
+  for the 3 runtime deps. The 5 Go-installed lint tools stay hand-pinned by
+  full commit hash in `linting.yml`, not moved into `go.mod`'s `tool` block —
+  golangci-lint alone would have pulled ~200 transitive dependencies into the
+  module's dependency graph, an unwanted licensing/audit surface for a
+  dev-only tool never linked into the shipped binary (rule 16).
+  markdownlint-cli2/taplo stay hand-pinned npm installs for the same reason —
+  npm package versions are immutable, so no manifest is needed for
+  reproducibility. shellcheck/hadolint stay hand-pinned native binaries — no
+  ecosystem covers those.
+- **Per-file-type lint coverage (rule 12).** Added `zsh -n` syntax checking
+  (`lint-zsh`) for `ssh-init-macos.zsh`, the one previously-uncovered file
+  type found; every other new extension since the table was last updated is
+  either tool-owned config or plain/binary fixture data with nothing to lint.
+- **Naming cleanup.** Renamed all 18 `test/containers/*-tier2-*` files to
+  drop the `tier2` infix, which leaked the internal test-tier label (open
+  decision 20) into filenames meant to describe what each file does, not
+  which tier runs it.
+
+→ goal 16; open decisions 9, 11, 20; rules 12, 14.
 
 ### Phase 8 — Release pipeline
 
