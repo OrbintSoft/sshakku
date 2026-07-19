@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"encoding/binary"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -145,4 +146,73 @@ func TestSocketArg(t *testing.T) {
 			}
 		})
 	}
+}
+
+// buildKernProcArgs2 synthesizes a buffer shaped like what macOS's
+// kern.procargs2 sysctl returns, for parseKernProcArgs2's unit tests:
+// [4-byte argc][execPath\0][padding NULs][argv[0]\0]...[argv[n-1]\0].
+func buildKernProcArgs2(execPath string, padding int, argv []string) []byte {
+	var buf []byte
+	argc := make([]byte, 4)
+	binary.LittleEndian.PutUint32(argc, uint32(len(argv)))
+	buf = append(buf, argc...)
+	buf = append(buf, execPath...)
+	buf = append(buf, 0)
+	buf = append(buf, make([]byte, padding)...)
+	for _, a := range argv {
+		buf = append(buf, a...)
+		buf = append(buf, 0)
+	}
+	return buf
+}
+
+func TestParseKernProcArgs2(t *testing.T) {
+	t.Run("normal, no padding", func(t *testing.T) {
+		want := []string{"ssh-agent", "-a", "/tmp/x.sock"}
+		buf := buildKernProcArgs2("/usr/bin/ssh-agent", 0, want)
+		got := parseKernProcArgs2(buf)
+		if len(got) != len(want) {
+			t.Fatalf("parseKernProcArgs2 = %v, want %v", got, want)
+		}
+		for i := range want {
+			if got[i] != want[i] {
+				t.Errorf("argv[%d] = %q, want %q", i, got[i], want[i])
+			}
+		}
+	})
+	t.Run("with word-alignment padding", func(t *testing.T) {
+		want := []string{"ssh-agent", "-D"}
+		buf := buildKernProcArgs2("/usr/bin/ssh-agent", 5, want)
+		got := parseKernProcArgs2(buf)
+		if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+			t.Fatalf("parseKernProcArgs2 = %v, want %v", got, want)
+		}
+	})
+	t.Run("buffer too short", func(t *testing.T) {
+		if got := parseKernProcArgs2([]byte{1, 2}); got != nil {
+			t.Errorf("parseKernProcArgs2(short) = %v, want nil", got)
+		}
+	})
+	t.Run("zero argc", func(t *testing.T) {
+		buf := buildKernProcArgs2("/usr/bin/ssh-agent", 0, nil)
+		if got := parseKernProcArgs2(buf); got != nil {
+			t.Errorf("parseKernProcArgs2(argc=0) = %v, want nil", got)
+		}
+	})
+	t.Run("argc larger than available chunks does not panic or overrun", func(t *testing.T) {
+		// A real kernel buffer's argc always matches its actual argv count;
+		// this only exercises defensive bounds-checking against a
+		// corrupted/truncated buffer, matching the same "prefer a trailing
+		// empty string over reading into the environment" tradeoff
+		// well-established parsers of this exact sysctl format make.
+		buf := buildKernProcArgs2("/usr/bin/ssh-agent", 0, []string{"ssh-agent"})
+		binary.LittleEndian.PutUint32(buf[:4], 5) // claim 5 args, only 1 present
+		got := parseKernProcArgs2(buf)
+		if len(got) == 0 || got[0] != "ssh-agent" {
+			t.Fatalf("parseKernProcArgs2(truncated) = %v, want a slice starting with ssh-agent", got)
+		}
+		if len(got) > 2 {
+			t.Errorf("parseKernProcArgs2(truncated) returned %d entries from a 1-entry buffer, want at most 2 (real arg + trailing empty)", len(got))
+		}
+	})
 }
