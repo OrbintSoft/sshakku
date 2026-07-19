@@ -14,7 +14,7 @@ import (
 // bus. On a developer's machine that ambient bus is their real, live desktop
 // session — there is no way to tell a disposable one from a real one from
 // inside the test — so this must default to skipped and only ever be set by
-// an environment built to be disposable, e.g. the tier-2 container's
+// an environment built to be disposable, e.g. a desktop-stack container's
 // entrypoint, never by a developer running `go test` locally.
 const allowRealSecretServiceEnv = "SSHAKKU_TEST_ALLOW_REAL_SECRETSERVICE"
 
@@ -41,7 +41,7 @@ const allowRealSecretServiceEnv = "SSHAKKU_TEST_ALLOW_REAL_SECRETSERVICE"
 // batched single unlock avoids.
 func TestSecretServiceBackendRealDaemon(t *testing.T) {
 	if os.Getenv(allowRealSecretServiceEnv) == "" {
-		t.Skipf("skipping: set %s=1 to run against a real Secret Service daemon (only safe in a disposable environment, e.g. the tier-2 container)", allowRealSecretServiceEnv)
+		t.Skipf("skipping: set %s=1 to run against a real Secret Service daemon (only safe in a disposable environment, e.g. a desktop-stack container)", allowRealSecretServiceEnv)
 	}
 
 	client, err := secretservice.NewClient()

@@ -1,4 +1,4 @@
-# Tier 1 (headless, no desktop) test environment: a widely-used systemd
+# Headless, no-desktop test environment: a widely-used systemd
 # distro. Go is fetched at the "stable" release, matching the go-version
 # used by the other CI jobs (actions/setup-go), rather than hand-pinned
 # here.

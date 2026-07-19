@@ -45,8 +45,8 @@ func lockRealAgentTests(t *testing.T) {
 // the processes they spawn — so a pre-existing reachable agent (a real login
 // session, or another test suite's leftover) would be picked up as a foreign
 // candidate and change which state EnsureAgent lands on. These tests are
-// meant for an isolated PID namespace (the tier-1 container, or a fresh CI
-// runner), never a live desktop session.
+// meant for an isolated PID namespace (the container test suite, or a fresh
+// CI runner), never a live desktop session.
 func requireIsolatedAgentEnvironment(t *testing.T) {
 	t.Helper()
 	if _, err := exec.LookPath("ssh-agent"); err != nil {
@@ -61,8 +61,8 @@ func requireIsolatedAgentEnvironment(t *testing.T) {
 	for _, p := range procs {
 		if p.Socket != "" && prober.Reachable(p.Socket) {
 			t.Skipf("a real ssh-agent (pid %d, socket %s) is already reachable on this machine — "+
-				"these five-state integration tests need an isolated PID namespace (e.g. the tier-1 "+
-				"container), not a live desktop session", p.PID, p.Socket)
+				"these five-state integration tests need an isolated PID namespace (e.g. the "+
+				"container test suite), not a live desktop session", p.PID, p.Socket)
 		}
 	}
 }

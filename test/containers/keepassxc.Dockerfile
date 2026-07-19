@@ -1,13 +1,14 @@
-# Tier 2 (headless, real desktop secret stack) test environment: KeePassXC's
+# Headless, real desktop secret stack test environment: KeePassXC's
 # Secret Service D-Bus integration. Unlike ksecretd/gnome-keyring-daemon,
 # KeePassXC has no standalone daemon mode — a "collection" is an open
 # database tab inside the full GUI app, so this image drives the one-time
 # "create new database" wizard headlessly via Xvfb + xdotool, the same shape
 # already used for the GNOME Keyring row. Fedora is used instead of the
-# tier-1 Debian image because Debian trixie's keepassxc package (2.7.10)
-# segfaults whenever it unlocks a database while running as a backgrounded
-# process, which Fedora's newer build (2.7.12) does not. Go is fetched at
-# the "stable" release, matching the go-version used by the other CI jobs
+# container test suite's Debian image because Debian trixie's keepassxc
+# package (2.7.10) segfaults whenever it unlocks a database while running
+# as a backgrounded process, which Fedora's newer build (2.7.12) does not.
+# Go is fetched at the "stable" release, matching the go-version used by
+# the other CI jobs
 # (actions/setup-go), rather than hand-pinned here.
 FROM fedora:44
 
@@ -22,9 +23,9 @@ RUN dnf install -y --setopt=install_weak_deps=False \
 
 ENV PATH="/usr/local/go/bin:${PATH}"
 
-COPY test/containers/keepassxc-entrypoint.sh test/containers/keepassxc-session.sh test/containers/keepassxc-create-collection.sh /opt/sshakku-tier2/
-RUN chmod +x /opt/sshakku-tier2/keepassxc-entrypoint.sh /opt/sshakku-tier2/keepassxc-session.sh /opt/sshakku-tier2/keepassxc-create-collection.sh
+COPY test/containers/keepassxc-entrypoint.sh test/containers/keepassxc-session.sh test/containers/keepassxc-create-collection.sh /opt/sshakku-desktop-stack/
+RUN chmod +x /opt/sshakku-desktop-stack/keepassxc-entrypoint.sh /opt/sshakku-desktop-stack/keepassxc-session.sh /opt/sshakku-desktop-stack/keepassxc-create-collection.sh
 
 WORKDIR /src
 
-ENTRYPOINT ["/opt/sshakku-tier2/keepassxc-entrypoint.sh"]
+ENTRYPOINT ["/opt/sshakku-desktop-stack/keepassxc-entrypoint.sh"]

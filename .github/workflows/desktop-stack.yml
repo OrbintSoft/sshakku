@@ -1,4 +1,4 @@
-name: Tier 2 desktop secret stacks
+name: Desktop secret stacks
 
 on: workflow_dispatch
 
@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   container-test:
-    name: make test (tier2 / ${{ matrix.name }})
+    name: make test (desktop-stack / ${{ matrix.name }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -32,7 +32,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Build ${{ matrix.name }} test image
-        run: docker build -f ${{ matrix.dockerfile }} -t sshakku-test-tier2-${{ matrix.name }} .
+        run: docker build -f ${{ matrix.dockerfile }} -t sshakku-test-desktop-stack-${{ matrix.name }} .
 
       - name: Run make test in ${{ matrix.name }}
-        run: docker run --init --rm -v "${{ github.workspace }}":/src:ro sshakku-test-tier2-${{ matrix.name }} make test
+        run: docker run --init --rm -v "${{ github.workspace }}":/src:ro sshakku-test-desktop-stack-${{ matrix.name }} make test

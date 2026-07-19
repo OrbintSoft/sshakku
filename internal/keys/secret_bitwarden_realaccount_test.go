@@ -21,7 +21,7 @@ import (
 // itself beyond that: Unlock is the exact production code path, exercised
 // here for real rather than assumed correct because it round-trips through
 // a fake Runner in secret_bitwarden_test.go. It only runs locally or in the
-// tier-2 container for now (see PLAN.md 4.2) — a Bitwarden/Vaultwarden
+// Vaultwarden desktop-stack container for now — a Bitwarden/Vaultwarden
 // account needs a server to talk to, unlike the local `op` app-integration
 // case.
 const allowRealBitwardenEnv = "SSHAKKU_TEST_ALLOW_REAL_BITWARDEN"

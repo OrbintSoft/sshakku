@@ -4,8 +4,8 @@
 # hook), and points every XDG/HOME path at a throwaway tree so tests never
 # touch the real user or system state.
 #
-# This suite must only ever run in a disposable environment (the tier-1
-# container): a real machine can have its own system-wide sshakku install
+# This suite must only ever run in a disposable environment (the container
+# test suite): a real machine can have its own system-wide sshakku install
 # and secret store, and every test here manipulates real ssh-agent
 # processes and real login-hook plumbing. SSHAKKU_TEST_ALLOW_BATS=1 is the
 # same explicit-opt-in pattern internal/keys's real-daemon integration
@@ -15,7 +15,7 @@ REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
 
 setup_file() {
 	if [ "${SSHAKKU_TEST_ALLOW_BATS:-}" != "1" ]; then
-		echo "skipping: set SSHAKKU_TEST_ALLOW_BATS=1 to run this suite — only safe in a disposable environment (the tier-1 container), never on a real machine with its own sshakku install" >&2
+		echo "skipping: set SSHAKKU_TEST_ALLOW_BATS=1 to run this suite — only safe in a disposable environment (the container test suite), never on a real machine with its own sshakku install" >&2
 		exit 1
 	fi
 
@@ -52,7 +52,7 @@ setup() {
 
 	# This suite exercises the headless path deliberately: whatever graphical
 	# session the machine actually running bats has (a real desktop on a
-	# developer's own box, none at all in the tier-1 container) must not
+	# developer's own box, none at all in the container test suite) must not
 	# leak in and make sshakku try kdialog — that would pop a real dialog
 	# and block on human input instead of running unattended. BASH_ENV is
 	# cleared too: every bash invocation below is non-interactive, non-login

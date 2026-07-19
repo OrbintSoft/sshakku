@@ -1,9 +1,9 @@
-# Tier 2 (headless, real desktop secret stack) test environment: KDE's
+# Headless, real desktop secret stack test environment: KDE's
 # Secret Service daemon (ksecretd) and kwalletd6, unlocked non-interactively
 # via pam-kwallet the same way a real login does — no display server
-# needed. Fedora is used here instead of the tier-1 Debian image because
-# Debian does not currently package ksecretd. Go is fetched at the "stable"
-# release, matching the go-version used by the other CI jobs
+# needed. Fedora is used here instead of the container test suite's Debian
+# image because Debian does not currently package ksecretd. Go is fetched
+# at the "stable" release, matching the go-version used by the other CI jobs
 # (actions/setup-go), rather than hand-pinned here.
 FROM fedora:44
 
@@ -18,9 +18,9 @@ RUN dnf install -y --setopt=install_weak_deps=False \
 
 ENV PATH="/usr/local/go/bin:${PATH}"
 
-COPY test/containers/kde-entrypoint.sh test/containers/kde-session.sh test/containers/kde.env test/containers/kde-pam.conf test/containers/kde-kwalletrc /opt/sshakku-tier2/
-RUN chmod +x /opt/sshakku-tier2/kde-entrypoint.sh /opt/sshakku-tier2/kde-session.sh
+COPY test/containers/kde-entrypoint.sh test/containers/kde-session.sh test/containers/kde.env test/containers/kde-pam.conf test/containers/kde-kwalletrc /opt/sshakku-desktop-stack/
+RUN chmod +x /opt/sshakku-desktop-stack/kde-entrypoint.sh /opt/sshakku-desktop-stack/kde-session.sh
 
 WORKDIR /src
 
-ENTRYPOINT ["/opt/sshakku-tier2/kde-entrypoint.sh"]
+ENTRYPOINT ["/opt/sshakku-desktop-stack/kde-entrypoint.sh"]

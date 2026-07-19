@@ -18,7 +18,7 @@
 # Secret Service integration enabled.
 set -euo pipefail
 
-readonly DB_PASSWORD="sshakku-keepassxc-tier2-test-password"
+readonly DB_PASSWORD="sshakku-keepassxc-desktop-stack-test-password"
 readonly DB_FILE="${HOME}/Passwords.kdbx"
 
 wait_for() {

@@ -14,7 +14,7 @@ readonly VAULTWARDEN_URL="https://localhost:${VAULTWARDEN_PORT}"
 # purpose, so every run of this fixture unlocks the same way. Never reuse it
 # for anything real.
 readonly TEST_EMAIL="sshakku-test@example.invalid"
-readonly TEST_MASTER_PASSWORD="sshakku-tier2-fixture-not-a-real-secret-1"
+readonly TEST_MASTER_PASSWORD="sshakku-desktop-stack-fixture-not-a-real-secret-1"
 
 wait_for() {
 	local description="$1" tries=50

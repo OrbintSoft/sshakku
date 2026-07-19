@@ -32,8 +32,8 @@ readonly TRIGGER_PID=$!
 # idempotent (clicking after the daemon already resolved the prompt is a
 # no-op) — a missed click from render-timing jitter is retried rather than
 # failing outright. This is a much smaller flakiness surface than driving
-# every unlock, the approach already rejected for the KDE tier-2 row: here
-# it is one bounded, retryable step, not one per operation.
+# every unlock, the approach already rejected for the KDE desktop-stack
+# image: here it is one bounded, retryable step, not one per operation.
 for _ in 1 2 3 4 5; do
 	if ! kill -0 "${TRIGGER_PID}" 2>/dev/null; then
 		break
