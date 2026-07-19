@@ -82,16 +82,22 @@ print-paths:
 	@echo "USER_BINDIR: $(USER_BINDIR)"
 
 # Linting. Requires: shellcheck, shfmt, markdownlint-cli2, taplo, checkmake,
-# actionlint, editorconfig-checker, hadolint. Each tool reads its own config
-# file where it has one.
+# actionlint, editorconfig-checker, hadolint, zsh. Each tool reads its own
+# config file where it has one.
 SH_SCRIPTS = $(wildcard *.sh) $(wildcard .githooks/*) $(wildcard test/containers/*.sh) $(wildcard test/bats/*.bats) $(wildcard test/bats/*.bash) $(wildcard test/bats/fixtures/*)
+ZSH_SCRIPTS = $(wildcard *.zsh)
 DOCKERFILES = $(wildcard test/containers/*.Dockerfile)
 
-lint: lint-sh lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go lint-docker
+lint: lint-sh lint-zsh lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go lint-docker
 
 lint-sh:
 	shellcheck $(SH_SCRIPTS)
 	shfmt -d $(SH_SCRIPTS)
+
+# zsh has no shellcheck/shfmt-equivalent linter; -n gives a real but
+# syntax-only check (no style/portability warnings).
+lint-zsh:
+	@for f in $(ZSH_SCRIPTS); do zsh -n "$$f" || exit 1; done
 
 lint-md:
 	markdownlint-cli2
@@ -117,5 +123,5 @@ lint-go:
 lint-docker:
 	hadolint $(DOCKERFILES)
 
-.PHONY: install uninstall install-user uninstall-user build test test-bats print-paths lint lint-sh lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go lint-docker
+.PHONY: install uninstall install-user uninstall-user build test test-bats print-paths lint lint-sh lint-zsh lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go lint-docker
 .DEFAULT_GOAL := install
