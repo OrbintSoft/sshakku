@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 # Shell-level regression checklist for the login hook and agent lifecycle
-# (nn-ssh-init-linux.sh + the sshakku binary it drives), run against real
+# (nn-ssh-init.sh + the sshakku binary it drives), run against real
 # ssh-agent/ssh-add processes. A stub secret-tool (test/bats/fixtures)
 # stands in for a real Secret Service so the vault is reachable without a
 # desktop session.
@@ -19,7 +19,7 @@
 # tests).
 #
 # agent_sock/agent_lock/log_file below come from `eval "$(sshakku
-# shell-init)"`, the same mechanism nn-ssh-init-linux.sh itself uses — a
+# shell-init)"`, the same mechanism nn-ssh-init.sh itself uses — a
 # static analyzer cannot trace an eval'd assignment, hence the file-wide
 # disable below.
 # shellcheck disable=SC2154

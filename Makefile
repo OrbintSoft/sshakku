@@ -18,6 +18,16 @@ NN ?= 001
 # to enable.
 WIRE_BASHRC ?=
 
+# macOS has no /etc/zprofile.d/-style drop-in convention, so the system-wide
+# install renders the hook once to SHARE_DIR and upserts a marker-block
+# source line into these two single files instead — /etc/zprofile for the
+# login shell (mirrors ETC_PROFILE_D's role), /etc/zshrc opt-in via
+# WIRE_ZSHRC for non-login interactive shells (mirrors WIRE_BASHRC).
+SHARE_DIR ?= $(PREFIX)/share/sshakku/
+ETC_ZPROFILE ?= /etc/zprofile
+ETC_ZSHRC ?= /etc/zshrc
+WIRE_ZSHRC ?=
+
 USER_HOME ?= $(HOME)
 USER_BINDIR ?= $(USER_HOME)/.local/bin
 
@@ -26,7 +36,7 @@ GO_MAIN = ./cmd/sshakku
 GO_BIN = bin/sshakku
 
 ifeq ($(UNAME),Linux)
-SSH_INIT_INSTALL_SCRIPT = nn-ssh-init-linux.sh
+SSH_INIT_INSTALL_SCRIPT = nn-ssh-init.sh
 INSTALL_PATH = $(DESTDIR)$(BINDIR)
 SSH_INIT_NAME= $(NN)-ssh-init.sh
 SSH_INIT_BIND_PATH = $(ETC_PROFILE_D)$(SSH_INIT_NAME)
@@ -83,6 +93,67 @@ uninstall-user:
 	@./install-user-hook.sh uninstall "$(USER_HOME)" "$(NN)"
 	@echo "Uninstallation complete."
 
+else ifeq ($(UNAME),Darwin)
+SSH_INIT_INSTALL_SCRIPT = nn-ssh-init.sh
+INSTALL_PATH = $(DESTDIR)$(BINDIR)
+SSH_INIT_NAME = $(NN)-sshakku-init.sh
+SSH_INIT_HOOK_RENDERED_PATH = $(DESTDIR)$(SHARE_DIR)$(SSH_INIT_NAME)
+SSH_INIT_ZPROFILE_PATH = $(DESTDIR)$(ETC_ZPROFILE)
+SSH_INIT_ZSHRC_PATH = $(DESTDIR)$(ETC_ZSHRC)
+# print-paths' one shared name for "where the login shell picks this up" —
+# on Darwin that's the marker-block file, not the rendered hook itself.
+SSH_INIT_INSTALL_PATH = $(SSH_INIT_ZPROFILE_PATH)
+SSHAKKU_INSTALL_PATH = $(INSTALL_PATH)/sshakku
+SSHAKKU_RUNTIME_PATH = $(BINDIR)/sshakku
+
+install: build
+	@echo "Installing $(GO_BIN) to $(SSHAKKU_INSTALL_PATH)"
+	@install -Dm755 $(GO_BIN) $(SSHAKKU_INSTALL_PATH)
+	@echo "Rendering $(SSH_INIT_INSTALL_SCRIPT) to $(SSH_INIT_HOOK_RENDERED_PATH)"
+	@install -Dm755 $(SSH_INIT_INSTALL_SCRIPT) $(SSH_INIT_HOOK_RENDERED_PATH)
+	@sed -i '' 's|/usr/local/bin/sshakku|$(SSHAKKU_RUNTIME_PATH)|g' $(SSH_INIT_HOOK_RENDERED_PATH)
+	@echo "Wiring the login hook into $(SSH_INIT_ZPROFILE_PATH)"
+	@mkdir -p "$(dir $(SSH_INIT_ZPROFILE_PATH))"
+	@./shell-hook-lib.sh upsert-block "$(SSH_INIT_ZPROFILE_PATH)" '. "$(SSH_INIT_HOOK_RENDERED_PATH)"'
+ifneq ($(WIRE_ZSHRC),)
+	@echo "Wiring the non-login zsh hook into $(SSH_INIT_ZSHRC_PATH)"
+	@mkdir -p "$(dir $(SSH_INIT_ZSHRC_PATH))"
+	@./shell-hook-lib.sh upsert-block "$(SSH_INIT_ZSHRC_PATH)" '. "$(SSH_INIT_HOOK_RENDERED_PATH)"'
+endif
+	@echo "Installation complete."
+
+uninstall:
+	@echo "Uninstalling $(SSHAKKU_INSTALL_PATH)"
+	@rm -f $(SSHAKKU_INSTALL_PATH)
+	@echo "Removing $(SSH_INIT_HOOK_RENDERED_PATH)"
+	@rm -f $(SSH_INIT_HOOK_RENDERED_PATH)
+	@rmdir "$(dir $(SSH_INIT_HOOK_RENDERED_PATH))" 2>/dev/null || true
+	@if [ -f "$(SSH_INIT_ZPROFILE_PATH)" ]; then \
+		tmp=$$(mktemp "$(SSH_INIT_ZPROFILE_PATH).XXXXXX"); \
+		./shell-hook-lib.sh strip-block "$(SSH_INIT_ZPROFILE_PATH)" >"$$tmp"; \
+		mv "$$tmp" "$(SSH_INIT_ZPROFILE_PATH)"; \
+	fi
+	@if [ -f "$(SSH_INIT_ZSHRC_PATH)" ]; then \
+		tmp=$$(mktemp "$(SSH_INIT_ZSHRC_PATH).XXXXXX"); \
+		./shell-hook-lib.sh strip-block "$(SSH_INIT_ZSHRC_PATH)" >"$$tmp"; \
+		mv "$$tmp" "$(SSH_INIT_ZSHRC_PATH)"; \
+	fi
+	@echo "Uninstallation complete."
+
+install-user: build
+	@echo "Installing $(GO_BIN) to $(USER_BINDIR)/sshakku"
+	@install -Dm755 $(GO_BIN) $(USER_BINDIR)/sshakku
+	@echo "Wiring the per-user login hook"
+	@./install-user-hook.sh install "$(USER_HOME)" "$(USER_BINDIR)/sshakku" "$(NN)" "$(WIRE_ZSHRC)" zsh
+	@echo "Installation complete."
+
+uninstall-user:
+	@echo "Uninstalling $(USER_BINDIR)/sshakku"
+	@rm -f $(USER_BINDIR)/sshakku
+	@echo "Removing the per-user login hook"
+	@./install-user-hook.sh uninstall "$(USER_HOME)" "$(NN)" zsh
+	@echo "Uninstallation complete."
+
 else
 
 install uninstall install-user uninstall-user:
@@ -115,7 +186,7 @@ print-paths:
 # Linting. Requires: shellcheck, shfmt, markdownlint-cli2, taplo, checkmake,
 # actionlint, editorconfig-checker, hadolint, zsh. Each tool reads its own
 # config file where it has one.
-SH_SCRIPTS = $(wildcard *.sh) $(wildcard .githooks/*) $(wildcard test/containers/*.sh) $(wildcard test/bats/*.bats) $(wildcard test/bats/*.bash) $(wildcard test/bats/fixtures/*)
+SH_SCRIPTS = $(wildcard *.sh) $(wildcard .githooks/*) $(wildcard test/*.sh) $(wildcard test/containers/*.sh) $(wildcard test/bats/*.bats) $(wildcard test/bats/*.bash) $(wildcard test/bats/fixtures/*)
 ZSH_SCRIPTS = $(wildcard *.zsh)
 DOCKERFILES = $(wildcard test/containers/*.Dockerfile)
 
