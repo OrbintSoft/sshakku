@@ -47,18 +47,19 @@ because both locations are root-owned; `sshakku` itself never runs with
 elevated privileges — only the one-time install does.
 
 A login shell doesn't fire for every new terminal (see
-[docs/DIAGNOSTICS.md](docs/DIAGNOSTICS.md)). If this system's bash also
-provides a non-login rc drop-in directory (`/etc/bash/bashrc.d` by
-default), opt in with `sudo make install WIRE_BASHRC=1` to additionally
-wire the hook there too, so non-login interactive shells pick it up as
-well; fails loudly instead of silently doing nothing if that directory
-doesn't exist. Additive to the login hook above, never a replacement.
+[docs/DIAGNOSTICS.md](docs/DIAGNOSTICS.md)). Opt in with `sudo make install
+WIRE_BASHRC=1` to additionally wire the hook into non-login interactive
+shells too: if this system's bash provides a non-login rc drop-in directory
+(`/etc/bash/bashrc.d` by default), a file is dropped there; otherwise a
+clearly delimited block is added to a single file (`/etc/bash.bashrc` by
+default, created if it doesn't exist yet). Additive to the login hook
+above, never a replacement.
 
 To remove it: `sudo make uninstall`.
 
-Override `PREFIX`/`BINDIR`/`DESTDIR`/`ETC_PROFILE_D`/`BASH_BASHRC_D` on the
-`make install` command line to install elsewhere (e.g. packaging into a
-staging root).
+Override `PREFIX`/`BINDIR`/`DESTDIR`/`ETC_PROFILE_D`/`BASH_BASHRC_D`/
+`BASH_BASHRC_FILE` on the `make install` command line to install elsewhere
+(e.g. packaging into a staging root).
 
 ### Per-user
 

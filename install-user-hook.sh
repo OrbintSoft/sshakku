@@ -6,6 +6,9 @@
 # <home>/.local/share/sshakku/shell-hook.sh (from nn-ssh-init-linux.sh, with
 # the per-user binary path substituted in), so both wiring mechanisms below
 # reduce to a single `source` line instead of duplicating the hook logic.
+# The marker-block/drop-in file primitives themselves live in
+# shell-hook-lib.sh, shared with this repo's Makefile for the equivalent
+# system-wide wiring.
 #
 # Usage:
 #   install-user-hook.sh install <home> <sshakku_bin_path> [nn] [wire_bashrc]
@@ -29,52 +32,9 @@
 # .bashrc — is harmless.
 set -euo pipefail
 
-marker_start="# >>> sshakku >>>"
-marker_end="# <<< sshakku <<<"
-
-# strip_block prints file with any existing sshakku marker block, and any
-# trailing blank lines left behind by an earlier upsert_block's own
-# separator, removed. A missing file prints nothing — the caller decides
-# whether that's fine. Trimming trailing blanks here (rather than leaving
-# them for upsert_block to reason about) is what makes re-running install
-# byte-for-byte idempotent: without it, each re-run would leave one more
-# blank line than the last.
-strip_block() {
-	local file="$1"
-	[ -f "$file" ] || return 0
-	awk -v start="$marker_start" -v end="$marker_end" '
-		$0 == start { skip = 1; next }
-		$0 == end   { skip = 0; next }
-		!skip       { lines[++n] = $0 }
-		END {
-			while (n > 0 && lines[n] == "") n--
-			for (i = 1; i <= n; i++) print lines[i]
-		}
-	' "$file"
-}
-
-# upsert_block replaces any existing sshakku marker block in file with one
-# wrapping source_line, appending it if none existed. Writes via a temp file
-# in the same directory (so the final mv is an atomic same-filesystem
-# rename) rather than editing file in place.
-upsert_block() {
-	local file="$1" source_line="$2" tmp
-	tmp="$(mktemp "${file}.XXXXXX")"
-	strip_block "$file" >"$tmp"
-	# A blank separator line only when something preceded the block — a
-	# brand-new file starts straight with the marker. Checked as its own
-	# statement, after the write above has already completed, so nothing
-	# reads and writes tmp within the same pipeline.
-	if [ -s "$tmp" ]; then
-		printf '\n' >>"$tmp"
-	fi
-	{
-		echo "$marker_start"
-		echo "$source_line"
-		echo "$marker_end"
-	} >>"$tmp"
-	mv "$tmp" "$file"
-}
+script_dir="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=shell-hook-lib.sh
+. "$script_dir/shell-hook-lib.sh"
 
 usage="usage: install-user-hook.sh {install <home> <sshakku_bin_path> [nn] [wire_bashrc]|uninstall <home> [nn]}"
 action="${1:?$usage}"
@@ -88,19 +48,13 @@ bashrc_d_dir="$home/.bashrc.d"
 bashrc_file="$home/.bashrc"
 
 # wire_hook drops source_line into dir/<nn>-sshakku-init.sh if dir exists,
-# otherwise upserts it as a marker block into file. Shared by the profile
-# and (optional) bashrc wiring below — they only differ in which dir/file
-# pair they target.
+# otherwise upserts it as a marker block into file (both via shell-hook-lib.sh
+# primitives). Shared by the profile and (optional) bashrc wiring below —
+# they only differ in which dir/file pair they target.
 wire_hook() {
 	local dir="$1" file="$2" nn="$3" source_line="$4"
-	local drop_file="$dir/${nn}-sshakku-init.sh"
 	if [ -d "$dir" ]; then
-		{
-			echo "#!/bin/bash"
-			echo "# sshakku per-user login hook. Regenerate with: make install-user"
-			echo "$source_line"
-		} >"$drop_file"
-		chmod 755 "$drop_file"
+		drop_in_hook "$dir/${nn}-sshakku-init.sh" "$source_line"
 	else
 		upsert_block "$file" "$source_line"
 	fi
@@ -111,7 +65,7 @@ wire_hook() {
 # was never run for this dir/file pair.
 unwire_hook() {
 	local dir="$1" file="$2" nn="$3"
-	rm -f "$dir/${nn}-sshakku-init.sh"
+	remove_drop_in_hook "$dir/${nn}-sshakku-init.sh"
 	if [ -f "$file" ]; then
 		local tmp
 		tmp="$(mktemp "${file}.XXXXXX")"

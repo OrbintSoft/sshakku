@@ -5,14 +5,17 @@ BINDIR ?= $(PREFIX)/bin
 DESTDIR ?=
 ETC_PROFILE_D ?= /etc/profile.d/
 # The non-login-shell equivalent of /etc/profile.d: some bash builds source
-# every file in here for every interactive shell, login or not. Not every
-# system has one; WIRE_BASHRC below checks it exists before relying on it.
+# every file in here for every interactive shell, login or not. Falls back
+# to BASH_BASHRC_FILE (a single file, marker-delimited block) if it doesn't
+# exist on this system.
 BASH_BASHRC_D ?= /etc/bash/bashrc.d/
+BASH_BASHRC_FILE ?= /etc/bash.bashrc
 NN ?= 001
 # Opt-in: also wire the login hook into a non-login shell's startup files
-# (.bashrc.d/.bashrc per-user, /etc/bash/bashrc.d/ system-wide), so a plain
-# new terminal tab (which often doesn't start a login shell) picks it up
-# too. Off by default; set to any non-empty value to enable.
+# (.bashrc.d/.bashrc per-user, /etc/bash/bashrc.d/ or /etc/bash.bashrc
+# system-wide), so a plain new terminal tab (which often doesn't start a
+# login shell) picks it up too. Off by default; set to any non-empty value
+# to enable.
 WIRE_BASHRC ?=
 
 USER_HOME ?= $(HOME)
@@ -28,7 +31,8 @@ INSTALL_PATH = $(DESTDIR)$(BINDIR)
 SSH_INIT_NAME= $(NN)-ssh-init.sh
 SSH_INIT_BIND_PATH = $(ETC_PROFILE_D)$(SSH_INIT_NAME)
 SSH_INIT_INSTALL_PATH = $(DESTDIR)$(SSH_INIT_BIND_PATH)
-SSH_INIT_BASHRC_INSTALL_PATH = $(DESTDIR)$(BASH_BASHRC_D)$(SSH_INIT_NAME)
+SSH_INIT_BASHRC_DROPIN_PATH = $(DESTDIR)$(BASH_BASHRC_D)$(SSH_INIT_NAME)
+SSH_INIT_BASHRC_FILE_PATH = $(DESTDIR)$(BASH_BASHRC_FILE)
 SSHAKKU_INSTALL_PATH = $(INSTALL_PATH)/sshakku
 SSHAKKU_RUNTIME_PATH = $(BINDIR)/sshakku
 
@@ -40,13 +44,15 @@ install: build
 	@echo "Setting binary paths in $(SSH_INIT_INSTALL_PATH)"
 	@sed -i 's|/usr/local/bin/sshakku|$(SSHAKKU_RUNTIME_PATH)|g' $(SSH_INIT_INSTALL_PATH)
 ifneq ($(WIRE_BASHRC),)
-	@if [ ! -d "$(BASH_BASHRC_D)" ]; then \
-		echo "WIRE_BASHRC is set but $(BASH_BASHRC_D) does not exist -- this system has no non-login bash rc drop-in to wire into; override BASH_BASHRC_D if yours lives elsewhere." >&2; \
-		exit 1; \
+	@if [ -d "$(BASH_BASHRC_D)" ]; then \
+		echo "Wiring the non-login bash hook into $(SSH_INIT_BASHRC_DROPIN_PATH)"; \
+		mkdir -p "$(dir $(SSH_INIT_BASHRC_DROPIN_PATH))"; \
+		./shell-hook-lib.sh drop-in "$(SSH_INIT_BASHRC_DROPIN_PATH)" '. "$(SSH_INIT_BIND_PATH)"'; \
+	else \
+		echo "Wiring the non-login bash hook into $(SSH_INIT_BASHRC_FILE_PATH)"; \
+		mkdir -p "$(dir $(SSH_INIT_BASHRC_FILE_PATH))"; \
+		./shell-hook-lib.sh upsert-block "$(SSH_INIT_BASHRC_FILE_PATH)" '. "$(SSH_INIT_BIND_PATH)"'; \
 	fi
-	@echo "Installing $(SSH_INIT_INSTALL_SCRIPT) to $(SSH_INIT_BASHRC_INSTALL_PATH)"
-	@install -Dm755 $(SSH_INIT_INSTALL_SCRIPT) $(SSH_INIT_BASHRC_INSTALL_PATH)
-	@sed -i 's|/usr/local/bin/sshakku|$(SSHAKKU_RUNTIME_PATH)|g' $(SSH_INIT_BASHRC_INSTALL_PATH)
 endif
 	@echo "Installation complete."
 
@@ -55,7 +61,12 @@ uninstall:
 	@rm -f $(SSHAKKU_INSTALL_PATH)
 	@echo "Uninstalling $(SSH_INIT_INSTALL_PATH)"
 	@rm -f $(SSH_INIT_INSTALL_PATH)
-	@rm -f $(SSH_INIT_BASHRC_INSTALL_PATH)
+	@./shell-hook-lib.sh remove-drop-in "$(SSH_INIT_BASHRC_DROPIN_PATH)"
+	@if [ -f "$(SSH_INIT_BASHRC_FILE_PATH)" ]; then \
+		tmp=$$(mktemp "$(SSH_INIT_BASHRC_FILE_PATH).XXXXXX"); \
+		./shell-hook-lib.sh strip-block "$(SSH_INIT_BASHRC_FILE_PATH)" >"$$tmp"; \
+		mv "$$tmp" "$(SSH_INIT_BASHRC_FILE_PATH)"; \
+	fi
 	@echo "Uninstallation complete."
 
 install-user: build
