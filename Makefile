@@ -186,7 +186,7 @@ print-paths:
 # Linting. Requires: shellcheck, shfmt, markdownlint-cli2, taplo, checkmake,
 # actionlint, editorconfig-checker, hadolint, zsh. Each tool reads its own
 # config file where it has one.
-SH_SCRIPTS = $(wildcard *.sh) $(wildcard .githooks/*) $(wildcard test/*.sh) $(wildcard test/containers/*.sh) $(wildcard test/bats/*.bats) $(wildcard test/bats/*.bash) $(wildcard test/bats/fixtures/*)
+SH_SCRIPTS = $(wildcard *.sh) $(wildcard .githooks/*) $(wildcard .github/scripts/*.sh) $(wildcard test/*.sh) $(wildcard test/containers/*.sh) $(wildcard test/bats/*.bats) $(wildcard test/bats/*.bash) $(wildcard test/bats/fixtures/*)
 ZSH_SCRIPTS = $(wildcard *.zsh)
 DOCKERFILES = $(wildcard test/containers/*.Dockerfile)
 
