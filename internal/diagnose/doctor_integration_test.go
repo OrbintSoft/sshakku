@@ -61,6 +61,20 @@ func requireIsolatedAgentEnvironment(t *testing.T) {
 	}
 }
 
+// shortDir returns a fresh, auto-cleaned temp directory with a short path.
+// Unlike t.TempDir(), which nests the (sub)test name under the OS temp root
+// (e.g. macOS's /var/folders/xx/.../T/TestName.../001/), it stays well under
+// the 104-byte sun_path limit unix sockets are bound under on BSD/Darwin.
+func shortDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "sshakku")
+	if err != nil {
+		t.Fatalf("mkdir temp: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
+}
+
 func realManager() agent.Manager {
 	return agent.Manager{
 		Prober:    agent.SocketProber{},
@@ -93,7 +107,7 @@ func waitDead(t *testing.T, pid int) {
 func TestDoctorDetectsAndFixesDeadOursAgent(t *testing.T) {
 	requireIsolatedAgentEnvironment(t)
 
-	dir := t.TempDir()
+	dir := shortDir(t)
 	cfg := agent.EnsureConfig{
 		FixedSock: filepath.Join(dir, "agent.sock"),
 		LegacyDir: filepath.Join(dir, "legacy"),

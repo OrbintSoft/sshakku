@@ -3,6 +3,7 @@ package agent
 import (
 	"bufio"
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -41,19 +42,29 @@ type AgentProc struct {
 	Args   []string // full argv, kept for diagnostics and anomaly reporting
 }
 
-// Inspector enumerates ssh-agent processes from a Linux procfs tree. ProcRoot is
-// injectable so tests can point at a fake tree; empty means "/proc".
+// Inspector enumerates ssh-agent processes. ProcRoot, when set, points Agents
+// at a procfs-shaped directory tree instead of asking the platform for the
+// real process list — real Linux procfs trees are shaped like this, so tests
+// use it to inject a fake tree on any host OS. Empty means "ask the platform"
+// (real /proc on Linux, sysctl on macOS — see platformAgents).
 type Inspector struct {
 	ProcRoot string
 }
 
-// Agents returns the ssh-agent processes currently visible under procfs. A
-// process that disappears mid-scan is skipped, not reported as an error.
+// Agents returns the ssh-agent processes currently visible. A process that
+// disappears mid-scan is skipped, not reported as an error.
 func (in Inspector) Agents() ([]AgentProc, error) {
-	root := in.ProcRoot
-	if root == "" {
-		root = "/proc"
+	if in.ProcRoot != "" {
+		return readProcfsTree(in.ProcRoot)
 	}
+	return platformAgents()
+}
+
+// readProcfsTree reads a Linux-procfs-shaped directory tree at root: one
+// subdirectory per pid, each holding "cmdline" and "status" files in the
+// kernel's own format. Used both for the real /proc on Linux and for a fake
+// tree tests point ProcRoot at on any host OS.
+func readProcfsTree(root string) ([]AgentProc, error) {
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		return nil, fmt.Errorf("read procfs %s: %w", root, err)
@@ -162,4 +173,32 @@ func isUnder(path, dir string) bool {
 		return false
 	}
 	return strings.HasPrefix(filepath.Clean(path), filepath.Clean(dir)+string(filepath.Separator))
+}
+
+// parseKernProcArgs2 extracts argv from the buffer macOS's kern.procargs2
+// sysctl returns for a pid — the Darwin equivalent of parsing
+// /proc/<pid>/cmdline, kept here (no build tag) so the parsing logic is
+// unit-testable without a real sysctl call. The kernel's layout is
+// [4-byte argc][exec_path\0][NUL padding][argv[0]\0]...[argv[argc-1]\0],
+// followed by the environment, which this ignores.
+func parseKernProcArgs2(buf []byte) []string {
+	if len(buf) < 4 {
+		return nil
+	}
+	argc := int(binary.LittleEndian.Uint32(buf[:4]))
+	if argc <= 0 {
+		return nil
+	}
+	chunks := bytes.Split(buf[4:], []byte{0})
+	// chunks[0] is the exec_path; skip it and the NUL padding before argv[0].
+	i := 1
+	for i < len(chunks) && len(chunks[i]) == 0 {
+		i++
+	}
+	argv := make([]string, 0, argc)
+	for ; argc > 0 && i < len(chunks); argc-- {
+		argv = append(argv, string(chunks[i]))
+		i++
+	}
+	return argv
 }
