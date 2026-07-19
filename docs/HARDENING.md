@@ -36,15 +36,17 @@ Set one:
 Everything above assumes the wallet database itself is out of reach at rest.
 If the disk isn't encrypted, anyone with the drive — lost, stolen, or
 discarded — can read it directly, bypassing the wallet's own lock entirely.
-Full-disk encryption (LUKS on Linux) closes that gap; most distribution
-installers offer to set it up during installation. `sshakku doctor` reports
-whether it detected encryption on the disk backing your home directory — see
+Full-disk encryption (LUKS on Linux, FileVault on macOS) closes that gap;
+most distribution installers offer to set it up during installation, and
+macOS offers it during first setup or later under System Settings →
+Privacy & Security → FileVault. `sshakku doctor` reports whether it detected
+encryption on the disk backing your home directory — see
 [Environment hardening checks](DIAGNOSTICS.md#environment-hardening-checks).
 
-If your machine has a TPM, it can also back a stronger unlock than a
-passphrase-typed-at-boot LUKS setup (for example, `systemd-cryptenroll`'s TPM2
-support). `doctor` reports whether a TPM is present, as a hint of what's
-available.
+If your machine has a TPM (Linux) or a Secure Enclave (macOS), it can also
+back a stronger unlock than a plain passphrase — for example,
+`systemd-cryptenroll`'s TPM2 support for LUKS. `doctor` reports whether such
+hardware is present, as a hint of what's available.
 
 ## Configure `/tmp`
 
@@ -56,7 +58,8 @@ it. `sshakku doctor` reports whether `/tmp` is tmpfs-backed — see
 
 ## Checking all of the above at once
 
-`sshakku doctor` reports disk encryption, `/tmp`, and TPM presence together
-under "environment", and `sshakku doctor --test-backend` proves your
+`sshakku doctor` reports disk encryption, `/tmp`, and secure hardware
+presence together under "environment", and `sshakku doctor --test-backend`
+proves your
 configured secret backend actually works end to end — see
 [Diagnostics](DIAGNOSTICS.md).

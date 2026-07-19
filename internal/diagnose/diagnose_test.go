@@ -354,14 +354,14 @@ func TestHostFindings(t *testing.T) {
 		t.Errorf("adequately sized tmpfs /tmp: got %v, want no findings", got)
 	}
 
-	got = hostFindings(HostChecks{TPMPresent: &no})
-	if len(got) != 1 || !strings.Contains(got[0], "no TPM device detected") {
-		t.Errorf("no TPM: got %v", got)
+	got = hostFindings(HostChecks{SecureHardwarePresent: &no})
+	if len(got) != 1 || !strings.Contains(got[0], "no TPM or Secure Enclave detected") {
+		t.Errorf("no secure hardware: got %v", got)
 	}
 
-	got = hostFindings(HostChecks{TPMPresent: &yes, TPMVersion: "2.0"})
+	got = hostFindings(HostChecks{SecureHardwarePresent: &yes, SecureHardwareKind: "TPM 2.0"})
 	if len(got) != 0 {
-		t.Errorf("TPM present: got %v, want no findings", got)
+		t.Errorf("secure hardware present: got %v, want no findings", got)
 	}
 }
 
@@ -372,15 +372,15 @@ func TestHostChecksLine(t *testing.T) {
 		t.Errorf("zero-value HostChecks: got %q, want empty (Gather called with nil HostSource)", got)
 	}
 
-	got := hostChecksLine(HostChecks{DiskEncrypted: &yes, TmpTmpfs: &yes, TmpSizeBytes: 1024 * 1024 * 1024, TPMPresent: &yes, TPMVersion: "2.0"})
-	for _, want := range []string{"disk encryption: yes", "/tmp: tmpfs, 1.0 GiB", "TPM: present (2.0)"} {
+	got := hostChecksLine(HostChecks{DiskEncrypted: &yes, TmpTmpfs: &yes, TmpSizeBytes: 1024 * 1024 * 1024, SecureHardwarePresent: &yes, SecureHardwareKind: "TPM 2.0"})
+	for _, want := range []string{"disk encryption: yes", "/tmp: tmpfs, 1.0 GiB", "secure hardware: present (TPM 2.0)"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("hostChecksLine = %q, want it to contain %q", got, want)
 		}
 	}
 
-	got = hostChecksLine(HostChecks{DiskEncrypted: &no, TmpTmpfs: &no, TPMPresent: &no})
-	for _, want := range []string{"disk encryption: no", "/tmp: not tmpfs", "TPM: not detected"} {
+	got = hostChecksLine(HostChecks{DiskEncrypted: &no, TmpTmpfs: &no, SecureHardwarePresent: &no})
+	for _, want := range []string{"disk encryption: no", "/tmp: not tmpfs", "secure hardware: not detected"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("hostChecksLine = %q, want it to contain %q", got, want)
 		}
@@ -406,7 +406,7 @@ func TestFormatIncludesEnvironmentSection(t *testing.T) {
 	r := Report{
 		FixedSock: fixed,
 		Findings:  []string{"no problems detected"},
-		Host:      HostChecks{DiskEncrypted: &yes, TmpTmpfs: &yes, TmpSizeBytes: 1024 * 1024 * 1024, TPMPresent: &yes, TPMVersion: "2.0"},
+		Host:      HostChecks{DiskEncrypted: &yes, TmpTmpfs: &yes, TmpSizeBytes: 1024 * 1024 * 1024, SecureHardwarePresent: &yes, SecureHardwareKind: "TPM 2.0"},
 	}
 	var buf bytes.Buffer
 	Format(&buf, r)
