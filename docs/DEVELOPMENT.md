@@ -30,8 +30,9 @@ composed by it. One line each:
 `ensure-agent`, `load-keys`, `askpass-env`, `doctor`, `forget`, `help`. See
 [docs/CLI.md](CLI.md) for the full command reference.
 
-The end-to-end flow, as wired up by `nn-ssh-init-linux.sh` (installed to
-`/etc/profile.d`) in every login shell:
+The end-to-end flow, as wired up by `nn-ssh-init.sh` (installed to
+`/etc/profile.d` on Linux, sourced from `/etc/zprofile` on macOS) in every
+login shell:
 
 1. `eval "$(sshakku shell-init)"` resolves the runtime paths and gets a
    healthy `ssh-agent` on a fixed socket (starting, reaping, or adopting one

@@ -45,7 +45,7 @@ const internalReadSocketTokenCmd = "__read-socket-token"
 // it before trusting EnvAskpassMode: ssh always execs the SSH_ASKPASS helper
 // with just the prompt text as its one argument, never one of these exact
 // names, but askpass-env exports EnvAskpassMode into the whole login shell
-// (nn-ssh-init-linux.sh), so it stays set for anything the user later types by
+// (nn-ssh-init.sh), so it stays set for anything the user later types by
 // hand in that same shell — a real subcommand must win over it. Keep this in
 // sync with the switch in run.
 var knownSubcommands = map[string]bool{
@@ -96,7 +96,7 @@ func main() {
 // SSH_ASKPASS helper rather than dispatch args as a subcommand. askpassEnvSet
 // is EnvAskpassMode's presence in the environment; it alone is not enough,
 // because askpass-env exports it into the whole login shell
-// (nn-ssh-init-linux.sh) so it stays set for anything typed by hand afterward
+// (nn-ssh-init.sh) so it stays set for anything typed by hand afterward
 // too — a real ssh invocation always execs the helper with just the prompt
 // text as its one argument, never one of our own subcommand names, so a known
 // subcommand always takes priority over the env marker.

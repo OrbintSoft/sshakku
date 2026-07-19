@@ -41,6 +41,9 @@ jobs:
       - name: Run make test
         run: make test
 
+      - name: Smoke-test make install/install-user (staged, not the real /etc or $HOME)
+        run: test/macos-install-smoke.sh "$RUNNER_TEMP/install-smoke"
+
   container-test:
     name: make test (container / ${{ matrix.name }})
     runs-on: ubuntu-latest
