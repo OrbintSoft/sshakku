@@ -16,11 +16,19 @@ jobs:
     runs-on: ubuntu-latest
     env:
       SHELLCHECK_VERSION: 0.11.0
+      # go install is pinned by full commit hash (mirrors the SHA-pinning
+      # used for the third-party actions below); *_VERSION is kept for the
+      # cache key and human-readable go install version comments.
       SHFMT_VERSION: 3.13.1
+      SHFMT_COMMIT: 879bcfa6d2db958fc385c09f739b3e97c4ae6010
       CHECKMAKE_VERSION: 0.3.2
+      CHECKMAKE_COMMIT: 86d946ff9035396c159f305897c204dea0093acf
       ACTIONLINT_VERSION: 1.7.12
+      ACTIONLINT_COMMIT: 914e7df21a07ef503a81201c76d2b11c789d3fca
       EDITORCONFIG_CHECKER_VERSION: 3.7.0
+      EDITORCONFIG_CHECKER_COMMIT: 03db2cca9a525b3831377be1e4696c06fdfef07a
       GOLANGCI_LINT_VERSION: 2.12.2
+      GOLANGCI_LINT_COMMIT: c0d3ddc9cf3faa61a4e378e879ece580256d76e5
       MARKDOWNLINT_CLI2_VERSION: 0.22.1
       TAPLO_CLI_VERSION: 0.7.0
       HADOLINT_VERSION: 2.14.0
@@ -62,12 +70,12 @@ jobs:
           curl -fsSL -o "${RUNNER_TEMP}/hadolint" "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-linux-x86_64"
           sudo install "${RUNNER_TEMP}/hadolint" /usr/local/bin/hadolint
 
-          # Go-based tools into $(go env GOPATH)/bin
-          go install "mvdan.cc/sh/v3/cmd/shfmt@v${SHFMT_VERSION}"
-          go install "github.com/checkmake/checkmake/cmd/checkmake@v${CHECKMAKE_VERSION}"
-          go install "github.com/rhysd/actionlint/cmd/actionlint@v${ACTIONLINT_VERSION}"
-          go install "github.com/editorconfig-checker/editorconfig-checker/v3/cmd/editorconfig-checker@v${EDITORCONFIG_CHECKER_VERSION}"
-          go install "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v${GOLANGCI_LINT_VERSION}"
+          # Go-based tools into $(go env GOPATH)/bin, pinned by commit hash.
+          go install "mvdan.cc/sh/v3/cmd/shfmt@${SHFMT_COMMIT}" # v${SHFMT_VERSION}
+          go install "github.com/checkmake/checkmake/cmd/checkmake@${CHECKMAKE_COMMIT}" # v${CHECKMAKE_VERSION}
+          go install "github.com/rhysd/actionlint/cmd/actionlint@${ACTIONLINT_COMMIT}" # v${ACTIONLINT_VERSION}
+          go install "github.com/editorconfig-checker/editorconfig-checker/v3/cmd/editorconfig-checker@${EDITORCONFIG_CHECKER_COMMIT}" # v${EDITORCONFIG_CHECKER_VERSION}
+          go install "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_LINT_COMMIT}" # v${GOLANGCI_LINT_VERSION}
 
       - name: Add Go bin to PATH
         run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
