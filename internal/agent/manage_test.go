@@ -47,6 +47,21 @@ func makeSocketFile(t *testing.T, path string) {
 	_ = l.Close()
 }
 
+// shortDir returns a fresh, auto-cleaned temp directory with a short path.
+// Unlike t.TempDir(), which nests the (sub)test name under the OS temp root
+// (e.g. macOS's /var/folders/xx/.../T/TestName.../001/), it stays well under
+// the 104-byte sun_path limit unix sockets are bound under on BSD/Darwin —
+// a limit t.TempDir()'s deeper macOS layout routinely exceeds.
+func shortDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "sshakku")
+	if err != nil {
+		t.Fatalf("mkdir temp: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
+}
+
 func contains(xs []int, x int) bool {
 	for _, v := range xs {
 		if v == x {
@@ -57,7 +72,7 @@ func contains(xs []int, x int) bool {
 }
 
 func TestManagerReap(t *testing.T) {
-	root := t.TempDir()
+	root := shortDir(t)
 	const ourUID = 1000
 
 	deadOurs := filepath.Join(root, "dead-ours.sock")
@@ -94,7 +109,7 @@ func TestManagerReap(t *testing.T) {
 }
 
 func TestManagerStart(t *testing.T) {
-	dir := t.TempDir()
+	dir := shortDir(t)
 	socket := filepath.Join(dir, "agent.sock")
 	state := filepath.Join(dir, "agent.state")
 
@@ -139,7 +154,7 @@ func TestStateRoundTrip(t *testing.T) {
 }
 
 func TestRemoveSocket(t *testing.T) {
-	dir := t.TempDir()
+	dir := shortDir(t)
 	sock := filepath.Join(dir, "a.sock")
 	makeSocketFile(t, sock)
 	if !removeSocket(sock) {

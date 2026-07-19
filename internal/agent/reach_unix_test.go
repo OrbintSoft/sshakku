@@ -34,7 +34,7 @@ func TestUIDGatedProberReachable(t *testing.T) {
 	})
 	t.Run("missing socket", func(t *testing.T) {
 		g := UIDGatedProber{UID: ownerUID, Prober: real}
-		if g.Reachable(filepath.Join(t.TempDir(), "nope.sock")) {
+		if g.Reachable(filepath.Join(shortDir(t), "nope.sock")) {
 			t.Fatal("want unreachable for a missing socket")
 		}
 	})

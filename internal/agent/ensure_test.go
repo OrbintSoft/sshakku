@@ -47,7 +47,7 @@ func (f *fakeLocker) Lock(path string) (func(), error) {
 }
 
 func TestEnsureAgentHealthy(t *testing.T) {
-	dir := t.TempDir()
+	dir := shortDir(t)
 	fixed := filepath.Join(dir, "agent.sock")
 	runner := &recordRunner{pid: 1}
 
@@ -65,14 +65,14 @@ func TestEnsureAgentHealthy(t *testing.T) {
 }
 
 func TestEnsureAgentClean(t *testing.T) {
-	dir := t.TempDir()
+	dir := shortDir(t)
 	fixed := filepath.Join(dir, "agent.sock")
 	state := filepath.Join(dir, "agent.state")
 	runner := &recordRunner{pid: 4242}
 
 	m := Manager{
 		Prober:    mapProber{}, // nothing reachable
-		Inspector: Inspector{ProcRoot: t.TempDir()},
+		Inspector: Inspector{ProcRoot: shortDir(t)},
 		Runner:    runner,
 		Signaler:  &recordSignaler{},
 	}
@@ -92,10 +92,10 @@ func TestEnsureAgentClean(t *testing.T) {
 }
 
 func TestEnsureAgentZombie(t *testing.T) {
-	dir := t.TempDir()
+	dir := shortDir(t)
 	fixed := filepath.Join(dir, "agent.sock")
 	state := filepath.Join(dir, "agent.state")
-	proc := t.TempDir()
+	proc := shortDir(t)
 
 	makeSocketFile(t, fixed)                                         // a real stale socket at our path
 	fakeProc(t, proc, 200, []string{"ssh-agent", "-a", fixed}, 1000) // dead agent of ours
@@ -124,9 +124,9 @@ func TestEnsureAgentZombie(t *testing.T) {
 }
 
 func TestEnsureAgentForeign(t *testing.T) {
-	dir := t.TempDir()
+	dir := shortDir(t)
 	fixed := filepath.Join(dir, "agent.sock")
-	proc := t.TempDir()
+	proc := shortDir(t)
 	foreignSock := filepath.Join(dir, "foreign.sock")
 
 	fakeProc(t, proc, 300, []string{"ssh-agent", "-a", foreignSock}, 1000)
@@ -166,9 +166,9 @@ func TestEnsureAgentForeign(t *testing.T) {
 }
 
 func TestEnsureAgentDisasterMultiple(t *testing.T) {
-	dir := t.TempDir()
+	dir := shortDir(t)
 	fixed := filepath.Join(dir, "agent.sock")
-	proc := t.TempDir()
+	proc := shortDir(t)
 	f1 := filepath.Join(dir, "f1.sock")
 	f2 := filepath.Join(dir, "f2.sock")
 
@@ -200,9 +200,9 @@ func TestEnsureAgentDisasterMultiple(t *testing.T) {
 }
 
 func TestEnsureAgentDisasterReapAndAdopt(t *testing.T) {
-	dir := t.TempDir()
+	dir := shortDir(t)
 	fixed := filepath.Join(dir, "agent.sock")
-	proc := t.TempDir()
+	proc := shortDir(t)
 	foreignSock := filepath.Join(dir, "foreign.sock")
 
 	makeSocketFile(t, fixed)                                               // stale socket of ours
@@ -235,7 +235,7 @@ func TestEnsureAgentDisasterReapAndAdopt(t *testing.T) {
 }
 
 func TestClearStalePath(t *testing.T) {
-	dir := t.TempDir()
+	dir := shortDir(t)
 
 	sock := filepath.Join(dir, "a.sock")
 	makeSocketFile(t, sock)
@@ -274,7 +274,7 @@ func TestClearStalePath(t *testing.T) {
 }
 
 func TestEnsureAgentFastPathSkipsLock(t *testing.T) {
-	dir := t.TempDir()
+	dir := shortDir(t)
 	fixed := filepath.Join(dir, "agent.sock")
 	lk := &fakeLocker{}
 
@@ -292,7 +292,7 @@ func TestEnsureAgentFastPathSkipsLock(t *testing.T) {
 }
 
 func TestEnsureAgentLocksMutatePath(t *testing.T) {
-	dir := t.TempDir()
+	dir := shortDir(t)
 	fixed := filepath.Join(dir, "agent.sock")
 	lock := filepath.Join(dir, "agent.lock")
 	runner := &recordRunner{pid: 4242}
@@ -300,7 +300,7 @@ func TestEnsureAgentLocksMutatePath(t *testing.T) {
 
 	m := Manager{
 		Prober:    mapProber{}, // silent
-		Inspector: Inspector{ProcRoot: t.TempDir()},
+		Inspector: Inspector{ProcRoot: shortDir(t)},
 		Runner:    runner,
 		Signaler:  &recordSignaler{},
 		Locker:    lk,
@@ -321,7 +321,7 @@ func TestEnsureAgentLocksMutatePath(t *testing.T) {
 }
 
 func TestEnsureAgentDoubleCheckUnderLock(t *testing.T) {
-	dir := t.TempDir()
+	dir := shortDir(t)
 	fixed := filepath.Join(dir, "agent.sock")
 	runner := &recordRunner{pid: 1}
 	sig := &recordSignaler{}
@@ -330,7 +330,7 @@ func TestEnsureAgentDoubleCheckUnderLock(t *testing.T) {
 	// A concurrent login starts ours while we hold the lock: the under-lock
 	// re-check must then find it healthy and neither reap nor start.
 	lk := &fakeLocker{onLock: func() { prober[fixed] = true }}
-	m := Manager{Prober: prober, Inspector: Inspector{ProcRoot: t.TempDir()}, Runner: runner, Signaler: sig, Locker: lk}
+	m := Manager{Prober: prober, Inspector: Inspector{ProcRoot: shortDir(t)}, Runner: runner, Signaler: sig, Locker: lk}
 
 	res, err := m.EnsureAgent(EnsureConfig{FixedSock: fixed, StatePath: filepath.Join(dir, "st"), LockPath: filepath.Join(dir, "lock"), OurUID: 1000}, nil)
 	if err != nil {
@@ -351,12 +351,12 @@ func TestEnsureAgentDoubleCheckUnderLock(t *testing.T) {
 }
 
 func TestEnsureAgentLockError(t *testing.T) {
-	dir := t.TempDir()
+	dir := shortDir(t)
 	fixed := filepath.Join(dir, "agent.sock")
 	runner := &recordRunner{pid: 1}
 	lk := &fakeLocker{err: errors.New("cannot open lock")}
 
-	m := Manager{Prober: mapProber{}, Inspector: Inspector{ProcRoot: t.TempDir()}, Runner: runner, Signaler: &recordSignaler{}, Locker: lk}
+	m := Manager{Prober: mapProber{}, Inspector: Inspector{ProcRoot: shortDir(t)}, Runner: runner, Signaler: &recordSignaler{}, Locker: lk}
 	if _, err := m.EnsureAgent(EnsureConfig{FixedSock: fixed, LockPath: filepath.Join(dir, "lock"), OurUID: 1000}, nil); err == nil {
 		t.Fatal("want an error when the lock cannot be acquired")
 	}

@@ -28,6 +28,19 @@ jobs:
       - name: Run make test
         run: make test
 
+  test-macos:
+    name: make test (macos)
+    runs-on: macos-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Go
+        uses: ./.github/actions/setup-go-env
+
+      - name: Run make test
+        run: make test
+
   container-test:
     name: make test (container / ${{ matrix.name }})
     runs-on: ubuntu-latest

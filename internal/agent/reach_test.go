@@ -14,7 +14,7 @@ import (
 // reply, and returns its socket path.
 func fakeAgent(t *testing.T, reply func(net.Conn)) string {
 	t.Helper()
-	sock := filepath.Join(t.TempDir(), "a.sock")
+	sock := filepath.Join(shortDir(t), "a.sock")
 	ln, err := net.Listen("unix", sock)
 	if err != nil {
 		t.Fatalf("listen: %v", err)
@@ -90,12 +90,12 @@ func TestSocketProberReachable(t *testing.T) {
 		}
 	})
 	t.Run("missing socket", func(t *testing.T) {
-		if p.Reachable(filepath.Join(t.TempDir(), "nope.sock")) {
+		if p.Reachable(filepath.Join(shortDir(t), "nope.sock")) {
 			t.Fatal("want unreachable for a missing socket")
 		}
 	})
 	t.Run("not a socket", func(t *testing.T) {
-		f := filepath.Join(t.TempDir(), "regular")
+		f := filepath.Join(shortDir(t), "regular")
 		if err := os.WriteFile(f, []byte("x"), 0o600); err != nil {
 			t.Fatal(err)
 		}
