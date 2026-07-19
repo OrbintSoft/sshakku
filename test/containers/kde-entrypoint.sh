@@ -6,8 +6,8 @@ set -euo pipefail
 
 readonly TEST_USER="sshakku-kde-test"
 readonly TEST_UID="1000"
-readonly TEST_PASSWORD="sshakku-kde-tier2-test-password"
-readonly PAM_SERVICE="sshakku-kde-tier2"
+readonly TEST_PASSWORD="sshakku-kde-desktop-stack-test-password"
+readonly PAM_SERVICE="sshakku-kde-desktop-stack"
 readonly RUNTIME_DIR="/run/user/${TEST_UID}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly SCRIPT_DIR

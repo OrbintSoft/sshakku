@@ -1,4 +1,4 @@
-# Tier 2 (headless, real desktop secret stack) test environment: GNOME
+# Headless, real desktop secret stack test environment: GNOME
 # Keyring's Secret Service daemon (gnome-keyring-daemon). Unlike KDE's
 # ksecretd, gnome-keyring only auto-unlocks non-interactively via PAM for
 # its single hardcoded "login" collection; a distinctly named collection
@@ -20,9 +20,9 @@ RUN apt-get update \
 
 ENV PATH="/usr/local/go/bin:${PATH}"
 
-COPY test/containers/gnome-keyring-entrypoint.sh test/containers/gnome-keyring-session.sh test/containers/gnome-keyring-create-collection.sh /opt/sshakku-tier2/
-RUN chmod +x /opt/sshakku-tier2/gnome-keyring-entrypoint.sh /opt/sshakku-tier2/gnome-keyring-session.sh /opt/sshakku-tier2/gnome-keyring-create-collection.sh
+COPY test/containers/gnome-keyring-entrypoint.sh test/containers/gnome-keyring-session.sh test/containers/gnome-keyring-create-collection.sh /opt/sshakku-desktop-stack/
+RUN chmod +x /opt/sshakku-desktop-stack/gnome-keyring-entrypoint.sh /opt/sshakku-desktop-stack/gnome-keyring-session.sh /opt/sshakku-desktop-stack/gnome-keyring-create-collection.sh
 
 WORKDIR /src
 
-ENTRYPOINT ["/opt/sshakku-tier2/gnome-keyring-entrypoint.sh"]
+ENTRYPOINT ["/opt/sshakku-desktop-stack/gnome-keyring-entrypoint.sh"]

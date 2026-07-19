@@ -74,24 +74,26 @@ tests talk to a real D-Bus session bus).
 
 There is no dedicated `make` target for this yet — the exact commands below
 are what CI itself runs (`.github/workflows/test.yml` and
-`tier2-desktop.yml`), reproduced here for running locally. All of them need
+`desktop-stack.yml`), reproduced here for running locally. All of them need
 plain `docker` (build and run); no `docker compose` is used anywhere in this
 repository.
 
-**Tier 1** — headless, no desktop, runs automatically in CI on every push:
+**The container suite** — headless, no desktop, runs automatically in CI on
+every push:
 
 ```sh
 docker build -f test/containers/debian.Dockerfile -t sshakku-test-debian .
 docker run --init --rm -v "$PWD":/src:ro -w /src sshakku-test-debian make test
 ```
 
-**Tier 2** — a real desktop secret store, one Dockerfile per backend, run
-only on demand (`workflow_dispatch` in CI, not on every push, since each one
-drives a full desktop stack headlessly and takes noticeably longer):
+**The desktop-stack suite** — a real desktop secret store, one Dockerfile
+per backend, run only on demand (`workflow_dispatch` in CI, not on every
+push, since each one drives a full desktop stack headlessly and takes
+noticeably longer):
 
 ```sh
-docker build -f test/containers/kde.Dockerfile -t sshakku-test-tier2-kde .
-docker run --init --rm -v "$PWD":/src:ro sshakku-test-tier2-kde make test
+docker build -f test/containers/kde.Dockerfile -t sshakku-test-desktop-stack-kde .
+docker run --init --rm -v "$PWD":/src:ro sshakku-test-desktop-stack-kde make test
 ```
 
 Swap `kde` for `gnome-keyring`, `keepassxc`, or `vaultwarden` for the other
@@ -100,10 +102,11 @@ explains why that particular distro/version was chosen (e.g. KDE's
 `ksecretd` isn't packaged on Debian; Debian's KeePassXC 2.7.10 segfaults on a
 backgrounded unlock where Fedora's 2.7.12 doesn't).
 
-1Password's tier-2 coverage (`tier2-onepassword.yml`) is not container-based:
-it runs `go test -run OnePasswordBackendRealAccount ./internal/keys/...`
-directly against a real 1Password service account token, so it isn't part of
-`make test` and needs a token you provide yourself to reproduce locally.
+1Password's real-account coverage (`onepassword-real-account.yml`) is not
+container-based: it runs `go test -run OnePasswordBackendRealAccount
+./internal/keys/...` directly against a real 1Password service account
+token, so it isn't part of `make test` and needs a token you provide
+yourself to reproduce locally.
 
 ## Linting
 
@@ -122,8 +125,8 @@ project currently lints against.
 
 ## Recommended dev environment
 
-- **Docker**, to run the container test suite above — the tier-1 image is
-  the closest thing to what CI actually checks on every push.
+- **Docker**, to run the container test suite above — the plain container
+  image is the closest thing to what CI actually checks on every push.
 - **The lint tools listed above**, so `make lint` catches what CI would
   before you push.
 - **VS Code** is the recommended editor. The repository ships shared

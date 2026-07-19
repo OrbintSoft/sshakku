@@ -1,4 +1,4 @@
-# Tier 2 (headless, real secret-store backend) test environment: a
+# Headless, real secret-store backend test environment: a
 # self-hosted Vaultwarden server (an AGPL-3.0 reimplementation of the
 # Bitwarden server API) plus the bw CLI. Unlike KDE/GNOME/KeePassXC, there is
 # no desktop session or Xvfb here — Vaultwarden is a plain HTTP daemon, and
@@ -33,10 +33,10 @@ ENV PATH="/usr/local/go/bin:${PATH}"
 
 COPY --from=vaultwarden /vaultwarden /usr/local/bin/vaultwarden
 
-COPY test/containers/vaultwarden-fixture/ /opt/sshakku-tier2/vaultwarden-fixture/
-COPY test/containers/vaultwarden-entrypoint.sh test/containers/vaultwarden-session.sh /opt/sshakku-tier2/
-RUN chmod +x /opt/sshakku-tier2/vaultwarden-entrypoint.sh /opt/sshakku-tier2/vaultwarden-session.sh
+COPY test/containers/vaultwarden-fixture/ /opt/sshakku-desktop-stack/vaultwarden-fixture/
+COPY test/containers/vaultwarden-entrypoint.sh test/containers/vaultwarden-session.sh /opt/sshakku-desktop-stack/
+RUN chmod +x /opt/sshakku-desktop-stack/vaultwarden-entrypoint.sh /opt/sshakku-desktop-stack/vaultwarden-session.sh
 
 WORKDIR /src
 
-ENTRYPOINT ["/opt/sshakku-tier2/vaultwarden-entrypoint.sh"]
+ENTRYPOINT ["/opt/sshakku-desktop-stack/vaultwarden-entrypoint.sh"]

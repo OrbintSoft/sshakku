@@ -519,7 +519,7 @@ choice reachable at runtime (4.3). → goals 11, 15; open decisions 7, 8, 13, 17
   CI on every push (`test.yml`). Gentoo was evaluated and dropped from the
   matrix — no OpenRC service actually runs in a plain container, so it only added
   a different toolchain/libc, not primary-target coverage. **Tier 2**:
-  `tier2-desktop.yml` (`workflow_dispatch`-only), starting with a KDE row
+  `desktop-stack.yml` (`workflow_dispatch`-only), starting with a KDE row
   (`ksecretd`/`kwalletd6` via Fedora — Debian doesn't package `ksecretd` — driven
   non-interactively through `pamtester`/`pam_kwallet5.so` and a pre-seeded
   `kwalletrc`). **Tier 2/3 breadth matrix, decided so 4.1/4.2 wouldn't
@@ -555,7 +555,7 @@ choice reachable at runtime (4.3). → goals 11, 15; open decisions 7, 8, 13, 17
     account, not a disposable local daemon, so it has no container tier: a
     dedicated service account ("SSHakku") authenticates in CI via
     `OP_SERVICE_ACCOUNT_TOKEN` (`op user get --me`, not `op whoami`/`op signin`,
-    both unsupported for service accounts) — `tier2-onepassword.yml`,
+    both unsupported for service accounts) — `onepassword-real-account.yml`,
     `workflow_dispatch`-only. A real packaging bug was found and fixed on the
     developer's own machine, unrelated to this repo: 1Password's Linux binaries
     reject a setgid IPC helper group id below 1000, which Gentoo's `acct-group`
@@ -660,7 +660,7 @@ choice reachable at runtime (4.3). → goals 11, 15; open decisions 7, 8, 13, 17
     round-trips a passphrase through a real (fake-backed) `SecretBackend`;
     the no-controlling-terminal case actually returning promptly under
     `setsid` rather than merely asserting it in isolation; and a real
-    `op`/`bw` CLI-backed round trip staying under `tier2-onepassword.yml`'s
+    `op`/`bw` CLI-backed round trip staying under `onepassword-real-account.yml`'s
     existing real-account gate rather than `make test`.
 
   → open decisions 7, 8.

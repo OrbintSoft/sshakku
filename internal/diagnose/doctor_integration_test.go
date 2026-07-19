@@ -40,8 +40,8 @@ func lockRealAgentTests(t *testing.T) {
 // requireIsolatedAgentEnvironment skips unless no ssh-agent is already
 // reachable on this machine: agent.Inspector scans the real, machine-wide
 // /proc, which a live desktop session (or another test's leftovers) would
-// pollute — these tests need an isolated PID namespace (the tier-1
-// container, or a fresh CI runner), never a live login.
+// pollute — these tests need an isolated PID namespace (the container test
+// suite, or a fresh CI runner), never a live login.
 func requireIsolatedAgentEnvironment(t *testing.T) {
 	t.Helper()
 	if _, err := exec.LookPath("ssh-agent"); err != nil {

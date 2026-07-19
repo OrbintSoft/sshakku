@@ -171,7 +171,7 @@ test:
 	$(GO) test -race ./...
 
 # Shell-level login-hook and agent-lifecycle regression suite. Requires
-# bats-core; only safe in a disposable environment (tier 1's own container
+# bats-core; only safe in a disposable environment (the container test suite
 # runs it in CI) — see test/bats/helpers.bash for the explicit opt-in gate.
 test-bats:
 	bats test/bats

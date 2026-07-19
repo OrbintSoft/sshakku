@@ -21,11 +21,11 @@ import (
 // prints one. Two ways to satisfy that: a developer's own already-signed-in
 // session (app integration or `op signin`, local only), or
 // OP_SERVICE_ACCOUNT_TOKEN set to a dedicated service account's token (CI —
-// see .github/workflows/tier2-onepassword.yml and PLAN.md 4.2). Unlike
+// see .github/workflows/onepassword-real-account.yml). Unlike
 // ksecretd / gnome-keyring-daemon / KeePassXC, a 1Password account is a
 // cloud account, not a disposable local daemon a container can stand up
 // from nothing — the CI job authenticates as a dedicated service account
-// instead of a tier-2-style container.
+// instead of standing up a container.
 const allowRealOnePasswordEnv = "SSHAKKU_TEST_ALLOW_REAL_ONEPASSWORD"
 
 // opSetupTimeout bounds each vault create/delete call made directly by the
