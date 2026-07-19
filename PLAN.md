@@ -172,9 +172,10 @@ done are summarised; see the note at the top of this file for full detail.
 
 11. **CI least-privilege & lint coverage (rule 14, 12). Decided (Phase 0):**
     `make lint` runs `shellcheck`+`shfmt`+`markdownlint-cli2`+`checkmake`+
-    `actionlint`(+`editorconfig-checker`, `golangci-lint`, `taplo`, `hadolint` as
-    each file type entered the repo); CI declares `permissions: contents: read`
-    and invokes the same `make lint`. See the per-file-type table under Phase 0.
+    `actionlint`(+`editorconfig-checker`, `golangci-lint`, `taplo`, `hadolint`,
+    `zsh -n` as each file type entered the repo); CI declares `permissions:
+    contents: read` and invokes the same `make lint`. See the per-file-type
+    table under Phase 0.
 
 12. **Install modes & path layout (goals 17–19). ✅ Done (step 1.1 for
     paths, Phase 1.2 for the bootstrap hook):** config **and** the session log live
@@ -321,7 +322,7 @@ Per-file-type lint decisions (rule 12), current as of the last file type added:
 | File type | Decision |
 |---|---|
 | Shell — bash (`*.sh`) | `shellcheck` + `shfmt` |
-| Shell — macOS (`*.zsh`) | Linting deferred to the macOS phase |
+| Shell — macOS (`*.zsh`) | `zsh -n` (syntax-only — no shellcheck/shfmt-equivalent linter exists for zsh) |
 | Markdown (`*.md`) | `markdownlint-cli2` (config `.markdownlint-cli2.yaml`) |
 | Makefile | `checkmake` (config `checkmake.ini`) |
 | YAML / GitHub workflows | `actionlint`; other YAML/INI/JSON has no dedicated linter — `editorconfig-checker` covers charset/EOL/indent/final-newline |
