@@ -6,3 +6,12 @@ updates:
     directory: /
     schedule:
       interval: weekly
+
+  # Keep the module's runtime dependencies (go.mod) up to date. Deliberately
+  # doesn't cover the project's lint tools, which are pinned by hand to
+  # keep this dependency graph free of a bundled linter's own transitive
+  # tree.
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
