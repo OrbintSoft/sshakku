@@ -5,6 +5,10 @@ BINDIR ?= $(PREFIX)/bin
 DESTDIR ?=
 ETC_PROFILE_D ?= /etc/profile.d/
 NN ?= 001
+# Opt-in: also wire install-user's login hook into .bashrc.d/.bashrc, so
+# non-login interactive shells (e.g. a new terminal tab) pick it up too, not
+# just login shells. Off by default; set to any non-empty value to enable.
+WIRE_BASHRC ?=
 
 USER_HOME ?= $(HOME)
 USER_BINDIR ?= $(USER_HOME)/.local/bin
@@ -42,7 +46,7 @@ install-user: build
 	@echo "Installing $(GO_BIN) to $(USER_BINDIR)/sshakku"
 	@install -Dm755 $(GO_BIN) $(USER_BINDIR)/sshakku
 	@echo "Wiring the per-user login hook"
-	@./install-user-hook.sh install "$(USER_HOME)" "$(USER_BINDIR)/sshakku" "$(NN)"
+	@./install-user-hook.sh install "$(USER_HOME)" "$(USER_BINDIR)/sshakku" "$(NN)" "$(WIRE_BASHRC)"
 	@echo "Installation complete."
 
 uninstall-user:

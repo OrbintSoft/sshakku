@@ -20,7 +20,9 @@ Always required, regardless of configuration:
   reimplementation of any of these.
 - **A login shell that sources `/etc/profile.d`** (or, for a per-user install,
   `~/.bash_profile`/`~/.bash_profile.d/`) — see the
-  [Requirements](../README.md#requirements) section of the README.
+  [Requirements](../README.md#requirements) section of the README. A per-user
+  install can optionally also wire `~/.bashrc`/`~/.bashrc.d/` (`make
+  install-user WIRE_BASHRC=1`) to additionally cover non-login shells.
 
 Required only for the default secret backend (`secret_backend =
 "secret-service"`, i.e. no `secret_backend` set at all):
