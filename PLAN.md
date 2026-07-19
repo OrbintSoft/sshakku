@@ -187,10 +187,16 @@ done are summarised; see the note at the top of this file for full detail.
     directory already exists (just drop a file in it, existence is the only
     check — no attempt to confirm it's actually sourced), else a
     marker-delimited block appended to `$HOME/.bash_profile` (created if
-    absent) — see Phase 1.2. **Extended (2026-07-19):** `make install-user
-    WIRE_BASHRC=1` additionally wires the same hook into `$HOME/.bashrc.d/`
-    or `$HOME/.bashrc` (same fallback shape), opt-in and off by default,
-    for non-login interactive shells the profile hook never reaches.
+    absent) — see Phase 1.2. **Extended (2026-07-19):** `WIRE_BASHRC=1`
+    additionally wires the same hook into a non-login shell's startup
+    files, opt-in and off by default, using the same drop-in-dir-or-
+    delimited-file fallback shape uniformly in all four spots: `make
+    install-user` targets `$HOME/.bashrc.d/` or `$HOME/.bashrc`; system-wide
+    `make install` targets `/etc/bash/bashrc.d/` or `/etc/bash.bashrc`. The
+    marker-block primitives (`strip_block`/`upsert_block`) and the drop-in
+    ones live in the new `shell-hook-lib.sh`, shared by `install-user-hook.sh`
+    and the Makefile (sourced by the former, invoked as a small standalone
+    CLI by the latter) instead of being duplicated.
 
 13. **Which keys to auto-load is configurable (goals 1, 2, 15). ✅ Done.**
     `config.toml`: `auto_load_mode` (`all`/`include`/`exclude`) +
