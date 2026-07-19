@@ -207,10 +207,14 @@ Keys are added to the agent with a lifetime (`SSHAKKU_KEY_LIFETIME`, default 8h)
 When that elapses the agent drops the key; the passphrase stays in the OS wallet,
 so re-adding the key never asks you to retype it.
 
-- **Opening a new terminal** re-adds any expired key automatically: SSHakku sees
-  the fingerprint is no longer in the agent and re-adds it from the wallet,
-  silently. Because every shell shares one agent on a fixed socket, this refills
-  the key for all terminals at once.
+- **Opening a new login shell** re-adds any expired key automatically: SSHakku
+  sees the fingerprint is no longer in the agent and re-adds it from the
+  wallet, silently. Because every shell shares one agent on a fixed socket,
+  this refills the key for all terminals at once — but only a login shell
+  runs the hook that triggers it (see
+  [Requirements](../README.md#requirements)); a plain new terminal tab that
+  doesn't start one won't, unless the optional `.bashrc`/`.bashrc.d` wiring
+  (`make install-user WIRE_BASHRC=1`) is also in place.
 - **In a still-open terminal** where a key just expired, the next `ssh` (or
   `git`, `rsync`, or any program that uses ssh) is routed through SSHakku's
   askpass broker. The broker fetches the passphrase from the wallet and hands it

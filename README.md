@@ -12,8 +12,9 @@ Every login shell keeps one `ssh-agent` alive on a fixed socket, so
 a key is used, SSHakku prompts for its passphrase and stores it in a dedicated
 collection in your desktop's secret store (KDE Wallet, GNOME Keyring, or
 KeePassXC — see [Requirements](#requirements)). Every time after that, the key
-is loaded silently: open a terminal, the key is already there. If something
-goes wrong, `sshakku doctor` explains what and, with `--fix`, repairs it.
+is loaded silently: open a login shell (a fresh login, or any terminal
+configured to start one), and the key is already there. If something goes
+wrong, `sshakku doctor` explains what and, with `--fix`, repairs it.
 
 ## Requirements
 
@@ -63,7 +64,20 @@ otherwise a clearly delimited block is added to `$HOME/.bash_profile`
 (created if it doesn't exist yet), leaving the rest of the file untouched.
 Make sure `$HOME/.local/bin` is on your `PATH`.
 
-To remove it: `make uninstall-user`.
+A login shell doesn't fire for every new terminal — a plain new tab or a
+multiplexer pane often starts a non-login shell instead (see
+[docs/DIAGNOSTICS.md](docs/DIAGNOSTICS.md)). To also wire the same hook into
+`$HOME/.bashrc.d/` (if it exists) or `$HOME/.bashrc`, so those pick it up
+too, opt in with:
+
+```sh
+make install-user WIRE_BASHRC=1
+```
+
+This is additive, never a replacement for the login hook above.
+
+To remove it (both the login hook and, if it was wired, the `.bashrc` one):
+`make uninstall-user`.
 
 ### Gentoo
 

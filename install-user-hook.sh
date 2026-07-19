@@ -8,7 +8,7 @@
 # reduce to a single `source` line instead of duplicating the hook logic.
 #
 # Usage:
-#   install-user-hook.sh install <home> <sshakku_bin_path> [nn]
+#   install-user-hook.sh install <home> <sshakku_bin_path> [nn] [wire_bashrc]
 #   install-user-hook.sh uninstall <home> [nn]
 #
 # <home>/.bash_profile.d/, if it already exists, gets a small file dropped
@@ -16,6 +16,17 @@
 # <home>/.bash_profile (created if absent) — re-running install regenerates
 # identical content, never duplicating the block; uninstall removes whichever
 # of the two was actually used.
+#
+# The login-shell profile is the primary mechanism and is always wired. A
+# login shell doesn't fire for a plain new terminal tab or a multiplexer
+# pane started without re-logging in — most of those start a non-login
+# shell instead, which reads .bashrc, not the profile. Passing a non-empty
+# wire_bashrc additionally wires the same hook into <home>/.bashrc.d/ (if it
+# exists) or <home>/.bashrc, the same fallback shape as the profile case, so
+# those shells self-heal too. The hook itself is idempotent (a healthy fixed
+# ssh-agent socket, and load-keys skips keys already present), so sourcing
+# it twice in the same shell — e.g. a .bash_profile that itself sources
+# .bashrc — is harmless.
 set -euo pipefail
 
 marker_start="# >>> sshakku >>>"
@@ -65,7 +76,7 @@ upsert_block() {
 	mv "$tmp" "$file"
 }
 
-usage="usage: install-user-hook.sh {install <home> <sshakku_bin_path> [nn]|uninstall <home> [nn]}"
+usage="usage: install-user-hook.sh {install <home> <sshakku_bin_path> [nn] [wire_bashrc]|uninstall <home> [nn]}"
 action="${1:?$usage}"
 home="${2:?$usage}"
 
@@ -73,20 +84,17 @@ hook_dir="$home/.local/share/sshakku"
 hook_file="$hook_dir/shell-hook.sh"
 profile_d_dir="$home/.bash_profile.d"
 profile_file="$home/.bash_profile"
+bashrc_d_dir="$home/.bashrc.d"
+bashrc_file="$home/.bashrc"
 
-case "$action" in
-install)
-	sshakku_bin="${3:?$usage}"
-	nn="${4:-001}"
-	drop_file="$profile_d_dir/${nn}-sshakku-init.sh"
-
-	mkdir -p "$hook_dir"
-	template_dir="$(cd "$(dirname "$0")" && pwd)"
-	sed 's|/usr/local/bin/sshakku|'"$sshakku_bin"'|g' "$template_dir/nn-ssh-init-linux.sh" >"$hook_file"
-	chmod 755 "$hook_file"
-
-	source_line=". \"$hook_file\""
-	if [ -d "$profile_d_dir" ]; then
+# wire_hook drops source_line into dir/<nn>-sshakku-init.sh if dir exists,
+# otherwise upserts it as a marker block into file. Shared by the profile
+# and (optional) bashrc wiring below — they only differ in which dir/file
+# pair they target.
+wire_hook() {
+	local dir="$1" file="$2" nn="$3" source_line="$4"
+	local drop_file="$dir/${nn}-sshakku-init.sh"
+	if [ -d "$dir" ]; then
 		{
 			echo "#!/bin/bash"
 			echo "# sshakku per-user login hook. Regenerate with: make install-user"
@@ -94,19 +102,46 @@ install)
 		} >"$drop_file"
 		chmod 755 "$drop_file"
 	else
-		upsert_block "$profile_file" "$source_line"
+		upsert_block "$file" "$source_line"
+	fi
+}
+
+# unwire_hook removes dir/<nn>-sshakku-init.sh and strips the marker block
+# from file, whichever was actually used — safe to call even if wire_hook
+# was never run for this dir/file pair.
+unwire_hook() {
+	local dir="$1" file="$2" nn="$3"
+	rm -f "$dir/${nn}-sshakku-init.sh"
+	if [ -f "$file" ]; then
+		local tmp
+		tmp="$(mktemp "${file}.XXXXXX")"
+		strip_block "$file" >"$tmp"
+		mv "$tmp" "$file"
+	fi
+}
+
+case "$action" in
+install)
+	sshakku_bin="${3:?$usage}"
+	nn="${4:-001}"
+	wire_bashrc="${5:-}"
+
+	mkdir -p "$hook_dir"
+	template_dir="$(cd "$(dirname "$0")" && pwd)"
+	sed 's|/usr/local/bin/sshakku|'"$sshakku_bin"'|g' "$template_dir/nn-ssh-init-linux.sh" >"$hook_file"
+	chmod 755 "$hook_file"
+
+	source_line=". \"$hook_file\""
+	wire_hook "$profile_d_dir" "$profile_file" "$nn" "$source_line"
+	if [ -n "$wire_bashrc" ]; then
+		wire_hook "$bashrc_d_dir" "$bashrc_file" "$nn" "$source_line"
 	fi
 	;;
 uninstall)
 	nn="${3:-001}"
-	drop_file="$profile_d_dir/${nn}-sshakku-init.sh"
 
-	rm -f "$drop_file"
-	if [ -f "$profile_file" ]; then
-		upsert_tmp="$(mktemp "${profile_file}.XXXXXX")"
-		strip_block "$profile_file" >"$upsert_tmp"
-		mv "$upsert_tmp" "$profile_file"
-	fi
+	unwire_hook "$profile_d_dir" "$profile_file" "$nn"
+	unwire_hook "$bashrc_d_dir" "$bashrc_file" "$nn"
 	rm -f "$hook_file"
 	rmdir "$hook_dir" 2>/dev/null || true
 	;;

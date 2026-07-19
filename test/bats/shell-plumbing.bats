@@ -150,3 +150,33 @@ load helpers
 	# still being alive under the same socket, not a doctor-recorded pid.
 	kill -0 "$own_pid"
 }
+
+@test "install-user-hook.sh leaves .bashrc/.bashrc.d untouched without the opt-in flag" {
+	"$REPO_ROOT/install-user-hook.sh" install "$HOME" "$SSHAKKU_BIN" 001
+	[ -f "$HOME/.bash_profile" ]
+	[ ! -e "$HOME/.bashrc" ]
+	[ ! -e "$HOME/.bashrc.d" ]
+}
+
+@test "install-user-hook.sh with the opt-in flag wires .bashrc when .bashrc.d is absent" {
+	"$REPO_ROOT/install-user-hook.sh" install "$HOME" "$SSHAKKU_BIN" 001 1
+	grep -q '# >>> sshakku >>>' "$HOME/.bashrc"
+	grep -q 'shell-hook.sh' "$HOME/.bashrc"
+}
+
+@test "install-user-hook.sh with the opt-in flag drops a file into an existing .bashrc.d instead" {
+	mkdir -p "$HOME/.bashrc.d"
+	"$REPO_ROOT/install-user-hook.sh" install "$HOME" "$SSHAKKU_BIN" 001 1
+	[ -f "$HOME/.bashrc.d/001-sshakku-init.sh" ]
+	[ ! -e "$HOME/.bashrc" ]
+}
+
+@test "install-user-hook.sh uninstall removes whichever bashrc artifact was wired" {
+	mkdir -p "$HOME/.bashrc.d"
+	"$REPO_ROOT/install-user-hook.sh" install "$HOME" "$SSHAKKU_BIN" 001 1
+	[ -f "$HOME/.bashrc.d/001-sshakku-init.sh" ]
+
+	"$REPO_ROOT/install-user-hook.sh" uninstall "$HOME" 001
+	[ ! -e "$HOME/.bashrc.d/001-sshakku-init.sh" ]
+	run ! grep -q 'sshakku' "$HOME/.bash_profile"
+}
