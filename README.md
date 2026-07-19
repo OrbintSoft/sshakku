@@ -73,10 +73,13 @@ sync with this repository.
 
 ## First run
 
-Install, then open a new terminal (or log out and back in). The first `ssh` to
-a key you haven't used yet prompts for its passphrase once; every use after
-that — in this terminal and every new one — is silent. If a key ever stops
-refilling silently, run `sshakku doctor` to see why.
+Install, then start a new login shell — log out and back in, or run `bash -l`
+(a plain new terminal tab isn't guaranteed to start one; see
+[docs/DIAGNOSTICS.md](docs/DIAGNOSTICS.md) if a new terminal doesn't pick it
+up). The first `ssh` to a key you haven't used yet prompts for its passphrase
+once; every use after that — in this shell and every new login shell — is
+silent. If a key ever stops refilling silently, run `sshakku doctor` to see
+why.
 
 ## Documentation
 

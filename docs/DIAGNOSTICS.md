@@ -62,11 +62,15 @@ When a graphical prompter is available (the same check `sshakku askpass-env`
 uses) but this shell's `SSH_ASKPASS`/`SSH_ASKPASS_REQUIRE` aren't set, the
 report flags it: ssh will fall back to prompting on the raw terminal instead of
 routing passphrases through the wallet-aware broker. This typically means the
-shell-init script never ran for this particular shell — e.g. it wasn't started
-as a login shell, so `/etc/profile.d` was never sourced — re-source your shell
-profile or open a new terminal. This check only applies to your own
-session; `--user` reports never inspect it, since it describes the invoking
-shell's environment, not the target's.
+shell-init script never ran for this particular shell because it wasn't
+started as a login shell, so `/etc/profile.d` (or, for a per-user install,
+`~/.bash_profile`) was never sourced. Opening a plain new terminal tab does
+*not* reliably fix this — many terminal emulators and multiplexers start a
+non-login shell by default, which reads `~/.bashrc` instead, not the login
+profile. Either re-source the profile directly in the affected shell, or
+start a genuine login shell (e.g. `bash -l`). This check only applies to your
+own session; `--user` reports never inspect it, since it describes the
+invoking shell's environment, not the target's.
 
 ### Keys and their remaining time
 
