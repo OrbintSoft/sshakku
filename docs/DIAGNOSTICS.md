@@ -115,24 +115,30 @@ does. `doctor` reports three best-effort, read-only checks:
 
 ```text
 environment:
-  disk encryption: no  |  /tmp: not tmpfs  |  TPM: present (2.0)
+  disk encryption: no  |  /tmp: not tmpfs  |  secure hardware: present (TPM 2.0)
 ```
 
-- **Disk encryption** — whether the block device backing your home directory
-  is LUKS-encrypted, detected via `/proc/mounts` and
-  `/sys/class/block/*/dm/uuid`, including one level of LUKS-under-LVM. An
-  unencrypted disk means anyone with physical access to the drive can read
-  the wallet database directly, bypassing sshakku entirely.
+- **Disk encryption** — on Linux, whether the block device backing your home
+  directory is LUKS-encrypted, detected via `/proc/mounts` and
+  `/sys/class/block/*/dm/uuid`, including one level of LUKS-under-LVM; on
+  macOS, FileVault's status via `fdesetup status`. An unencrypted disk means
+  anyone with physical access to the drive can read the wallet database
+  directly, bypassing sshakku entirely.
 - **`/tmp`** — whether `/tmp` is its own tmpfs mount (memory-backed) rather
   than living on the root filesystem, and, when it is, whether it looks
-  large enough (512 MiB) to be reliable under load.
-- **TPM** — whether the kernel has a TPM device driver bound
-  (`/sys/class/tpm/tpm<N>`), and its rough version (1.2 or 2.0). A present
-  TPM can back a stronger disk-encryption setup than a plain passphrase-only
-  LUKS volume, where the platform supports it.
+  large enough (512 MiB) to be reliable under load. Always "not tmpfs" on
+  macOS, which has no tmpfs-backed `/tmp`.
+- **Secure hardware** — whether the machine has a hardware key store an
+  OS-level encryption scheme could bind to: on Linux, a TPM device driver
+  bound under `/sys/class/tpm/tpm<N>` (and its rough version, 1.2 or 2.0);
+  on macOS, a Secure Enclave Processor, detected via the `AppleSEPManager`
+  entry in the IOKit registry (`ioreg`). Present hardware can back a
+  stronger disk-encryption setup than a plain passphrase alone, where the
+  platform supports it.
 
 Every check that cannot be determined (a network filesystem, an unreadable
-`/proc` or `/sys`) is reported as "undetermined" rather than guessed. A
+`/proc` or `/sys`, an `fdesetup`/`ioreg` invocation that failed to run) is
+reported as "undetermined" rather than guessed. A
 concerning result also appears under **findings**, always phrased as
 advisory: `doctor` reports these, it never configures anything or refuses to
 run because of them. Fixing what these checks flag is outside sshakku's

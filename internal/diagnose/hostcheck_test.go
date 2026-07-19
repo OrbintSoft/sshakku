@@ -1,3 +1,5 @@
+//go:build linux
+
 package diagnose
 
 import (
@@ -155,11 +157,11 @@ func TestChecksTPMPresent2_0(t *testing.T) {
 	writeFile(t, filepath.Join(sys, "class", "tpm", "tpm0", "tpm_version_major"), "2\n")
 
 	got := ProcfsHostSource{ProcRoot: filepath.Join(root, "proc"), SysRoot: sys, DevRoot: filepath.Join(root, "dev")}.Checks()
-	if got.TPMPresent == nil || !*got.TPMPresent {
-		t.Fatalf("TPMPresent = %v, want true", got.TPMPresent)
+	if got.SecureHardwarePresent == nil || !*got.SecureHardwarePresent {
+		t.Fatalf("SecureHardwarePresent = %v, want true", got.SecureHardwarePresent)
 	}
-	if got.TPMVersion != "2.0" {
-		t.Fatalf("TPMVersion = %q, want 2.0", got.TPMVersion)
+	if got.SecureHardwareKind != "TPM 2.0" {
+		t.Fatalf("SecureHardwareKind = %q, want %q", got.SecureHardwareKind, "TPM 2.0")
 	}
 }
 
@@ -171,22 +173,22 @@ func TestChecksTPMPresent1_2(t *testing.T) {
 	}
 
 	got := ProcfsHostSource{ProcRoot: filepath.Join(root, "proc"), SysRoot: sys, DevRoot: filepath.Join(root, "dev")}.Checks()
-	if got.TPMPresent == nil || !*got.TPMPresent {
-		t.Fatalf("TPMPresent = %v, want true", got.TPMPresent)
+	if got.SecureHardwarePresent == nil || !*got.SecureHardwarePresent {
+		t.Fatalf("SecureHardwarePresent = %v, want true", got.SecureHardwarePresent)
 	}
-	if got.TPMVersion != "1.2" {
-		t.Fatalf("TPMVersion = %q, want 1.2", got.TPMVersion)
+	if got.SecureHardwareKind != "TPM 1.2" {
+		t.Fatalf("SecureHardwareKind = %q, want %q", got.SecureHardwareKind, "TPM 1.2")
 	}
 }
 
 func TestChecksTPMAbsent(t *testing.T) {
 	root := t.TempDir()
 	got := ProcfsHostSource{ProcRoot: filepath.Join(root, "proc"), SysRoot: filepath.Join(root, "sys"), DevRoot: filepath.Join(root, "dev")}.Checks()
-	if got.TPMPresent == nil || *got.TPMPresent {
-		t.Fatalf("TPMPresent = %v, want false", got.TPMPresent)
+	if got.SecureHardwarePresent == nil || *got.SecureHardwarePresent {
+		t.Fatalf("SecureHardwarePresent = %v, want false", got.SecureHardwarePresent)
 	}
-	if got.TPMVersion != "" {
-		t.Fatalf("TPMVersion = %q, want empty", got.TPMVersion)
+	if got.SecureHardwareKind != "" {
+		t.Fatalf("SecureHardwareKind = %q, want empty", got.SecureHardwareKind)
 	}
 }
 
@@ -198,8 +200,8 @@ func TestChecksTPMIgnoresResourceManagerEntry(t *testing.T) {
 	}
 
 	got := ProcfsHostSource{ProcRoot: filepath.Join(root, "proc"), SysRoot: sys, DevRoot: filepath.Join(root, "dev")}.Checks()
-	if got.TPMPresent == nil || *got.TPMPresent {
-		t.Fatalf("TPMPresent = %v, want false (tpmrm0 is not a TPM device entry)", got.TPMPresent)
+	if got.SecureHardwarePresent == nil || *got.SecureHardwarePresent {
+		t.Fatalf("SecureHardwarePresent = %v, want false (tpmrm0 is not a TPM device entry)", got.SecureHardwarePresent)
 	}
 }
 

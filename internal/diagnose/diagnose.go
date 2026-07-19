@@ -494,8 +494,8 @@ func hostFindings(h HostChecks) []string {
 			f = append(f, fmt.Sprintf("/tmp is tmpfs but only %s — outside sshakku's control, may be too small under load", humanBytes(h.TmpSizeBytes)))
 		}
 	}
-	if h.TPMPresent != nil && !*h.TPMPresent {
-		f = append(f, "no TPM device detected — outside sshakku's control, a TPM enables stronger disk-encryption key protection where supported")
+	if h.SecureHardwarePresent != nil && !*h.SecureHardwarePresent {
+		f = append(f, "no TPM or Secure Enclave detected — outside sshakku's control, that kind of hardware enables stronger disk-encryption key protection where supported")
 	}
 	return f
 }
@@ -503,7 +503,7 @@ func hostFindings(h HostChecks) []string {
 // hostChecksLine renders h as a single summary line for Format, or "" when h
 // is the zero value (Gather was called with a nil HostSource).
 func hostChecksLine(h HostChecks) string {
-	if h.DiskEncrypted == nil && h.TmpTmpfs == nil && h.TPMPresent == nil {
+	if h.DiskEncrypted == nil && h.TmpTmpfs == nil && h.SecureHardwarePresent == nil {
 		return ""
 	}
 	parts := []string{
@@ -519,12 +519,12 @@ func hostChecksLine(h HostChecks) string {
 	default:
 		parts = append(parts, "/tmp: tmpfs, size undetermined")
 	}
-	if h.TPMPresent == nil {
-		parts = append(parts, "TPM: undetermined")
-	} else if *h.TPMPresent {
-		parts = append(parts, fmt.Sprintf("TPM: present (%s)", h.TPMVersion))
+	if h.SecureHardwarePresent == nil {
+		parts = append(parts, "secure hardware: undetermined")
+	} else if *h.SecureHardwarePresent {
+		parts = append(parts, fmt.Sprintf("secure hardware: present (%s)", h.SecureHardwareKind))
 	} else {
-		parts = append(parts, "TPM: not detected")
+		parts = append(parts, "secure hardware: not detected")
 	}
 	return strings.Join(parts, "  |  ")
 }
