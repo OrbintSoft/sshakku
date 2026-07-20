@@ -45,6 +45,17 @@ func TestRun(t *testing.T) {
 	}
 }
 
+func TestValidSecretBackendName(t *testing.T) {
+	for _, name := range []string{"secret-service", "1password", "bitwarden", "keychain"} {
+		if !validSecretBackendName(name) {
+			t.Errorf("validSecretBackendName(%q) = false, want true", name)
+		}
+	}
+	if validSecretBackendName("bogus") {
+		t.Error(`validSecretBackendName("bogus") = true, want false`)
+	}
+}
+
 func TestResolveTargetUser(t *testing.T) {
 	self, err := user.Current()
 	if err != nil {

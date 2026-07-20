@@ -73,20 +73,30 @@ same way a problem in `config.toml` itself is.
 
 By default SSHakku stores passphrases in a dedicated Secret Service collection
 (KDE Wallet, GNOME Keyring, or KeePassXC via its Secret Service integration —
-see the next section). `secret_backend` in `config.toml` switches to 1Password
-or Bitwarden instead. Like `wallet_store_mode`, these four keys are
-config-file only — an account identity (an email address, a vault name)
-doesn't fit a single environment variable, and there is no benefit to leaving
-it sitting in the process environment instead of the file:
+see the next section). This default only works on Linux — macOS has no D-Bus
+session bus or Secret Service implementation to fall back to, so a macOS
+install must set `secret_backend = "keychain"` explicitly. `secret_backend`
+in `config.toml` can also switch to 1Password or Bitwarden on either
+platform. Like `wallet_store_mode`, these four keys are config-file only — an
+account identity (an email address, a vault name) doesn't fit a single
+environment variable, and there is no benefit to leaving it sitting in the
+process environment instead of the file:
 
 ```toml
-secret_backend = "bitwarden"                  # "secret-service" (default), "1password", or "bitwarden"
+secret_backend = "bitwarden"                  # "secret-service" (default), "keychain", "1password", or "bitwarden"
 onepassword_vault = "sshakku"                  # consulted only when secret_backend = "1password"
 bitwarden_email = "you@example.com"            # consulted only when secret_backend = "bitwarden"
 bitwarden_server = "https://vault.example.com" # optional; a self-hosted Vaultwarden instance
 ```
 
 - `"secret-service"` (the default) is described in the next section.
+  Linux only.
+- `"keychain"` stores passphrases as generic-password items in the macOS
+  Keychain, one per key, scoped to your account. SSHakku talks to
+  Security.framework directly (via cgo), never shelling out to the `security`
+  CLI — a plain status read has no secret material to protect from `ps`/argv
+  exposure, but a passphrase does, and `security add-generic-password -w`
+  has no way to take it other than on the command line. macOS only.
 - `"1password"` shells out to the `op` CLI. `onepassword_vault` names a vault
   dedicated to SSHakku — every item in it is assumed to be SSHakku's own, the
   same dedicated-collection assumption the default backend makes. `op` must
@@ -130,6 +140,13 @@ Upgrading from a version that stored passphrases in the default collection: an
 already-stored key is not found in the new `sshakku` collection, so it
 re-prompts once on the first load after upgrading and is then stored under
 `sshakku` — no migration, and every load after that behaves as before.
+
+With `secret_backend = "keychain"` (macOS), each key's passphrase is a
+generic-password item in your default (login) keychain, labelled `SSH
+Passphrase for <keyname>` and scoped to your account. Unlike the Secret
+Service default, these items are ordinary entries in the same keychain
+everything else uses, so they're visible in Keychain Access alongside your
+other passwords, not tucked away in a separate collection.
 
 ## Choosing which keys' passphrases are stored
 
@@ -196,10 +213,12 @@ every entry sshakku manages. Useful for testing, for revoking a passphrase
 after suspecting it was exposed, or for removing an already-stored passphrase
 so the key goes back to being prompted for and kept in memory only.
 
-`--all` enumerates the dedicated `sshakku` collection directly, so it needs
-the native Secret Service backend; if sshakku fell back to `secret-tool` (no
-D-Bus session bus reachable), `--all` fails with an explanatory error and the
-named form must be used instead.
+`--all` enumerates every stored entry directly, which every backend supports
+except the `secret-tool` fallback (used only when the default Secret Service
+backend can't reach a D-Bus session bus at all): `secret-tool` has no verb to
+list entries without already knowing their exact attributes, so in that
+situation `--all` fails with an explanatory error and the named form must be
+used instead.
 
 ## Key expiry and the wallet
 
