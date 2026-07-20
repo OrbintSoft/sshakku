@@ -6,12 +6,14 @@ import (
 	"bytes"
 	"os/exec"
 	"strings"
+
+	"golang.org/x/sys/unix"
 )
 
 // DarwinHostSource gathers HostChecks via macOS-native tools: `fdesetup
-// status` for FileVault, and an AppleSEPManager IOKit-registry probe for
-// Secure Enclave presence. Target is unused — FileVault status is
-// whole-volume, unlike Linux's per-mount LUKS check — kept only for
+// status` for FileVault, and CPU architecture (falling back to a T1/T2 probe
+// on Intel) for Secure Enclave presence. Target is unused — FileVault status
+// is whole-volume, unlike Linux's per-mount LUKS check — kept only for
 // interface parity with ProcfsHostSource.
 type DarwinHostSource struct {
 	Target string
@@ -48,16 +50,26 @@ func fileVaultStatus() *bool {
 }
 
 // secureEnclaveInfo reports whether the machine has a Secure Enclave
-// Processor, via the same AppleSEPManager IOKit registry entry present on
-// every Mac with one — T1/T2 Intel Macs and all Apple Silicon Macs alike, so
-// this needs no separate check per CPU architecture. nil when `ioreg` itself
-// could not run; a clean run with no match is a real "absent" determination.
+// Processor. Every Apple Silicon Mac has one built into the SoC — no probe
+// needed beyond CPU architecture, read via the same "hw.optional.arm64"
+// sysctl the OS itself uses to decide whether Rosetta is needed. This
+// reflects the *host*, unlike checking the running binary's own GOARCH,
+// which would misreport under Rosetta 2 emulation. Only Intel Macs need an
+// actual probe, since a Secure Enclave there was optional, tied to a T1/T2
+// Security Chip; `system_profiler`'s bridge/coprocessor data type names it
+// directly when present. Deliberately avoids IOKit registry class names
+// (e.g. `ioreg -c <class>`) for this: they are internal implementation
+// details Apple can rename between OS releases, unlike a public sysctl name.
 func secureEnclaveInfo() (*bool, string) {
-	out, err := exec.Command("ioreg", "-c", "AppleSEPManager", "-d", "1").Output()
+	if arm64, err := unix.SysctlUint32("hw.optional.arm64"); err == nil && arm64 == 1 {
+		present := true
+		return &present, "Secure Enclave"
+	}
+	out, err := exec.Command("system_profiler", "SPiBridgeDataType").Output()
 	if err != nil {
 		return nil, ""
 	}
-	present := bytes.Contains(out, []byte("AppleSEPManager"))
+	present := bytes.Contains(out, []byte("Apple T1")) || bytes.Contains(out, []byte("Apple T2"))
 	if present {
 		return &present, "Secure Enclave"
 	}
