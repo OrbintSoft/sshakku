@@ -1,14 +1,18 @@
 # Dependencies
 
-What has to be present on a Linux system to *run* SSHakku, versus what's needed
-only to *build* it from source — for end users and for anyone packaging it.
+What has to be present on Linux or macOS to *run* SSHakku, versus what's
+needed only to *build* it from source — for end users and for anyone
+packaging it.
 
 ## To build
 
 - **Go 1.25 or newer.** The only build-time requirement; `go build ./...` (or
   `make build`) fetches the Go module dependencies itself
   (`github.com/godbus/dbus/v5`, `github.com/BurntSushi/toml`, `golang.org/x/sys`
-  — all pure Go, no C toolchain or cgo involved).
+  — all pure Go, no C toolchain or cgo involved on Linux). On macOS, building
+  additionally needs a C toolchain (Xcode Command Line Tools, `xcode-select
+  --install`) for the Keychain backend, which uses cgo to call
+  Security.framework directly rather than shelling out.
 
 ## To run
 
@@ -17,15 +21,22 @@ Always required, regardless of configuration:
 - **OpenSSH client tools**: `ssh-add`, `ssh-agent`, `ssh-keygen`. SSHakku
   starts and manages its own `ssh-agent` process and drives `ssh-add`/
   `ssh-keygen` for every key it loads or fingerprints — there is no bundled
-  reimplementation of any of these.
-- **A login shell that sources `/etc/profile.d`** (or, for a per-user install,
-  `~/.bash_profile`/`~/.bash_profile.d/`) — see the
-  [Requirements](../README.md#requirements) section of the README. A per-user
-  install can optionally also wire `~/.bashrc`/`~/.bashrc.d/` (`make
-  install-user WIRE_BASHRC=1`) to additionally cover non-login shells.
+  reimplementation of any of these. Present by default on both Linux and
+  macOS.
+- **A login shell that sources `/etc/profile.d`** on Linux, or `/etc/zprofile`
+  on macOS (or, for a per-user install, `~/.bash_profile`/
+  `~/.bash_profile.d/` on Linux, `~/.zprofile`/`~/.zprofile.d/` on macOS) —
+  see the [Requirements](../README.md#requirements) section of the README. A
+  per-user install can optionally also wire `~/.bashrc`/`~/.bashrc.d/`
+  (Linux) or `~/.zshrc`/`~/.zshrc.d/` (macOS) via `make install-user
+  WIRE_BASHRC=1`/`WIRE_ZSHRC=1` to additionally cover non-login shells.
 
 Required only for the default secret backend (`secret_backend =
-"secret-service"`, i.e. no `secret_backend` set at all):
+"secret-service"`, i.e. no `secret_backend` set at all). This default does
+not work on macOS — there is no D-Bus session bus or Secret Service
+implementation to fall back to — so macOS installs must set `secret_backend
+= "keychain"` explicitly in `config.toml` (see
+[Choosing the secret backend](CONFIGURATION.md#choosing-the-secret-backend)):
 
 - **A reachable D-Bus session bus** with a Secret Service implementation
   behind it — KDE Wallet, GNOME Keyring, or KeePassXC (via its Secret Service
@@ -37,13 +48,19 @@ Required only for the default secret backend (`secret_backend =
   non-interactive or non-desktop login) — see
   [Where passphrases are stored](CONFIGURATION.md#where-passphrases-are-stored).
 
-Required only when a graphical passphrase prompt is used (a GUI session is
-detected — Wayland, or X11 with a live `$DISPLAY` confirmed via `xset`):
+On macOS, `secret_backend = "keychain"` needs nothing beyond what's already
+on every Mac: SSHakku talks to Security.framework directly (via cgo), never
+shelling out to the `security` CLI.
 
-- **`kdialog`**, for the passphrase dialog itself. Without it, or without a
-  GUI session, SSHakku falls back to a terminal prompt instead (via `ssh-add`
-  for an SSH key's own passphrase, or a plain terminal prompt for the
-  Bitwarden master password).
+Required only when a graphical passphrase prompt is used (a GUI session is
+detected — Wayland or X11 with a live `$DISPLAY` confirmed via `xset` on
+Linux, always on macOS):
+
+- **`kdialog`** on Linux, for the passphrase dialog itself. Without it, or
+  without a GUI session, SSHakku falls back to a terminal prompt instead (via
+  `ssh-add` for an SSH key's own passphrase, or a plain terminal prompt for
+  the Bitwarden master password). macOS needs no extra package for its
+  graphical prompt.
 
 Required only when `secret_backend` selects that backend in `config.toml` (see
 [Choosing the secret backend](CONFIGURATION.md#choosing-the-secret-backend)):
@@ -59,11 +76,14 @@ Required only when `secret_backend` selects that backend in `config.toml` (see
 
 A distribution package should declare:
 
-- A build-time dependency on the Go toolchain (`>= 1.25`).
+- A build-time dependency on the Go toolchain (`>= 1.25`); on macOS, also a C
+  toolchain, for the cgo Keychain backend.
 - A runtime dependency on `openssh` (for `ssh-add`/`ssh-agent`/`ssh-keygen`).
-- `libsecret`'s tools (for `secret-tool`) and `kdialog` as recommended, not
-  mandatory, runtime dependencies — both are optional fallbacks, not needed
-  for every configuration.
+- On Linux: `libsecret`'s tools (for `secret-tool`) and `kdialog` as
+  recommended, not mandatory, runtime dependencies — both are optional
+  fallbacks, not needed for every configuration. macOS needs no equivalent
+  package; the Keychain backend and graphical prompt use only what ships with
+  the OS.
 - No runtime dependency on `op` or `bw` — they're only needed by whoever
   opts into `secret_backend = "1password"` or `"bitwarden"`, and are
   typically packaged and installed separately by the user in that case.

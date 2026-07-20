@@ -6,7 +6,6 @@
 package diagnose
 
 import (
-	_ "embed"
 	"fmt"
 	"io"
 	"os"
@@ -19,13 +18,13 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/keystate"
 )
 
-//go:embed askpass_not_wired.txt
-var askpassNotWiredMsgFile string
-
-// askpassNotWiredMsg is the finding text for the askpass-wiring check, kept as
-// its own file so the prose can be read and edited as plain text rather than a
-// Go string literal.
-var askpassNotWiredMsg = strings.TrimSpace(askpassNotWiredMsgFile)
+// askpassNotWiredMsg is the finding text for the askpass-wiring check.
+// loginShellHint (OS-specific: paths and the login-shell command differ
+// between bash/profile.d on Linux and zsh/zprofile on macOS) is shared with
+// the plain "no agent" finding below, since both stem from the same cause.
+var askpassNotWiredMsg = "a graphical prompter is available but SSH_ASKPASS is not wired into " +
+	"this shell — ssh will prompt for passphrases on the raw terminal instead of routing them " +
+	"through the wallet; " + loginShellHint
 
 // logTailLines is how many trailing session-log lines the report shows.
 const logTailLines = 10
@@ -307,7 +306,7 @@ func findings(in Inputs, r Report) []string {
 	var f []string
 	switch {
 	case in.EnvSock == "":
-		f = append(f, "SSH_AUTH_SOCK is unset — this shell cannot reach any agent")
+		f = append(f, "SSH_AUTH_SOCK is unset — this shell cannot reach any agent; "+loginShellHint)
 	case !r.EnvReachable:
 		f = append(f, fmt.Sprintf("SSH_AUTH_SOCK points at %s, which is not answering", in.EnvSock))
 	case in.EnvSock != in.FixedSock:

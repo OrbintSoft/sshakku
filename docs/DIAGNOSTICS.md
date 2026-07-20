@@ -56,21 +56,23 @@ instead of only saying "not our fixed socket". These services never run under
 the `ssh-agent` binary name, so they cannot appear as an agent in the process
 list above; the socket path is the only signal available for them.
 
-### Askpass wiring
+### Login shell not picked up
 
-When a graphical prompter is available (the same check `sshakku askpass-env`
-uses) but this shell's `SSH_ASKPASS`/`SSH_ASKPASS_REQUIRE` aren't set, the
-report flags it: ssh will fall back to prompting on the raw terminal instead of
-routing passphrases through the wallet-aware broker. This typically means the
-shell-init script never ran for this particular shell because it wasn't
-started as a login shell, so `/etc/profile.d` (or, for a per-user install,
-`~/.bash_profile`) was never sourced. Opening a plain new terminal tab does
-*not* reliably fix this — many terminal emulators and multiplexers start a
-non-login shell by default, which reads `~/.bashrc` instead, not the login
-profile. Either re-source the profile directly in the affected shell, or
-start a genuine login shell (e.g. `bash -l`). This check only applies to your
-own session; `--user` reports never inspect it, since it describes the
-invoking shell's environment, not the target's.
+Both `SSH_AUTH_SOCK` being unset and, separately, a graphical prompter being
+available but this shell's `SSH_ASKPASS`/`SSH_ASKPASS_REQUIRE` not being set
+(the same check `sshakku askpass-env` uses) most commonly trace back to the
+same cause: the shell-init script never ran for this particular shell
+because it wasn't started as a login shell, so the profile file that sources
+it was never read — `/etc/profile.d` (or, for a per-user install,
+`~/.bash_profile`) on Linux, `/etc/zprofile` (or `~/.zprofile`) on macOS.
+Opening a plain new terminal tab does *not* reliably fix this — many
+terminal emulators, multiplexers, and IDE-integrated terminals start a
+non-login shell by default, which reads `~/.bashrc`/`~/.zshrc` instead, not
+the login profile. Either re-source the profile directly in the affected
+shell, or start a genuine login shell (e.g. `bash -l` on Linux, `zsh -l` on
+macOS). The askpass half of this check only applies to your own session;
+`--user` reports never inspect it, since it describes the invoking shell's
+environment, not the target's.
 
 ### Keys and their remaining time
 
@@ -131,13 +133,15 @@ environment:
 - **Secure hardware** — whether the machine has a hardware key store an
   OS-level encryption scheme could bind to: on Linux, a TPM device driver
   bound under `/sys/class/tpm/tpm<N>` (and its rough version, 1.2 or 2.0);
-  on macOS, a Secure Enclave Processor, detected via the `AppleSEPManager`
-  entry in the IOKit registry (`ioreg`). Present hardware can back a
-  stronger disk-encryption setup than a plain passphrase alone, where the
-  platform supports it.
+  on macOS, a Secure Enclave Processor. Every Apple Silicon Mac has one, so
+  this is CPU architecture (the `hw.optional.arm64` sysctl), not a probe;
+  on Intel Macs, where a Secure Enclave was optional (tied to a T1/T2
+  Security Chip), `system_profiler SPiBridgeDataType` names it when
+  present. Present hardware can back a stronger disk-encryption setup than
+  a plain passphrase alone, where the platform supports it.
 
 Every check that cannot be determined (a network filesystem, an unreadable
-`/proc` or `/sys`, an `fdesetup`/`ioreg` invocation that failed to run) is
+`/proc` or `/sys`, an `fdesetup`/`system_profiler` invocation that failed to run) is
 reported as "undetermined" rather than guessed. A
 concerning result also appears under **findings**, always phrased as
 advisory: `doctor` reports these, it never configures anything or refuses to
@@ -176,8 +180,8 @@ backend test: PASS
 
 With no name, it tests whichever backend `config.toml`'s `secret_backend`
 resolves to (see [`CONFIGURATION.md`](CONFIGURATION.md)). Naming one of
-`secret-service`, `1password`, or `bitwarden` explicitly tests that backend
-instead, using the same account fields (`onepassword_vault`,
+`secret-service`, `keychain`, `1password`, or `bitwarden` explicitly tests
+that backend instead, using the same account fields (`onepassword_vault`,
 `bitwarden_email`, `bitwarden_server`) already in `config.toml` regardless of
 which backend is actually configured as the default — useful for checking a
 backend you're about to switch to before you switch. The probe entry is

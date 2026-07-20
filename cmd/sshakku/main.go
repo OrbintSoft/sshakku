@@ -660,7 +660,7 @@ func doctor(stdout, stderr io.Writer, args []string) int {
 	}
 	if testBackendName != "" && !validSecretBackendName(testBackendName) {
 		_, _ = fmt.Fprintf(stderr,
-			"sshakku: doctor --test-backend: unknown backend %q (want secret-service, 1password, or bitwarden)\n", testBackendName)
+			"sshakku: doctor --test-backend: unknown backend %q (want secret-service, 1password, bitwarden, or keychain)\n", testBackendName)
 		return 2
 	}
 
@@ -721,7 +721,7 @@ func doctor(stdout, stderr io.Writer, args []string) int {
 // newSecretBackend knows how to construct.
 func validSecretBackendName(name string) bool {
 	switch name {
-	case config.SecretBackendSecretService, config.SecretBackendOnePassword, config.SecretBackendBitwarden:
+	case config.SecretBackendSecretService, config.SecretBackendOnePassword, config.SecretBackendBitwarden, config.SecretBackendKeychain:
 		return true
 	default:
 		return false
