@@ -157,10 +157,18 @@ done are summarised; see the note at the top of this file for full detail.
    are implemented (Phase 4.2) and selectable at runtime via `config.toml`'s
    `secret_backend` key (Phase 4.3, see `docs/CONFIGURATION.md`).
 
-8. **Thin platform ports (goals 12, 13).** macOS already does silent passphrase
-   caching natively via launchd + `ssh-add --apple-use-keychain`; the macOS port
-   may reduce to "add keys with keychain". Windows is the most divergent
-   (service + named pipe, no socket) — keep it last.
+8. **Platform port depth (goals 12, 13). Decided for macOS (2026-07-19): full
+   port, not thin.** macOS gets sshakku's own agent management
+   (adoption/self-healing/fixed-socket symlink) exactly as on Linux — the
+   `internal/agent`/`internal/paths`/`internal/keyring` layers were already
+   unix-portable — plus a real `SecretBackend` over Keychain (via
+   Security.framework, see decision 23), not a reduction to a bare
+   `ssh-add --apple-use-keychain` call. Rationale: consistent semantics and
+   expiry behavior across platforms outweighs the extra code, and the extra
+   code turned out to be mostly a new `SecretBackend` implementation plus a
+   zsh install hook, not new agent-layer work. Shipped across Phase 5 Steps
+   1–6. Windows is still deferred and its port depth undecided — remains the
+   most divergent target (service + named pipe, no socket) and stays last.
 
 9. **CI vs containers for non-Linux (goal 16).** Use GitHub Actions `macos-*`/
    `windows-*` runners for those platforms; keep Linux containers for the rest.
@@ -668,6 +676,52 @@ choice reachable at runtime (4.3). → goals 11, 15; open decisions 7, 8, 13, 17
 ### Phase 5 — Widen the OS targets
 
 macOS as a wide port, never trust Apple; then Windows last as the most divergent target (service + named pipe, no socket, use win32 safe API). → goals 12, 13; open decision 8.
+
+**macOS half ✅ Done** (PRs #77–#84). Full port per open decision 8: sshakku's
+own agent runs on macOS exactly as on Linux, backed by a real Keychain
+`SecretBackend` (Security.framework via cgo, open decision 23).
+
+- `macos-latest` CI job (build + full test suite), surfacing and fixing two
+  real portability gaps (`unix.TCGETS`/`TCSETS` termios constants,
+  `t.TempDir()`-derived socket paths exceeding `sun_path`'s length limit on
+  Darwin).
+- Keychain `SecretBackend` (`internal/keys/secret_keychain_darwin.go`) over
+  `SecItemAdd`/`CopyMatching`/`Update`/`Delete` — no shell-out, so the
+  passphrase never touches argv (open decision 2).
+- Agent management (`internal/agent`) verified on real Darwin CI; found and
+  fixed a real gap — `Inspector.Agents()` hard-depended on `/proc`, absent on
+  macOS — via a new sysctl-based `platformAgents()`
+  (`golang.org/x/sys/unix`, no cgo).
+- zsh install hook: `nn-ssh-init-linux.sh` generalized to `nn-ssh-init.sh`
+  (shared by both platforms), a `Darwin` branch in the `Makefile`
+  (render-to-`$(SHARE_DIR)` + marker-block upsert into `/etc/zprofile`,
+  opt-in `/etc/zshrc` via `WIRE_ZSHRC`), the old dead-weight
+  `ssh-init-macos.zsh` deleted.
+- `doctor`/diagnose macOS specifics: `TPMPresent`/`TPMVersion` generalized to
+  `SecureHardwarePresent`/`SecureHardwareKind` (TPM 2.0/1.2 or Secure
+  Enclave); FileVault via `fdesetup status`; Secure Enclave via the
+  `hw.optional.arm64` sysctl on Apple Silicon (revised after a real-hardware
+  false negative — see below), `system_profiler` T1/T2 match on Intel.
+- `README.md`/`docs/DEPENDENCIES.md`/`docs/CONFIGURATION.md`/
+  `docs/DIAGNOSTICS.md` cover macOS install, `WIRE_ZSHRC`, and the
+  `keychain` backend; `doctor --test-backend keychain` bug fixed
+  (`validSecretBackendName` had never been updated for it).
+- **Real-hardware pass (2026-07-19/20, Apple Silicon MacBook Pro):** caught
+  two issues no CI VM could — a stale Secure Enclave detection (`ioreg -c
+  AppleSEPManager` no longer matches on macOS 26; replaced with the sysctl
+  approach above) and a login-shell gap (`SSH_AUTH_SOCK` unset / no agent
+  when the shell under test wasn't a login shell — fixed with a shared,
+  OS-specific `loginShellHint` appended to both the askpass and
+  `SSH_AUTH_SOCK`-unset findings). Two findings from that same pass are still
+  unexplained and need another real-hardware session, not further guessing:
+  `doctor` appearing to hang right after `sudo make install` in the same
+  shell, and one `ssh-agent` process listed `foreign`/`dead` whose origin
+  wasn't confirmed. Real Secure Enclave hardware and a real launchd/
+  Terminal.app login-shell chain are exactly what no CI runner in this
+  project can provide (open decision 9) — expect macOS spot checks like this
+  one to stay a manual step alongside CI, not something CI fully replaces.
+
+→ goals 12, 13; open decisions 2, 8, 9, 23.
 
 ### Phase 6 — Full test matrix
 
