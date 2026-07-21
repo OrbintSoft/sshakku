@@ -4,11 +4,19 @@ package diagnose
 
 import (
 	"bytes"
+	"context"
 	"os/exec"
 	"strings"
+	"time"
 
 	"golang.org/x/sys/unix"
 )
+
+// hostCheckTimeout bounds each of DarwinHostSource's shell-outs. These are
+// plain status queries, not human-facing prompts, so a wedged binary (or an
+// agent/authorization dependency it silently blocks on) must surface as an
+// undetermined check, not hang the caller (e.g. `doctor`) indefinitely.
+const hostCheckTimeout = 5 * time.Second
 
 // DarwinHostSource gathers HostChecks via macOS-native tools: `fdesetup
 // status` for FileVault, and CPU architecture (falling back to a T1/T2 probe
@@ -33,7 +41,9 @@ func (DarwinHostSource) Checks() HostChecks {
 // to query (only to change). nil on any output this parser doesn't
 // recognize, rather than guessing.
 func fileVaultStatus() *bool {
-	out, err := exec.Command("fdesetup", "status").Output()
+	ctx, cancel := context.WithTimeout(context.Background(), hostCheckTimeout)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "fdesetup", "status").Output()
 	if err != nil {
 		return nil
 	}
@@ -65,7 +75,9 @@ func secureEnclaveInfo() (*bool, string) {
 		present := true
 		return &present, "Secure Enclave"
 	}
-	out, err := exec.Command("system_profiler", "SPiBridgeDataType").Output()
+	ctx, cancel := context.WithTimeout(context.Background(), hostCheckTimeout)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "system_profiler", "SPiBridgeDataType").Output()
 	if err != nil {
 		return nil, ""
 	}
