@@ -34,8 +34,12 @@ func TestExecRunnerRun(t *testing.T) {
 	})
 
 	t.Run("a positive Timeout kills a command that outlives it", func(t *testing.T) {
+		// Runs sleep directly, not via a shell: a shell wrapping the last
+		// command may or may not exec-replace itself depending on the shell
+		// and environment, which would leave the kill racing an unrelated
+		// process tree instead of the one under test.
 		start := time.Now()
-		res, err := ExecRunner{}.Run(Cmd{Name: "sh", Args: []string{"-c", "sleep 5"}, Timeout: 100 * time.Millisecond})
+		res, err := ExecRunner{}.Run(Cmd{Name: "sleep", Args: []string{"5"}, Timeout: 100 * time.Millisecond})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
