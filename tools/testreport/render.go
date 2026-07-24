@@ -12,9 +12,11 @@ import (
 const commentMarker = "<!-- sshakku:test-health-report -->"
 
 // renderMarkdown formats one Report per OS into the Markdown body of the
-// per-PR test-health comment: coverage and wall-clock time per OS, each OS's
-// slowest tests, and a failures section listing every failing test's
-// captured output (omitted when nothing failed).
+// per-PR test-health comment: coverage and wall-clock time per OS, a link to
+// the latest full coverage report on `coverage-reports`, each OS's
+// per-package coverage breakdown and slowest tests, and a failures section
+// listing every failing test's captured output (omitted when nothing
+// failed).
 func renderMarkdown(reports []Report) string {
 	sorted := make([]Report, len(reports))
 	copy(sorted, reports)
@@ -36,6 +38,26 @@ func renderMarkdown(reports []Report) string {
 			slowest = fmt.Sprintf("%s (%.2fs)", r.SlowestTests[0].Name, r.SlowestTests[0].Seconds)
 		}
 		fmt.Fprintf(&b, "| %s | %s | %.1fs | %s |\n", r.OS, coverage, r.WallSeconds, slowest)
+	}
+	fmt.Fprintln(&b)
+	fmt.Fprintln(&b, "[Full coverage report (latest on `master`)](https://github.com/OrbintSoft/sshakku/blob/coverage-reports/report.md)")
+
+	for _, r := range sorted {
+		if len(r.PackageCoverage) == 0 {
+			continue
+		}
+		byCoverage := make([]PackageCoverage, len(r.PackageCoverage))
+		copy(byCoverage, r.PackageCoverage)
+		sort.Slice(byCoverage, func(i, j int) bool { return byCoverage[i].Percent < byCoverage[j].Percent })
+
+		fmt.Fprintln(&b)
+		fmt.Fprintf(&b, "<details><summary>Coverage by package (%s)</summary>\n\n", r.OS)
+		fmt.Fprintln(&b, "| Package | Coverage |")
+		fmt.Fprintln(&b, "| --- | --- |")
+		for _, p := range byCoverage {
+			fmt.Fprintf(&b, "| %s | %.1f%% |\n", p.Package, p.Percent)
+		}
+		fmt.Fprintln(&b, "\n</details>")
 	}
 
 	for _, r := range sorted {

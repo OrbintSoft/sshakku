@@ -1,5 +1,6 @@
 # SSHakku
 
+[![Tests](https://github.com/OrbintSoft/sshakku/actions/workflows/test.yml/badge.svg?branch=master)](https://github.com/OrbintSoft/sshakku/actions/workflows/test.yml)
 [![Coverage (Linux)](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/OrbintSoft/sshakku/coverage-reports/coverage-linux.json)](https://github.com/OrbintSoft/sshakku/blob/coverage-reports/report.md)
 [![Coverage (macOS)](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/OrbintSoft/sshakku/coverage-reports/coverage-macos.json)](https://github.com/OrbintSoft/sshakku/blob/coverage-reports/report.md)
 

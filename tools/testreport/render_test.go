@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestRenderMarkdownStartsWithMarker(t *testing.T) {
 	out := renderMarkdown([]Report{{OS: "linux"}})
@@ -57,6 +60,38 @@ func TestRenderMarkdownShowsCoverageOnlyWhenPresent(t *testing.T) {
 	withoutCoverage := renderMarkdown([]Report{{OS: "linux"}})
 	if !contains(withoutCoverage, "n/a") {
 		t.Fatalf("expected n/a placeholder when coverage wasn't computed, got:\n%s", withoutCoverage)
+	}
+}
+
+func TestRenderMarkdownLinksFullReport(t *testing.T) {
+	out := renderMarkdown([]Report{{OS: "linux"}})
+	if !contains(out, "https://github.com/OrbintSoft/sshakku/blob/coverage-reports/report.md") {
+		t.Fatalf("expected a link to the full coverage report, got:\n%s", out)
+	}
+}
+
+func TestRenderMarkdownPackageCoverageSortedWorstFirst(t *testing.T) {
+	out := renderMarkdown([]Report{{
+		OS: "linux",
+		PackageCoverage: []PackageCoverage{
+			{Package: "internal/good", Percent: 95.0},
+			{Package: "internal/bad", Percent: 10.0},
+		},
+	}})
+	if !contains(out, "Coverage by package (linux)") {
+		t.Fatalf("expected a per-package coverage section, got:\n%s", out)
+	}
+	badIdx := strings.Index(out, "internal/bad")
+	goodIdx := strings.Index(out, "internal/good")
+	if badIdx == -1 || goodIdx == -1 || badIdx > goodIdx {
+		t.Fatalf("expected the worse-covered package listed first, got:\n%s", out)
+	}
+}
+
+func TestRenderMarkdownOmitsPackageCoverageWhenAbsent(t *testing.T) {
+	out := renderMarkdown([]Report{{OS: "linux"}})
+	if contains(out, "Coverage by package") {
+		t.Fatalf("expected no per-package coverage section without data, got:\n%s", out)
 	}
 }
 
