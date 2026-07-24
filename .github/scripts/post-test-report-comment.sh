@@ -16,7 +16,7 @@ existing_id=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${pr_number}/comments" -
 	--jq 'map(select(.body | startswith(env.SSHAKKU_REPORT_MARKER))) | .[0].id // empty')
 
 if [ -n "$existing_id" ]; then
-	printf '%s' "$body" | gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${existing_id}" -f body=@-
+	printf '%s' "$body" | gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${existing_id}" -F body=@-
 else
-	printf '%s' "$body" | gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${pr_number}/comments" -f body=@-
+	printf '%s' "$body" | gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${pr_number}/comments" -F body=@-
 fi
