@@ -22,7 +22,6 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/diagnose"
 	"github.com/OrbintSoft/sshakku/internal/giveup"
-	"github.com/OrbintSoft/sshakku/internal/keyring"
 	"github.com/OrbintSoft/sshakku/internal/keys"
 	"github.com/OrbintSoft/sshakku/internal/keystate"
 	"github.com/OrbintSoft/sshakku/internal/paths"
@@ -82,9 +81,9 @@ commands:
 func main() {
 	// ssh-add execs this binary as its SSH_ASKPASS program, passing only the
 	// prompt as an argument and marking the call via the environment. Handle that
-	// before subcommand dispatch and return the passphrase from the keyring —
-	// unless args actually name one of our own subcommands, which always wins
-	// (see wantsAskpass).
+	// before subcommand dispatch and return the stashed passphrase — unless args
+	// actually name one of our own subcommands, which always wins (see
+	// wantsAskpass).
 	args := os.Args[1:]
 	if wantsAskpass(os.Getenv(keys.EnvAskpassMode) != "", args) {
 		os.Exit(askpass(os.Stdout, args))
@@ -203,14 +202,14 @@ func ensureAgent(stdout, stderr io.Writer) int {
 	return 0
 }
 
-// askpass answers an SSH_ASKPASS request. The proactive key-loading path stashes
-// the passphrase in the @u keyring and points us at it via $SSHAKKU_KEYCTL_SERIAL;
-// with a serial we serve that one-shot stash. Without one we are the reactive
-// broker for an interactive ssh whose key has expired, and answer the prompt in
-// args from the wallet (or the terminal).
+// askpass answers an SSH_ASKPASS request. The proactive key-loading path
+// stashes the passphrase via the OS-appropriate handoff and points us at it
+// via $SSHAKKU_HANDOFF_TOKEN; with a token we serve that one-shot stash.
+// Without one we are the reactive broker for an interactive ssh whose key has
+// expired, and answer the prompt in args from the wallet (or the terminal).
 func askpass(stdout io.Writer, args []string) int {
-	if os.Getenv(keys.EnvKeyctlSerial) != "" {
-		return askpassFromKeyring(stdout)
+	if os.Getenv(keys.EnvPassHandoffToken) != "" {
+		return askpassFromHandoff(stdout)
 	}
 	return askpassBroker(stdout, args)
 }
@@ -243,31 +242,28 @@ func askpassBroker(stdout io.Writer, args []string) int {
 	return 0
 }
 
-// askpassFromKeyring reads the passphrase the loader stashed in the @u keyring,
-// identified by the serial in $SSHAKKU_KEYCTL_SERIAL, prints it on stdout for
-// ssh-add, and unlinks the one-shot entry. The passphrase never touches stderr or
-// argv; only the keyring serial crosses the environment. Diagnostics go to the
-// session log alone, so the success path stays silent.
-func askpassFromKeyring(stdout io.Writer) int {
+// askpassFromHandoff reads the passphrase the loader stashed via the
+// OS-appropriate handoff, identified by the token in $SSHAKKU_HANDOFF_TOKEN,
+// prints it on stdout for ssh-add, and invalidates the one-shot stash. The
+// passphrase never touches stderr or argv; only the handoff token crosses the
+// environment. Diagnostics go to the session log alone, so the success path
+// stays silent.
+func askpassFromHandoff(stdout io.Writer) int {
 	log := sessionlog.New(paths.Resolve(paths.FromOS(), paths.ProbeDir).LogFile)
 
-	raw := os.Getenv(keys.EnvKeyctlSerial)
-	serial, err := strconv.Atoi(raw)
-	if err != nil {
-		_ = log.Log("ERROR", "askpass: missing or malformed keyctl serial")
+	token := os.Getenv(keys.EnvPassHandoffToken)
+	if token == "" {
+		_ = log.Log("ERROR", "askpass: missing handoff token")
 		return 1
 	}
 
-	pass, readErr := keyring.Read(keyring.Serial(serial))
-	// One-shot: drop the entry whether or not the read succeeded, so a leaked
-	// passphrase cannot linger in the keyring.
-	_ = keyring.Unlink(keyring.Serial(serial))
-	if readErr != nil {
-		_ = log.Log("ERROR", fmt.Sprintf("askpass: read keyring serial …%s: %v", tail(raw, 3), readErr))
+	pass, err := keys.FetchHandoff(token)
+	if err != nil {
+		_ = log.Log("ERROR", fmt.Sprintf("askpass: fetch handoff token …%s: %v", tail(token, 3), err))
 		return 1
 	}
 	if len(pass) == 0 {
-		_ = log.Log("ERROR", fmt.Sprintf("askpass: empty passphrase for serial …%s", tail(raw, 3)))
+		_ = log.Log("ERROR", fmt.Sprintf("askpass: empty passphrase for handoff token …%s", tail(token, 3)))
 		return 1
 	}
 
@@ -276,11 +272,11 @@ func askpassFromKeyring(stdout io.Writer) int {
 		_ = log.Log("ERROR", fmt.Sprintf("askpass: write passphrase: %v", err))
 		return 1
 	}
-	_ = log.Log("INFO", fmt.Sprintf("askpass: provided passphrase for serial …%s", tail(raw, 3)))
+	_ = log.Log("INFO", fmt.Sprintf("askpass: provided passphrase for handoff token …%s", tail(token, 3)))
 	return 0
 }
 
-// tail returns the last n characters of s, for logging a key serial without
+// tail returns the last n characters of s, for logging a handoff token without
 // recording it in full.
 func tail(s string, n int) string {
 	if len(s) <= n {
@@ -292,9 +288,9 @@ func tail(s string, n int) string {
 // loadKeys adds the user's ~/.ssh keys to the agent: it skips keys already loaded
 // and, for the rest, pulls each passphrase from the secret store (or prompts) and
 // hands it to ssh-add out of band. The login entrypoint calls it only in
-// interactive shells. SSH_ASKPASS points at this very binary, which ssh-add re-execs
-// to fetch the passphrase from the keyring. The success path is silent; problems go
-// to the session log (and stderr for a hard failure).
+// interactive shells. SSH_ASKPASS points at this very binary, which ssh-add
+// re-execs to fetch the stashed passphrase. The success path is silent;
+// problems go to the session log (and stderr for a hard failure).
 func loadKeys(stderr io.Writer) int {
 	env := paths.FromOS()
 	layout := paths.Resolve(env, paths.ProbeDir).WithSocketToken(paths.SocketToken())

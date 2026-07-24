@@ -4,8 +4,6 @@ package keys
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -14,18 +12,15 @@ import (
 	"strconv"
 	"syscall"
 	"time"
-
-	"github.com/OrbintSoft/sshakku/internal/keyring"
 )
 
 const (
 	// defaultAddTimeout caps each ssh-add so a stuck prompt cannot hang login.
 	defaultAddTimeout = 60 * time.Second
-	// defaultKeyTTL bounds how long the stashed passphrase lives in the keyring,
-	// so an entry ssh-add never reads still expires.
+	// defaultKeyTTL bounds how long the stashed passphrase lives in the
+	// handoff (keyring entry or socket, depending on OS), so an entry
+	// ssh-add never reads still expires.
 	defaultKeyTTL = 60 * time.Second
-	// keyDescBytes sizes the random keyring description for a stashed passphrase.
-	keyDescBytes = 16
 )
 
 // ExecKeyAdder adds keys with the real ssh-add.
@@ -43,30 +38,26 @@ type ExecKeyAdder struct {
 	KeyLifetime time.Duration
 }
 
-// AddWithAskpass stashes passphrase in the keyring, then runs ssh-add detached
-// from any terminal so it fetches the passphrase through the SSH_ASKPASS helper
-// keyed by the keyring serial. The passphrase never enters argv or the inherited
+// AddWithAskpass stashes passphrase in the OS-appropriate handoff (see
+// handoff_linux.go/handoff_darwin.go), then runs ssh-add detached from any
+// terminal so it fetches the passphrase through the SSH_ASKPASS helper keyed
+// by the handoff token. The passphrase never enters argv or the inherited
 // environment of any other process.
 func (a ExecKeyAdder) AddWithAskpass(keyfile, passphrase string) (int, error) {
-	desc, err := randomKeyDesc()
-	if err != nil {
-		return 0, err
-	}
-	serial, err := keyring.Add(desc, []byte(passphrase))
-	if err != nil {
-		return 0, fmt.Errorf("stash passphrase: %w", err)
-	}
 	ttl := a.KeyTTL
 	if ttl == 0 {
 		ttl = defaultKeyTTL
 	}
-	_ = keyring.SetTimeout(serial, ttl)
+	token, err := stashPassphrase(passphrase, ttl)
+	if err != nil {
+		return 0, fmt.Errorf("stash passphrase: %w", err)
+	}
 
 	env := []string{
 		"SSH_ASKPASS=" + a.AskpassProg,
 		"SSH_ASKPASS_REQUIRE=force",
 		EnvAskpassMode + "=1",
-		EnvKeyctlSerial + "=" + strconv.Itoa(int(serial)),
+		EnvPassHandoffToken + "=" + token,
 	}
 	env = passThrough(env, "PATH", "HOME", "USER", "DISPLAY", "WAYLAND_DISPLAY",
 		"SSH_AUTH_SOCK", "XDG_RUNTIME_DIR", "XDG_CONFIG_HOME", "DBUS_SESSION_BUS_ADDRESS")
@@ -111,16 +102,6 @@ func sshAddArgs(lifetime time.Duration, keyfile string) []string {
 		return []string{"-t", strconv.FormatInt(secs, 10), keyfile}
 	}
 	return []string{keyfile}
-}
-
-// randomKeyDesc returns a unique keyring description, so concurrent key loads do
-// not collide on (and overwrite) one another's stashed passphrase.
-func randomKeyDesc() (string, error) {
-	b := make([]byte, keyDescBytes)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	return "sshakku-pass-" + hex.EncodeToString(b), nil
 }
 
 // passThrough appends "NAME=value" for each named variable that is set, leaving
