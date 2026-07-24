@@ -6,3 +6,9 @@ scratch/
 
 # Go build output
 /bin/
+
+# make test-json output: the raw `go test -json` stream and coverage profile
+# tools/testreport consumes to build the CI test-health report.
+/test.json
+/coverage.out
+/report-*.json
