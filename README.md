@@ -130,6 +130,7 @@ why.
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Architecture, code layout, and how to build, test, and lint SSHakku — for contributors. |
 | [docs/DIAGNOSTICS.md](docs/DIAGNOSTICS.md) | `sshakku doctor`: reading the report, `--fix`, `--user`, and `--test-backend`. |
 | [docs/HARDENING.md](docs/HARDENING.md) | Practical steps outside SSHakku itself that keep your keys safer: a short key lifetime, not leaving the wallet unlocked, disk encryption, and `/tmp`. |
+| [docs/TEST-MATRIX.md](docs/TEST-MATRIX.md) | Every user-facing scenario — OS, secret backend, shell environment, configuration — and whether it's covered by an automated test today. |
 | [docs/THREAT-MODEL.md](docs/THREAT-MODEL.md) | What SSHakku protects against, what it doesn't, and why — for anyone evaluating it for a security-sensitive setup. |
 
 ## Contributing
