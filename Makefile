@@ -181,6 +181,14 @@ build:
 test:
 	$(GO) test -race ./...
 
+# CI-only variant of test: same run, but captures a `go test -json` event
+# stream and a coverage profile for tools/testreport to summarize into the
+# per-PR test-health comment. Redirecting (not piping) to test.json preserves
+# go test's exit status, so `make test-json` still fails the build on a test
+# failure like plain `make test` does.
+test-json:
+	$(GO) test -race -json -coverprofile=coverage.out ./... > test.json
+
 # Shell-level login-hook and agent-lifecycle regression suite. Requires
 # bats-core; only safe in a disposable environment (the container test suite
 # runs it in CI) — see test/bats/helpers.bash for the explicit opt-in gate.
@@ -240,5 +248,5 @@ lint-go:
 lint-docker:
 	hadolint $(DOCKERFILES)
 
-.PHONY: install uninstall install-user uninstall-user build test test-bats print-paths lint lint-sh lint-zsh lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go lint-docker
+.PHONY: install uninstall install-user uninstall-user build test test-json test-bats print-paths lint lint-sh lint-zsh lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go lint-docker
 .DEFAULT_GOAL := install

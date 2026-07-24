@@ -25,8 +25,19 @@ jobs:
       - name: Ensure dbus-daemon is available
         run: command -v dbus-daemon || (sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends dbus)
 
-      - name: Run make test
-        run: make test
+      - name: Run make test-json
+        run: make test-json
+
+      - name: Build test-health report
+        if: always()
+        run: go run ./tools/testreport -os linux -coverprofile=coverage.out < test.json > report-linux.json
+
+      - name: Upload test-health report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: report-linux
+          path: report-linux.json
 
   test-macos:
     name: make test (macos)
@@ -38,8 +49,19 @@ jobs:
       - name: Set up Go
         uses: ./.github/actions/setup-go-env
 
-      - name: Run make test
-        run: make test
+      - name: Run make test-json
+        run: make test-json
+
+      - name: Build test-health report
+        if: always()
+        run: go run ./tools/testreport -os macos -coverprofile=coverage.out < test.json > report-macos.json
+
+      - name: Upload test-health report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: report-macos
+          path: report-macos.json
 
       - name: Smoke-test make install/install-user (staged, not the real /etc or $HOME)
         run: test/macos-install-smoke.sh "$RUNNER_TEMP/install-smoke"
