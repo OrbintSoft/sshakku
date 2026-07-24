@@ -24,6 +24,11 @@ composed by it. One line each:
 | `internal/secretservice` | A native client for the freedesktop Secret Service D-Bus API (`org.freedesktop.secrets`), used instead of shelling out to `secret-tool` so a dedicated collection can be created and locked/unlocked around a single lookup or store. |
 | `internal/sessionlog` | Appends timestamped, level-tagged lines to the owner-only session log, bounded to a fixed number of recent lines. |
 
+`tools/` holds CI-only helpers built and run by workflows, never by
+`make build` or `cmd/sshakku` — e.g. `tools/testreport`, which turns a `go
+test -json` stream into the coverage/timing/failure summary behind the
+per-PR test-health comment.
+
 ## How the pieces fit together
 
 `cmd/sshakku/main.go`'s `run()` dispatches on `args[0]`: `shell-init`,
