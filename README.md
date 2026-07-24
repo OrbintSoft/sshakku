@@ -1,5 +1,8 @@
 # SSHakku
 
+[![Coverage (Linux)](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/OrbintSoft/sshakku/coverage-reports/coverage-linux.json)](https://github.com/OrbintSoft/sshakku/blob/coverage-reports/report.md)
+[![Coverage (macOS)](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/OrbintSoft/sshakku/coverage-reports/coverage-macos.json)](https://github.com/OrbintSoft/sshakku/blob/coverage-reports/report.md)
+
 Tends your SSH agent so every shell can use SSH without retyping the passphrase:
 it starts and watches the agent (lifecycle, health checks, diagnostics, recovery)
 and loads your keys, pulling each passphrase from the OS secret store — never
