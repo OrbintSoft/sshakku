@@ -15,10 +15,12 @@ import "time"
 // is not an option.
 const EnvAskpassMode = "SSHAKKU_ASKPASS"
 
-// EnvKeyctlSerial names the environment variable carrying the kernel-keyring
-// serial of a passphrase entry from the loader to the askpass helper. Only the
-// serial — a handle — crosses the env; the passphrase itself stays in the keyring.
-const EnvKeyctlSerial = "SSHAKKU_KEYCTL_SERIAL"
+// EnvPassHandoffToken names the environment variable carrying the one-shot
+// passphrase-handoff token from the loader to the askpass helper — a kernel
+// keyring serial on Linux, a private Unix socket path on Darwin (see
+// handoff_linux.go/handoff_darwin.go). Only the token — a handle — crosses
+// the env; the passphrase itself never does.
+const EnvPassHandoffToken = "SSHAKKU_HANDOFF_TOKEN"
 
 // Cmd describes one external command invocation. Env entries are appended to the
 // current environment; Stdin, when non-empty, is fed to the process — the way a

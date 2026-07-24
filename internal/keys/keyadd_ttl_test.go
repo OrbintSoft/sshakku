@@ -55,10 +55,10 @@ func TestAddWithAskpassAppliesKeyLifetime(t *testing.T) {
 	waitForSocket(t, sock)
 	t.Setenv("SSH_AUTH_SOCK", sock)
 
-	// A minimal askpass helper mirroring askpassFromKeyring in cmd/sshakku:
-	// print the payload AddWithAskpass stashed under $SSHAKKU_KEYCTL_SERIAL.
+	// A minimal askpass helper mirroring askpassFromHandoff in cmd/sshakku:
+	// print the payload AddWithAskpass stashed under $SSHAKKU_HANDOFF_TOKEN.
 	askpassScript := filepath.Join(dir, "askpass.sh")
-	script := "#!/bin/sh\nexec keyctl pipe \"$" + EnvKeyctlSerial + "\"\n"
+	script := "#!/bin/sh\nexec keyctl pipe \"$" + EnvPassHandoffToken + "\"\n"
 	if err := os.WriteFile(askpassScript, []byte(script), 0o755); err != nil {
 		t.Fatalf("write askpass helper: %v", err)
 	}

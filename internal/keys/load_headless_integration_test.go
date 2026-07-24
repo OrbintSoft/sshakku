@@ -47,7 +47,7 @@ func TestLoadKeysHeadlessVaultHit(t *testing.T) {
 	t.Setenv("SSH_AUTH_SOCK", sock)
 
 	askpassScript := filepath.Join(dir, "askpass.sh")
-	script := "#!/bin/sh\nexec keyctl pipe \"$" + EnvKeyctlSerial + "\"\n"
+	script := "#!/bin/sh\nexec keyctl pipe \"$" + EnvPassHandoffToken + "\"\n"
 	if err := os.WriteFile(askpassScript, []byte(script), 0o755); err != nil {
 		t.Fatalf("write askpass helper: %v", err)
 	}
