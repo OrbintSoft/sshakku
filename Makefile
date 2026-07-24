@@ -30,6 +30,17 @@ WIRE_ZSHRC ?=
 
 USER_HOME ?= $(HOME)
 USER_BINDIR ?= $(USER_HOME)/.local/bin
+# install-user/uninstall-user shell family: "bash" (default) or "zsh". Picks
+# which of WIRE_BASHRC/WIRE_ZSHRC gates the non-login rc-file wiring and which
+# profile/rc file pair install-user-hook.sh targets; install-user-hook.sh
+# itself always prefers an existing .d drop-in directory over the
+# marker-block fallback file, whichever shell is selected.
+USER_SHELL ?= bash
+ifeq ($(USER_SHELL),zsh)
+USER_WIRE_RC = $(WIRE_ZSHRC)
+else
+USER_WIRE_RC = $(WIRE_BASHRC)
+endif
 
 GO ?= go
 GO_MAIN = ./cmd/sshakku
@@ -83,14 +94,14 @@ install-user: build
 	@echo "Installing $(GO_BIN) to $(USER_BINDIR)/sshakku"
 	@install -Dm755 $(GO_BIN) $(USER_BINDIR)/sshakku
 	@echo "Wiring the per-user login hook"
-	@./install-user-hook.sh install "$(USER_HOME)" "$(USER_BINDIR)/sshakku" "$(NN)" "$(WIRE_BASHRC)"
+	@./install-user-hook.sh install "$(USER_HOME)" "$(USER_BINDIR)/sshakku" "$(NN)" "$(USER_WIRE_RC)" "$(USER_SHELL)"
 	@echo "Installation complete."
 
 uninstall-user:
 	@echo "Uninstalling $(USER_BINDIR)/sshakku"
 	@rm -f $(USER_BINDIR)/sshakku
 	@echo "Removing the per-user login hook"
-	@./install-user-hook.sh uninstall "$(USER_HOME)" "$(NN)"
+	@./install-user-hook.sh uninstall "$(USER_HOME)" "$(NN)" "$(USER_SHELL)"
 	@echo "Uninstallation complete."
 
 else ifeq ($(UNAME),Darwin)
@@ -185,6 +196,7 @@ print-paths:
 	@echo "SSH_INIT_INSTALL_PATH: $(SSH_INIT_INSTALL_PATH)"
 	@echo "USER_HOME: $(USER_HOME)"
 	@echo "USER_BINDIR: $(USER_BINDIR)"
+	@echo "USER_SHELL: $(USER_SHELL)"
 
 # Linting. Requires: shellcheck, shfmt, markdownlint-cli2, taplo, checkmake,
 # actionlint, editorconfig-checker, hadolint, zsh. Each tool reads its own
