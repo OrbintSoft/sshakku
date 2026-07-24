@@ -1,11 +1,12 @@
 name: Tests
 
-# pull_request lets pr-test-report post/update the test-health PR comment;
-# push keeps every branch (including ones without an open PR) covered. Both
-# events fire for a push to an open PR's branch, so its tests run twice --
-# accepted for now to keep the trigger simple.
+# pull_request lets pr-test-report post/update the test-health PR comment,
+# and covers every feature-branch push (a push to an open PR's branch fires
+# pull_request, not push). push is scoped to master only, so post-merge
+# commits there still get tested without every PR push running twice.
 on:
   push:
+    branches: [master]
   pull_request:
 
 concurrency:
