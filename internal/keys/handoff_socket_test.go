@@ -6,13 +6,15 @@ import (
 	"time"
 )
 
-// shortDir returns a fresh temp dir outside t.TempDir()'s nested,
-// test-name-derived path: the socket paths under it must fit AF_UNIX's
-// sun_path limit (108 bytes on Linux, 104 on BSD/Darwin), which a deeply
-// nested per-subtest TempDir routinely exceeds.
+// shortDir returns a fresh temp dir under /tmp — not t.TempDir()'s nested,
+// test-name-derived path, and not os.MkdirTemp("", ...)'s default either: on
+// Darwin that resolves under $TMPDIR, itself a long per-boot randomized path
+// (/var/folders/.../T/), which combined with this package's own
+// cache-dir/socket-name suffix still overflows AF_UNIX's sun_path limit (108
+// bytes on Linux, 104 on Darwin). /tmp is short on both.
 func shortDir(t *testing.T) string {
 	t.Helper()
-	dir, err := os.MkdirTemp("", "sshakku")
+	dir, err := os.MkdirTemp("/tmp", "sshakku")
 	if err != nil {
 		t.Fatalf("mkdir temp: %v", err)
 	}

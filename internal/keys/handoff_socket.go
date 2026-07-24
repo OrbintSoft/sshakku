@@ -9,13 +9,15 @@ import (
 )
 
 // socketHandoffDir returns (creating it if needed) the private per-user
-// directory passphrase-handoff sockets live in.
+// directory passphrase-handoff sockets live in. Named "h", not "handoff":
+// every byte here counts against AF_UNIX's sun_path limit (104 bytes on
+// Darwin, 108 on Linux) once the socket filename is appended.
 func socketHandoffDir() (string, error) {
 	cache, err := os.UserCacheDir()
 	if err != nil {
 		return "", err
 	}
-	dir := filepath.Join(cache, "sshakku", "handoff")
+	dir := filepath.Join(cache, "sshakku", "h")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err
 	}
