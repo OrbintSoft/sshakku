@@ -181,13 +181,14 @@ build:
 test:
 	$(GO) test -race ./...
 
-# CI-only variant of test: same run, but captures a `go test -json` event
-# stream and a coverage profile for tools/testreport to summarize into the
-# per-PR test-health comment. Redirecting (not piping) to test.json preserves
-# go test's exit status, so `make test-json` still fails the build on a test
-# failure like plain `make test` does.
+# CI-only variant of test: same run under gotestsum (nicer condensed CI
+# output; requires it on PATH, unlike plain `test`), capturing the same
+# `go test -json` event stream (--jsonfile) and a coverage profile for
+# tools/testreport and gopogh to summarize. gotestsum exits with go test's
+# own status, so `make test-json` still fails the build on a test failure
+# like plain `make test` does.
 test-json:
-	$(GO) test -race -json -coverprofile=coverage.out ./... > test.json
+	gotestsum --jsonfile test.json -- -race -coverprofile=coverage.out ./...
 
 # Shell-level login-hook and agent-lifecycle regression suite. Requires
 # bats-core; only safe in a disposable environment (the container test suite
