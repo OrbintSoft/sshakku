@@ -98,3 +98,8 @@ appending. See `docs/THREAT-MODEL.md` for the threat model and the June 2026 inc
     comment drifts out of sync the moment the owning file changes, and nothing
     forces the two edits to happen together. State only what this file itself does
     or decides; extends Rule 15.
+
+19. **Keep the test matrix current.** Whenever a new OS/target, integration,
+    environment, configuration, or installation method is implemented, add or
+    update its row in `docs/TEST-MATRIX.md` in the same change — see PLAN.md
+    Phase 6 / open decision 24.

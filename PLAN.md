@@ -338,6 +338,16 @@ done are summarised; see the note at the top of this file for full detail.
       whether it supports a stdin-fed passphrase the way this project's
       argv rule, open decision 2, already requires of every other backend).
 
+24. **Test coverage & reporting infrastructure (goal 16). Decided
+    (2026-07-24):** every PR's CI posts/updates a single comment with
+    per-OS coverage, test wall-clock time, the slowest tests, and any
+    failures; once merged to master, CI commits a coverage badge and a
+    markdown report to a dedicated branch (never master itself), linked from
+    `README.md`. A maintained `docs/TEST-MATRIX.md` enumerates every
+    user-facing case × OS/target/integration/environment/config/install-method
+    combination, tracking integration-test coverage and a per-case
+    last-main-run badge. See Phase 6.
+
 ---
 
 ## Phases
@@ -723,13 +733,36 @@ own agent runs on macOS exactly as on Linux, backed by a real Keychain
 
 → goals 12, 13; open decisions 2, 8, 9, 23.
 
-### Phase 6 — Full test matrix
+### Phase 6 — Test infrastructure, coverage & full test matrix
 
-Extend CI to macOS and Windows runners and complete the cross-platform test
-matrix. Tier 2 of open decision 20 (real-desktop-secret-stack containers) was
-brought forward to Phase 4.1; this phase adds tier 3 (the full Vagrant
-Gentoo/OpenRC/KDE box) as a manually-triggered CI workflow. → goal 16; open
-decisions 9, 20.
+Extend CI to macOS and Windows runners, build real visibility into what is and
+isn't tested, then use that visibility to close the gaps. Tier 2 of open
+decision 20 (real-desktop-secret-stack containers) was brought forward to
+Phase 4.1; this phase adds tier 3 (the full Vagrant Gentoo/OpenRC/KDE box) as a
+manually-triggered CI workflow, once the steps below land. → goal 16; open
+decisions 9, 20, 24.
+
+1. **Coverage + test-health report on every PR.** CI computes per-OS
+   unit-test coverage (Linux, macOS; Windows once it exists) and posts/updates
+   a single PR comment: total coverage per OS, wall-clock test time, a ranked
+   list of the slowest tests, and a failure report when something fails.
+2. **Post-merge badge + report.** Once merged to master, CI commits a
+   coverage badge (SVG) and a markdown report to a dedicated branch (never
+   master itself); `README.md` on master links both.
+3. **Test case matrix (`docs/TEST-MATRIX.md`).** Enumerates every
+   user-facing case × OS/target/integration/environment/config/install-method
+   combination; each row tracks whether it's covered by an integration test
+   and shows a badge for that case's last main-branch run.
+4. **Keep the matrix current** — every new OS/target, integration,
+   environment, configuration, or install method gets a matrix row in the
+   same change that introduces it (rule 19).
+5. **Coverage push.** Once the reporting exists, drive coverage toward
+   ~100%: mock what's mockable, optimize slow/redundant tests.
+6. **Close every open cell** in the matrix with a real integration test.
+7. **Race, goroutine-leak, and memory checks** alongside the existing
+   `-race` suite.
+8. **Performance/benchmark tests**, tracked over time alongside the coverage
+   report.
 
 ### Phase 7 — CI review & dependency hardening ✅ Done
 
