@@ -746,9 +746,13 @@ decisions 9, 20, 24.
    unit-test coverage (Linux, macOS; Windows once it exists) and posts/updates
    a single PR comment: total coverage per OS, wall-clock test time, a ranked
    list of the slowest tests, and a failure report when something fails.
-2. **Post-merge badge + report.** Once merged to master, CI commits a
-   coverage badge (SVG) and a markdown report to a dedicated branch (never
-   master itself); `README.md` on master links both.
+2. **Post-merge badge + report. ✅ Done.** Once merged to master, CI commits
+   a shields.io endpoint badge (JSON, one per OS) and a markdown report to
+   the `coverage-reports` branch (orphan history, never `master`);
+   `README.md` on master links both. `tools/testreport badge` (PR #95),
+   the `publish-coverage-report` CI job + script (PR #96), the README
+   badges (PRs #97, #98), and a repository ruleset on `coverage-reports`
+   blocking force-push/deletion.
 3. **Test case matrix (`docs/TEST-MATRIX.md`).** Enumerates every
    user-facing case × OS/target/integration/environment/config/install-method
    combination; each row tracks whether it's covered by an integration test
