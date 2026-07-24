@@ -9,12 +9,21 @@ import (
 )
 
 func main() {
-	if len(os.Args) > 1 && os.Args[1] == "render" {
-		if err := runRender(os.Args[2:]); err != nil {
-			fmt.Fprintf(os.Stderr, "testreport: render: %v\n", err)
-			os.Exit(1)
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "render":
+			if err := runRender(os.Args[2:]); err != nil {
+				fmt.Fprintf(os.Stderr, "testreport: render: %v\n", err)
+				os.Exit(1)
+			}
+			return
+		case "badge":
+			if err := runBadge(os.Args[2:]); err != nil {
+				fmt.Fprintf(os.Stderr, "testreport: badge: %v\n", err)
+				os.Exit(1)
+			}
+			return
 		}
-		return
 	}
 	runSummarize()
 }
@@ -43,6 +52,32 @@ func runRender(paths []string) error {
 		reports = append(reports, r)
 	}
 	fmt.Print(renderMarkdown(reports))
+	return nil
+}
+
+// runBadge reads one Report JSON file (as produced by the default summarize
+// action) and writes its shields.io endpoint badge JSON to stdout.
+func runBadge(args []string) error {
+	if len(args) != 1 {
+		return fmt.Errorf("usage: testreport badge <report.json>")
+	}
+	f, err := os.Open(args[0])
+	if err != nil {
+		return fmt.Errorf("open %s: %w", args[0], err)
+	}
+	var r Report
+	err = json.NewDecoder(f).Decode(&r)
+	if closeErr := f.Close(); closeErr != nil && err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return fmt.Errorf("decode %s: %w", args[0], err)
+	}
+	badge, err := renderBadgeJSON(r)
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(badge))
 	return nil
 }
 
