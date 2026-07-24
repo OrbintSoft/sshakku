@@ -39,6 +39,9 @@ func TestRenderBadgeJSONFields(t *testing.T) {
 	if !contains(string(out), `"schemaVersion": 1`) {
 		t.Fatalf("expected shields.io schemaVersion 1, got:\n%s", out)
 	}
+	if !contains(string(out), `"label": "coverage linux"`) {
+		t.Fatalf("expected the OS in the label, got:\n%s", out)
+	}
 }
 
 func TestRenderBadgeJSONErrorsWithoutCoverage(t *testing.T) {
