@@ -1,13 +1,23 @@
 package keys
 
-import "strings"
+import (
+	"strings"
+	"time"
+)
+
+// fingerprintTimeout bounds ssh-keygen/ssh-add lookups: plain status/read
+// operations, not a human-facing prompt, so unlike ExecKeyAdder's 60s
+// (defaultAddTimeout) these must never wait on interaction — a stuck agent or
+// binary should surface as a lookup failure, not hang the caller (e.g. `doctor`)
+// indefinitely.
+const fingerprintTimeout = 5 * time.Second
 
 // FileFingerprint returns the SHA256 fingerprint of the key at path, read with
 // `ssh-keygen -lf <path>`. A key ssh-keygen cannot read (wrong format, no such
 // file) yields an empty fingerprint and no error — the loader then treats it as
 // not-yet-loaded rather than aborting the whole run.
 func FileFingerprint(r Runner, path string) (string, error) {
-	res, err := r.Run(Cmd{Name: "ssh-keygen", Args: []string{"-lf", path}})
+	res, err := r.Run(Cmd{Name: "ssh-keygen", Args: []string{"-lf", path}, Timeout: fingerprintTimeout})
 	if err != nil {
 		return "", err
 	}
@@ -22,7 +32,7 @@ func FileFingerprint(r Runner, path string) (string, error) {
 // (exit 2) yields an empty set, not an error — mirroring the bash snapshot, where
 // a missing or empty agent simply means nothing is loaded yet.
 func AgentFingerprints(r Runner) (map[string]bool, error) {
-	res, err := r.Run(Cmd{Name: "ssh-add", Args: []string{"-l"}})
+	res, err := r.Run(Cmd{Name: "ssh-add", Args: []string{"-l"}, Timeout: fingerprintTimeout})
 	if err != nil {
 		return nil, err
 	}

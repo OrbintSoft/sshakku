@@ -5,6 +5,8 @@
 // drives the OpenSSH tools and the secret store through the seams below.
 package keys
 
+import "time"
+
 // EnvAskpassMode marks an invocation as ssh-add's SSH_ASKPASS helper. The loader
 // sets it (to "1") in the ssh-add child environment and points SSH_ASKPASS at the
 // sshakku binary itself; the binary, seeing the marker, returns the passphrase
@@ -20,12 +22,16 @@ const EnvKeyctlSerial = "SSHAKKU_KEYCTL_SERIAL"
 
 // Cmd describes one external command invocation. Env entries are appended to the
 // current environment; Stdin, when non-empty, is fed to the process — the way a
-// passphrase reaches secret-tool without ever appearing in argv.
+// passphrase reaches secret-tool without ever appearing in argv. Timeout, when
+// positive, bounds how long the process may run before it is killed; zero means
+// unbounded, the right default for a call that waits on a human (e.g. a GUI
+// unlock prompt) rather than a plain status query.
 type Cmd struct {
-	Name  string
-	Args  []string
-	Stdin string
-	Env   []string
+	Name    string
+	Args    []string
+	Stdin   string
+	Env     []string
+	Timeout time.Duration
 }
 
 // Result is the outcome of running a Cmd. A non-zero Code is reported here, not
