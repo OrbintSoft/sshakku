@@ -42,10 +42,12 @@ type TestFailure struct {
 
 // Report summarizes one `go test -json` run for one operating system.
 type Report struct {
-	OS           string        `json:"os"`
-	WallSeconds  float64       `json:"wall_seconds"`
-	SlowestTests []TestTiming  `json:"slowest_tests"`
-	Failures     []TestFailure `json:"failures"`
+	OS              string            `json:"os"`
+	WallSeconds     float64           `json:"wall_seconds"`
+	CoveragePercent float64           `json:"coverage_percent,omitempty"`
+	PackageCoverage []PackageCoverage `json:"package_coverage,omitempty"`
+	SlowestTests    []TestTiming      `json:"slowest_tests"`
+	Failures        []TestFailure     `json:"failures"`
 }
 
 // outputKey identifies one running test for buffering its interleaved output
