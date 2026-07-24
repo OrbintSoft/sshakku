@@ -1,13 +1,20 @@
 name: Tests
 
-on: [push]
+# pull_request lets pr-test-report post/update the test-health PR comment,
+# and covers every feature-branch push (a push to an open PR's branch fires
+# pull_request, not push). push is scoped to master only, so post-merge
+# commits there still get tested without every PR push running twice.
+on:
+  push:
+    branches: [master]
+  pull_request:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# The workflow only builds and runs the checked-out tree's test suite; no
-# write scopes.
+# Read-only by default; pr-test-report grants itself pull-requests: write at
+# the job level, the only job that needs to write anything.
 permissions:
   contents: read
 
@@ -87,3 +94,31 @@ jobs:
 
       - name: Run make test-bats in ${{ matrix.name }}
         run: docker run --init --rm -e SSHAKKU_TEST_ALLOW_BATS=1 -v "${{ github.workspace }}":/src:ro -w /src sshakku-test-${{ matrix.name }} make test-bats
+
+  pr-test-report:
+    name: Post test-health PR comment
+    needs: [test, test-macos]
+    if: always() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Go
+        uses: ./.github/actions/setup-go-env
+
+      - name: Download report artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: report-*
+          merge-multiple: true
+
+      - name: Render test-health comment
+        run: go run ./tools/testreport render report-linux.json report-macos.json > comment.md
+
+      - name: Post or update the PR comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: .github/scripts/post-test-report-comment.sh "${{ github.event.pull_request.number }}" < comment.md
