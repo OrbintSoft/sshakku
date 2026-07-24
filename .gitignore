@@ -12,3 +12,9 @@ scratch/
 /test.json
 /coverage.out
 /report-*.json
+
+# tools/testreport badge/render output, built post-merge and pushed to the
+# coverage-reports branch -- never committed on this branch.
+/coverage-linux.json
+/coverage-macos.json
+/report.md

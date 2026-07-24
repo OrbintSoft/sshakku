@@ -13,8 +13,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# Read-only by default; pr-test-report grants itself pull-requests: write at
-# the job level, the only job that needs to write anything.
+# Read-only by default; pr-test-report and publish-coverage-report grant
+# themselves write access at the job level, the only jobs that need to write
+# anything.
 permissions:
   contents: read
 
@@ -122,3 +123,35 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: .github/scripts/post-test-report-comment.sh "${{ github.event.pull_request.number }}" < comment.md
+
+  publish-coverage-report:
+    name: Publish coverage badges + report
+    needs: [test, test-macos]
+    if: github.ref == 'refs/heads/master' && success()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Go
+        uses: ./.github/actions/setup-go-env
+
+      - name: Download report artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: report-*
+          merge-multiple: true
+
+      - name: Build coverage badge JSON (linux)
+        run: go run ./tools/testreport badge report-linux.json > coverage-linux.json
+
+      - name: Build coverage badge JSON (macos)
+        run: go run ./tools/testreport badge report-macos.json > coverage-macos.json
+
+      - name: Build coverage report
+        run: go run ./tools/testreport render report-linux.json report-macos.json > report.md
+
+      - name: Publish to coverage-reports
+        run: .github/scripts/publish-coverage-report.sh
