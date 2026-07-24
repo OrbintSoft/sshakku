@@ -11,12 +11,18 @@ import (
 // run. Must be the first line of the rendered body.
 const commentMarker = "<!-- sshakku:test-health-report -->"
 
+// pagesReportURL is the GitHub Pages URL (serving the coverage-reports
+// branch root) for the given OS's Mochawesome-style HTML test report.
+func pagesReportURL(os string) string {
+	return fmt.Sprintf("https://orbintsoft.github.io/sshakku/report-%s.html", os)
+}
+
 // renderMarkdown formats one Report per OS into the Markdown body of the
 // per-PR test-health comment: coverage and wall-clock time per OS, a link to
-// the latest full coverage report on `coverage-reports`, each OS's
-// per-package coverage breakdown and slowest tests, and a failures section
-// listing every failing test's captured output (omitted when nothing
-// failed).
+// the latest full coverage report and per-OS HTML report on
+// `coverage-reports`, each OS's per-package coverage breakdown and slowest
+// tests, and a failures section listing every failing test's captured
+// output (omitted when nothing failed).
 func renderMarkdown(reports []Report) string {
 	sorted := make([]Report, len(reports))
 	copy(sorted, reports)
@@ -26,8 +32,8 @@ func renderMarkdown(reports []Report) string {
 	fmt.Fprintln(&b, commentMarker)
 	fmt.Fprintln(&b, "## Test health")
 	fmt.Fprintln(&b)
-	fmt.Fprintln(&b, "| OS | Coverage | Wall time | Slowest test |")
-	fmt.Fprintln(&b, "| --- | --- | --- | --- |")
+	fmt.Fprintln(&b, "| OS | Coverage | Wall time | Slowest test | HTML report |")
+	fmt.Fprintln(&b, "| --- | --- | --- | --- | --- |")
 	for _, r := range sorted {
 		coverage := "n/a"
 		if len(r.PackageCoverage) > 0 {
@@ -37,7 +43,7 @@ func renderMarkdown(reports []Report) string {
 		if len(r.SlowestTests) > 0 {
 			slowest = fmt.Sprintf("%s (%.2fs)", r.SlowestTests[0].Name, r.SlowestTests[0].Seconds)
 		}
-		fmt.Fprintf(&b, "| %s | %s | %.1fs | %s |\n", r.OS, coverage, r.WallSeconds, slowest)
+		fmt.Fprintf(&b, "| %s | %s | %.1fs | %s | [HTML](%s) |\n", r.OS, coverage, r.WallSeconds, slowest, pagesReportURL(r.OS))
 	}
 	fmt.Fprintln(&b)
 	fmt.Fprintln(&b, "[Full coverage report (latest on `master`)](https://github.com/OrbintSoft/sshakku/blob/coverage-reports/report.md)")
