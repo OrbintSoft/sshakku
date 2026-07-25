@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"runtime"
 	"strings"
@@ -25,30 +26,55 @@ func (f osURLFlag) Set(v string) error {
 	return nil
 }
 
+// openFile opens a path for reading. It's a seam so tests can supply a reader
+// whose Close fails, exercising the close-error handling a real *os.File
+// almost never triggers.
+var openFile = func(name string) (io.ReadCloser, error) {
+	f, err := os.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	return f, nil
+}
+
 func main() {
-	if len(os.Args) > 1 {
-		switch os.Args[1] {
+	// The process entry point: a single os.Exit around the testable dispatch,
+	// with nothing here to unit-test (a test can't observe os.Exit).
+	//coverage:ignore
+	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
+}
+
+// run dispatches the subcommand in args and returns the process exit code,
+// reading the go test -json stream from stdin and writing output to stdout and
+// diagnostics to stderr. Kept separate from main so every path but the lone
+// os.Exit is testable against in-memory streams.
+func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	if len(args) > 0 {
+		switch args[0] {
 		case "render":
-			if err := runRender(os.Args[2:]); err != nil {
-				fmt.Fprintf(os.Stderr, "testreport: render: %v\n", err)
-				os.Exit(1)
+			if err := runRender(args[1:], stdout); err != nil {
+				_, _ = fmt.Fprintf(stderr, "testreport: render: %v\n", err)
+				return 1
 			}
-			return
+			return 0
 		case "badge":
-			if err := runBadge(os.Args[2:]); err != nil {
-				fmt.Fprintf(os.Stderr, "testreport: badge: %v\n", err)
-				os.Exit(1)
+			if err := runBadge(args[1:], stdout); err != nil {
+				_, _ = fmt.Fprintf(stderr, "testreport: badge: %v\n", err)
+				return 1
 			}
-			return
+			return 0
 		}
 	}
-	runSummarize()
+	if err := runSummarize(args, stdin, stdout); err != nil {
+		_, _ = fmt.Fprintf(stderr, "testreport: %v\n", err)
+		return 1
+	}
+	return 0
 }
 
 // runRender reads one Report JSON file per path in args (as produced by the
-// default summarize action) and writes the combined PR comment body to
-// stdout.
-func runRender(args []string) error {
+// default summarize action) and writes the combined PR comment body to out.
+func runRender(args []string, out io.Writer) error {
 	fs := flag.NewFlagSet("render", flag.ContinueOnError)
 	reportURLs := osURLFlag{}
 	coverageURLs := osURLFlag{}
@@ -63,7 +89,7 @@ func runRender(args []string) error {
 	}
 	reports := make([]Report, 0, len(paths))
 	for _, path := range paths {
-		f, err := os.Open(path)
+		f, err := openFile(path)
 		if err != nil {
 			return fmt.Errorf("open %s: %w", path, err)
 		}
@@ -77,17 +103,19 @@ func runRender(args []string) error {
 		}
 		reports = append(reports, r)
 	}
-	fmt.Print(renderMarkdown(reports, reportURLs, coverageURLs))
+	if _, err := fmt.Fprint(out, renderMarkdown(reports, reportURLs, coverageURLs)); err != nil {
+		return err
+	}
 	return nil
 }
 
 // runBadge reads one Report JSON file (as produced by the default summarize
-// action) and writes its shields.io endpoint badge JSON to stdout.
-func runBadge(args []string) error {
+// action) and writes its shields.io endpoint badge JSON to out.
+func runBadge(args []string, out io.Writer) error {
 	if len(args) != 1 {
 		return fmt.Errorf("usage: testreport badge <report.json>")
 	}
-	f, err := os.Open(args[0])
+	f, err := openFile(args[0])
 	if err != nil {
 		return fmt.Errorf("open %s: %w", args[0], err)
 	}
@@ -103,44 +131,48 @@ func runBadge(args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println(string(badge))
+	if _, err := fmt.Fprintln(out, string(badge)); err != nil {
+		return err
+	}
 	return nil
 }
 
-func runSummarize() {
-	osName := flag.String("os", runtime.GOOS, "operating system label recorded in the report")
-	slowest := flag.Int("slowest", 20, "number of slowest tests to keep")
-	coverprofile := flag.String("coverprofile", "", "path to a go test -coverprofile file; omit to skip coverage")
-	flag.Parse()
+// runSummarize reads a go test -json stream from stdin and writes the
+// summarized Report JSON to stdout, optionally folding in a coverage profile.
+func runSummarize(args []string, stdin io.Reader, stdout io.Writer) error {
+	fs := flag.NewFlagSet("summarize", flag.ContinueOnError)
+	osName := fs.String("os", runtime.GOOS, "operating system label recorded in the report")
+	slowest := fs.Int("slowest", 20, "number of slowest tests to keep")
+	coverprofile := fs.String("coverprofile", "", "path to a go test -coverprofile file; omit to skip coverage")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
 
-	report, err := parseEvents(os.Stdin, *osName, *slowest)
+	report, err := parseEvents(stdin, *osName, *slowest)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "testreport: parse go test -json stream: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("parse go test -json stream: %w", err)
 	}
 
 	if *coverprofile != "" {
-		f, err := os.Open(*coverprofile)
+		f, err := openFile(*coverprofile)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "testreport: open coverage profile: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("open coverage profile: %w", err)
 		}
 		total, perPackage, err := parseCoverageProfile(f)
 		if closeErr := f.Close(); closeErr != nil && err == nil {
 			err = closeErr
 		}
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "testreport: parse coverage profile: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("parse coverage profile: %w", err)
 		}
 		report.CoveragePercent = total
 		report.PackageCoverage = perPackage
 	}
 
-	enc := json.NewEncoder(os.Stdout)
+	enc := json.NewEncoder(stdout)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(report); err != nil {
-		fmt.Fprintf(os.Stderr, "testreport: encode report: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("encode report: %w", err)
 	}
+	return nil
 }
