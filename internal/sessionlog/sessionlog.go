@@ -4,6 +4,7 @@ package sessionlog
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
@@ -21,6 +22,9 @@ const (
 type Logger struct {
 	path     string
 	maxLines int
+	// open creates the log file for appending; a nil value uses os.OpenFile. It
+	// is injectable so the write- and close-failure paths can be exercised.
+	open func(path string, flag int, perm os.FileMode) (io.WriteCloser, error)
 }
 
 // New returns a Logger writing to path, bounded to DefaultMaxLines.
@@ -28,15 +32,24 @@ func New(path string) *Logger {
 	return &Logger{path: path, maxLines: DefaultMaxLines}
 }
 
+// openAppend is the production opener: the log file opened for create/append.
+func openAppend(path string, flag int, perm os.FileMode) (io.WriteCloser, error) {
+	return os.OpenFile(path, flag, perm)
+}
+
 // Log appends one "TIMESTAMP | [LEVEL] message" line, then trims the file to the
 // most recent maxLines lines.
 func (l *Logger) Log(level, message string) error {
 	line := fmt.Sprintf("%s | [%s] %s\n", time.Now().Format(timeLayout), level, message)
-	f, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, filePerm)
+	open := l.open
+	if open == nil {
+		open = openAppend
+	}
+	f, err := open(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, filePerm)
 	if err != nil {
 		return err
 	}
-	if _, err := f.WriteString(line); err != nil {
+	if _, err := f.Write([]byte(line)); err != nil {
 		_ = f.Close()
 		return err
 	}

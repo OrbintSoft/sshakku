@@ -1,7 +1,9 @@
 package sessionlog
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -65,5 +67,70 @@ func TestLogTrims(t *testing.T) {
 	}
 	if !strings.Contains(lines[2], "line-9") {
 		t.Errorf("last line = %q, want line-9", lines[2])
+	}
+}
+
+// TestLogOpenError covers the branch where the log file cannot be opened: a
+// parent directory that does not exist makes os.OpenFile fail.
+func TestLogOpenError(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "missing-dir", "sessions.log")
+	if err := New(path).Log("INFO", "x"); err == nil {
+		t.Error("Log into a missing directory returned nil, want error")
+	}
+}
+
+// errWriteCloser is an injected log file whose Write and/or Close fail on demand,
+// so Log's write- and close-failure branches can be driven.
+type errWriteCloser struct {
+	writeErr error
+	closeErr error
+	closed   bool
+}
+
+func (w *errWriteCloser) Write(p []byte) (int, error) {
+	if w.writeErr != nil {
+		return 0, w.writeErr
+	}
+	return len(p), nil
+}
+
+func (w *errWriteCloser) Close() error {
+	w.closed = true
+	return w.closeErr
+}
+
+func TestLogWriteError(t *testing.T) {
+	wc := &errWriteCloser{writeErr: errors.New("disk full")}
+	lg := &Logger{
+		path:     filepath.Join(t.TempDir(), "sessions.log"),
+		maxLines: DefaultMaxLines,
+		open:     func(string, int, os.FileMode) (io.WriteCloser, error) { return wc, nil },
+	}
+	if err := lg.Log("INFO", "x"); err == nil {
+		t.Error("Log with a failing Write returned nil, want error")
+	}
+	if !wc.closed {
+		t.Error("Log did not close the file after a write failure")
+	}
+}
+
+func TestLogCloseError(t *testing.T) {
+	wc := &errWriteCloser{closeErr: errors.New("close failed")}
+	lg := &Logger{
+		path:     filepath.Join(t.TempDir(), "sessions.log"),
+		maxLines: DefaultMaxLines,
+		open:     func(string, int, os.FileMode) (io.WriteCloser, error) { return wc, nil },
+	}
+	if err := lg.Log("INFO", "x"); err == nil {
+		t.Error("Log with a failing Close returned nil, want error")
+	}
+}
+
+// TestTrimReadError covers trim's read-failure branch: a path that is a
+// directory cannot be read as a file.
+func TestTrimReadError(t *testing.T) {
+	lg := &Logger{path: t.TempDir(), maxLines: 3}
+	if err := lg.trim(); err == nil {
+		t.Error("trim on a directory path returned nil, want error")
 	}
 }
