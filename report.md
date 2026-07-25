@@ -3,8 +3,8 @@
 
 | OS | Coverage | Wall time | Slowest test | Test report | Coverage report |
 | --- | --- | --- | --- | --- | --- |
-| linux | 86.6% | 5.0s | TestLoadKeysNoTerminalReturnsPromptly (1.38s) | [HTML](https://orbintsoft.github.io/sshakku/report-linux.html) | [HTML](https://orbintsoft.github.io/sshakku/coverage-linux.html) |
-| macos | 77.1% | 8.3s | TestAddWithAskpassRealBinaryDarwin (4.08s) | [HTML](https://orbintsoft.github.io/sshakku/report-macos.html) | [HTML](https://orbintsoft.github.io/sshakku/coverage-macos.html) |
+| linux | 86.6% | 5.0s | TestLoadKeysNoTerminalReturnsPromptly (1.35s) | [HTML](https://orbintsoft.github.io/sshakku/report-linux.html) | [HTML](https://orbintsoft.github.io/sshakku/coverage-linux.html) |
+| macos | 77.1% | 7.6s | TestAddWithAskpassRealBinaryDarwin (3.41s) | [HTML](https://orbintsoft.github.io/sshakku/report-macos.html) | [HTML](https://orbintsoft.github.io/sshakku/coverage-macos.html) |
 
 <details><summary>Coverage by package (linux)</summary>
 
@@ -48,14 +48,14 @@
 
 | Test | Package | Seconds |
 | --- | --- | --- |
-| TestLoadKeysNoTerminalReturnsPromptly | github.com/OrbintSoft/sshakku/internal/keys | 1.38 |
+| TestLoadKeysNoTerminalReturnsPromptly | github.com/OrbintSoft/sshakku/internal/keys | 1.35 |
 | TestReadTTYLineNoTerminalReturnsPromptly | github.com/OrbintSoft/sshakku/internal/keys | 1.01 |
 | TestExecRunnerRun | github.com/OrbintSoft/sshakku/internal/keys | 0.31 |
 | TestClientUnlockLock | github.com/OrbintSoft/sshakku/internal/secretservice | 0.25 |
 | TestClientUnlockLock/a_hung_prompt_times_out_and_is_dismissed | github.com/OrbintSoft/sshakku/internal/secretservice | 0.21 |
 | TestExecRunnerRun/zero_Timeout_does_not_bound_the_command | github.com/OrbintSoft/sshakku/internal/keys | 0.20 |
 | TestFlockLockerSerialises | github.com/OrbintSoft/sshakku/internal/agent | 0.12 |
-| TestSocketHandoffExpiresUnclaimed | github.com/OrbintSoft/sshakku/internal/keys | 0.12 |
+| TestSocketHandoffExpiresUnclaimed | github.com/OrbintSoft/sshakku/internal/keys | 0.10 |
 | TestExecRunnerRun/a_positive_Timeout_kills_a_command_that_outlives_it | github.com/OrbintSoft/sshakku/internal/keys | 0.10 |
 | TestEnsureAgentRealDisasterReapsAndAdoptsLowestPID | github.com/OrbintSoft/sshakku/internal/agent | 0.09 |
 | TestClientCollection | github.com/OrbintSoft/sshakku/internal/secretservice | 0.09 |
@@ -75,25 +75,25 @@
 
 | Test | Package | Seconds |
 | --- | --- | --- |
-| TestAddWithAskpassRealBinaryDarwin | github.com/OrbintSoft/sshakku/internal/keys | 4.08 |
-| TestReadTTYLineNoTerminalReturnsPromptly | github.com/OrbintSoft/sshakku/internal/keys | 1.03 |
-| TestExecRunnerRun | github.com/OrbintSoft/sshakku/internal/keys | 0.39 |
-| TestExecRunnerRun/zero_Timeout_does_not_bound_the_command | github.com/OrbintSoft/sshakku/internal/keys | 0.26 |
+| TestAddWithAskpassRealBinaryDarwin | github.com/OrbintSoft/sshakku/internal/keys | 3.41 |
+| TestReadTTYLineNoTerminalReturnsPromptly | github.com/OrbintSoft/sshakku/internal/keys | 1.02 |
+| TestExecRunnerRun | github.com/OrbintSoft/sshakku/internal/keys | 0.44 |
+| TestExecRunnerRun/zero_Timeout_does_not_bound_the_command | github.com/OrbintSoft/sshakku/internal/keys | 0.33 |
 | TestEnsureAgentRealDisasterReapsAndAdoptsLowestPID | github.com/OrbintSoft/sshakku/internal/agent | 0.15 |
 | TestEnsureAgentRealZombie | github.com/OrbintSoft/sshakku/internal/agent | 0.13 |
 | TestFlockLockerSerialises | github.com/OrbintSoft/sshakku/internal/agent | 0.13 |
 | TestDoctorDetectsAndFixesDeadOursAgent | github.com/OrbintSoft/sshakku/internal/diagnose | 0.13 |
-| TestSocketHandoffExpiresUnclaimed | github.com/OrbintSoft/sshakku/internal/keys | 0.11 |
-| TestExecRunnerRun/a_positive_Timeout_kills_a_command_that_outlives_it | github.com/OrbintSoft/sshakku/internal/keys | 0.11 |
+| TestSocketHandoffExpiresUnclaimed | github.com/OrbintSoft/sshakku/internal/keys | 0.12 |
 | TestEnsureAgentRealClean | github.com/OrbintSoft/sshakku/internal/agent | 0.10 |
+| TestExecRunnerRun/a_positive_Timeout_kills_a_command_that_outlives_it | github.com/OrbintSoft/sshakku/internal/keys | 0.10 |
 | TestEnsureAgentRealHealthyReuse | github.com/OrbintSoft/sshakku/internal/agent | 0.07 |
 | TestEnsureAgentRealReachableButEmptyIsHealthy | github.com/OrbintSoft/sshakku/internal/agent | 0.07 |
 | TestEnsureAgentRealForeignAdopted | github.com/OrbintSoft/sshakku/internal/agent | 0.07 |
 | TestManagerReap | github.com/OrbintSoft/sshakku/internal/agent | 0.04 |
-| TestSocketHandoffOneShot | github.com/OrbintSoft/sshakku/internal/keys | 0.02 |
-| TestSocketHandoffStashErrors | github.com/OrbintSoft/sshakku/internal/keys | 0.01 |
+| TestLoadSettingsMergesConfigD | github.com/OrbintSoft/sshakku/cmd/sshakku | 0.02 |
+| TestRun/doctor_--user_unknown | github.com/OrbintSoft/sshakku/cmd/sshakku | 0.01 |
+| TestRun | github.com/OrbintSoft/sshakku/cmd/sshakku | 0.01 |
 | TestRunSSHAddExitCode | github.com/OrbintSoft/sshakku/internal/keys | 0.01 |
 | TestExecRunnerRunStdinEnvAndStartFailure | github.com/OrbintSoft/sshakku/internal/keys | 0.01 |
-| TestExecRunnerRun/captures_stdout,_stderr,_and_exit_code | github.com/OrbintSoft/sshakku/internal/keys | 0.01 |
 
 </details>
