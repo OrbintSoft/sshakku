@@ -752,7 +752,12 @@ decisions 9, 20, 24.
    `README.md` on master links both. `tools/testreport badge` (PR #95),
    the `publish-coverage-report` CI job + script (PR #96), the README
    badges (PRs #97, #98), and a repository ruleset on `coverage-reports`
-   blocking force-push/deletion.
+   blocking force-push/deletion. Follow-up: a richer, Mochawesome-style HTML
+   test report per OS via `gotestsum`+`gopogh` (PR #101), published to
+   `coverage-reports` alongside the badges (PR #102), a per-package coverage
+   breakdown, report link, and CI status badge in the PR comment/README
+   (PR #103), and both HTML reports linked from `report.md`/the PR comment
+   via the already-live GitHub Pages site for that branch (PR #104).
 3. **Test case matrix (`docs/TEST-MATRIX.md`).** Enumerates every
    user-facing case × OS/target/integration/environment/config/install-method
    combination; each row tracks whether it's covered by an integration test
