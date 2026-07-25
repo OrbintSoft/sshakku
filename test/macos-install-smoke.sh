@@ -37,6 +37,9 @@ fi
 make install-user USER_HOME="$home"
 test -x "$home/.local/bin/sshakku"
 grep -qF sshakku "$home/.zprofile"
+# install-user also wires the per-user bindir onto PATH (default WIRE_PATH=1),
+# since ~/.local/bin isn't on the macOS default PATH.
+grep -qF "export PATH=\"$home/.local/bin:" "$home/.zprofile"
 
 make uninstall-user USER_HOME="$home"
 test ! -e "$home/.local/bin/sshakku"

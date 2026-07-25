@@ -11,7 +11,7 @@
 # system-wide wiring.
 #
 # Usage:
-#   install-user-hook.sh install <home> <sshakku_bin_path> [nn] [wire_rc] [shell]
+#   install-user-hook.sh install <home> <sshakku_bin_path> [nn] [wire_rc] [shell] [wire_path]
 #   install-user-hook.sh uninstall <home> [nn] [shell]
 #
 # shell selects which startup files get wired: "bash" (default) targets
@@ -35,13 +35,20 @@
 # ssh-agent socket, and load-keys skips keys already present), so sourcing
 # it twice in the same shell — e.g. a profile that itself sources the rc
 # file — is harmless.
+#
+# Unless wire_path is "0" or empty, the wired block also puts the sshakku
+# binary's own directory on PATH, so `sshakku` is runnable interactively even
+# where that directory isn't on the login shell's default PATH (notably
+# ~/.local/bin on macOS). The line is guarded so it's a no-op when the
+# directory is already there, and it rides in the same block as the hook so
+# uninstall removes it too.
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=shell-hook-lib.sh
 . "$script_dir/shell-hook-lib.sh"
 
-usage="usage: install-user-hook.sh {install <home> <sshakku_bin_path> [nn] [wire_rc] [shell]|uninstall <home> [nn] [shell]}"
+usage="usage: install-user-hook.sh {install <home> <sshakku_bin_path> [nn] [wire_rc] [shell] [wire_path]|uninstall <home> [nn] [shell]}"
 action="${1:?$usage}"
 home="${2:?$usage}"
 
@@ -104,6 +111,7 @@ install)
 	nn="${4:-001}"
 	wire_rc="${5:-}"
 	set_shell_paths "${6:-bash}"
+	wire_path="${7:-1}"
 
 	mkdir -p "$hook_dir"
 	template_dir="$(cd "$(dirname "$0")" && pwd)"
@@ -111,6 +119,12 @@ install)
 	chmod 755 "$hook_file"
 
 	source_line=". \"$hook_file\""
+	# Prepend the PATH guard (see the file header) unless the caller opted out.
+	if [ -n "$wire_path" ] && [ "$wire_path" != "0" ]; then
+		bindir="$(dirname "$sshakku_bin")"
+		path_line="case \":\$PATH:\" in *\":$bindir:\"*) ;; *) export PATH=\"$bindir:\$PATH\" ;; esac"
+		source_line="$(printf '%s\n%s' "$path_line" "$source_line")"
+	fi
 	wire_hook "$profile_d_dir" "$profile_file" "$nn" "$source_line"
 	if [ -n "$wire_rc" ]; then
 		wire_hook "$rc_d_dir" "$rc_file" "$nn" "$source_line"
