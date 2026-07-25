@@ -41,7 +41,7 @@ func TestRun(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := run(io.Discard, io.Discard, tc.args); got != tc.want {
+			if got := realDeps().run(io.Discard, io.Discard, tc.args); got != tc.want {
 				t.Errorf("run(%q) = %d, want %d", tc.args, got, tc.want)
 			}
 		})
@@ -298,10 +298,10 @@ func TestStderrNotifier(t *testing.T) {
 // env unset, it must fall through to normal subcommand dispatch. The askpass
 // branch is exercised via TestAskpassHandoff.
 func TestDispatchRoutesToRun(t *testing.T) {
-	if got := dispatch(io.Discard, io.Discard, []string{"help"}, false); got != 0 {
+	if got := dispatch(realDeps(), io.Discard, io.Discard, []string{"help"}, false); got != 0 {
 		t.Errorf("dispatch(help) = %d, want 0", got)
 	}
-	if got := dispatch(io.Discard, io.Discard, nil, false); got != 2 {
+	if got := dispatch(realDeps(), io.Discard, io.Discard, nil, false); got != 2 {
 		t.Errorf("dispatch(no args) = %d, want 2 (usage)", got)
 	}
 }
@@ -324,7 +324,7 @@ func TestAskpassHandoff(t *testing.T) {
 
 	t.Run("unresolvable token routed via askpass", func(t *testing.T) {
 		t.Setenv(keys.EnvPassHandoffToken, "sshakku-test-nonexistent-token")
-		if got := askpass(io.Discard, nil); got != 1 {
+		if got := realDeps().askpass(io.Discard, nil); got != 1 {
 			t.Errorf("askpass (bogus handoff token) = %d, want 1", got)
 		}
 	})
