@@ -16,12 +16,21 @@ type Serial int32
 // PAM login (`pam_keyinit`) — so a bare non-error return from Add is not
 // sufficient evidence the keyring is actually usable; this exercises the
 // round trip callers depend on.
+// Seams over the probe's own operations, so Available's failure branches are
+// testable without depending on the live keyring's behaviour. Production points
+// them at the real implementations.
+var (
+	probeAdd    = Add
+	probeUnlink = Unlink
+	probeRead   = Read
+)
+
 func Available() bool {
-	s, err := Add("sshakku-keyring-probe", []byte("probe"))
+	s, err := probeAdd("sshakku-keyring-probe", []byte("probe"))
 	if err != nil {
 		return false
 	}
-	defer func() { _ = Unlink(s) }()
-	_, err = Read(s)
+	defer func() { _ = probeUnlink(s) }()
+	_, err = probeRead(s)
 	return err == nil
 }

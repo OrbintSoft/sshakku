@@ -11,11 +11,21 @@ import (
 // keyType is the only kernel key class sshakku uses: an opaque "user" payload.
 const keyType = "user"
 
+// Seams over the raw keyctl syscalls, so the wrappers' error and edge branches
+// can be exercised without a live kernel keyring (unavailable in many containers
+// and CI runners). Production points them at the real syscalls.
+var (
+	addKey       = unix.AddKey
+	keyctlSearch = unix.KeyctlSearch
+	keyctlBuffer = unix.KeyctlBuffer
+	keyctlInt    = unix.KeyctlInt
+)
+
 // Add stores payload under description in the @u user keyring and returns its
 // serial. A later Add with the same description updates that key rather than
 // creating a second one, so concurrent callers converge on one entry.
 func Add(description string, payload []byte) (Serial, error) {
-	id, err := unix.AddKey(keyType, description, payload, unix.KEY_SPEC_USER_KEYRING)
+	id, err := addKey(keyType, description, payload, unix.KEY_SPEC_USER_KEYRING)
 	if err != nil {
 		return 0, err
 	}
@@ -25,7 +35,7 @@ func Add(description string, payload []byte) (Serial, error) {
 // Search returns the serial of the @u "user" key with description and whether it
 // exists; a missing key is reported as ok=false, not an error.
 func Search(description string) (Serial, bool) {
-	id, err := unix.KeyctlSearch(unix.KEY_SPEC_USER_KEYRING, keyType, description, 0)
+	id, err := keyctlSearch(unix.KEY_SPEC_USER_KEYRING, keyType, description, 0)
 	if err != nil {
 		return 0, false
 	}
@@ -35,7 +45,7 @@ func Search(description string) (Serial, bool) {
 // Read returns the payload of the key with serial s. The first call sizes the
 // payload (nil buffer); the second fills it.
 func Read(s Serial) ([]byte, error) {
-	size, err := unix.KeyctlBuffer(unix.KEYCTL_READ, int(s), nil, 0)
+	size, err := keyctlBuffer(unix.KEYCTL_READ, int(s), nil, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -43,7 +53,7 @@ func Read(s Serial) ([]byte, error) {
 		return nil, nil
 	}
 	buf := make([]byte, size)
-	n, err := unix.KeyctlBuffer(unix.KEYCTL_READ, int(s), buf, 0)
+	n, err := keyctlBuffer(unix.KEYCTL_READ, int(s), buf, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -61,12 +71,12 @@ func SetTimeout(s Serial, d time.Duration) error {
 	if secs < 1 {
 		secs = 1
 	}
-	_, err := unix.KeyctlInt(unix.KEYCTL_SET_TIMEOUT, int(s), secs, 0, 0)
+	_, err := keyctlInt(unix.KEYCTL_SET_TIMEOUT, int(s), secs, 0, 0)
 	return err
 }
 
 // Unlink removes the key with serial s from the @u user keyring.
 func Unlink(s Serial) error {
-	_, err := unix.KeyctlInt(unix.KEYCTL_UNLINK, int(s), unix.KEY_SPEC_USER_KEYRING, 0, 0)
+	_, err := keyctlInt(unix.KEYCTL_UNLINK, int(s), unix.KEY_SPEC_USER_KEYRING, 0, 0)
 	return err
 }
