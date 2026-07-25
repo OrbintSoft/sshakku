@@ -72,7 +72,13 @@ func TestSocketHandoffDirErrors(t *testing.T) {
 		if err := os.WriteFile(file, nil, 0o600); err != nil {
 			t.Fatalf("write file: %v", err)
 		}
-		t.Setenv("XDG_CACHE_HOME", file)
+		// Point HOME (not XDG_CACHE_HOME) at the file: os.UserCacheDir derives
+		// the cache path from HOME under an intermediate subdir on every
+		// platform (~/.cache on Linux, ~/Library/Caches on macOS, and macOS
+		// ignores XDG_CACHE_HOME entirely), so MkdirAll fails with ENOTDIR
+		// regardless of OS.
+		t.Setenv("HOME", file)
+		t.Setenv("XDG_CACHE_HOME", "")
 		if _, err := socketHandoffDir(); err == nil {
 			t.Fatal("socketHandoffDir returned nil error, want the mkdir failure under a file")
 		}
