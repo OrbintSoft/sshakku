@@ -143,7 +143,7 @@ func (d deps) run(stdout, stderr io.Writer, args []string) int {
 	case "ensure-agent":
 		return ensureAgent(stdout, stderr)
 	case "load-keys":
-		return loadKeys(stderr)
+		return d.loadKeys(stderr)
 	case "askpass-env":
 		return askpassEnv(stdout, stderr)
 	case "doctor":
@@ -318,7 +318,7 @@ func tail(s string, n int) string {
 // interactive shells. SSH_ASKPASS points at this very binary, which ssh-add
 // re-execs to fetch the stashed passphrase. The success path is silent;
 // problems go to the session log (and stderr for a hard failure).
-func loadKeys(stderr io.Writer) int {
+func (d deps) loadKeys(stderr io.Writer) int {
 	env := paths.FromOS()
 	layout := paths.Resolve(env, paths.ProbeDir).WithSocketToken(paths.SocketToken())
 	log := sessionlog.New(layout.LogFile)
@@ -361,7 +361,7 @@ func loadKeys(stderr io.Writer) int {
 		prompter = kdialog
 	}
 
-	secret, closeSecret := newSecretBackend(currentUser(), log, settings)
+	secret, closeSecret := d.newSecret(currentUser(), log, settings)
 	defer closeSecret()
 
 	loader := keys.Loader{

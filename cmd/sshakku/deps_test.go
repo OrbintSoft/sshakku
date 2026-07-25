@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"errors"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
@@ -105,6 +107,46 @@ func TestAskpassBroker(t *testing.T) {
 	if got := out.String(); got != "wallet-pass\n" {
 		t.Errorf("askpassBroker wrote %q, want the wallet passphrase with a trailing newline", got)
 	}
+}
+
+// TestLoadKeys covers loadKeys' wiring against a fake backend, in a headless
+// session (no display) with a temp HOME so it never execs a prompter or ssh-add
+// and never touches the real ~/.ssh. With no ~/.ssh at all the enumerator finds
+// no keys and the load is a silent success; a ~/.ssh that is a plain file makes
+// enumeration fail, which surfaces as a non-zero exit.
+func TestLoadKeys(t *testing.T) {
+	t.Run("no keys is a silent success", func(t *testing.T) {
+		tmp := t.TempDir()
+		t.Setenv("HOME", tmp)
+		t.Setenv("XDG_STATE_HOME", tmp)
+		t.Setenv("WAYLAND_DISPLAY", "")
+		t.Setenv("DISPLAY", "")
+
+		d := depsReturning(newMemoryBackend())
+		var errOut bytes.Buffer
+		if got := d.loadKeys(&errOut); got != 0 {
+			t.Fatalf("loadKeys (no keys) = %d, want 0; stderr=%q", got, errOut.String())
+		}
+	})
+
+	t.Run("enumeration failure returns non-zero", func(t *testing.T) {
+		tmp := t.TempDir()
+		t.Setenv("HOME", tmp)
+		t.Setenv("XDG_STATE_HOME", tmp)
+		t.Setenv("WAYLAND_DISPLAY", "")
+		t.Setenv("DISPLAY", "")
+		// A plain file where ~/.ssh should be a directory makes the key
+		// enumeration fail with a non-"not exist" error.
+		if err := os.WriteFile(filepath.Join(tmp, ".ssh"), []byte("not a dir"), 0o600); err != nil {
+			t.Fatalf("seed ~/.ssh file: %v", err)
+		}
+
+		d := depsReturning(newMemoryBackend())
+		var errOut bytes.Buffer
+		if got := d.loadKeys(&errOut); got != 1 {
+			t.Errorf("loadKeys (bad ~/.ssh) = %d, want 1", got)
+		}
+	})
 }
 
 // TestForget covers forget against a fake backend: named keys delete the
