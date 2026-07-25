@@ -33,6 +33,23 @@ type fakeService struct {
 	// against the real wire protocol.
 	restrictAlias bool
 
+	// failCollectionsProp makes Get reply to the service's Collections
+	// property with an error, so Client.findCollectionByLabel's list-failure
+	// path is exercised over the real wire rather than a mocked interface.
+	failCollectionsProp bool
+
+	// collectionsProp overrides the value Get returns for the Collections
+	// property when collectionsPropSet is true — used to feed
+	// findCollectionByLabel a wrong-typed value or a list naming an
+	// unexported collection whose Label read then fails.
+	collectionsProp    any
+	collectionsPropSet bool
+
+	// failCreateCollection makes CreateCollection return a generic (non
+	// errNotSupported) D-Bus error, exercising Collection's plain
+	// create-failure path rather than the alias fallback.
+	failCreateCollection bool
+
 	mu          sync.Mutex
 	aliases     map[string]dbus.ObjectPath
 	collections map[dbus.ObjectPath]*fakeCollection
@@ -127,6 +144,12 @@ func (s *fakeService) Get(iface, prop string) (dbus.Variant, *dbus.Error) {
 	if iface == serviceIface && prop == "Collections" {
 		s.mu.Lock()
 		defer s.mu.Unlock()
+		if s.failCollectionsProp {
+			return dbus.Variant{}, dbus.MakeFailedError(fmt.Errorf("collections unavailable"))
+		}
+		if s.collectionsPropSet {
+			return dbus.MakeVariant(s.collectionsProp), nil
+		}
 		collections := make([]dbus.ObjectPath, 0, len(s.collections))
 		for path := range s.collections {
 			collections = append(collections, path)
@@ -137,6 +160,12 @@ func (s *fakeService) Get(iface, prop string) (dbus.Variant, *dbus.Error) {
 }
 
 func (s *fakeService) CreateCollection(props map[string]dbus.Variant, alias string) (dbus.ObjectPath, dbus.ObjectPath, *dbus.Error) {
+	s.mu.Lock()
+	failGeneric := s.failCreateCollection
+	s.mu.Unlock()
+	if failGeneric {
+		return noPrompt, noPrompt, dbus.MakeFailedError(fmt.Errorf("create collection failed"))
+	}
 	if s.getRestrictAlias() && alias != "" && alias != "default" {
 		err := dbus.NewError(errNotSupported, []any{"Only the 'default' alias is supported"})
 		return noPrompt, noPrompt, err
@@ -321,6 +350,20 @@ func (p *fakePrompt) Prompt(string) *dbus.Error {
 		_ = p.conn.Emit(p.path, promptIface+".Completed", true, dbus.MakeVariant(""))
 	case "hang":
 		// Never completes: the client is expected to time out and Dismiss.
+	case "badresult":
+		// Completed, not dismissed, but the result variant is a bool, not the
+		// object path the caller expects — a bool isn't convertible to the
+		// path's string type, so Client's result.Store fails (unlike a number,
+		// which Go would silently rune-convert into a garbage path).
+		_ = p.conn.Emit(p.path, promptIface+".Completed", false, dbus.MakeVariant(true))
+	case "short":
+		// A Completed signal with the wrong number of body fields — Client
+		// must reject it rather than index past the end of the body.
+		_ = p.conn.Emit(p.path, promptIface+".Completed", false)
+	case "malformed":
+		// Two fields, but the first isn't the bool "dismissed" flag — Client
+		// must reject it rather than trust a failed type assertion.
+		_ = p.conn.Emit(p.path, promptIface+".Completed", "not-a-bool", dbus.MakeVariant(""))
 	default: // "ok"
 		_ = p.conn.Emit(p.path, promptIface+".Completed", false, p.resultFn())
 	}
