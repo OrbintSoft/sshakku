@@ -11,7 +11,9 @@ import (
 	"os"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
+	"github.com/OrbintSoft/sshakku/internal/diagnose"
 	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/OrbintSoft/sshakku/internal/paths"
 )
 
 // internalReadSocketTokenCmd is not a user-facing command: `doctor` execs the
@@ -80,11 +82,31 @@ type deps struct {
 	// production value is the concrete agent.Manager; tests substitute a fake so
 	// the shell-init/ensure-agent bodies run without spawning a real agent.
 	ensurer agentEnsurer
+	// gather builds the diagnostic report for a resolved layout (see
+	// gatherReport), reading the real procfs, sockets, and process tree. Injected
+	// so doctor's report-printing and self-heal paths run against a synthetic
+	// report instead of this host's live agent state.
+	gather func(env paths.Env, layout paths.Layout) diagnose.Report
+	// tokenSource reads another user's per-login socket token for a cross-user
+	// doctor run (see execTokenSource). The production value re-executes this
+	// binary under the target's credentials; a fake lets doctorCrossUser run
+	// without root or a second uid.
+	tokenSource TargetTokenSource
+	// geteuid reports the process's effective uid, which doctor's cross-user
+	// guard consults to decide whether elevation is present. Injected so a test
+	// can drive the root-only cross-user path without actually being root.
+	geteuid func() int
 }
 
 // realDeps wires deps to the production implementations.
 func realDeps() deps {
-	return deps{newSecret: newSecretBackend, ensurer: realEnsurer()}
+	return deps{
+		newSecret:   newSecretBackend,
+		ensurer:     realEnsurer(),
+		gather:      gatherReport,
+		tokenSource: execTokenSource{},
+		geteuid:     os.Geteuid,
+	}
 }
 
 // dispatch routes an invocation either to the SSH_ASKPASS helper path or to
