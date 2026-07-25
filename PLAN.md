@@ -767,6 +767,13 @@ decisions 9, 20, 24.
    same change that introduces it (rule 19).
 5. **Coverage push.** Once the reporting exists, drive coverage toward
    ~100%: mock what's mockable, optimize slow/redundant tests.
+   Condition/branch coverage via `gobco` (BSD-2-Clause, CI-only, JSON
+   `-stats` output) was evaluated and accepted in principle, but deferred to
+   *after* this line-coverage push: a stricter metric only pays off once line
+   coverage is already high, gobco ignores `select` statements (a real blind
+   spot in this concurrency-heavy code), and it runs per-package (needs a
+   sweep driver + a second instrumented test run). Revisit once line coverage
+   is near the target.
 6. **Close every open cell** in the matrix with a real integration test.
 7. **Race, goroutine-leak, and memory checks** alongside the existing
    `-race` suite.
