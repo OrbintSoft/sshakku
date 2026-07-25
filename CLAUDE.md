@@ -103,3 +103,12 @@ appending. See `docs/THREAT-MODEL.md` for the threat model and the June 2026 inc
     environment, configuration, or installation method is implemented, add or
     update its row in `docs/TEST-MATRIX.md` in the same change — see PLAN.md
     Phase 6 / open decision 24.
+
+20. **Exclude only genuinely untestable code from coverage.** Tag a block
+    `//coverage:ignore` (with a plain-comment reason on the line above it,
+    Rule 15) only when it cannot be unit-tested in principle — the process
+    entry point's lone `os.Exit`, a platform stub with no observable
+    behaviour. Never use it to hide code that is testable but not yet tested;
+    when tempted, refactor the untestable part into a thin injectable seam and
+    test the rest instead. `go-ignore-cov` (wired into `make test-json`) then
+    counts the tagged block as covered so the reported percentage stays honest.
