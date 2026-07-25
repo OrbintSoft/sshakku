@@ -3,10 +3,8 @@
 
 | OS | Coverage | Wall time | Slowest test | Test report | Coverage report |
 | --- | --- | --- | --- | --- | --- |
-| linux | 73.2% | 5.6s | TestLoadKeysNoTerminalReturnsPromptly (1.27s) | [HTML](https://orbintsoft.github.io/sshakku/report-linux.html) | [HTML](https://orbintsoft.github.io/sshakku/coverage-linux.html) |
-| macos | 66.7% | 11.9s | TestAddWithAskpassRealBinaryDarwin (5.36s) | [HTML](https://orbintsoft.github.io/sshakku/report-macos.html) | [HTML](https://orbintsoft.github.io/sshakku/coverage-macos.html) |
-
-[Full coverage report (latest on `master`)](https://github.com/OrbintSoft/sshakku/blob/coverage-reports/report.md)
+| linux | 72.8% | 2.1s | TestLoadKeysNoTerminalReturnsPromptly (1.27s) | [HTML](https://orbintsoft.github.io/sshakku/report-linux.html) | [HTML](https://orbintsoft.github.io/sshakku/coverage-linux.html) |
+| macos | 66.4% | 5.7s | TestAddWithAskpassRealBinaryDarwin (1.81s) | [HTML](https://orbintsoft.github.io/sshakku/report-macos.html) | [HTML](https://orbintsoft.github.io/sshakku/coverage-macos.html) |
 
 <details><summary>Coverage by package (linux)</summary>
 
@@ -15,7 +13,7 @@
 | github.com/OrbintSoft/sshakku/cmd/sshakku | 34.0% |
 | github.com/OrbintSoft/sshakku/internal/keyring | 41.2% |
 | github.com/OrbintSoft/sshakku/internal/paths | 57.4% |
-| github.com/OrbintSoft/sshakku/tools/testreport | 63.4% |
+| github.com/OrbintSoft/sshakku/tools/testreport | 60.3% |
 | github.com/OrbintSoft/sshakku/internal/sessionlog | 73.7% |
 | github.com/OrbintSoft/sshakku/internal/keys | 75.1% |
 | github.com/OrbintSoft/sshakku/internal/secretservice | 82.4% |
@@ -34,7 +32,7 @@
 | github.com/OrbintSoft/sshakku/internal/keyring | 0.0% |
 | github.com/OrbintSoft/sshakku/internal/secretservice | 0.0% |
 | github.com/OrbintSoft/sshakku/cmd/sshakku | 34.4% |
-| github.com/OrbintSoft/sshakku/tools/testreport | 63.4% |
+| github.com/OrbintSoft/sshakku/tools/testreport | 60.3% |
 | github.com/OrbintSoft/sshakku/internal/keys | 69.8% |
 | github.com/OrbintSoft/sshakku/internal/paths | 70.1% |
 | github.com/OrbintSoft/sshakku/internal/sessionlog | 73.7% |
@@ -77,10 +75,10 @@
 
 | Test | Package | Seconds |
 | --- | --- | --- |
-| TestAddWithAskpassRealBinaryDarwin | github.com/OrbintSoft/sshakku/internal/keys | 5.36 |
-| TestReadTTYLineNoTerminalReturnsPromptly | github.com/OrbintSoft/sshakku/internal/keys | 1.06 |
-| TestExecRunnerRun | github.com/OrbintSoft/sshakku/internal/keys | 0.35 |
-| TestExecRunnerRun/zero_Timeout_does_not_bound_the_command | github.com/OrbintSoft/sshakku/internal/keys | 0.23 |
+| TestAddWithAskpassRealBinaryDarwin | github.com/OrbintSoft/sshakku/internal/keys | 1.81 |
+| TestReadTTYLineNoTerminalReturnsPromptly | github.com/OrbintSoft/sshakku/internal/keys | 1.10 |
+| TestExecRunnerRun | github.com/OrbintSoft/sshakku/internal/keys | 0.48 |
+| TestExecRunnerRun/zero_Timeout_does_not_bound_the_command | github.com/OrbintSoft/sshakku/internal/keys | 0.35 |
 | TestEnsureAgentRealDisasterReapsAndAdoptsLowestPID | github.com/OrbintSoft/sshakku/internal/agent | 0.15 |
 | TestEnsureAgentRealZombie | github.com/OrbintSoft/sshakku/internal/agent | 0.13 |
 | TestFlockLockerSerialises | github.com/OrbintSoft/sshakku/internal/agent | 0.13 |
@@ -95,7 +93,7 @@
 | TestLogTrims | github.com/OrbintSoft/sshakku/internal/sessionlog | 0.04 |
 | TestRun/doctor_--user_unknown | github.com/OrbintSoft/sshakku/cmd/sshakku | 0.01 |
 | TestRun | github.com/OrbintSoft/sshakku/cmd/sshakku | 0.01 |
-| TestLoadPartialLeavesAbsentKeysNil | github.com/OrbintSoft/sshakku/internal/config | 0.01 |
 | TestLogAppends | github.com/OrbintSoft/sshakku/internal/sessionlog | 0.01 |
+| TestExecRunnerRun/captures_stdout,_stderr,_and_exit_code | github.com/OrbintSoft/sshakku/internal/keys | 0.01 |
 
 </details>
