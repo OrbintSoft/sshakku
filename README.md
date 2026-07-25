@@ -31,7 +31,7 @@ wrong, `sshakku doctor` explains what and, with `--fix`, repairs it.
   instead use a password manager you already run, the 1Password or Bitwarden
   CLI — see
   [Choosing the secret backend](docs/CONFIGURATION.md#choosing-the-secret-backend).
-- **Go 1.25+**, only to build from source (see Installation).
+- **Go 1.26.5+**, only to build from source (see Installation).
 
 ## Installation
 
