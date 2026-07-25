@@ -186,9 +186,14 @@ test:
 # `go test -json` event stream (--jsonfile) and a coverage profile for
 # tools/testreport and gopogh to summarize. gotestsum exits with go test's
 # own status, so `make test-json` still fails the build on a test failure
-# like plain `make test` does.
+# like plain `make test` does. go-ignore-cov then marks blocks tagged
+# `//coverage:ignore` as covered, so genuinely untestable code (e.g. main's
+# lone os.Exit) doesn't drag the reported percentage down; it warns and no-ops
+# if it can't resolve packages (e.g. an unsatisfied local toolchain), never
+# failing the build.
 test-json:
 	gotestsum --jsonfile test.json -- -race -coverprofile=coverage.out ./...
+	go-ignore-cov --file coverage.out --root .
 
 # Shell-level login-hook and agent-lifecycle regression suite. Requires
 # bats-core; only safe in a disposable environment (the container test suite

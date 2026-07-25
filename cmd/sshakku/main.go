@@ -79,16 +79,27 @@ commands:
 `
 
 func main() {
-	// ssh-add execs this binary as its SSH_ASKPASS program, passing only the
-	// prompt as an argument and marking the call via the environment. Handle that
-	// before subcommand dispatch and return the stashed passphrase — unless args
-	// actually name one of our own subcommands, which always wins (see
-	// wantsAskpass).
-	args := os.Args[1:]
-	if wantsAskpass(os.Getenv(keys.EnvAskpassMode) != "", args) {
-		os.Exit(askpass(os.Stdout, args))
+	// The process entry point: a single os.Exit around the testable dispatch,
+	// with nothing here to unit-test (a test can't observe os.Exit).
+	//coverage:ignore
+	os.Exit(dispatch(os.Stdout, os.Stderr, os.Args[1:], os.Getenv(keys.EnvAskpassMode) != ""))
+}
+
+// dispatch routes an invocation either to the SSH_ASKPASS helper path or to
+// normal subcommand dispatch, returning the process exit code. It is the whole
+// body of main, split out so main stays a single os.Exit call and everything
+// here can be tested without spawning the process.
+//
+// ssh-add execs this binary as its SSH_ASKPASS program, passing only the prompt
+// as an argument and marking the call via the environment (askpassEnvSet).
+// Handle that before subcommand dispatch and return the stashed passphrase —
+// unless args actually name one of our own subcommands, which always wins (see
+// wantsAskpass).
+func dispatch(stdout, stderr io.Writer, args []string, askpassEnvSet bool) int {
+	if wantsAskpass(askpassEnvSet, args) {
+		return askpass(stdout, args)
 	}
-	os.Exit(run(os.Stdout, os.Stderr, args))
+	return run(stdout, stderr, args)
 }
 
 // wantsAskpass reports whether main should treat this invocation as ssh's

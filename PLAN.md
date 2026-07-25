@@ -774,6 +774,12 @@ decisions 9, 20, 24.
    spot in this concurrency-heavy code), and it runs per-package (needs a
    sweep driver + a second instrumented test run). Revisit once line coverage
    is near the target.
+   Genuinely untestable code (the process entry point's lone `os.Exit`,
+   platform stubs) is excluded from the reported percentage via
+   `go-ignore-cov` (MIT, CI-only, pinned by commit), wired into `make
+   test-json`: it marks `//coverage:ignore`-tagged blocks as covered so the
+   number reflects real testable coverage. See rule 20 for when the tag is
+   allowed.
 6. **Close every open cell** in the matrix with a real integration test.
 7. **Race, goroutine-leak, and memory checks** alongside the existing
    `-race` suite.
