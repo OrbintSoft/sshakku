@@ -82,7 +82,23 @@ func main() {
 	// The process entry point: a single os.Exit around the testable dispatch,
 	// with nothing here to unit-test (a test can't observe os.Exit).
 	//coverage:ignore
-	os.Exit(dispatch(os.Stdout, os.Stderr, os.Args[1:], os.Getenv(keys.EnvAskpassMode) != ""))
+	os.Exit(dispatch(realDeps(), os.Stdout, os.Stderr, os.Args[1:], os.Getenv(keys.EnvAskpassMode) != ""))
+}
+
+// deps carries the process's injectable system seams so the command bodies can
+// be exercised against fakes in tests. Only dependencies that reach outside the
+// process — today the secret backend, whose default opens the D-Bus session
+// bus — live here; anything a command builds purely from its arguments stays
+// inline. main wires it from the real implementations via realDeps.
+type deps struct {
+	// newSecret opens the secret backend settings.SecretBackend selects, with a
+	// cleanup func that releases whatever it opened (see newSecretBackend).
+	newSecret func(user string, log keys.Logger, settings config.Settings) (keys.SecretBackend, func())
+}
+
+// realDeps wires deps to the production implementations.
+func realDeps() deps {
+	return deps{newSecret: newSecretBackend}
 }
 
 // dispatch routes an invocation either to the SSH_ASKPASS helper path or to
@@ -95,11 +111,11 @@ func main() {
 // Handle that before subcommand dispatch and return the stashed passphrase —
 // unless args actually name one of our own subcommands, which always wins (see
 // wantsAskpass).
-func dispatch(stdout, stderr io.Writer, args []string, askpassEnvSet bool) int {
+func dispatch(d deps, stdout, stderr io.Writer, args []string, askpassEnvSet bool) int {
 	if wantsAskpass(askpassEnvSet, args) {
-		return askpass(stdout, args)
+		return d.askpass(stdout, args)
 	}
-	return run(stdout, stderr, args)
+	return d.run(stdout, stderr, args)
 }
 
 // wantsAskpass reports whether main should treat this invocation as ssh's
@@ -116,7 +132,7 @@ func wantsAskpass(askpassEnvSet bool, args []string) bool {
 
 // run dispatches a subcommand and returns the process exit code. Output goes to
 // the supplied writers so the command is testable without touching real stdio.
-func run(stdout, stderr io.Writer, args []string) int {
+func (d deps) run(stdout, stderr io.Writer, args []string) int {
 	if len(args) == 0 {
 		_, _ = fmt.Fprint(stderr, usage)
 		return 2
@@ -127,13 +143,13 @@ func run(stdout, stderr io.Writer, args []string) int {
 	case "ensure-agent":
 		return ensureAgent(stdout, stderr)
 	case "load-keys":
-		return loadKeys(stderr)
+		return d.loadKeys(stderr)
 	case "askpass-env":
 		return askpassEnv(stdout, stderr)
 	case "doctor":
-		return doctor(stdout, stderr, args[1:])
+		return d.doctor(stdout, stderr, args[1:])
 	case "forget":
-		return forget(stdout, stderr, args[1:])
+		return d.forget(stdout, stderr, args[1:])
 	case internalReadSocketTokenCmd:
 		return readSocketTokenInternal(stdout)
 	case "help", "-h", "--help":
@@ -218,11 +234,11 @@ func ensureAgent(stdout, stderr io.Writer) int {
 // via $SSHAKKU_HANDOFF_TOKEN; with a token we serve that one-shot stash.
 // Without one we are the reactive broker for an interactive ssh whose key has
 // expired, and answer the prompt in args from the wallet (or the terminal).
-func askpass(stdout io.Writer, args []string) int {
+func (d deps) askpass(stdout io.Writer, args []string) int {
 	if os.Getenv(keys.EnvPassHandoffToken) != "" {
 		return askpassFromHandoff(stdout)
 	}
-	return askpassBroker(stdout, args)
+	return d.askpassBroker(stdout, args)
 }
 
 // askpassBroker answers ssh's passphrase or confirmation prompt: a key passphrase
@@ -230,11 +246,11 @@ func askpass(stdout io.Writer, args []string) int {
 // the terminal. Only the reply goes to stdout; diagnostics go to the session log.
 // It reads the config file for the wallet-store policy, so a miss-then-store
 // refill honours the same include/exclude rules as load-keys.
-func askpassBroker(stdout io.Writer, args []string) int {
+func (d deps) askpassBroker(stdout io.Writer, args []string) int {
 	layout := paths.Resolve(paths.FromOS(), paths.ProbeDir)
 	log := sessionlog.New(layout.LogFile)
 	settings := loadSettings(layout, "askpass", log)
-	secret, closeSecret := newSecretBackend(currentUser(), log, settings)
+	secret, closeSecret := d.newSecret(currentUser(), log, settings)
 	defer closeSecret()
 	broker := keys.Broker{
 		Secret: secret,
@@ -302,7 +318,7 @@ func tail(s string, n int) string {
 // interactive shells. SSH_ASKPASS points at this very binary, which ssh-add
 // re-execs to fetch the stashed passphrase. The success path is silent;
 // problems go to the session log (and stderr for a hard failure).
-func loadKeys(stderr io.Writer) int {
+func (d deps) loadKeys(stderr io.Writer) int {
 	env := paths.FromOS()
 	layout := paths.Resolve(env, paths.ProbeDir).WithSocketToken(paths.SocketToken())
 	log := sessionlog.New(layout.LogFile)
@@ -345,7 +361,7 @@ func loadKeys(stderr io.Writer) int {
 		prompter = kdialog
 	}
 
-	secret, closeSecret := newSecretBackend(currentUser(), log, settings)
+	secret, closeSecret := d.newSecret(currentUser(), log, settings)
 	defer closeSecret()
 
 	loader := keys.Loader{
@@ -639,7 +655,7 @@ func crossUserGuard(target targetUser, fix, testBackend bool, euid int) string {
 // misconfigured backend surfaces here instead of as a broken ssh prompt
 // later. Refused cross-user for the same reason as --fix (see
 // crossUserGuard): it acts, it does not just read.
-func doctor(stdout, stderr io.Writer, args []string) int {
+func (d deps) doctor(stdout, stderr io.Writer, args []string) int {
 	fix := false
 	testBackend := false
 	var userArg, testBackendName string
@@ -694,7 +710,7 @@ func doctor(stdout, stderr io.Writer, args []string) int {
 	if testBackend {
 		_, _ = io.WriteString(stdout, "\n── testing secret backend ──\n")
 		log := sessionlog.New(layout.LogFile)
-		exitCode = testSecretBackend(stdout, stderr, layout, log, testBackendName)
+		exitCode = d.testSecretBackend(stdout, stderr, layout, log, testBackendName)
 	}
 	if !fix {
 		return exitCode
@@ -748,7 +764,7 @@ const doctorProbeService = "sshakku-doctor-probe"
 // probe entry is always deleted before returning, even after a failure, so
 // no leftover test data survives in the wallet. Returns 0 on a clean pass, 1
 // on any failed step.
-func testSecretBackend(stdout, stderr io.Writer, layout paths.Layout, log keys.Logger, name string) int {
+func (d deps) testSecretBackend(stdout, stderr io.Writer, layout paths.Layout, log keys.Logger, name string) int {
 	settings := loadSettings(layout, "doctor", log)
 	if name == "" {
 		name = settings.SecretBackend
@@ -756,7 +772,7 @@ func testSecretBackend(stdout, stderr io.Writer, layout paths.Layout, log keys.L
 	settings.SecretBackend = name
 	_, _ = fmt.Fprintf(stdout, "backend: %s\n", name)
 
-	secret, closeSecret := newSecretBackend(currentUser(), log, settings)
+	secret, closeSecret := d.newSecret(currentUser(), log, settings)
 	defer closeSecret()
 
 	probe, err := randomProbeValue()
@@ -911,7 +927,7 @@ func gatherReport(env paths.Env, layout paths.Layout) diagnose.Report {
 // forget deletes stored passphrases: either the named keys, or every entry
 // sshakku manages with --all. Argument validation happens before any secret
 // backend is opened, so a usage error never touches the D-Bus session bus.
-func forget(stdout, stderr io.Writer, args []string) int {
+func (d deps) forget(stdout, stderr io.Writer, args []string) int {
 	all := false
 	var names []string
 	for _, a := range args {
@@ -933,7 +949,7 @@ func forget(stdout, stderr io.Writer, args []string) int {
 	layout := paths.Resolve(paths.FromOS(), paths.ProbeDir)
 	log := sessionlog.New(layout.LogFile)
 	settings := loadSettings(layout, "forget", log)
-	secret, closeSecret := newSecretBackend(currentUser(), log, settings)
+	secret, closeSecret := d.newSecret(currentUser(), log, settings)
 	defer closeSecret()
 
 	// forget always touches the secret store (listing and/or deleting), so —

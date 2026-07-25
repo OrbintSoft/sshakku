@@ -41,7 +41,7 @@ func TestRun(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := run(io.Discard, io.Discard, tc.args); got != tc.want {
+			if got := realDeps().run(io.Discard, io.Discard, tc.args); got != tc.want {
 				t.Errorf("run(%q) = %d, want %d", tc.args, got, tc.want)
 			}
 		})
@@ -225,6 +225,43 @@ func TestLoadSettingsMergesConfigD(t *testing.T) {
 	}
 }
 
+// countingLogger records how many lines were logged, so a test can assert that
+// an error-handling branch actually ran.
+type countingLogger struct{ n int }
+
+func (c *countingLogger) Log(string, string) error { c.n++; return nil }
+
+// TestLoadSettingsLogsErrors covers loadSettings' three error-logging branches
+// at once — a config.toml that fails to load, a malformed config.d drop-in, and
+// an unparseable env override — and confirms it still returns usable settings
+// with defaults where a value could not be resolved.
+func TestLoadSettingsLogsErrors(t *testing.T) {
+	dir := t.TempDir()
+	// A directory where config.toml should be a file makes config.Load fail.
+	if err := os.Mkdir(filepath.Join(dir, "config.toml"), 0o755); err != nil {
+		t.Fatalf("mkdir config.toml: %v", err)
+	}
+	// A malformed drop-in makes config.LoadDir report an error.
+	confD := filepath.Join(dir, "config.d")
+	if err := os.MkdirAll(confD, 0o755); err != nil {
+		t.Fatalf("mkdir config.d: %v", err)
+	}
+	writeFile(t, filepath.Join(confD, "10-bad.toml"), "this is not = valid = toml")
+	// An unparseable env value makes config.Resolve report an error.
+	t.Setenv("SSHAKKU_KEY_LIFETIME", "notaduration")
+
+	log := &countingLogger{}
+	settings := loadSettings(paths.Layout{ConfigDir: dir}, "test", log)
+
+	if log.n < 3 {
+		t.Errorf("logged %d errors, want at least 3 (config load, config.d, resolve)", log.n)
+	}
+	// A setting untouched by the errors still resolves to its default.
+	if settings.SecretBackend == "" {
+		t.Error("SecretBackend is empty, want the built-in default despite the load errors")
+	}
+}
+
 func TestTail(t *testing.T) {
 	tests := []struct {
 		s    string
@@ -298,10 +335,10 @@ func TestStderrNotifier(t *testing.T) {
 // env unset, it must fall through to normal subcommand dispatch. The askpass
 // branch is exercised via TestAskpassHandoff.
 func TestDispatchRoutesToRun(t *testing.T) {
-	if got := dispatch(io.Discard, io.Discard, []string{"help"}, false); got != 0 {
+	if got := dispatch(realDeps(), io.Discard, io.Discard, []string{"help"}, false); got != 0 {
 		t.Errorf("dispatch(help) = %d, want 0", got)
 	}
-	if got := dispatch(io.Discard, io.Discard, nil, false); got != 2 {
+	if got := dispatch(realDeps(), io.Discard, io.Discard, nil, false); got != 2 {
 		t.Errorf("dispatch(no args) = %d, want 2 (usage)", got)
 	}
 }
@@ -324,7 +361,7 @@ func TestAskpassHandoff(t *testing.T) {
 
 	t.Run("unresolvable token routed via askpass", func(t *testing.T) {
 		t.Setenv(keys.EnvPassHandoffToken, "sshakku-test-nonexistent-token")
-		if got := askpass(io.Discard, nil); got != 1 {
+		if got := realDeps().askpass(io.Discard, nil); got != 1 {
 			t.Errorf("askpass (bogus handoff token) = %d, want 1", got)
 		}
 	})
