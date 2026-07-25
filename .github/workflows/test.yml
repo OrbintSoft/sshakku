@@ -184,7 +184,7 @@ jobs:
           merge-multiple: true
 
       - name: Render test-health comment
-        run: go run ./tools/testreport render report-linux.json report-macos.json > comment.md
+        run: go run ./tools/testreport render -artifacts-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" report-linux.json report-macos.json > comment.md
 
       - name: Post or update the PR comment
         env:

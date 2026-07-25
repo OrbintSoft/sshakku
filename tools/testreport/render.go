@@ -25,11 +25,19 @@ func pagesCoverageURL(os string) string {
 
 // renderMarkdown formats one Report per OS into the Markdown body of the
 // per-PR test-health comment: coverage and wall-clock time per OS, a link to
-// the latest full coverage report and per-OS HTML report on
-// `coverage-reports`, each OS's per-package coverage breakdown and slowest
-// tests, and a failures section listing every failing test's captured
-// output (omitted when nothing failed).
-func renderMarkdown(reports []Report) string {
+// each OS's HTML test report and coverage report, each OS's per-package
+// coverage breakdown and slowest tests, and a failures section listing every
+// failing test's captured output (omitted when nothing failed).
+//
+// When artifactsURL is empty, the report links point to the GitHub Pages
+// site publish-coverage-report publishes to on every merge to master --
+// correct when rendering report.md itself, since that's exactly what gets
+// published there. When artifactsURL is set (the per-PR test-health
+// comment), the Pages site still only reflects the last *master* merge, not
+// this PR's own run, so the links point to artifactsURL (the workflow run
+// that produced this comment) instead, where the PR's own report/coverage
+// HTML can actually be downloaded.
+func renderMarkdown(reports []Report, artifactsURL string) string {
 	sorted := make([]Report, len(reports))
 	copy(sorted, reports)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].OS < sorted[j].OS })
@@ -49,10 +57,12 @@ func renderMarkdown(reports []Report) string {
 		if len(r.SlowestTests) > 0 {
 			slowest = fmt.Sprintf("%s (%.2fs)", r.SlowestTests[0].Name, r.SlowestTests[0].Seconds)
 		}
-		fmt.Fprintf(&b, "| %s | %s | %.1fs | %s | [HTML](%s) | [HTML](%s) |\n", r.OS, coverage, r.WallSeconds, slowest, pagesReportURL(r.OS), pagesCoverageURL(r.OS))
+		testURL, coverageURL := pagesReportURL(r.OS), pagesCoverageURL(r.OS)
+		if artifactsURL != "" {
+			testURL, coverageURL = artifactsURL, artifactsURL
+		}
+		fmt.Fprintf(&b, "| %s | %s | %.1fs | %s | [HTML](%s) | [HTML](%s) |\n", r.OS, coverage, r.WallSeconds, slowest, testURL, coverageURL)
 	}
-	fmt.Fprintln(&b)
-	fmt.Fprintln(&b, "[Full coverage report (latest on `master`)](https://github.com/OrbintSoft/sshakku/blob/coverage-reports/report.md)")
 
 	for _, r := range sorted {
 		if len(r.PackageCoverage) == 0 {

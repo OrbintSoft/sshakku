@@ -28,12 +28,18 @@ func main() {
 	runSummarize()
 }
 
-// runRender reads one Report JSON file per path in paths (as produced by the
+// runRender reads one Report JSON file per path in args (as produced by the
 // default summarize action) and writes the combined PR comment body to
 // stdout.
-func runRender(paths []string) error {
+func runRender(args []string) error {
+	fs := flag.NewFlagSet("render", flag.ContinueOnError)
+	artifactsURL := fs.String("artifacts-url", "", "workflow run URL where this run's report/coverage HTML artifacts can be downloaded; when set, report links point here instead of the published GitHub Pages site")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	paths := fs.Args()
 	if len(paths) == 0 {
-		return fmt.Errorf("usage: testreport render <report.json> [report.json ...]")
+		return fmt.Errorf("usage: testreport render [-artifacts-url URL] <report.json> [report.json ...]")
 	}
 	reports := make([]Report, 0, len(paths))
 	for _, path := range paths {
@@ -51,7 +57,7 @@ func runRender(paths []string) error {
 		}
 		reports = append(reports, r)
 	}
-	fmt.Print(renderMarkdown(reports))
+	fmt.Print(renderMarkdown(reports, *artifactsURL))
 	return nil
 }
 

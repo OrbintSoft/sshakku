@@ -6,7 +6,7 @@ import (
 )
 
 func TestRenderMarkdownStartsWithMarker(t *testing.T) {
-	out := renderMarkdown([]Report{{OS: "linux"}})
+	out := renderMarkdown([]Report{{OS: "linux"}}, "")
 	if !hasPrefix(out, commentMarker) {
 		t.Fatalf("renderMarkdown output does not start with the comment marker:\n%s", out)
 	}
@@ -16,14 +16,14 @@ func TestRenderMarkdownOrdersByOS(t *testing.T) {
 	out := renderMarkdown([]Report{
 		{OS: "macos", WallSeconds: 1},
 		{OS: "linux", WallSeconds: 2},
-	})
+	}, "")
 	if indexOf(out, "| linux |") > indexOf(out, "| macos |") {
 		t.Fatalf("expected linux row before macos row, got:\n%s", out)
 	}
 }
 
 func TestRenderMarkdownOmitsFailuresSectionWhenNoneFail(t *testing.T) {
-	out := renderMarkdown([]Report{{OS: "linux"}})
+	out := renderMarkdown([]Report{{OS: "linux"}}, "")
 	if contains(out, "### Failures") {
 		t.Fatalf("expected no Failures section, got:\n%s", out)
 	}
@@ -35,7 +35,7 @@ func TestRenderMarkdownIncludesFailureOutput(t *testing.T) {
 		Failures: []TestFailure{
 			{Name: "TestBad", Package: "pkg", Output: "--- FAIL: TestBad\nwant 1, got 2\n"},
 		},
-	}})
+	}}, "")
 	if !contains(out, "### Failures") {
 		t.Fatalf("expected a Failures section, got:\n%s", out)
 	}
@@ -52,21 +52,14 @@ func TestRenderMarkdownShowsCoverageOnlyWhenPresent(t *testing.T) {
 		OS:              "linux",
 		CoveragePercent: 87.5,
 		PackageCoverage: []PackageCoverage{{Package: "pkg", Percent: 87.5}},
-	}})
+	}}, "")
 	if !contains(withCoverage, "87.5%") {
 		t.Fatalf("expected coverage percentage in output, got:\n%s", withCoverage)
 	}
 
-	withoutCoverage := renderMarkdown([]Report{{OS: "linux"}})
+	withoutCoverage := renderMarkdown([]Report{{OS: "linux"}}, "")
 	if !contains(withoutCoverage, "n/a") {
 		t.Fatalf("expected n/a placeholder when coverage wasn't computed, got:\n%s", withoutCoverage)
-	}
-}
-
-func TestRenderMarkdownLinksFullReport(t *testing.T) {
-	out := renderMarkdown([]Report{{OS: "linux"}})
-	if !contains(out, "https://github.com/OrbintSoft/sshakku/blob/coverage-reports/report.md") {
-		t.Fatalf("expected a link to the full coverage report, got:\n%s", out)
 	}
 }
 
@@ -74,7 +67,7 @@ func TestRenderMarkdownLinksHTMLReportPerOS(t *testing.T) {
 	out := renderMarkdown([]Report{
 		{OS: "linux"},
 		{OS: "macos"},
-	})
+	}, "")
 	if !contains(out, "https://orbintsoft.github.io/sshakku/report-linux.html") {
 		t.Fatalf("expected a link to the linux HTML report, got:\n%s", out)
 	}
@@ -87,12 +80,22 @@ func TestRenderMarkdownLinksCoverageReportPerOS(t *testing.T) {
 	out := renderMarkdown([]Report{
 		{OS: "linux"},
 		{OS: "macos"},
-	})
+	}, "")
 	if !contains(out, "https://orbintsoft.github.io/sshakku/coverage-linux.html") {
 		t.Fatalf("expected a link to the linux coverage report, got:\n%s", out)
 	}
 	if !contains(out, "https://orbintsoft.github.io/sshakku/coverage-macos.html") {
 		t.Fatalf("expected a link to the macos coverage report, got:\n%s", out)
+	}
+}
+
+func TestRenderMarkdownUsesArtifactsURLWhenSet(t *testing.T) {
+	out := renderMarkdown([]Report{{OS: "linux"}}, "https://github.com/OrbintSoft/sshakku/actions/runs/12345")
+	if !contains(out, "https://github.com/OrbintSoft/sshakku/actions/runs/12345") {
+		t.Fatalf("expected report links to point to the given artifacts URL, got:\n%s", out)
+	}
+	if contains(out, "orbintsoft.github.io") {
+		t.Fatalf("expected no Pages links when artifactsURL is set, got:\n%s", out)
 	}
 }
 
@@ -103,7 +106,7 @@ func TestRenderMarkdownPackageCoverageSortedWorstFirst(t *testing.T) {
 			{Package: "internal/good", Percent: 95.0},
 			{Package: "internal/bad", Percent: 10.0},
 		},
-	}})
+	}}, "")
 	if !contains(out, "Coverage by package (linux)") {
 		t.Fatalf("expected a per-package coverage section, got:\n%s", out)
 	}
@@ -115,7 +118,7 @@ func TestRenderMarkdownPackageCoverageSortedWorstFirst(t *testing.T) {
 }
 
 func TestRenderMarkdownOmitsPackageCoverageWhenAbsent(t *testing.T) {
-	out := renderMarkdown([]Report{{OS: "linux"}})
+	out := renderMarkdown([]Report{{OS: "linux"}}, "")
 	if contains(out, "Coverage by package") {
 		t.Fatalf("expected no per-package coverage section without data, got:\n%s", out)
 	}
