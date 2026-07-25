@@ -83,6 +83,19 @@ func TestRenderMarkdownLinksHTMLReportPerOS(t *testing.T) {
 	}
 }
 
+func TestRenderMarkdownLinksCoverageReportPerOS(t *testing.T) {
+	out := renderMarkdown([]Report{
+		{OS: "linux"},
+		{OS: "macos"},
+	})
+	if !contains(out, "https://orbintsoft.github.io/sshakku/coverage-linux.html") {
+		t.Fatalf("expected a link to the linux coverage report, got:\n%s", out)
+	}
+	if !contains(out, "https://orbintsoft.github.io/sshakku/coverage-macos.html") {
+		t.Fatalf("expected a link to the macos coverage report, got:\n%s", out)
+	}
+}
+
 func TestRenderMarkdownPackageCoverageSortedWorstFirst(t *testing.T) {
 	out := renderMarkdown([]Report{{
 		OS: "linux",

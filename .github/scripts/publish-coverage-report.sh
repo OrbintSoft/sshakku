@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 #
 # Publishes coverage-linux.json, coverage-macos.json, report.md,
-# report-linux.html, and report-macos.html (expected in the current
-# directory) to the orphan coverage-reports branch, skipping the commit if
-# nothing changed. Run from the repository root after those files have been
-# generated; needs contents: write and a git remote named origin with push
-# access.
+# report-linux.html, report-macos.html, coverage-linux.html, and
+# coverage-macos.html (expected in the current directory) to the orphan
+# coverage-reports branch, skipping the commit if nothing changed. Run from
+# the repository root after those files have been generated; needs
+# contents: write and a git remote named origin with push access.
 set -euo pipefail
 
-published_files="coverage-linux.json coverage-macos.json report.md report-linux.html report-macos.html"
+published_files="coverage-linux.json coverage-macos.json report.md report-linux.html report-macos.html coverage-linux.html coverage-macos.html"
 
 worktree="$(mktemp -d)"
 cleanup() {
