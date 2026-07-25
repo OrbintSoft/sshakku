@@ -11,19 +11,26 @@ import (
 
 // FromOS reads the path inputs from the process environment.
 func FromOS() Env {
-	home := os.Getenv("HOME")
+	return fromEnv(os.Getenv, os.UserHomeDir, os.Getuid)
+}
+
+// fromEnv is FromOS with its environment lookups injected, so the HOME fallback
+// (which os.UserHomeDir also derives from $HOME, hence unreachable through the
+// real os functions) can be exercised in tests.
+func fromEnv(getenv func(string) string, homeDir func() (string, error), getuid func() int) Env {
+	home := getenv("HOME")
 	if home == "" {
-		if h, err := os.UserHomeDir(); err == nil {
+		if h, err := homeDir(); err == nil {
 			home = h
 		}
 	}
 	return Env{
 		Home:       home,
-		ConfigHome: os.Getenv("XDG_CONFIG_HOME"),
-		StateHome:  os.Getenv("XDG_STATE_HOME"),
-		RuntimeDir: os.Getenv("XDG_RUNTIME_DIR"),
-		CacheHome:  os.Getenv("XDG_CACHE_HOME"),
-		UID:        os.Getuid(),
+		ConfigHome: getenv("XDG_CONFIG_HOME"),
+		StateHome:  getenv("XDG_STATE_HOME"),
+		RuntimeDir: getenv("XDG_RUNTIME_DIR"),
+		CacheHome:  getenv("XDG_CACHE_HOME"),
+		UID:        getuid(),
 	}
 }
 
@@ -59,11 +66,11 @@ func ProbeDirAs(uid int) func(path string, requireOwner bool) bool {
 // umask but never re-permissioned — only our own leaf dirs are forced to 0700.
 func Ensure(l Layout) error {
 	for _, dir := range dedupe(l.ConfigDir, l.StateDir, l.RuntimeDir, l.SocketDir) {
-		if err := ensureDir(dir); err != nil {
+		if err := ensureDir(dir, os.Chmod); err != nil {
 			return err
 		}
 	}
-	return ensureFile(l.LogFile, 0o600)
+	return ensureFile(l.LogFile, 0o600, os.Chmod)
 }
 
 // CleanupLegacyAgentDir retires our previous location under ~/.ssh: the agent/
@@ -83,11 +90,11 @@ func CleanupLegacyAgentDir(home string) {
 	_ = os.Remove(dir) // rmdir; harmless if the dir is not empty
 }
 
-func ensureDir(path string) error {
+func ensureDir(path string, chmod func(string, os.FileMode) error) error {
 	if err := os.MkdirAll(path, 0o700); err != nil {
 		return fmt.Errorf("create %s: %w", path, err)
 	}
-	if err := os.Chmod(path, 0o700); err != nil {
+	if err := chmod(path, 0o700); err != nil {
 		return fmt.Errorf("chmod %s: %w", path, err)
 	}
 	// Reject a symlink planted in our place: the leaf must be a real directory.
@@ -98,13 +105,13 @@ func ensureDir(path string) error {
 	return nil
 }
 
-func ensureFile(path string, perm os.FileMode) error {
+func ensureFile(path string, perm os.FileMode, chmod func(string, os.FileMode) error) error {
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY, perm)
 	if err != nil {
 		return fmt.Errorf("create %s: %w", path, err)
 	}
 	_ = f.Close()
-	if err := os.Chmod(path, perm); err != nil {
+	if err := chmod(path, perm); err != nil {
 		return fmt.Errorf("chmod %s: %w", path, err)
 	}
 	return nil
