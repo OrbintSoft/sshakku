@@ -18,13 +18,23 @@ import (
 // round" rather than logging or surfacing it as an error.
 var ErrNoTerminal = errors.New("no controlling terminal available")
 
+// Seams over the controlling terminal and its echo toggle. Production opens the
+// real /dev/tty and drives the real termios ioctls; tests point them at a
+// socketpair and stubbed ioctls so ReadTTYLine and disableEcho are exercisable
+// without a live terminal.
+var (
+	openTTY    = func() (*os.File, error) { return os.OpenFile("/dev/tty", os.O_RDWR, 0) }
+	getTermios = unix.IoctlGetTermios
+	setTermios = unix.IoctlSetTermios
+)
+
 // ReadTTYLine writes prompt to /dev/tty and reads one line from it, optionally
 // with echo disabled. It opens /dev/tty directly rather than reading stdin, so
 // it works even when the caller has been detached from its original stdin;
 // with no controlling terminal at all the open fails immediately — it never
 // blocks waiting for one to appear — reported as ErrNoTerminal.
 func ReadTTYLine(prompt string, secret bool) (string, error) {
-	f, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
+	f, err := openTTY()
 	if err != nil {
 		return "", fmt.Errorf("%w: %v", ErrNoTerminal, err)
 	}
@@ -58,16 +68,16 @@ func ReadTTYLine(prompt string, secret bool) (string, error) {
 // the previous terminal state.
 func disableEcho(f *os.File) (func(), error) {
 	fd := int(f.Fd())
-	old, err := unix.IoctlGetTermios(fd, tcGetTermiosReq)
+	old, err := getTermios(fd, tcGetTermiosReq)
 	if err != nil {
 		return nil, err
 	}
 	raw := *old
 	raw.Lflag &^= unix.ECHO
-	if err := unix.IoctlSetTermios(fd, tcSetTermiosReq, &raw); err != nil {
+	if err := setTermios(fd, tcSetTermiosReq, &raw); err != nil {
 		return nil, err
 	}
-	return func() { _ = unix.IoctlSetTermios(fd, tcSetTermiosReq, old) }, nil
+	return func() { _ = setTermios(fd, tcSetTermiosReq, old) }, nil
 }
 
 // TTYPrompter prompts for a passphrase directly on /dev/tty — the fallback

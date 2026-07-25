@@ -1,12 +1,18 @@
 package keys
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/godbus/dbus/v5"
 )
+
+// jsonMarshal is the item-template encoder the shell-out backends (Bitwarden,
+// 1Password) use to build their stdin payloads. It is a seam so the otherwise
+// unreachable marshal-failure branch of each Store can be exercised.
+var jsonMarshal = json.Marshal
 
 // ErrListUnsupported is returned by List on a backend that cannot enumerate
 // its stored entries — e.g. SecretToolBackend, which has no generic

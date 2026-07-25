@@ -236,7 +236,7 @@ func (b *BitwardenBackend) Store(service, label, passphrase string) error {
 		return err
 	}
 
-	payload, err := json.Marshal(bitwardenItem{
+	payload, err := jsonMarshal(bitwardenItem{
 		Type:   bitwardenLoginItemType,
 		Name:   service,
 		Fields: []any{},

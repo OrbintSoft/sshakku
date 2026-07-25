@@ -174,9 +174,11 @@ func fails(err error) func(Cmd) (Result, error) {
 // fakeGiveup is an in-memory GiveupStore that scripts GivenUp and records the
 // keys passed to Record and Clear.
 type fakeGiveup struct {
-	given    map[string]bool
-	recorded []string
-	cleared  []string
+	given     map[string]bool
+	recorded  []string
+	cleared   []string
+	recordErr error
+	clearErr  error
 }
 
 func newFakeGiveup() *fakeGiveup { return &fakeGiveup{given: map[string]bool{}} }
@@ -184,12 +186,18 @@ func newFakeGiveup() *fakeGiveup { return &fakeGiveup{given: map[string]bool{}} 
 func (g *fakeGiveup) GivenUp(key string) bool { return g.given[key] }
 
 func (g *fakeGiveup) Record(key string) error {
+	if g.recordErr != nil {
+		return g.recordErr
+	}
 	g.recorded = append(g.recorded, key)
 	g.given[key] = true
 	return nil
 }
 
 func (g *fakeGiveup) Clear(key string) error {
+	if g.clearErr != nil {
+		return g.clearErr
+	}
 	g.cleared = append(g.cleared, key)
 	delete(g.given, key)
 	return nil

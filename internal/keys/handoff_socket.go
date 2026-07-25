@@ -8,6 +8,15 @@ import (
 	"time"
 )
 
+// Seams over the socket listen and chmod, so socketHandoffStash's listen- and
+// permission-failure branches are exercisable deterministically. Production
+// points them at the real net and os operations.
+var (
+	netListen = net.Listen
+	chmodSock = os.Chmod
+	readAll   = io.ReadAll
+)
+
 // socketHandoffDir returns (creating it if needed) the private per-user
 // directory passphrase-handoff sockets live in. Named "h", not "handoff":
 // every byte here counts against AF_UNIX's sun_path limit (104 bytes on
@@ -40,11 +49,11 @@ func socketHandoffStash(passphrase string, ttl time.Duration) (string, error) {
 	}
 	sockPath := filepath.Join(dir, name+".sock")
 
-	ln, err := net.Listen("unix", sockPath)
+	ln, err := netListen("unix", sockPath)
 	if err != nil {
 		return "", err
 	}
-	if err := os.Chmod(sockPath, 0o600); err != nil {
+	if err := chmodSock(sockPath, 0o600); err != nil {
 		_ = ln.Close()
 		_ = os.Remove(sockPath)
 		return "", err
@@ -92,7 +101,7 @@ func socketHandoffFetch(token string) (string, error) {
 		return "", err
 	}
 	defer func() { _ = conn.Close() }()
-	buf, err := io.ReadAll(conn)
+	buf, err := readAll(conn)
 	if err != nil {
 		return "", err
 	}
