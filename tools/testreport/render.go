@@ -17,6 +17,12 @@ func pagesReportURL(os string) string {
 	return fmt.Sprintf("https://orbintsoft.github.io/sshakku/report-%s.html", os)
 }
 
+// pagesCoverageURL is the GitHub Pages URL for the given OS's per-line HTML
+// coverage report.
+func pagesCoverageURL(os string) string {
+	return fmt.Sprintf("https://orbintsoft.github.io/sshakku/coverage-%s.html", os)
+}
+
 // renderMarkdown formats one Report per OS into the Markdown body of the
 // per-PR test-health comment: coverage and wall-clock time per OS, a link to
 // the latest full coverage report and per-OS HTML report on
@@ -32,8 +38,8 @@ func renderMarkdown(reports []Report) string {
 	fmt.Fprintln(&b, commentMarker)
 	fmt.Fprintln(&b, "## Test health")
 	fmt.Fprintln(&b)
-	fmt.Fprintln(&b, "| OS | Coverage | Wall time | Slowest test | HTML report |")
-	fmt.Fprintln(&b, "| --- | --- | --- | --- | --- |")
+	fmt.Fprintln(&b, "| OS | Coverage | Wall time | Slowest test | Test report | Coverage report |")
+	fmt.Fprintln(&b, "| --- | --- | --- | --- | --- | --- |")
 	for _, r := range sorted {
 		coverage := "n/a"
 		if len(r.PackageCoverage) > 0 {
@@ -43,7 +49,7 @@ func renderMarkdown(reports []Report) string {
 		if len(r.SlowestTests) > 0 {
 			slowest = fmt.Sprintf("%s (%.2fs)", r.SlowestTests[0].Name, r.SlowestTests[0].Seconds)
 		}
-		fmt.Fprintf(&b, "| %s | %s | %.1fs | %s | [HTML](%s) |\n", r.OS, coverage, r.WallSeconds, slowest, pagesReportURL(r.OS))
+		fmt.Fprintf(&b, "| %s | %s | %.1fs | %s | [HTML](%s) | [HTML](%s) |\n", r.OS, coverage, r.WallSeconds, slowest, pagesReportURL(r.OS), pagesCoverageURL(r.OS))
 	}
 	fmt.Fprintln(&b)
 	fmt.Fprintln(&b, "[Full coverage report (latest on `master`)](https://github.com/OrbintSoft/sshakku/blob/coverage-reports/report.md)")

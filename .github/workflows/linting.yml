@@ -47,8 +47,11 @@ jobs:
         with:
           node-version: "24.18.0"
 
-      # Keyed on every pinned tool version, so bumping any one of them
-      # invalidates the cache instead of silently reusing a stale binary.
+      # Keyed on every pinned tool version and on go.mod's hash, so bumping
+      # any one of them -- including go.mod's `go` directive -- invalidates
+      # the cache instead of silently reusing a Go-installed binary built
+      # with an older Go than the module now targets (golangci-lint refuses
+      # to run in that case).
       - name: Cache native and Go-installed lint tool binaries
         id: lint-tools-cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -57,7 +60,7 @@ jobs:
             /usr/local/bin/shellcheck
             /usr/local/bin/hadolint
             ~/go/bin
-          key: lint-tools-${{ runner.os }}-shellcheck${{ env.SHELLCHECK_VERSION }}-hadolint${{ env.HADOLINT_VERSION }}-shfmt${{ env.SHFMT_VERSION }}-checkmake${{ env.CHECKMAKE_VERSION }}-actionlint${{ env.ACTIONLINT_VERSION }}-editorconfig-checker${{ env.EDITORCONFIG_CHECKER_VERSION }}-golangci-lint${{ env.GOLANGCI_LINT_VERSION }}
+          key: lint-tools-${{ runner.os }}-shellcheck${{ env.SHELLCHECK_VERSION }}-hadolint${{ env.HADOLINT_VERSION }}-shfmt${{ env.SHFMT_VERSION }}-checkmake${{ env.CHECKMAKE_VERSION }}-actionlint${{ env.ACTIONLINT_VERSION }}-editorconfig-checker${{ env.EDITORCONFIG_CHECKER_VERSION }}-golangci-lint${{ env.GOLANGCI_LINT_VERSION }}-gomod${{ hashFiles('go.mod') }}
 
       - name: Install native and Go-installed lint tools
         if: steps.lint-tools-cache.outputs.cache-hit != 'true'

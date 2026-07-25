@@ -6,7 +6,7 @@ packaging it.
 
 ## To build
 
-- **Go 1.25 or newer.** The only build-time requirement; `go build ./...` (or
+- **Go 1.26.5 or newer.** The only build-time requirement; `go build ./...` (or
   `make build`) fetches the Go module dependencies itself
   (`github.com/godbus/dbus/v5`, `github.com/BurntSushi/toml`, `golang.org/x/sys`
   — all pure Go, no C toolchain or cgo involved on Linux). On macOS, building
