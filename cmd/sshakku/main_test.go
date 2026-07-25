@@ -315,7 +315,7 @@ func TestAskpassEnvHeadless(t *testing.T) {
 	t.Setenv("WAYLAND_DISPLAY", "")
 	t.Setenv("DISPLAY", "")
 	var out, errOut bytes.Buffer
-	if got := askpassEnv(&out, &errOut); got != 0 {
+	if got := realDeps().askpassEnv(&out, &errOut); got != 0 {
 		t.Errorf("askpassEnv (headless) = %d, want 0", got)
 	}
 	if out.Len() != 0 {
@@ -354,7 +354,7 @@ func TestAskpassHandoff(t *testing.T) {
 
 	t.Run("missing token", func(t *testing.T) {
 		t.Setenv(keys.EnvPassHandoffToken, "")
-		if got := askpassFromHandoff(io.Discard); got != 1 {
+		if got := realDeps().askpassFromHandoff(io.Discard); got != 1 {
 			t.Errorf("askpassFromHandoff (no token) = %d, want 1", got)
 		}
 	})

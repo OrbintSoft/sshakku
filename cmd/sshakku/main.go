@@ -96,16 +96,31 @@ type deps struct {
 	// guard consults to decide whether elevation is present. Injected so a test
 	// can drive the root-only cross-user path without actually being root.
 	geteuid func() int
+	// self reports this binary's own path (os.Executable), which askpass-env
+	// bakes into the SSH_ASKPASS export lines. Injected so the lookup's
+	// error branch is testable.
+	self func() (string, error)
+	// guiAvailable reports whether a graphical passphrase prompter is reachable
+	// (detectGUIAvailable); askpass-env emits its exports only when it is.
+	// Injected so both branches run regardless of the test host's display.
+	guiAvailable func() bool
+	// fetchHandoff redeems a one-shot passphrase-handoff token (keys.FetchHandoff).
+	// Injected so askpass's handoff path is testable without a live kernel
+	// keyring, which many containers and CI runners lack.
+	fetchHandoff func(token string) (string, error)
 }
 
 // realDeps wires deps to the production implementations.
 func realDeps() deps {
 	return deps{
-		newSecret:   newSecretBackend,
-		ensurer:     realEnsurer(),
-		gather:      gatherReport,
-		tokenSource: execTokenSource{},
-		geteuid:     os.Geteuid,
+		newSecret:    newSecretBackend,
+		ensurer:      realEnsurer(),
+		gather:       gatherReport,
+		tokenSource:  execTokenSource{},
+		geteuid:      os.Geteuid,
+		self:         os.Executable,
+		guiAvailable: detectGUIAvailable,
+		fetchHandoff: keys.FetchHandoff,
 	}
 }
 
@@ -153,7 +168,7 @@ func (d deps) run(stdout, stderr io.Writer, args []string) int {
 	case "load-keys":
 		return d.loadKeys(stderr)
 	case "askpass-env":
-		return askpassEnv(stdout, stderr)
+		return d.askpassEnv(stdout, stderr)
 	case "doctor":
 		return d.doctor(stdout, stderr, args[1:])
 	case "forget":
