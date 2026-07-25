@@ -171,18 +171,18 @@ func (d deps) doctor(stdout, stderr io.Writer, args []string) int {
 		_, _ = fmt.Fprintf(stderr, "sshakku: doctor: %v\n", err)
 		return 2
 	}
-	if msg := crossUserGuard(target, fix, testBackend, os.Geteuid()); msg != "" {
+	if msg := crossUserGuard(target, fix, testBackend, d.geteuid()); msg != "" {
 		_, _ = fmt.Fprintf(stderr, "sshakku: doctor: %s\n", msg)
 		return 2
 	}
 
 	if target.Source != "" {
-		return doctorCrossUser(stdout, stderr, env, target)
+		return d.doctorCrossUser(stdout, stderr, env, target)
 	}
 
 	layout := paths.Resolve(env, paths.ProbeDir).WithSocketToken(paths.SocketToken())
 
-	diagnose.Format(stdout, gatherReport(env, layout))
+	diagnose.Format(stdout, d.gather(env, layout))
 
 	exitCode := 0
 	if testBackend {
@@ -208,7 +208,7 @@ func (d deps) doctor(stdout, stderr io.Writer, args []string) int {
 	}
 
 	_, _ = io.WriteString(stdout, "\nafter:\n\n")
-	after := gatherReport(env, layout)
+	after := d.gather(env, layout)
 	diagnose.Format(stdout, after)
 	if after.EnvSock != liveSock {
 		_, _ = fmt.Fprintf(stdout,
@@ -328,8 +328,8 @@ func randomProbeValue() (string, error) {
 // per-login token from their own kernel keyring (execTokenSource), rather than
 // guessing a path — an empty token is a valid "no agent started yet" state, not
 // a failure.
-func doctorCrossUser(stdout, stderr io.Writer, invoking paths.Env, target targetUser) int {
-	token, err := (execTokenSource{}).ReadToken(target.UID, target.GID)
+func (d deps) doctorCrossUser(stdout, stderr io.Writer, invoking paths.Env, target targetUser) int {
+	token, err := d.tokenSource.ReadToken(target.UID, target.GID)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "sshakku: doctor: %v\n", err)
 		return 1
