@@ -68,18 +68,23 @@ func main() {
 
 // deps carries the process's injectable system seams so the command bodies can
 // be exercised against fakes in tests. Only dependencies that reach outside the
-// process — today the secret backend, whose default opens the D-Bus session
-// bus — live here; anything a command builds purely from its arguments stays
-// inline. main wires it from the real implementations via realDeps.
+// process — the secret backend, whose default opens the D-Bus session bus, and
+// the agent ensurer, which spawns/reaps real ssh-agents — live here; anything a
+// command builds purely from its arguments stays inline. main wires it from the
+// real implementations via realDeps.
 type deps struct {
 	// newSecret opens the secret backend settings.SecretBackend selects, with a
 	// cleanup func that releases whatever it opened (see newSecretBackend).
 	newSecret func(user string, log keys.Logger, settings config.Settings) (keys.SecretBackend, func())
+	// ensurer drives the fixed socket to a healthy ssh-agent (see runEnsure). The
+	// production value is the concrete agent.Manager; tests substitute a fake so
+	// the shell-init/ensure-agent bodies run without spawning a real agent.
+	ensurer agentEnsurer
 }
 
 // realDeps wires deps to the production implementations.
 func realDeps() deps {
-	return deps{newSecret: newSecretBackend}
+	return deps{newSecret: newSecretBackend, ensurer: realEnsurer()}
 }
 
 // dispatch routes an invocation either to the SSH_ASKPASS helper path or to
@@ -120,9 +125,9 @@ func (d deps) run(stdout, stderr io.Writer, args []string) int {
 	}
 	switch args[0] {
 	case "shell-init":
-		return shellInit(stdout, stderr)
+		return d.shellInit(stdout, stderr)
 	case "ensure-agent":
-		return ensureAgent(stdout, stderr)
+		return d.ensureAgent(stdout, stderr)
 	case "load-keys":
 		return d.loadKeys(stderr)
 	case "askpass-env":

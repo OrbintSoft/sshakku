@@ -15,6 +15,28 @@ import (
 // proceeds without it, so a stuck holder slows the login but never hangs it.
 const agentLockWait = 5 * time.Second
 
+// agentEnsurer drives the fixed socket to a healthy ssh-agent. The production
+// implementation is the concrete agent.Manager; a fake stands in so runEnsure's
+// result handling is exercised without spawning, reaping, or adopting a real
+// agent on the test host.
+type agentEnsurer interface {
+	EnsureAgent(cfg agent.EnsureConfig, log agent.Logger) (agent.EnsureResult, error)
+}
+
+// realEnsurer wires the concrete system probes and runners into the production
+// agent.Manager. It composes real implementations and has no branching logic of
+// its own; deps.ensurer holds the result so command bodies can be tested against
+// a fake.
+func realEnsurer() agentEnsurer {
+	return agent.Manager{
+		Prober:    agent.SocketProber{},
+		Inspector: agent.Inspector{},
+		Runner:    agent.ExecRunner{},
+		Signaler:  agent.SysSignaler{},
+		Locker:    agent.FlockLocker{Wait: agentLockWait},
+	}
+}
+
 // shellInit resolves and creates the per-user runtime layout, drives the fixed
 // socket to a healthy ssh-agent, then prints the result as shell assignments for
 // the login entrypoint to eval:
@@ -26,7 +48,7 @@ const agentLockWait = 5 * time.Second
 // agent_sock is the live socket EnsureAgent settled on, which may be an adopted
 // agent rather than the fixed path. Only these assignments go to stdout;
 // diagnostics and anomalies go to stderr and the session log.
-func shellInit(stdout, stderr io.Writer) int {
+func (d deps) shellInit(stdout, stderr io.Writer) int {
 	env := paths.FromOS()
 	layout := paths.Resolve(env, paths.ProbeDir).WithSocketToken(paths.SocketToken())
 	if err := paths.Ensure(layout); err != nil {
@@ -37,7 +59,7 @@ func shellInit(stdout, stderr io.Writer) int {
 	}
 	paths.CleanupLegacyAgentDir(env.Home)
 
-	liveSock, code := runEnsure(stderr, env, layout)
+	liveSock, code := d.runEnsure(stderr, env, layout)
 	if code != 0 {
 		return code
 	}
@@ -64,7 +86,7 @@ func shellInit(stdout, stderr io.Writer) int {
 //
 // It is a standalone entry point for exercising the lifecycle; the login path
 // reaches the same logic through shell-init, which adds the other assignments.
-func ensureAgent(stdout, stderr io.Writer) int {
+func (d deps) ensureAgent(stdout, stderr io.Writer) int {
 	env := paths.FromOS()
 	layout := paths.Resolve(env, paths.ProbeDir).WithSocketToken(paths.SocketToken())
 	if err := paths.Ensure(layout); err != nil {
@@ -72,7 +94,7 @@ func ensureAgent(stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	liveSock, code := runEnsure(stderr, env, layout)
+	liveSock, code := d.runEnsure(stderr, env, layout)
 	if code != 0 {
 		return code
 	}
@@ -97,15 +119,8 @@ func keystateDir(layout paths.Layout) string {
 // to expose and a process exit code (0 on success). shell-init and ensure-agent
 // share it so the login path and the standalone command drive the agent
 // identically; each caller prints the assignments it needs.
-func runEnsure(stderr io.Writer, env paths.Env, layout paths.Layout) (string, int) {
+func (d deps) runEnsure(stderr io.Writer, env paths.Env, layout paths.Layout) (string, int) {
 	log := sessionlog.New(layout.LogFile)
-	m := agent.Manager{
-		Prober:    agent.SocketProber{},
-		Inspector: agent.Inspector{},
-		Runner:    agent.ExecRunner{},
-		Signaler:  agent.SysSignaler{},
-		Locker:    agent.FlockLocker{Wait: agentLockWait},
-	}
 	cfg := agent.EnsureConfig{
 		FixedSock: layout.AgentSock,
 		LegacyDir: filepath.Join(env.Home, ".ssh", "agent"),
@@ -114,7 +129,7 @@ func runEnsure(stderr io.Writer, env paths.Env, layout paths.Layout) (string, in
 		OurUID:    env.UID,
 	}
 
-	res, err := m.EnsureAgent(cfg, log)
+	res, err := d.ensurer.EnsureAgent(cfg, log)
 	if err != nil {
 		_ = log.Log("ERROR", fmt.Sprintf("ensure-agent: %v", err))
 		_, _ = fmt.Fprintf(stderr, "sshakku: %v\n", err)
