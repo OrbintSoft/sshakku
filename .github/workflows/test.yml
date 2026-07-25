@@ -27,6 +27,8 @@ env:
   GOTESTSUM_COMMIT: c4a0df2e75a225d979a444342dd3db752b53619f
   GOPOGH_VERSION: 0.29.0
   GOPOGH_COMMIT: 8b1e14a7bf74e0bf3d22ad3dd4f4dac06b628595
+  GO_BETTER_HTML_COVERAGE_VERSION: 1.2.0
+  GO_BETTER_HTML_COVERAGE_COMMIT: 02341504e2b24350ec3029fb02144134f292f831
 
 jobs:
   test:
@@ -73,6 +75,17 @@ jobs:
           name: report-html-linux
           path: report-linux.html
 
+      - name: Build coverage HTML report
+        if: always()
+        run: go-better-html-coverage -profile coverage.out -o coverage-linux.html -n
+
+      - name: Upload coverage HTML report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-linux
+          path: coverage-linux.html
+
   test-macos:
     name: make test (macos)
     runs-on: macos-latest
@@ -113,6 +126,17 @@ jobs:
         with:
           name: report-html-macos
           path: report-macos.html
+
+      - name: Build coverage HTML report
+        if: always()
+        run: go-better-html-coverage -profile coverage.out -o coverage-macos.html -n
+
+      - name: Upload coverage HTML report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-macos
+          path: coverage-macos.html
 
       - name: Smoke-test make install/install-user (staged, not the real /etc or $HOME)
         run: test/macos-install-smoke.sh "$RUNNER_TEMP/install-smoke"
