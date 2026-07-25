@@ -23,6 +23,15 @@ const (
 	defaultKeyTTL = 60 * time.Second
 )
 
+// Seams over the passphrase stash and the ssh-add invocation, so
+// AddWithAskpass's stash-failure branch and runSSHAdd's exit-code handling are
+// exercisable without a live keyring or a real ssh-add. Production points them
+// at the real stash and os/exec run.
+var (
+	stashPass = stashPassphrase
+	runCmd    = func(cmd *exec.Cmd) error { return cmd.Run() }
+)
+
 // ExecKeyAdder adds keys with the real ssh-add.
 type ExecKeyAdder struct {
 	// AskpassProg is the absolute path to the SSH_ASKPASS helper — the sshakku
@@ -48,7 +57,7 @@ func (a ExecKeyAdder) AddWithAskpass(keyfile, passphrase string) (int, error) {
 	if ttl == 0 {
 		ttl = defaultKeyTTL
 	}
-	token, err := stashPassphrase(passphrase, ttl)
+	token, err := stashPass(passphrase, ttl)
 	if err != nil {
 		return 0, fmt.Errorf("stash passphrase: %w", err)
 	}
@@ -82,7 +91,7 @@ func (a ExecKeyAdder) runSSHAdd(env []string, keyfile string) (int, error) {
 	cmd.Stdout = io.Discard
 	cmd.Stderr = io.Discard
 
-	err := cmd.Run()
+	err := runCmd(cmd)
 	if err != nil {
 		var ee *exec.ExitError
 		if errors.As(err, &ee) {

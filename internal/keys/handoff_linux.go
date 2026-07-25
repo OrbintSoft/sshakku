@@ -10,6 +10,16 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/keyring"
 )
 
+// Seams over the kernel-keyring operations, so the stash and fetch error and
+// success branches are exercisable without a live session keyring (unavailable
+// in many containers and CI runners). Production points them at the real ops.
+var (
+	keyringAdd        = keyring.Add
+	keyringRead       = keyring.Read
+	keyringUnlink     = keyring.Unlink
+	keyringSetTimeout = keyring.SetTimeout
+)
+
 // stashPassphrase stores passphrase in the @u kernel keyring under a random
 // description, sets it to expire after ttl, and returns the keyring serial
 // (as a string) — the handoff token fetchPassphrase later redeems.
@@ -18,11 +28,11 @@ func stashPassphrase(passphrase string, ttl time.Duration) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	serial, err := keyring.Add("sshakku-pass-"+desc, []byte(passphrase))
+	serial, err := keyringAdd("sshakku-pass-"+desc, []byte(passphrase))
 	if err != nil {
 		return "", err
 	}
-	_ = keyring.SetTimeout(serial, ttl)
+	_ = keyringSetTimeout(serial, ttl)
 	return strconv.Itoa(int(serial)), nil
 }
 
@@ -35,8 +45,8 @@ func fetchPassphrase(token string) (string, error) {
 		return "", fmt.Errorf("malformed handoff token %q: %w", token, err)
 	}
 	serial := keyring.Serial(n)
-	pass, err := keyring.Read(serial)
-	_ = keyring.Unlink(serial)
+	pass, err := keyringRead(serial)
+	_ = keyringUnlink(serial)
 	if err != nil {
 		return "", err
 	}

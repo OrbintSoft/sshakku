@@ -86,7 +86,7 @@ func (b *OnePasswordBackend) Store(service, label, passphrase string) error {
 		return err
 	}
 
-	payload, err := json.Marshal(onePasswordItemTemplate{
+	payload, err := jsonMarshal(onePasswordItemTemplate{
 		Title:    service,
 		Category: "PASSWORD",
 		Tags:     []string{onePasswordTag},

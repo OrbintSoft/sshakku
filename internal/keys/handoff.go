@@ -13,11 +13,15 @@ import (
 // leaves concurrent key loads no realistic chance of colliding.
 const handoffTokenBytes = 8
 
+// randRead is the token RNG, a seam so randomHandoffToken's read-failure branch
+// (which crypto/rand practically never takes) can be exercised.
+var randRead = rand.Read
+
 // randomHandoffToken returns a unique random hex string, so concurrent key
 // loads never collide on (or cross-read) one another's stashed passphrase.
 func randomHandoffToken() (string, error) {
 	b := make([]byte, handoffTokenBytes)
-	if _, err := rand.Read(b); err != nil {
+	if _, err := randRead(b); err != nil {
 		return "", err
 	}
 	return hex.EncodeToString(b), nil
