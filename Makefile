@@ -30,6 +30,11 @@ WIRE_ZSHRC ?=
 
 USER_HOME ?= $(HOME)
 USER_BINDIR ?= $(USER_HOME)/.local/bin
+# install-user also puts USER_BINDIR on PATH from the wired login hook (guarded
+# so it's a no-op when already present), since it isn't on the default PATH
+# everywhere — notably ~/.local/bin on macOS. On by default; set to 0 or empty
+# to skip it and wire only the agent hook.
+WIRE_PATH ?= 1
 # install-user/uninstall-user shell family: "bash" or "zsh". Picks which of
 # WIRE_BASHRC/WIRE_ZSHRC gates the non-login rc-file wiring and which
 # profile/rc file pair install-user-hook.sh targets; install-user-hook.sh
@@ -99,7 +104,7 @@ install-user: build
 	@echo "Installing $(GO_BIN) to $(USER_BINDIR)/sshakku"
 	@install -Dm755 $(GO_BIN) $(USER_BINDIR)/sshakku
 	@echo "Wiring the per-user login hook"
-	@./install-user-hook.sh install "$(USER_HOME)" "$(USER_BINDIR)/sshakku" "$(NN)" "$(USER_WIRE_RC)" "$(USER_SHELL)"
+	@./install-user-hook.sh install "$(USER_HOME)" "$(USER_BINDIR)/sshakku" "$(NN)" "$(USER_WIRE_RC)" "$(USER_SHELL)" "$(WIRE_PATH)"
 	@echo "Installation complete."
 
 uninstall-user:
@@ -163,7 +168,7 @@ install-user: build
 	@mkdir -p "$(USER_BINDIR)"
 	@install -m755 $(GO_BIN) $(USER_BINDIR)/sshakku
 	@echo "Wiring the per-user login hook"
-	@./install-user-hook.sh install "$(USER_HOME)" "$(USER_BINDIR)/sshakku" "$(NN)" "$(USER_WIRE_RC)" "$(USER_SHELL)"
+	@./install-user-hook.sh install "$(USER_HOME)" "$(USER_BINDIR)/sshakku" "$(NN)" "$(USER_WIRE_RC)" "$(USER_SHELL)" "$(WIRE_PATH)"
 	@echo "Installation complete."
 
 uninstall-user:

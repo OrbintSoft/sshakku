@@ -87,7 +87,10 @@ wires the same login hook into your own shell only. On Linux: if
 a clearly delimited block is added to `$HOME/.bash_profile` (created if it
 doesn't exist yet). On macOS: the same, but for `zsh` — `$HOME/.zprofile.d/`
 if it exists, otherwise a block in `$HOME/.zprofile`. Either way the rest of
-the file is left untouched. Make sure `$HOME/.local/bin` is on your `PATH`.
+the file is left untouched. The wired hook also puts `$HOME/.local/bin` on
+your `PATH` (guarded, so it's a no-op when it's already there) — that
+directory isn't on the default `PATH` everywhere, notably on macOS. Pass
+`WIRE_PATH=0` to skip that and wire only the agent hook.
 
 A login shell doesn't fire for every new terminal — a plain new tab or a
 multiplexer pane often starts a non-login shell instead (see
