@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/hex"
 	"io"
 	"os"
 	"os/user"
@@ -9,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/OrbintSoft/sshakku/internal/keys"
 	"github.com/OrbintSoft/sshakku/internal/paths"
 )
 
@@ -219,6 +222,147 @@ func TestLoadSettingsMergesConfigD(t *testing.T) {
 	}
 	if !settings.Quiet {
 		t.Errorf("Quiet = %v, want true (config.toml's own value, untouched by config.d/)", settings.Quiet)
+	}
+}
+
+func TestTail(t *testing.T) {
+	tests := []struct {
+		s    string
+		n    int
+		want string
+	}{
+		{"", 3, ""},
+		{"ab", 3, "ab"},
+		{"abc", 3, "abc"},
+		{"abcdef", 3, "def"},
+		{"abcdef", 0, ""},
+	}
+	for _, tc := range tests {
+		if got := tail(tc.s, tc.n); got != tc.want {
+			t.Errorf("tail(%q, %d) = %q, want %q", tc.s, tc.n, got, tc.want)
+		}
+	}
+}
+
+func TestRandomProbeValue(t *testing.T) {
+	a, err := randomProbeValue()
+	if err != nil {
+		t.Fatalf("randomProbeValue: %v", err)
+	}
+	if len(a) != 32 {
+		t.Errorf("len(randomProbeValue()) = %d, want 32 (16 bytes hex-encoded)", len(a))
+	}
+	if _, err := hex.DecodeString(a); err != nil {
+		t.Errorf("randomProbeValue() = %q, not valid hex: %v", a, err)
+	}
+	b, err := randomProbeValue()
+	if err != nil {
+		t.Fatalf("randomProbeValue: %v", err)
+	}
+	if a == b {
+		t.Errorf("two calls both returned %q, want distinct random values", a)
+	}
+}
+
+func TestDetectGUIAvailableHeadless(t *testing.T) {
+	t.Setenv("WAYLAND_DISPLAY", "")
+	t.Setenv("DISPLAY", "")
+	if detectGUIAvailable() {
+		t.Error("detectGUIAvailable() = true with no display server, want false")
+	}
+}
+
+// TestAskpassEnvHeadless confirms the headless branch: with no display server,
+// askpassEnv emits nothing (ssh keeps its own terminal prompting) and succeeds.
+func TestAskpassEnvHeadless(t *testing.T) {
+	t.Setenv("WAYLAND_DISPLAY", "")
+	t.Setenv("DISPLAY", "")
+	var out, errOut bytes.Buffer
+	if got := askpassEnv(&out, &errOut); got != 0 {
+		t.Errorf("askpassEnv (headless) = %d, want 0", got)
+	}
+	if out.Len() != 0 {
+		t.Errorf("headless askpassEnv wrote %q to stdout, want no export lines", out.String())
+	}
+}
+
+func TestStderrNotifier(t *testing.T) {
+	var buf bytes.Buffer
+	stderrNotifier{w: &buf}.Notify("hello world")
+	if got, want := buf.String(), "sshakku: hello world\n"; got != want {
+		t.Errorf("Notify wrote %q, want %q", got, want)
+	}
+}
+
+// TestDispatchRoutesToRun covers dispatch's non-askpass branch: with the askpass
+// env unset, it must fall through to normal subcommand dispatch. The askpass
+// branch is exercised via TestAskpassHandoff.
+func TestDispatchRoutesToRun(t *testing.T) {
+	if got := dispatch(io.Discard, io.Discard, []string{"help"}, false); got != 0 {
+		t.Errorf("dispatch(help) = %d, want 0", got)
+	}
+	if got := dispatch(io.Discard, io.Discard, nil, false); got != 2 {
+		t.Errorf("dispatch(no args) = %d, want 2 (usage)", got)
+	}
+}
+
+// TestAskpassHandoff covers the SSH_ASKPASS handoff failure branches: a missing
+// token returns 1, and askpass routes an unresolvable token to the handoff path,
+// which also returns 1. HOME and XDG_STATE_HOME point at a temp dir so the
+// session log never touches the real state dir.
+func TestAskpassHandoff(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("XDG_STATE_HOME", tmp)
+
+	t.Run("missing token", func(t *testing.T) {
+		t.Setenv(keys.EnvPassHandoffToken, "")
+		if got := askpassFromHandoff(io.Discard); got != 1 {
+			t.Errorf("askpassFromHandoff (no token) = %d, want 1", got)
+		}
+	})
+
+	t.Run("unresolvable token routed via askpass", func(t *testing.T) {
+		t.Setenv(keys.EnvPassHandoffToken, "sshakku-test-nonexistent-token")
+		if got := askpass(io.Discard, nil); got != 1 {
+			t.Errorf("askpass (bogus handoff token) = %d, want 1", got)
+		}
+	})
+}
+
+func TestKeystateDir(t *testing.T) {
+	got := keystateDir(paths.Layout{AgentSock: "/run/user/1000/sshakku/agent.sock"})
+	if want := "/run/user/1000/sshakku/keystate"; got != want {
+		t.Errorf("keystateDir = %q, want %q", got, want)
+	}
+}
+
+func TestCurrentUser(t *testing.T) {
+	t.Run("USER set", func(t *testing.T) {
+		t.Setenv("USER", "sshakku-test-user")
+		if got := currentUser(); got != "sshakku-test-user" {
+			t.Errorf("currentUser = %q, want the $USER value", got)
+		}
+	})
+
+	t.Run("USER empty falls back to a lookup", func(t *testing.T) {
+		t.Setenv("USER", "")
+		// The fallback resolves the real process owner; on a normal test host
+		// that is a non-empty username. If the lookup itself fails (an
+		// unresolvable uid), "" is the documented result, so accept either.
+		self, err := user.Current()
+		if err != nil {
+			t.Skipf("user.Current: %v", err)
+		}
+		if got := currentUser(); got != self.Username {
+			t.Errorf("currentUser = %q, want %q from user.Current()", got, self.Username)
+		}
+	})
+}
+
+func TestNewHostSource(t *testing.T) {
+	if newHostSource("") == nil {
+		t.Error("newHostSource returned nil, want a diagnose.HostSource for this OS")
 	}
 }
 
