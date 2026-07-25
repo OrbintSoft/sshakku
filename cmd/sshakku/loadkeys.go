@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 
 	"github.com/OrbintSoft/sshakku/internal/giveup"
@@ -24,7 +23,7 @@ func (d deps) loadKeys(stderr io.Writer) int {
 	layout := paths.Resolve(env, paths.ProbeDir).WithSocketToken(paths.SocketToken())
 	log := sessionlog.New(layout.LogFile)
 
-	self, err := os.Executable()
+	self, err := d.self()
 	if err != nil {
 		_ = log.Log("ERROR", fmt.Sprintf("load-keys: locate self: %v", err))
 		_, _ = fmt.Fprintf(stderr, "sshakku: %v\n", err)
@@ -48,17 +47,13 @@ func (d deps) loadKeys(stderr io.Writer) int {
 	}
 
 	runner := keys.ExecRunner{}
-	guiEnv := keys.GUIEnv{
-		WaylandDisplay: os.Getenv("WAYLAND_DISPLAY"),
-		Display:        os.Getenv("DISPLAY"),
-	}
 	kdialog := keys.KDialogPrompter{Runner: runner}
 	// The vault is always consulted first regardless of which of these is
 	// picked (see Loader.loadViaVaultThenPrompt); this only chooses how to
 	// ask when it misses — kdialog when a graphical session is usable,
 	// otherwise the terminal, which needs no external binary.
 	var prompter keys.Prompter = keys.TTYPrompter{}
-	if keys.GUIAvailable(guiEnv, runner, kdialog) {
+	if d.guiAvailable() {
 		prompter = kdialog
 	}
 

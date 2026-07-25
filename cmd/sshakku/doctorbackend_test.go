@@ -25,6 +25,9 @@ type fakeProbeBackend struct {
 	lookupErr error
 	deleteErr error
 	unlockErr error
+	lockErr   error
+	listVal   []string
+	listErr   error
 	lockCalls int
 }
 
@@ -33,13 +36,13 @@ func (f *fakeProbeBackend) Lookup(string) (string, bool, error) {
 }
 func (f *fakeProbeBackend) Store(string, string, string) error { return f.storeErr }
 func (f *fakeProbeBackend) Delete(string) error                { return f.deleteErr }
-func (f *fakeProbeBackend) List() ([]string, error)            { return nil, nil }
+func (f *fakeProbeBackend) List() ([]string, error)            { return f.listVal, f.listErr }
 
 // fakeProbeSession wraps fakeProbeBackend to also implement keys.SecretSession.
 type fakeProbeSession struct{ *fakeProbeBackend }
 
 func (f fakeProbeSession) Unlock() error { return f.unlockErr }
-func (f fakeProbeSession) Lock() error   { f.lockCalls++; return nil }
+func (f fakeProbeSession) Lock() error   { f.lockCalls++; return f.lockErr }
 
 func TestProbeSecretBackendPass(t *testing.T) {
 	backend := &fakeProbeBackend{lookupVal: "probe-value", lookupOK: true}

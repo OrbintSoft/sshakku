@@ -311,12 +311,16 @@ func probeSecretBackend(stdout io.Writer, log keys.Logger, secret keys.SecretBac
 	return 1
 }
 
+// randRead is the probe RNG, a seam so randomProbeValue's read-failure branch
+// (which crypto/rand practically never takes) can be exercised.
+var randRead = rand.Read
+
 // randomProbeValue returns a fresh random hex string for testSecretBackend's
 // probe entry, so a lookup can only match what this run itself stored, never
 // a leftover from an earlier one.
 func randomProbeValue() (string, error) {
 	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
+	if _, err := randRead(b); err != nil {
 		return "", fmt.Errorf("generate probe value: %w", err)
 	}
 	return hex.EncodeToString(b), nil

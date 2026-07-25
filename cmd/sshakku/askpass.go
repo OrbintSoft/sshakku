@@ -36,7 +36,7 @@ func (d deps) askpassBroker(stdout io.Writer, args []string) int {
 	defer closeSecret()
 	broker := keys.Broker{
 		Secret: secret,
-		TTY:    ttyPrompter{},
+		TTY:    d.tty,
 		Log:    log,
 		Config: keys.Config{WalletStore: settings.StoresWallet},
 	}
