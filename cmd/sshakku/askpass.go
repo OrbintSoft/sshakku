@@ -18,7 +18,7 @@ import (
 // expired, and answer the prompt in args from the wallet (or the terminal).
 func (d deps) askpass(stdout io.Writer, args []string) int {
 	if os.Getenv(keys.EnvPassHandoffToken) != "" {
-		return askpassFromHandoff(stdout)
+		return d.askpassFromHandoff(stdout)
 	}
 	return d.askpassBroker(stdout, args)
 }
@@ -57,7 +57,7 @@ func (d deps) askpassBroker(stdout io.Writer, args []string) int {
 // passphrase never touches stderr or argv; only the handoff token crosses the
 // environment. Diagnostics go to the session log alone, so the success path
 // stays silent.
-func askpassFromHandoff(stdout io.Writer) int {
+func (d deps) askpassFromHandoff(stdout io.Writer) int {
 	log := sessionlog.New(paths.Resolve(paths.FromOS(), paths.ProbeDir).LogFile)
 
 	token := os.Getenv(keys.EnvPassHandoffToken)
@@ -66,7 +66,7 @@ func askpassFromHandoff(stdout io.Writer) int {
 		return 1
 	}
 
-	pass, err := keys.FetchHandoff(token)
+	pass, err := d.fetchHandoff(token)
 	if err != nil {
 		_ = log.Log("ERROR", fmt.Sprintf("askpass: fetch handoff token …%s: %v", tail(token, 3), err))
 		return 1
@@ -100,11 +100,11 @@ func tail(s string, n int) string {
 // only when a graphical prompter is available — a headless session keeps ssh's
 // own terminal prompting — and the login entrypoint evals it in every login
 // shell, interactive or not, since it only ever prints two export lines.
-func askpassEnv(stdout, stderr io.Writer) int {
-	if !detectGUIAvailable() {
+func (d deps) askpassEnv(stdout, stderr io.Writer) int {
+	if !d.guiAvailable() {
 		return 0
 	}
-	self, err := os.Executable()
+	self, err := d.self()
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "sshakku: %v\n", err)
 		return 1
