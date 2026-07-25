@@ -108,6 +108,11 @@ type deps struct {
 	// Injected so askpass's handoff path is testable without a live kernel
 	// keyring, which many containers and CI runners lack.
 	fetchHandoff func(token string) (string, error)
+	// tty is the reactive broker's terminal fallback when a passphrase prompt
+	// misses the wallet (see askpassBroker). The production value reads
+	// /dev/tty; a fake lets the broker's decline path run without a controlling
+	// terminal.
+	tty keys.TTY
 }
 
 // realDeps wires deps to the production implementations.
@@ -121,6 +126,7 @@ func realDeps() deps {
 		self:         os.Executable,
 		guiAvailable: detectGUIAvailable,
 		fetchHandoff: keys.FetchHandoff,
+		tty:          ttyPrompter{},
 	}
 }
 
