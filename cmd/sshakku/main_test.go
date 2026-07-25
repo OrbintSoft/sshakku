@@ -138,6 +138,15 @@ func TestResolveTargetUser(t *testing.T) {
 			t.Errorf("got %+v, want Source=\"\" (SUDO_UID should be ignored)", got)
 		}
 	})
+
+	t.Run("malformed SUDO_UID as root errors", func(t *testing.T) {
+		// As root with a non-numeric SUDO_UID, the auto-detect lookup fails and
+		// resolveTargetUser reports it rather than silently falling through.
+		t.Setenv("SUDO_UID", "not-a-uid-xyzzy")
+		if _, err := resolveTargetUser("", paths.Env{UID: 0}); err == nil {
+			t.Error("resolveTargetUser(bad SUDO_UID) = nil error, want a lookup failure")
+		}
+	})
 }
 
 func TestCrossUserGuard(t *testing.T) {
