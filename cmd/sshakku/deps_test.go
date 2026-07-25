@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -147,6 +148,22 @@ func TestLoadKeys(t *testing.T) {
 			t.Errorf("loadKeys (bad ~/.ssh) = %d, want 1", got)
 		}
 	})
+}
+
+// TestRunLoadKeys covers run's load-keys case: it dispatches to d.loadKeys with
+// the injected backend. Headless with a temp HOME and no ~/.ssh, the load is a
+// silent no-op, so this exercises the dispatch wiring without a subprocess.
+func TestRunLoadKeys(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("XDG_STATE_HOME", tmp)
+	t.Setenv("WAYLAND_DISPLAY", "")
+	t.Setenv("DISPLAY", "")
+
+	d := depsReturning(newMemoryBackend())
+	if got := d.run(io.Discard, io.Discard, []string{"load-keys"}); got != 0 {
+		t.Errorf("run load-keys (no keys) = %d, want 0", got)
+	}
 }
 
 // TestForget covers forget against a fake backend: named keys delete the

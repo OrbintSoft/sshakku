@@ -225,6 +225,43 @@ func TestLoadSettingsMergesConfigD(t *testing.T) {
 	}
 }
 
+// countingLogger records how many lines were logged, so a test can assert that
+// an error-handling branch actually ran.
+type countingLogger struct{ n int }
+
+func (c *countingLogger) Log(string, string) error { c.n++; return nil }
+
+// TestLoadSettingsLogsErrors covers loadSettings' three error-logging branches
+// at once — a config.toml that fails to load, a malformed config.d drop-in, and
+// an unparseable env override — and confirms it still returns usable settings
+// with defaults where a value could not be resolved.
+func TestLoadSettingsLogsErrors(t *testing.T) {
+	dir := t.TempDir()
+	// A directory where config.toml should be a file makes config.Load fail.
+	if err := os.Mkdir(filepath.Join(dir, "config.toml"), 0o755); err != nil {
+		t.Fatalf("mkdir config.toml: %v", err)
+	}
+	// A malformed drop-in makes config.LoadDir report an error.
+	confD := filepath.Join(dir, "config.d")
+	if err := os.MkdirAll(confD, 0o755); err != nil {
+		t.Fatalf("mkdir config.d: %v", err)
+	}
+	writeFile(t, filepath.Join(confD, "10-bad.toml"), "this is not = valid = toml")
+	// An unparseable env value makes config.Resolve report an error.
+	t.Setenv("SSHAKKU_KEY_LIFETIME", "notaduration")
+
+	log := &countingLogger{}
+	settings := loadSettings(paths.Layout{ConfigDir: dir}, "test", log)
+
+	if log.n < 3 {
+		t.Errorf("logged %d errors, want at least 3 (config load, config.d, resolve)", log.n)
+	}
+	// A setting untouched by the errors still resolves to its default.
+	if settings.SecretBackend == "" {
+		t.Error("SecretBackend is empty, want the built-in default despite the load errors")
+	}
+}
+
 func TestTail(t *testing.T) {
 	tests := []struct {
 		s    string
