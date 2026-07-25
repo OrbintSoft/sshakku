@@ -29,15 +29,14 @@ func pagesCoverageURL(os string) string {
 // coverage breakdown and slowest tests, and a failures section listing every
 // failing test's captured output (omitted when nothing failed).
 //
-// When artifactsURL is empty, the report links point to the GitHub Pages
-// site publish-coverage-report publishes to on every merge to master --
-// correct when rendering report.md itself, since that's exactly what gets
-// published there. When artifactsURL is set (the per-PR test-health
-// comment), the Pages site still only reflects the last *master* merge, not
-// this PR's own run, so the links point to artifactsURL (the workflow run
-// that produced this comment) instead, where the PR's own report/coverage
-// HTML can actually be downloaded.
-func renderMarkdown(reports []Report, artifactsURL string) string {
+// reportURLs and coverageURLs map an OS to the link its "Test report" /
+// "Coverage report" cell should use. An OS absent from a map falls back to
+// the GitHub Pages site publish-coverage-report publishes to on every merge
+// to master -- correct when rendering report.md itself, since that's exactly
+// what gets published there. The per-PR test-health comment passes each OS's
+// own workflow-run artifact URL instead, since the Pages site only ever
+// reflects the last *master* merge, not this PR's own run.
+func renderMarkdown(reports []Report, reportURLs, coverageURLs map[string]string) string {
 	sorted := make([]Report, len(reports))
 	copy(sorted, reports)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].OS < sorted[j].OS })
@@ -57,9 +56,13 @@ func renderMarkdown(reports []Report, artifactsURL string) string {
 		if len(r.SlowestTests) > 0 {
 			slowest = fmt.Sprintf("%s (%.2fs)", r.SlowestTests[0].Name, r.SlowestTests[0].Seconds)
 		}
-		testURL, coverageURL := pagesReportURL(r.OS), pagesCoverageURL(r.OS)
-		if artifactsURL != "" {
-			testURL, coverageURL = artifactsURL, artifactsURL
+		testURL := pagesReportURL(r.OS)
+		if u, ok := reportURLs[r.OS]; ok {
+			testURL = u
+		}
+		coverageURL := pagesCoverageURL(r.OS)
+		if u, ok := coverageURLs[r.OS]; ok {
+			coverageURL = u
 		}
 		fmt.Fprintf(&b, "| %s | %s | %.1fs | %s | [HTML](%s) | [HTML](%s) |\n", r.OS, coverage, r.WallSeconds, slowest, testURL, coverageURL)
 	}

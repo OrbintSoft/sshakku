@@ -6,7 +6,24 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"strings"
 )
+
+// osURLFlag collects repeated `os=url` flag values into a map keyed by OS, so
+// `render` can be told a distinct per-OS artifact link (each OS's report is a
+// separate artifact with its own opaque id) for the Test/Coverage columns.
+type osURLFlag map[string]string
+
+func (f osURLFlag) String() string { return "" }
+
+func (f osURLFlag) Set(v string) error {
+	key, url, ok := strings.Cut(v, "=")
+	if !ok || key == "" || url == "" {
+		return fmt.Errorf("expected os=url, got %q", v)
+	}
+	f[key] = url
+	return nil
+}
 
 func main() {
 	if len(os.Args) > 1 {
@@ -33,13 +50,16 @@ func main() {
 // stdout.
 func runRender(args []string) error {
 	fs := flag.NewFlagSet("render", flag.ContinueOnError)
-	artifactsURL := fs.String("artifacts-url", "", "workflow run URL where this run's report/coverage HTML artifacts can be downloaded; when set, report links point here instead of the published GitHub Pages site")
+	reportURLs := osURLFlag{}
+	coverageURLs := osURLFlag{}
+	fs.Var(reportURLs, "report-url", "os=url for an OS's HTML test report artifact; repeatable. Overrides the published GitHub Pages link for that OS's Test report cell")
+	fs.Var(coverageURLs, "coverage-url", "os=url for an OS's HTML coverage report artifact; repeatable. Overrides the published GitHub Pages link for that OS's Coverage report cell")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	paths := fs.Args()
 	if len(paths) == 0 {
-		return fmt.Errorf("usage: testreport render [-artifacts-url URL] <report.json> [report.json ...]")
+		return fmt.Errorf("usage: testreport render [-report-url os=url] [-coverage-url os=url] <report.json> [report.json ...]")
 	}
 	reports := make([]Report, 0, len(paths))
 	for _, path := range paths {
@@ -57,7 +77,7 @@ func runRender(args []string) error {
 		}
 		reports = append(reports, r)
 	}
-	fmt.Print(renderMarkdown(reports, *artifactsURL))
+	fmt.Print(renderMarkdown(reports, reportURLs, coverageURLs))
 	return nil
 }
 
