@@ -202,7 +202,7 @@ func (d deps) doctor(stdout, stderr io.Writer, args []string) int {
 		return 1
 	}
 	paths.CleanupLegacyAgentDir(env.Home)
-	liveSock, code := runEnsure(stderr, env, layout)
+	liveSock, code := d.runEnsure(stderr, env, layout)
 	if code != 0 {
 		return code
 	}

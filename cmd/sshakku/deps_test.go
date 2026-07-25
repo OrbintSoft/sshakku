@@ -17,13 +17,14 @@ import (
 
 // depsReturning builds a deps whose newSecret always yields backend, so a
 // command body can be exercised against a fake secret store without opening
-// the real D-Bus/CLI-backed one.
+// the real D-Bus/CLI-backed one. The other seams keep their production wiring
+// (harmless for the secret-store paths this helper serves).
 func depsReturning(backend keys.SecretBackend) deps {
-	return deps{
-		newSecret: func(string, keys.Logger, config.Settings) (keys.SecretBackend, func()) {
-			return backend, func() {}
-		},
+	d := realDeps()
+	d.newSecret = func(string, keys.Logger, config.Settings) (keys.SecretBackend, func()) {
+		return backend, func() {}
 	}
+	return d
 }
 
 // memoryBackend is an in-process keys.SecretBackend that actually records what
