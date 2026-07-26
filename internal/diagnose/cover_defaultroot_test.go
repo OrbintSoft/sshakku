@@ -1,6 +1,19 @@
 package diagnose
 
-import "testing"
+import (
+	"path/filepath"
+	"testing"
+)
+
+// TestProcfsAncestryReadError covers Parent's read-failure branch
+// deterministically on any host: a Root that does not exist makes the stat read
+// fail regardless of whether the platform has a /proc at all.
+func TestProcfsAncestryReadError(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "does-not-exist")
+	if _, _, ok := (ProcfsAncestry{Root: root}).Parent(1); ok {
+		t.Error("Parent with an unreadable stat must report not-ok")
+	}
+}
 
 // These cover the empty-Root default to /proc in ProcfsAncestry.Parent and
 // ProcfsCgroup.Cgroup. They are portable — a pid that cannot exist makes the
