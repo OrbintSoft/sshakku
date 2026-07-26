@@ -29,6 +29,10 @@ Compiled into the distributed binary:
   client, replacing the `secret-tool` shell-out for scoped collection
   lock/unlock).
 
+Imported only by tests, never linked into the distributed binary:
+
+- **go.uber.org/goleak** — MIT (goroutine-leak detection in the test suite).
+
 These permissive licences (BSD-2-Clause, BSD-3-Clause and MIT) are compatible
 with the EUPL 1.2 and with offering the project under additional licences, so
 they do not obstruct relicensing. Build- and CI-only tools (the Go toolchain and

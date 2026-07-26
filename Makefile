@@ -205,6 +205,16 @@ test-json:
 	gotestsum --jsonfile test.json -- -race -coverprofile=coverage.out ./...
 	go-ignore-cov --file coverage.out --root .
 
+# Goroutine leak checks. The normal suite already runs every package under
+# go.uber.org/goleak, so a goroutine outliving its package's tests fails the
+# build. This target additionally rebuilds under Go's experimental goroutine
+# leak profiler (GOEXPERIMENT=goroutineleakprofile) and runs the *GoroutineLeak*
+# tests, which use the runtime's reachability analysis to catch a goroutine
+# blocked forever — a class the running-count check cannot see. Those tests
+# skip when the profiler isn't compiled in, so they are inert in `make test`.
+test-leakprofile:
+	GOEXPERIMENT=goroutineleakprofile $(GO) test -run GoroutineLeak ./...
+
 # Shell-level login-hook and agent-lifecycle regression suite. Requires
 # bats-core; only safe in a disposable environment (the container test suite
 # runs it in CI) — see test/bats/helpers.bash for the explicit opt-in gate.
@@ -264,5 +274,5 @@ lint-go:
 lint-docker:
 	hadolint $(DOCKERFILES)
 
-.PHONY: install uninstall install-user uninstall-user build test test-json test-bats print-paths lint lint-sh lint-zsh lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go lint-docker
+.PHONY: install uninstall install-user uninstall-user build test test-json test-leakprofile test-bats print-paths lint lint-sh lint-zsh lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go lint-docker
 .DEFAULT_GOAL := install

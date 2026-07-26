@@ -55,6 +55,9 @@ jobs:
       - name: Run make test-json
         run: make test-json
 
+      - name: Run goroutine leak profile checks
+        run: make test-leakprofile
+
       - name: Build test-health report
         if: always()
         run: go run ./tools/testreport -os linux -coverprofile=coverage.out < test.json > report-linux.json

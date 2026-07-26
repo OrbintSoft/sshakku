@@ -782,7 +782,18 @@ decisions 9, 20, 24.
    allowed.
 6. **Close every open cell** in the matrix with a real integration test.
 7. **Race, goroutine-leak, and memory checks** alongside the existing
-   `-race` suite.
+   `-race` suite. **Partly done.** Race: the whole suite already runs under
+   `-race` (`make test` / `make test-json`). Goroutine leaks: every package
+   with goroutines runs under `go.uber.org/goleak` (MIT) in a `TestMain`, so
+   one left running past a package's tests fails the build; a
+   `*GoroutineLeak*` test additionally drives Go 1.26's experimental
+   goroutine-leak profiler (`GOEXPERIMENT=goroutineleakprofile`,
+   `make test-leakprofile`, wired into the Linux CI job) to catch a goroutine
+   blocked *forever* — a class the running-count check can't see. It skips when
+   the profiler isn't compiled in, so it's inert in the normal suite. Memory:
+   the race detector already covers Go memory-safety; ASan/MSan add value only
+   on the cgo path (the darwin keychain), so they ride with the live-keychain
+   integration test (item 6) rather than the pure-Go suite.
 8. **Performance/benchmark tests**, tracked over time alongside the coverage
    report.
 
