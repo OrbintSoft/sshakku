@@ -13,8 +13,14 @@ readonly VAULTWARDEN_URL="https://localhost:${VAULTWARDEN_PORT}"
 # test vault; the password protects nothing of value and is fixed on
 # purpose, so every run of this fixture unlocks the same way. Never reuse it
 # for anything real.
+#
+# This exact string is baked into the committed fixture (vaultwarden-fixture/
+# db.sqlite3): both the stored login hash and the wrapping of the vault key are
+# derived from it, so it is an opaque token bound to that binary, not free-form
+# prose. Changing it without regenerating the fixture makes login fail with
+# "Username or password is incorrect" — do not "tidy" it.
 readonly TEST_EMAIL="sshakku-test@example.invalid"
-readonly TEST_MASTER_PASSWORD="sshakku-desktop-stack-fixture-not-a-real-secret-1"
+readonly TEST_MASTER_PASSWORD="sshakku-tier2-fixture-not-a-real-secret-1"
 
 wait_for() {
 	local description="$1" tries=50
