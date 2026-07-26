@@ -66,14 +66,22 @@ func resolveTargetUser(userArg string, selfEnv paths.Env) (targetUser, error) {
 	return targetUser{UID: selfEnv.UID, Home: selfEnv.Home}, nil
 }
 
+// userLookupID and userLookup resolve a uid or username via the OS user
+// database; seams so lookupUser's uid/gid parse-failure branches are testable
+// with a fabricated entry the real database would never return.
+var (
+	userLookupID = user.LookupId
+	userLookup   = user.Lookup
+)
+
 // lookupUser resolves a username or uid string via the OS user database.
 func lookupUser(nameOrUID string) (targetUser, error) {
 	var u *user.User
 	var err error
 	if _, convErr := strconv.Atoi(nameOrUID); convErr == nil {
-		u, err = user.LookupId(nameOrUID)
+		u, err = userLookupID(nameOrUID)
 	} else {
-		u, err = user.Lookup(nameOrUID)
+		u, err = userLookup(nameOrUID)
 	}
 	if err != nil {
 		return targetUser{}, err
