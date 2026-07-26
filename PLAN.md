@@ -781,6 +781,15 @@ decisions 9, 20, 24.
    number reflects real testable coverage. See rule 20 for when the tag is
    allowed.
 6. **Close every open cell** in the matrix with a real integration test.
+   **In progress.** The macOS Keychain cell is closed:
+   `TestDarwinKeychainClientRealRoundTrip` drives a live
+   `Add`/`Find`/`Update`/`Delete`/`List` round trip (plus the duplicate-add
+   and update-missing error paths) through `DarwinKeychainClient` in the
+   `test-macos` CI job, against a throwaway default keychain the job stands up
+   first (`test/macos-keychain-setup.sh`) so the runner's login keychain is
+   never touched. The ASan/MSan pass over the cgo keychain path (deferred here
+   from item 7) rides on top of this test as a follow-up. Other open cells in
+   `docs/TEST-MATRIX.md` remain.
 7. **Race, goroutine-leak, and memory checks** alongside the existing
    `-race` suite. **Partly done.** Race: the whole suite already runs under
    `-race` (`make test` / `make test-json`). Goroutine leaks: every package

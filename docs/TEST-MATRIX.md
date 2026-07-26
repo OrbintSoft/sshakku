@@ -47,7 +47,7 @@ worth adding later.
 
 | Backend | Linux | macOS |
 | --- | --- | --- |
-| Keychain | — | ❌ (unit-tested only against a mocked `KeychainClient`; the planned integration gap is a live-keychain round trip through `DarwinKeychainClient` — `Add`/`Find`/`Update`/`Delete`/`List`, including the duplicate-add and update-missing error paths — on a macOS runner) |
+| Keychain | — | ✅ `TestDarwinKeychainClientRealRoundTrip` — a live round trip through `DarwinKeychainClient` (`Add`/`Find`/`Update`/`Delete`/`List`, including the duplicate-add and update-missing error paths) against a throwaway default keychain the `test-macos` job stands up first (`test/macos-keychain-setup.sh`), so the runner's login keychain is never touched |
 | 1Password (`op` CLI) | ✅ `TestOnePasswordBackendRealAccount`, `onepassword-real-account.yml` | ❌ (that workflow runs on `ubuntu-latest` only) |
 | Bitwarden (`bw` CLI) | ✅ real backend against Vaultwarden, `desktop-stack.yml` | ❌ (that job also runs on `ubuntu-latest` only) |
 

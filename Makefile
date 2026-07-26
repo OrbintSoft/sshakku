@@ -215,6 +215,16 @@ test-json:
 test-leakprofile:
 	GOEXPERIMENT=goroutineleakprofile $(GO) test -run GoroutineLeak ./...
 
+# Live macOS keychain integration test: the real Add/Find/Update/Delete/List
+# round trip through DarwinKeychainClient against the process's default
+# keychain. Only meaningful on macOS, and only once the default keychain is one
+# the caller is content to write to — CI repoints it at a throwaway keychain
+# first (test/macos-keychain-setup.sh). The test skips unless
+# SSHAKKU_TEST_ALLOW_REAL_KEYCHAIN is set; -count=1 defeats go's build cache,
+# which has no way to see the keychain's external state.
+test-keychain:
+	SSHAKKU_TEST_ALLOW_REAL_KEYCHAIN=1 $(GO) test -count=1 -run TestDarwinKeychainClientRealRoundTrip ./internal/keys/
+
 # Shell-level login-hook and agent-lifecycle regression suite. Requires
 # bats-core; only safe in a disposable environment (the container test suite
 # runs it in CI) — see test/bats/helpers.bash for the explicit opt-in gate.
@@ -274,5 +284,5 @@ lint-go:
 lint-docker:
 	hadolint $(DOCKERFILES)
 
-.PHONY: install uninstall install-user uninstall-user build test test-json test-leakprofile test-bats print-paths lint lint-sh lint-zsh lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go lint-docker
+.PHONY: install uninstall install-user uninstall-user build test test-json test-leakprofile test-keychain test-bats print-paths lint lint-sh lint-zsh lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go lint-docker
 .DEFAULT_GOAL := install

@@ -110,6 +110,12 @@ jobs:
       - name: Run make test-json
         run: make test-json
 
+      - name: Point the default keychain at a throwaway one
+        run: test/macos-keychain-setup.sh
+
+      - name: Run live keychain integration test
+        run: make test-keychain
+
       - name: Build test-health report
         if: always()
         run: go run ./tools/testreport -os macos -coverprofile=coverage.out < test.json > report-macos.json
