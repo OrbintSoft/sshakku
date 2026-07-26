@@ -29,7 +29,12 @@ const (
 // at the real stash and os/exec run.
 var (
 	stashPass = stashPassphrase
-	runCmd    = func(cmd *exec.Cmd) error { return cmd.Run() }
+	runCmd    = func(cmd *exec.Cmd) error {
+		// Running ssh-add is an external-process side effect; runSSHAdd's exit-code
+		// and start-failure handling around this call is unit-tested by stubbing runCmd.
+		//coverage:ignore
+		return cmd.Run()
+	}
 )
 
 // ExecKeyAdder adds keys with the real ssh-add.
