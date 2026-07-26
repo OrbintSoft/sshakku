@@ -1,6 +1,11 @@
 name: Desktop secret stacks
 
-on: workflow_dispatch
+# Integration tests run on demand, not on every PR: a manual dispatch, or a
+# push whose head commit opts in with [integration] in its message (see the
+# job `if:` below), so one marked push exercises the whole integration suite.
+on:
+  workflow_dispatch:
+  push:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -14,6 +19,9 @@ permissions:
 jobs:
   container-test:
     name: make test (desktop-stack / ${{ matrix.name }})
+    # workflow_dispatch always runs; a push runs only when its head commit
+    # opts in, so integration runs stay deliberate.
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[integration]')
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

@@ -1,0 +1,36 @@
+name: Install methods
+
+# Integration smoke for the install/uninstall methods, kept out of the
+# per-PR unit suite (test.yml) because it builds and stages a full
+# install/uninstall tree. It runs on demand — a manual dispatch, or a push
+# whose head commit opts in with [integration] in its message (see the job
+# `if:` below), so a marked commit exercises it without every push paying for
+# it.
+on:
+  workflow_dispatch:
+  push:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Only builds and stages install trees under RUNNER_TEMP; no write scopes.
+permissions:
+  contents: read
+
+jobs:
+  linux-install-smoke:
+    name: Linux install/uninstall smoke
+    # workflow_dispatch always runs; a push runs only when its head commit
+    # opts in, so integration runs stay deliberate.
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[integration]')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: ./.github/actions/setup-go-env
+
+      - name: Smoke-test make install/install-user (staged, not the real /etc or $HOME)
+        run: test/linux-install-smoke.sh "$RUNNER_TEMP/install-smoke"
