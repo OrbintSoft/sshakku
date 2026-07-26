@@ -793,7 +793,12 @@ decisions 9, 20, 24.
    `make install`/`uninstall`, `install-user`/`uninstall-user`, the opt-in
    non-login `WIRE_BASHRC` wiring (both the `bashrc.d` drop-in and the
    fallback-file shape), and the per-user `PATH` wiring under a scratch
-   `DESTDIR`/`USER_HOME`. Other open cells in `docs/TEST-MATRIX.md` remain.
+   `DESTDIR`/`USER_HOME`. The graceful-stop agent cell is closed by
+   `TestEnsureAgentRealGracefulStopRemovesSocket` (a SIGTERM'd agent unlinks its
+   own socket, so the next `EnsureAgent` is a clean start, not a zombie reap),
+   running in the isolated container/macOS suites alongside the other
+   `TestEnsureAgentReal*` states. Other open cells in `docs/TEST-MATRIX.md`
+   remain.
 
    Integration tests are heavier than the unit suite, so each lives in its own
    workflow that runs on `workflow_dispatch` or on a push whose head commit

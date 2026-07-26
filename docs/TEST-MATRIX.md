@@ -68,7 +68,7 @@ worth adding later.
 | Agent already running and healthy, reused rather than restarted | ✅ `TestEnsureAgentRealHealthyReuse` | ✅ same |
 | Agent reachable with zero keys loaded, still treated as healthy | ✅ `TestEnsureAgentRealReachableButEmptyIsHealthy` | ✅ same |
 | Agent process killed (SIGKILL), stale socket left behind, recovered on next run | ✅ `TestEnsureAgentRealZombie` | ✅ same |
-| Agent stopped gracefully (SIGTERM) after being registered, socket removed rather than left stale | ❌ | ❌ |
+| Agent stopped gracefully (SIGTERM) after being registered, socket removed rather than left stale | ✅ `TestEnsureAgentRealGracefulStopRemovesSocket` | ✅ same |
 | A foreign `ssh-agent` started before SSHakku ever runs, adopted rather than killed | ✅ `TestEnsureAgentRealForeignAdopted` | ✅ same |
 | One dead agent of ours plus multiple healthy foreign agents | ✅ `TestEnsureAgentRealDisasterReapsAndAdoptsLowestPID` | ✅ same |
 | `sshakku doctor --fix` recovers a dead own-agent | ✅ `TestDoctorDetectsAndFixesDeadOursAgent` | ✅ same |
