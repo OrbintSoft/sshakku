@@ -11,5 +11,9 @@ import "github.com/OrbintSoft/sshakku/internal/keys"
 type ttyPrompter struct{}
 
 func (ttyPrompter) Prompt(prompt string, secret bool) (string, error) {
+	// Reads the real controlling terminal (/dev/tty); this is the production TTY
+	// implementation that unit tests replace with a fake, so its body cannot run
+	// in a unit test.
+	//coverage:ignore
 	return keys.ReadTTYLine(prompt, secret)
 }

@@ -40,7 +40,15 @@ func newSecretBackend(user string, log keys.Logger, settings config.Settings) (k
 			_ = log.Log("ERROR", fmt.Sprintf("secret service: %v; falling back to secret-tool", err))
 			return keys.SecretToolBackend{Runner: keys.ExecRunner{}, User: user}, func() {}
 		}
-		return &keys.SecretServiceBackend{Client: client, User: user}, func() { _ = client.Close() }
+		// Reached only when the session bus is live; the returned client is a
+		// concrete *secretservice.Client that a unit test cannot stand in for
+		// without a real D-Bus Secret Service, so this cannot run in a unit
+		// test. The fallback above is unit-tested.
+		//coverage:ignore
+		return &keys.SecretServiceBackend{Client: client, User: user}, func() {
+			//coverage:ignore
+			_ = client.Close()
+		}
 	}
 }
 
@@ -60,6 +68,9 @@ func (p bitwardenMasterPrompter) Prompt(keyname string) (string, error) {
 	if p.gui {
 		return p.kdialog.Prompt(keyname)
 	}
+	// Terminal fallback: reaches the real controlling terminal, so it cannot run
+	// in a unit test; the GUI branch above is unit-tested.
+	//coverage:ignore
 	return ttyPrompter{}.Prompt("Enter "+keyname, true)
 }
 
