@@ -14,6 +14,14 @@ import (
 	"unsafe"
 )
 
+// Every function here is a thin cgo adapter: it marshals Go values into
+// CoreFoundation types and calls a Sec* API that reads or writes the real login
+// keychain — an OS side effect nothing can stand in for in a unit test. The
+// KeychainClient interface is the seam; KeychainBackend's logic is unit-tested
+// against a fake in secret_keychain_test.go, and this file's real integration
+// is exercised only against a live macOS keychain.
+//coverage:ignore file
+
 // secSuccess/secItemNotFound are Go-typed copies of Security.framework's
 // errSecSuccess/errSecItemNotFound OSStatus constants, so status comparisons
 // below don't need a repeated C.OSStatus(...) conversion at every call site.

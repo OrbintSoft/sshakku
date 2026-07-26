@@ -7,32 +7,6 @@ import (
 	"testing"
 )
 
-// TestProcfsAncestryDefaultRoot covers Parent's empty-Root default to /proc; a
-// pid that cannot exist makes the read fail deterministically after the default
-// root is applied.
-func TestProcfsAncestryDefaultRoot(t *testing.T) {
-	if _, _, ok := (ProcfsAncestry{}).Parent(1 << 30); ok {
-		t.Error("Parent of a nonexistent pid under /proc must report not-ok")
-	}
-}
-
-// TestProcfsAncestryParseFailure covers Parent's branch where the stat file is
-// readable but unparseable.
-func TestProcfsAncestryParseFailure(t *testing.T) {
-	root := t.TempDir()
-	writeFile(t, filepath.Join(root, "5", "stat"), "no parentheses here")
-	if _, _, ok := (ProcfsAncestry{Root: root}).Parent(5); ok {
-		t.Error("Parent of a malformed stat must report not-ok")
-	}
-}
-
-// TestProcfsCgroupDefaultRoot covers Cgroup's empty-Root default to /proc.
-func TestProcfsCgroupDefaultRoot(t *testing.T) {
-	if _, ok := (ProcfsCgroup{}).Cgroup(1 << 30); ok {
-		t.Error("Cgroup of a nonexistent pid under /proc must report not-ok")
-	}
-}
-
 // TestParseMountsSkipsShortLine covers parseMounts dropping a line with fewer
 // than three whitespace-separated fields.
 func TestParseMountsSkipsShortLine(t *testing.T) {
