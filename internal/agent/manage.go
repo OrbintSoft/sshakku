@@ -152,6 +152,16 @@ type ExecRunner struct {
 	Path string
 }
 
+// execOutput runs name with args and returns its stdout. It is a package variable
+// so ExecRunner.Start's binary resolution, error wrapping, and output parsing stay
+// unit-testable with a stub, without spawning a real ssh-agent.
+var execOutput = func(name string, args ...string) ([]byte, error) {
+	// Spawning the ssh-agent process is an external-process side effect; Start's
+	// logic around this call is unit-tested by stubbing execOutput.
+	//coverage:ignore
+	return exec.Command(name, args...).Output()
+}
+
 // Start runs `ssh-agent -a <socket>`, which daemonizes and prints its
 // environment, and returns the SSH_AGENT_PID it announces.
 func (r ExecRunner) Start(socket string) (int, error) {
@@ -159,7 +169,7 @@ func (r ExecRunner) Start(socket string) (int, error) {
 	if bin == "" {
 		bin = "ssh-agent"
 	}
-	out, err := exec.Command(bin, "-a", socket).Output()
+	out, err := execOutput(bin, "-a", socket)
 	if err != nil {
 		return 0, fmt.Errorf("start ssh-agent: %w", err)
 	}
