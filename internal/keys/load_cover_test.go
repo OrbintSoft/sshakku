@@ -226,3 +226,9 @@ func TestLoadKeysSessionLockErrorLogged(t *testing.T) {
 		t.Fatalf("expected an ERROR lock log, got %v", log.lines)
 	}
 }
+
+// TestLogfWithoutSinkIsNoop covers logf's guard for a Loader configured with no
+// Log sink: the line is silently dropped rather than dereferencing a nil logger.
+func TestLogfWithoutSinkIsNoop(t *testing.T) {
+	(Loader{}).logf("INFO", "loaded %d keys", 3)
+}
