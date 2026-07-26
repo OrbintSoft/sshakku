@@ -55,10 +55,10 @@ worth adding later.
 
 | Case | Linux | macOS |
 | --- | --- | --- |
-| System-wide (`make install`/`uninstall`) | ❌ | ✅ `test/macos-install-smoke.sh` |
-| Per-user (`make install-user`/`uninstall-user`) | ❌ (bats only drives `install-user-hook.sh` directly, not this Makefile target) | ✅ same script |
-| Non-login shell wiring, opt-in (`WIRE_BASHRC=1`/`WIRE_ZSHRC=1`) | ❌ (same reason) | ❌ (not exercised by the smoke script) |
-| User bindir put on `PATH` from the hook (`install-user`, default; `WIRE_PATH=0` opts out) | ❌ (bats drives the hook script directly, not this Makefile target) | ✅ `test/macos-install-smoke.sh` |
+| System-wide (`make install`/`uninstall`) | ✅ `test/linux-install-smoke.sh` | ✅ `test/macos-install-smoke.sh` |
+| Per-user (`make install-user`/`uninstall-user`) | ✅ `test/linux-install-smoke.sh` | ✅ same script |
+| Non-login shell wiring, opt-in (`WIRE_BASHRC=1`/`WIRE_ZSHRC=1`) | ✅ `test/linux-install-smoke.sh` (both the `bashrc.d` drop-in and the fallback-file shape) | ❌ (not exercised by the smoke script) |
+| User bindir put on `PATH` from the hook (`install-user`, default; `WIRE_PATH=0` opts out) | ✅ `test/linux-install-smoke.sh` | ✅ `test/macos-install-smoke.sh` |
 
 ## Agent lifecycle and recovery scenarios
 

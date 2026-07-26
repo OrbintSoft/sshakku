@@ -788,8 +788,24 @@ decisions 9, 20, 24.
    `test-macos` CI job, against a throwaway default keychain the job stands up
    first (`test/macos-keychain-setup.sh`) so the runner's login keychain is
    never touched. The ASan/MSan pass over the cgo keychain path (deferred here
-   from item 7) rides on top of this test as a follow-up. Other open cells in
-   `docs/TEST-MATRIX.md` remain.
+   from item 7) rides on top of this test as a follow-up. The Linux
+   install/uninstall cells are closed too: `test/linux-install-smoke.sh` stages
+   `make install`/`uninstall`, `install-user`/`uninstall-user`, the opt-in
+   non-login `WIRE_BASHRC` wiring (both the `bashrc.d` drop-in and the
+   fallback-file shape), and the per-user `PATH` wiring under a scratch
+   `DESTDIR`/`USER_HOME`. Other open cells in `docs/TEST-MATRIX.md` remain.
+
+   Integration tests are heavier than the unit suite, so each lives in its own
+   workflow that runs on `workflow_dispatch` or on a push whose head commit
+   opts in with `[integration]` in its message, never on every PR. The
+   convention spans every integration workflow — `install-methods.yml` (this
+   smoke), `desktop-stack.yml`, and `onepassword-real-account.yml` — so one
+   marked push exercises the whole integration suite. The push-marker trigger
+   is also what lets a brand-new such workflow be exercised before it reaches
+   `master` (a `workflow_dispatch`-only workflow isn't dispatchable until it's
+   on the default branch). When the release pipeline lands (Phase 8) these
+   become a release gate; that will likely add `workflow_call` so release can
+   depend on them.
 7. **Race, goroutine-leak, and memory checks** alongside the existing
    `-race` suite. **Partly done.** Race: the whole suite already runs under
    `-race` (`make test` / `make test-json`). Goroutine leaks: every package
