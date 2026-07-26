@@ -274,6 +274,52 @@ func TestEnsureAgentRealZombie(t *testing.T) {
 	}
 }
 
+// TestEnsureAgentRealGracefulStopRemovesSocket is the graceful counterpart to
+// TestEnsureAgentRealZombie: SIGTERM (unlike SIGKILL) is caught by ssh-agent,
+// whose signal handler unlinks the socket it was started on before exiting. So
+// a graceful stop leaves no stale socket behind, and the next EnsureAgent is a
+// clean start with nothing to reap — not a zombie reap.
+func TestEnsureAgentRealGracefulStopRemovesSocket(t *testing.T) {
+	requireIsolatedAgentEnvironment(t)
+	m := newRealManager()
+	cfg := realCfg(t)
+
+	res1, err := m.EnsureAgent(cfg, nil)
+	if err != nil {
+		t.Fatalf("first EnsureAgent: %v", err)
+	}
+	if res1.Situation != SituationClean {
+		t.Fatalf("setup Situation = %s, want clean", res1.Situation)
+	}
+	if !m.Prober.Reachable(cfg.FixedSock) {
+		t.Fatal("fixed socket not reachable after a clean start")
+	}
+
+	// SIGTERM, not SIGKILL: ssh-agent catches it and unlinks its own socket.
+	stopAgent(t, res1.Started)
+
+	if m.Prober.Reachable(cfg.FixedSock) {
+		t.Fatal("socket should be dead after SIGTERM")
+	}
+	if _, err := os.Lstat(cfg.FixedSock); !os.IsNotExist(err) {
+		t.Errorf("socket %s still present after graceful SIGTERM; want it unlinked, not left stale (Lstat err = %v)", cfg.FixedSock, err)
+	}
+
+	// With no stale socket to reap, the next EnsureAgent is a clean start.
+	res2, err := m.EnsureAgent(cfg, nil)
+	if err != nil {
+		t.Fatalf("second EnsureAgent: %v", err)
+	}
+	t.Cleanup(func() { stopAgent(t, res2.Started) })
+
+	if res2.Situation != SituationClean {
+		t.Errorf("Situation after graceful stop = %s, want clean (no stale socket to reap)", res2.Situation)
+	}
+	if len(res2.Reaped.RemovedSockets) != 0 || len(res2.Reaped.Terminated) != 0 {
+		t.Errorf("nothing should have been reaped after a graceful stop, got %+v", res2.Reaped)
+	}
+}
+
 // TestEnsureAgentRealForeignAdopted covers state D: a healthy agent sshakku
 // did not start must be adopted via the fixed-socket symlink, not killed.
 func TestEnsureAgentRealForeignAdopted(t *testing.T) {
