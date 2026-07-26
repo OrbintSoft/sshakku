@@ -45,3 +45,12 @@ func TestFlockLockerCreatesFile(t *testing.T) {
 	}
 	unlock()
 }
+
+func TestFlockLockerOpenError(t *testing.T) {
+	// The lock file's parent directory does not exist, so opening it fails before
+	// any flock attempt.
+	path := filepath.Join(t.TempDir(), "no-such-dir", "agent.lock")
+	if _, err := (FlockLocker{}).Lock(path); err == nil {
+		t.Fatal("want an error when the lock file cannot be opened")
+	}
+}
