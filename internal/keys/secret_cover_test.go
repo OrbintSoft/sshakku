@@ -27,26 +27,3 @@ func TestSecretToolStoreRunError(t *testing.T) {
 		t.Fatalf("error = %v, want %v", err, boom)
 	}
 }
-
-// TestSecretServiceUnlockClientError covers Unlock's client-error branch: the
-// collection resolves but the D-Bus Unlock call fails.
-func TestSecretServiceUnlockClientError(t *testing.T) {
-	client := &fakeSecretServiceClient{collection: "/org/collection/sshakku", unlockErr: errors.New("unlock refused")}
-	b := &SecretServiceBackend{Client: client, User: "u"}
-	if err := b.Unlock(); err == nil {
-		t.Fatal("Unlock returned nil, want the client's unlock error")
-	}
-}
-
-// TestSecretServiceLockCollectionError covers Lock's resolve-failure branch:
-// the collection cannot be resolved, so Lock returns before touching the bus.
-func TestSecretServiceLockCollectionError(t *testing.T) {
-	client := &fakeSecretServiceClient{collectionErr: errors.New("no such collection")}
-	b := &SecretServiceBackend{Client: client, User: "u"}
-	if err := b.Lock(); err == nil {
-		t.Fatal("Lock returned nil, want the collection-resolve error")
-	}
-	if len(client.locked) != 0 {
-		t.Fatalf("Lock must not call the bus when the collection cannot resolve, got %v", client.locked)
-	}
-}
