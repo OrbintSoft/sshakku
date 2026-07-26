@@ -3,10 +3,8 @@
 package diagnose
 
 import (
-	"bytes"
 	"context"
 	"os/exec"
-	"strings"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -17,6 +15,24 @@ import (
 // agent/authorization dependency it silently blocks on) must surface as an
 // undetermined check, not hang the caller (e.g. `doctor`) indefinitely.
 const hostCheckTimeout = 5 * time.Second
+
+// Seams over the macOS host-status probes — each a shell-out or sysctl side
+// effect — so DarwinHostSource.Checks and its helpers' branch logic are
+// unit-testable by stubbing them. Production points them at the real tools.
+var (
+	fdesetupStatus = func() ([]byte, error) {
+		//coverage:ignore
+		return hostCheckOutput("fdesetup", "status")
+	}
+	systemProfilerBridge = func() ([]byte, error) {
+		//coverage:ignore
+		return hostCheckOutput("system_profiler", "SPiBridgeDataType")
+	}
+	sysctlARM64 = func() (uint32, error) {
+		//coverage:ignore
+		return unix.SysctlUint32("hw.optional.arm64")
+	}
+)
 
 // DarwinHostSource gathers HostChecks via macOS-native tools: `fdesetup
 // status` for FileVault, and CPU architecture (falling back to a T1/T2 probe
@@ -38,25 +54,14 @@ func (DarwinHostSource) Checks() HostChecks {
 }
 
 // fileVaultStatus runs `fdesetup status`, which needs no elevated privilege
-// to query (only to change). nil on any output this parser doesn't
-// recognize, rather than guessing.
+// to query (only to change), and interprets its output. nil on any output the
+// parser doesn't recognize (or a run failure), rather than guessing.
 func fileVaultStatus() *bool {
-	ctx, cancel := context.WithTimeout(context.Background(), hostCheckTimeout)
-	defer cancel()
-	out, err := exec.CommandContext(ctx, "fdesetup", "status").Output()
+	out, err := fdesetupStatus()
 	if err != nil {
 		return nil
 	}
-	switch s := strings.TrimSpace(string(out)); {
-	case strings.HasPrefix(s, "FileVault is On"):
-		on := true
-		return &on
-	case strings.HasPrefix(s, "FileVault is Off"):
-		off := false
-		return &off
-	default:
-		return nil
-	}
+	return parseFileVaultStatus(out)
 }
 
 // secureEnclaveInfo reports whether the machine has a Secure Enclave
@@ -71,19 +76,22 @@ func fileVaultStatus() *bool {
 // (e.g. `ioreg -c <class>`) for this: they are internal implementation
 // details Apple can rename between OS releases, unlike a public sysctl name.
 func secureEnclaveInfo() (*bool, string) {
-	if arm64, err := unix.SysctlUint32("hw.optional.arm64"); err == nil && arm64 == 1 {
+	if arm64, err := sysctlARM64(); err == nil && arm64 == 1 {
 		present := true
 		return &present, "Secure Enclave"
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), hostCheckTimeout)
-	defer cancel()
-	out, err := exec.CommandContext(ctx, "system_profiler", "SPiBridgeDataType").Output()
+	out, err := systemProfilerBridge()
 	if err != nil {
 		return nil, ""
 	}
-	present := bytes.Contains(out, []byte("Apple T1")) || bytes.Contains(out, []byte("Apple T2"))
-	if present {
-		return &present, "Secure Enclave"
-	}
-	return &present, ""
+	return bridgeSecureEnclave(out)
+}
+
+// hostCheckOutput runs a status probe with hostCheckTimeout so a wedged binary
+// surfaces as an undetermined check rather than hanging the caller.
+func hostCheckOutput(name string, args ...string) ([]byte, error) {
+	//coverage:ignore
+	ctx, cancel := context.WithTimeout(context.Background(), hostCheckTimeout)
+	defer cancel()
+	return exec.CommandContext(ctx, name, args...).Output()
 }
