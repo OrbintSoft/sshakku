@@ -15,6 +15,11 @@ const DefaultProbeTimeout = 2 * time.Second
 // cannot make us allocate unbounded memory. We only need the first payload byte.
 const maxFrame = 256 << 10
 
+// setDeadline applies a read/write deadline to conn. It is a package variable so
+// the failure path can be tested without a connection whose deadline genuinely
+// cannot be set.
+var setDeadline = func(conn net.Conn, t time.Time) error { return conn.SetDeadline(t) }
+
 // SocketProber probes a real ssh-agent by dialing its unix socket and issuing a
 // minimal request-identities ping. A valid identities-answer — regardless of how
 // many keys it lists — means the agent is healthy.
@@ -37,7 +42,7 @@ func (p SocketProber) Reachable(socket string) bool {
 		return false
 	}
 	defer func() { _ = conn.Close() }()
-	if err := conn.SetDeadline(time.Now().Add(timeout)); err != nil {
+	if err := setDeadline(conn, time.Now().Add(timeout)); err != nil {
 		return false
 	}
 	return identitiesAnswered(conn)

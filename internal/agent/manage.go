@@ -29,11 +29,18 @@ type Locker interface {
 	Lock(path string) (unlock func(), err error)
 }
 
+// ProcLister enumerates the ssh-agent processes currently visible on the host. It
+// abstracts the process scan so the agent lifecycle can be tested without a real
+// process table; the production implementation is Inspector.
+type ProcLister interface {
+	Agents() ([]AgentProc, error)
+}
+
 // Manager owns the ssh-agent lifecycle: start one on the fixed socket, and reap
 // dead agents and their stale sockets. It never reimplements the agent.
 type Manager struct {
 	Prober    Prober
-	Inspector Inspector
+	Inspector ProcLister
 	Runner    Runner
 	Signaler  Signaler
 	Locker    Locker // serialises the mutate path; nil disables locking

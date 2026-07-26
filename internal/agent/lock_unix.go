@@ -11,6 +11,11 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// flock is the flock(2) syscall, held as a package variable so the rare
+// non-EWOULDBLOCK failure path can be exercised in tests without provoking a real
+// kernel lock error.
+var flock = unix.Flock
+
 // FlockLocker serialises the mutate path of EnsureAgent with an exclusive advisory
 // lock (flock) on a lock file. The caller probes the fixed socket before locking,
 // so a healthy login is never serialised; only the start/reap/adopt path contends.
@@ -39,10 +44,10 @@ func (l FlockLocker) Lock(path string) (func(), error) {
 	}
 	deadline := time.Now().Add(l.Wait)
 	for {
-		err := unix.Flock(int(f.Fd()), unix.LOCK_EX|unix.LOCK_NB)
+		err := flock(int(f.Fd()), unix.LOCK_EX|unix.LOCK_NB)
 		if err == nil {
 			return func() {
-				_ = unix.Flock(int(f.Fd()), unix.LOCK_UN)
+				_ = flock(int(f.Fd()), unix.LOCK_UN)
 				_ = f.Close()
 			}, nil
 		}
