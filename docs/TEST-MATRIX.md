@@ -78,7 +78,7 @@ worth adding later.
 | Secret backend unresponsive or hangs | ❌ (only unit-tested against a mocked/faked backend interface) | ❌ |
 | Secret-service daemon stopped/crashed mid-session (clean disconnect, not just slow) | ❌ | — (Keychain has no comparable daemon to stop) |
 | D-Bus session bus itself unreachable mid-session (lower-level than the daemon above) | ❌ | — |
-| Real environment variables tampered (`SSH_AUTH_SOCK`, `SSH_ASKPASS`, `SSH_ASKPASS_REQUIRE`, `SSHAKKU_ASKPASS`, `SSHAKKU_HANDOFF_TOKEN`) | ❌ (`Gather`'s logic is only unit-tested against fakes) | ❌ |
+| Real environment variables tampered (`SSH_AUTH_SOCK`, `SSH_ASKPASS`, `SSH_ASKPASS_REQUIRE`, `SSHAKKU_ASKPASS`, `SSHAKKU_HANDOFF_TOKEN`) | ✅ `TestTamperedEnvVarsHandledSafely` — real `os.Getenv` reads feeding the real `gatherReport`/`dispatch`/`askpass`: a hijacked or cleared `SSH_AUTH_SOCK` is flagged unreachable, a leftover `SSHAKKU_ASKPASS` marker never hijacks a real subcommand, and a malformed `SSHAKKU_HANDOFF_TOKEN` redeems nothing from the real store. `SSH_ASKPASS`/`SSH_ASKPASS_REQUIRE` tampering has no observable effect without a live GUI, so it stays unit-only. | ✅ same |
 
 `test/bats/shell-plumbing.bats` has a comment claiming the live-TTY
 first-time-prompt case is "covered at the Go level instead" -- no such test
