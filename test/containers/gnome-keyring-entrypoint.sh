@@ -22,6 +22,14 @@ ln -sf /etc/machine-id /var/lib/dbus/machine-id
 mkdir -p /tmp/.X11-unix
 chmod 1777 /tmp/.X11-unix
 
+# A mid-session-failure test kills the daemon to watch the backend cope; the
+# bus would otherwise respawn it from this activation file on the next call,
+# so the test opts into removing it. The prompter services stay so the
+# one-time collection-creation dialog still works.
+if [ -n "${SSHAKKU_DISABLE_SECRETS_ACTIVATION:-}" ]; then
+	rm -f /usr/share/dbus-1/services/org.freedesktop.secrets.service
+fi
+
 useradd -m -u "${TEST_UID}" -s /bin/bash "${TEST_USER}"
 
 mkdir -p "${RUNTIME_DIR}"
@@ -34,4 +42,5 @@ exec runuser -u "${TEST_USER}" -- env -i \
 	XDG_RUNTIME_DIR="${RUNTIME_DIR}" \
 	DBUS_SESSION_BUS_ADDRESS="unix:path=${RUNTIME_DIR}/bus" \
 	SSHAKKU_TEST_ALLOW_REAL_SECRETSERVICE="1" \
+	SSHAKKU_DISABLE_SECRETS_ACTIVATION="${SSHAKKU_DISABLE_SECRETS_ACTIVATION:-}" \
 	"${SCRIPT_DIR}/gnome-keyring-session.sh" "$@"
