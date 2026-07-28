@@ -966,4 +966,81 @@ configurability, and the Homebrew tap-then-public-tap path (open decision
 scratch, since it has no Secret-Service-equivalent path there (open decision
 23). Detailed steps written when this phase starts.
 
+- **Configurable Keychain access policy (ACL).** The `KeychainBackend` sets an
+  explicit access control on every item it writes, chosen by a `config.toml`
+  key (e.g. `macos_keychain_access`): `touchid-always` (**default** — maximum
+  security: each passphrase release requires Touch ID or the login password,
+  and stays deterministic even for an ad-hoc-signed binary), `touchid-once`
+  (authorize once, then silent for sshakku), or `silent` (no prompt when
+  sshakku reads its own items). Today `Add()` sets no access control, so the
+  prompt behaviour is left to the default ACL and drifts with the binary's
+  code-signing identity — which is why the same tool sometimes prompts for
+  Touch ID and sometimes doesn't. `silent`/`touchid-once` are only
+  deterministic with a stable Developer ID signature, tying this to the
+  codesigning work above. macOS-only (the key is inert off Darwin); the chosen
+  policy is documented in `docs/CONFIGURATION.md`.
+
 → goal 12; open decisions 22, 23.
+
+### Phase 12 — Configuration visibility & editing
+
+Make the effective configuration and the active secret backend legible from the
+CLI, so a user can see what sshakku is actually doing without reading source or
+guessing which `config.toml` key won. Small, self-contained UX work; detailed
+steps written when the phase starts.
+
+- **`doctor` reports the active secret backend.** `sshakku doctor`'s standard
+  report names the backend currently resolved from `config.toml` (macOS
+  Keychain, 1Password `op`, Bitwarden `bw`, freedesktop Secret Service, ...),
+  not only whether `--test-backend` can exercise it — so the resolved choice is
+  visible at a glance alongside the rest of the diagnosis.
+- **`sshakku config --show`** prints the effective configuration: the resolved
+  settings actually in force (file values merged over defaults) and the path of
+  the `config.toml` it read, so the user can confirm what took effect rather
+  than inspecting the file by hand.
+- **`sshakku config --edit`** opens the `config.toml` in `$EDITOR` (falling back
+  to `$VISUAL`, then a sensible default), creating it from a commented template
+  if absent. An interactive, human-invoked operation.
+
+Open: whether these are flags on a `config` subcommand (`config --show`) or
+verbs (`config show`/`config edit`); whether `--show` reports value provenance
+(default vs file) per key. Settle when the phase starts.
+
+→ goals 8, 11, 15; open decisions 7, 12.
+
+### Phase 13 — Cross-platform GUI passphrase prompt
+
+Today the only graphical passphrase prompter is `KDialogPrompter` (kdialog,
+KDE). On GNOME without kdialog, and on macOS always, the key-passphrase prompt
+falls back to the terminal, so the graphical path is effectively KDE-only. Make
+the graphical prompt work across desktops without hard-depending on any single
+tool, always keeping the terminal as the floor. Detailed steps written when the
+phase starts.
+
+- **Prompter chain.** Linux: `pinentry` (Assuan) → `TTYPrompter`. macOS:
+  `osascript` → `TTYPrompter` (a Darwin-only file, not compiled elsewhere).
+  `pinentry`/`osascript` auto-select the desktop-appropriate frontend, so no
+  single toolkit is presumed.
+- **Config override.** `config.toml` `gui_prompter = auto | pinentry | kdialog |
+  zenity | none`: `auto` (default) = pinentry on Linux, osascript on macOS;
+  `none` = never use a GUI; `kdialog`/`zenity` = explicit override (still gated
+  on a graphical session).
+- **Fallback invariants.** No graphical session → **always** `TTYPrompter`,
+  whatever the config says. Graphical session present but the GUI prompter
+  cannot run (binary absent, D-Bus/Assuan error) → **TTY fallback**. A user who
+  *cancels* the dialog is not a fallback: the cancel propagates
+  (`ErrPromptCanceled`), and the loader gives up on that key without a terminal
+  retry.
+- **No `$SSH_ASKPASS` delegation.** sshakku *is* the askpass broker (it exports
+  `SSH_ASKPASS=self`), so a prompter that consulted `$SSH_ASKPASS` to find "the
+  system helper" would point back at sshakku. That approach is deliberately
+  rejected.
+- **Also un-KDE the broker gate.** `askpassEnv` decides whether to wire the
+  wallet-aware `SSH_ASKPASS` broker off the same kdialog-only `guiAvailable()`
+  check; widen that detection so the broker wiring stops being KDE-only too.
+- **Licence (rule 16).** pinentry (GPL), kdialog (GPL), zenity, osascript are
+  invoked as separate processes at runtime, never linked or embedded, so their
+  licences do not affect EUPL compatibility or relicensing; recorded as
+  runtime-invoked tools.
+
+→ goals 11, 15; open decision 7.
