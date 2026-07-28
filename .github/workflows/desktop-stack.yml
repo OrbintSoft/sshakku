@@ -79,3 +79,26 @@ jobs:
           -e SSHAKKU_DISABLE_SECRETS_ACTIVATION=${{ matrix.disable_activation }}
           sshakku-test-desktop-stack-gnome-keyring
           go test -tags midsession_failure -count=1 -run '${{ matrix.run }}' ./internal/keys/
+
+  unresponsive-backend:
+    name: unresponsive backend (frozen daemon)
+    # Same integration gate as container-test: manual dispatch, or a push whose
+    # head commit opts in with [integration].
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[integration]')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Reuses the gnome-keyring image: SIGSTOP-freezing its single daemon
+      # leaves it owning org.freedesktop.secrets, so the bus never respawns a
+      # replacement and no activation-file removal is needed, unlike the
+      # daemon-stopped mid-session scenario.
+      - name: Build gnome-keyring test image
+        run: docker build -f test/containers/gnome-keyring.Dockerfile -t sshakku-test-desktop-stack-gnome-keyring .
+
+      - name: Run frozen-daemon scenario
+        run: >
+          docker run --init --rm -v "${{ github.workspace }}":/src:ro
+          sshakku-test-desktop-stack-gnome-keyring
+          go test -tags backend_unresponsive -count=1 -run TestSecretServiceUnresponsiveDaemon ./internal/keys/
