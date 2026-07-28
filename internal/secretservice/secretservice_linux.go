@@ -7,8 +7,10 @@
 package secretservice
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/godbus/dbus/v5"
@@ -48,6 +50,14 @@ const (
 // operation as failed. A var, not a const, so tests can shorten it.
 var promptTimeout = 30 * time.Second
 
+// defaultCallTimeout bounds every ordinary D-Bus round-trip when the caller
+// leaves Client.CallTimeout unset. Killing the daemon or the bus breaks the
+// connection so godbus returns an error on its own, but a daemon that is alive
+// yet unresponsive never replies and a plain flags-only call would block the
+// caller forever; the deadline turns that hang into a prompt error. Long enough
+// never to trip a slow-but-alive daemon.
+const defaultCallTimeout = 30 * time.Second
+
 // Secret is the D-Bus Secret Service "Secret" struct. sshakku only ever
 // negotiates the "plain" session algorithm, so Parameters is always empty and
 // Value is the passphrase bytes verbatim (no decryption step).
@@ -63,6 +73,43 @@ type Client struct {
 	conn    *dbus.Conn
 	service dbus.BusObject
 	session dbus.ObjectPath
+
+	// CallTimeout bounds each ordinary D-Bus round-trip. Zero selects
+	// defaultCallTimeout; set it lower to fail faster against a store that has
+	// stopped responding.
+	CallTimeout time.Duration
+}
+
+// callTimeout is CallTimeout or, when unset, defaultCallTimeout.
+func (c *Client) callTimeout() time.Duration {
+	if c.CallTimeout > 0 {
+		return c.CallTimeout
+	}
+	return defaultCallTimeout
+}
+
+// call makes a synchronous D-Bus method call bounded by callTimeout, so a
+// connected-but-unresponsive daemon surfaces a deadline error instead of
+// blocking forever. CallWithContext returns only once the call completes or the
+// deadline fires, so cancelling the context as call returns is safe.
+func (c *Client) call(obj dbus.BusObject, method string, args ...interface{}) *dbus.Call {
+	ctx, cancel := context.WithTimeout(context.Background(), c.callTimeout())
+	defer cancel()
+	return obj.CallWithContext(ctx, method, 0, args...)
+}
+
+// property reads a single D-Bus property under the same callTimeout bound as
+// call. godbus's own BusObject.GetProperty has no context-aware variant and
+// would block indefinitely against a frozen daemon, so this issues the
+// underlying org.freedesktop.DBus.Properties.Get through call instead.
+func (c *Client) property(obj dbus.BusObject, name string) (dbus.Variant, error) {
+	dot := strings.LastIndex(name, ".")
+	if dot < 0 {
+		return dbus.Variant{}, fmt.Errorf("secret service: malformed property name %q", name)
+	}
+	var v dbus.Variant
+	err := c.call(obj, "org.freedesktop.DBus.Properties.Get", name[:dot], name[dot+1:]).Store(&v)
+	return v, err
 }
 
 // NewClient connects to the session bus and negotiates a "plain" Secret
@@ -79,7 +126,9 @@ func NewClient() (*Client, error) {
 		output  dbus.Variant
 		session dbus.ObjectPath
 	)
-	call := service.Call(serviceIface+".OpenSession", 0, "plain", dbus.MakeVariant(""))
+	ctx, cancel := context.WithTimeout(context.Background(), defaultCallTimeout)
+	defer cancel()
+	call := service.CallWithContext(ctx, serviceIface+".OpenSession", 0, "plain", dbus.MakeVariant(""))
 	if err := call.Store(&output, &session); err != nil {
 		_ = conn.Close()
 		return nil, fmt.Errorf("secret service: open session: %w", err)
@@ -90,7 +139,7 @@ func NewClient() (*Client, error) {
 
 // Close ends the Secret Service session and closes the bus connection.
 func (c *Client) Close() error {
-	_ = c.conn.Object(busName, c.session).Call(sessionIface+".Close", 0).Err
+	_ = c.call(c.conn.Object(busName, c.session), sessionIface+".Close").Err
 	return c.conn.Close()
 }
 
@@ -105,7 +154,7 @@ func (c *Client) Close() error {
 // unchanged for a backend like KDE's ksecretd that supports it.
 func (c *Client) Collection(alias, label string) (dbus.ObjectPath, error) {
 	var existing dbus.ObjectPath
-	if err := c.service.Call(serviceIface+".ReadAlias", 0, alias).Store(&existing); err != nil {
+	if err := c.call(c.service, serviceIface+".ReadAlias", alias).Store(&existing); err != nil {
 		return "", fmt.Errorf("secret service: read alias %q: %w", alias, err)
 	}
 	if existing != noPrompt {
@@ -145,7 +194,7 @@ func (c *Client) Collection(alias, label string) (dbus.ObjectPath, error) {
 // Collection can retry it with a different alias on isAliasNotSupported.
 func (c *Client) createCollection(alias, label string) (collection, prompt dbus.ObjectPath, err error) {
 	props := map[string]dbus.Variant{collectionLabelProp: dbus.MakeVariant(label)}
-	err = c.service.Call(serviceIface+".CreateCollection", 0, props, alias).Store(&collection, &prompt)
+	err = c.call(c.service, serviceIface+".CreateCollection", props, alias).Store(&collection, &prompt)
 	return collection, prompt, err
 }
 
@@ -165,7 +214,7 @@ func isAliasNotSupported(err error) bool {
 // never find it on a later call. Returns noPrompt, not an error, when
 // nothing matches.
 func (c *Client) findCollectionByLabel(label string) (dbus.ObjectPath, error) {
-	v, err := c.service.GetProperty(serviceCollectionsProp)
+	v, err := c.property(c.service, serviceCollectionsProp)
 	if err != nil {
 		return "", fmt.Errorf("secret service: list collections: %w", err)
 	}
@@ -174,7 +223,7 @@ func (c *Client) findCollectionByLabel(label string) (dbus.ObjectPath, error) {
 		return "", fmt.Errorf("secret service: list collections: unexpected property type %T", v.Value())
 	}
 	for _, collection := range collections {
-		v, err := c.conn.Object(busName, collection).GetProperty(collectionLabelProp)
+		v, err := c.property(c.conn.Object(busName, collection), collectionLabelProp)
 		if err != nil {
 			continue
 		}
@@ -202,7 +251,7 @@ func (c *Client) unlockOrLock(method string, objects []dbus.ObjectPath) error {
 		done   []dbus.ObjectPath
 		prompt dbus.ObjectPath
 	)
-	if err := c.service.Call(method, 0, objects).Store(&done, &prompt); err != nil {
+	if err := c.call(c.service, method, objects).Store(&done, &prompt); err != nil {
 		return fmt.Errorf("secret service: %s: %w", method, err)
 	}
 	if prompt == noPrompt {
@@ -217,7 +266,7 @@ func (c *Client) unlockOrLock(method string, objects []dbus.ObjectPath) error {
 func (c *Client) SearchItems(collection dbus.ObjectPath, attrs map[string]string) ([]dbus.ObjectPath, error) {
 	var items []dbus.ObjectPath
 	obj := c.conn.Object(busName, collection)
-	if err := obj.Call(collectionIface+".SearchItems", 0, attrs).Store(&items); err != nil {
+	if err := c.call(obj, collectionIface+".SearchItems", attrs).Store(&items); err != nil {
 		return nil, fmt.Errorf("secret service: search items: %w", err)
 	}
 	return items, nil
@@ -228,7 +277,7 @@ func (c *Client) SearchItems(collection dbus.ObjectPath, attrs map[string]string
 func (c *Client) GetSecret(item dbus.ObjectPath) (string, error) {
 	var secret Secret
 	obj := c.conn.Object(busName, item)
-	if err := obj.Call(itemIface+".GetSecret", 0, c.session).Store(&secret); err != nil {
+	if err := c.call(obj, itemIface+".GetSecret", c.session).Store(&secret); err != nil {
 		return "", fmt.Errorf("secret service: get secret: %w", err)
 	}
 	return string(secret.Value), nil
@@ -249,7 +298,7 @@ func (c *Client) CreateItem(collection dbus.ObjectPath, label string, attrs map[
 		prompt dbus.ObjectPath
 	)
 	obj := c.conn.Object(busName, collection)
-	call := obj.Call(collectionIface+".CreateItem", 0, props, secret, replace)
+	call := c.call(obj, collectionIface+".CreateItem", props, secret, replace)
 	if err := call.Store(&item, &prompt); err != nil {
 		return fmt.Errorf("secret service: create item %q: %w", label, err)
 	}
@@ -264,7 +313,7 @@ func (c *Client) CreateItem(collection dbus.ObjectPath, label string, attrs map[
 // — unlike SearchItems, which only returns items matching a given filter.
 func (c *Client) Items(collection dbus.ObjectPath) ([]dbus.ObjectPath, error) {
 	obj := c.conn.Object(busName, collection)
-	v, err := obj.GetProperty(collectionItemsProp)
+	v, err := c.property(obj, collectionItemsProp)
 	if err != nil {
 		return nil, fmt.Errorf("secret service: collection items: %w", err)
 	}
@@ -279,7 +328,7 @@ func (c *Client) Items(collection dbus.ObjectPath) ([]dbus.ObjectPath, error) {
 // item was stored under.
 func (c *Client) ItemAttributes(item dbus.ObjectPath) (map[string]string, error) {
 	obj := c.conn.Object(busName, item)
-	v, err := obj.GetProperty(itemAttributesProp)
+	v, err := c.property(obj, itemAttributesProp)
 	if err != nil {
 		return nil, fmt.Errorf("secret service: item attributes: %w", err)
 	}
@@ -295,7 +344,7 @@ func (c *Client) ItemAttributes(item dbus.ObjectPath) (map[string]string, error)
 func (c *Client) DeleteItem(item dbus.ObjectPath) error {
 	var prompt dbus.ObjectPath
 	obj := c.conn.Object(busName, item)
-	if err := obj.Call(itemIface+".Delete", 0).Store(&prompt); err != nil {
+	if err := c.call(obj, itemIface+".Delete").Store(&prompt); err != nil {
 		return fmt.Errorf("secret service: delete item: %w", err)
 	}
 	if prompt == noPrompt {
@@ -326,7 +375,7 @@ func (c *Client) completePrompt(path dbus.ObjectPath) (dbus.Variant, error) {
 	defer func() { _ = c.conn.RemoveMatchSignal(matchOpts...) }()
 
 	prompt := c.conn.Object(busName, path)
-	if err := prompt.Call(promptIface+".Prompt", 0, "").Err; err != nil {
+	if err := c.call(prompt, promptIface+".Prompt", "").Err; err != nil {
 		return dbus.Variant{}, fmt.Errorf("secret service: prompt %s: %w", path, err)
 	}
 
@@ -345,7 +394,7 @@ func (c *Client) completePrompt(path dbus.ObjectPath) (dbus.Variant, error) {
 		}
 		return result, nil
 	case <-time.After(promptTimeout):
-		_ = prompt.Call(promptIface+".Dismiss", 0)
+		_ = c.call(prompt, promptIface+".Dismiss").Err
 		return dbus.Variant{}, fmt.Errorf("secret service: prompt %s timed out after %s", path, promptTimeout)
 	}
 }

@@ -50,11 +50,26 @@ type fakeService struct {
 	// create-failure path rather than the alias fallback.
 	failCreateCollection bool
 
+	// hang, when non-nil, makes ReadAlias accept the call but block on the
+	// channel instead of replying, standing in for a daemon that is alive and
+	// connected yet unresponsive — the case a plain flags-only call would wait
+	// on forever. The test closes the channel in cleanup so the handler
+	// goroutine unwinds after the client has already given up.
+	hang chan struct{}
+
 	mu          sync.Mutex
 	aliases     map[string]dbus.ObjectPath
 	collections map[dbus.ObjectPath]*fakeCollection
 	nextID      int
 	lastPrompt  *fakePrompt
+}
+
+// hangOn arms the ReadAlias block with ch, under the lock since the exported
+// handler reads the field from a D-Bus dispatch goroutine.
+func (s *fakeService) hangOn(ch chan struct{}) {
+	s.mu.Lock()
+	s.hang = ch
+	s.mu.Unlock()
 }
 
 // startFakeSecretService exports svc as org.freedesktop.secrets on conn and
@@ -130,6 +145,13 @@ func (s *fakeService) OpenSession(string, dbus.Variant) (dbus.Variant, dbus.Obje
 }
 
 func (s *fakeService) ReadAlias(name string) (dbus.ObjectPath, *dbus.Error) {
+	s.mu.Lock()
+	hang := s.hang
+	s.mu.Unlock()
+	if hang != nil {
+		<-hang // block outside the lock: an unresponsive daemon never replies
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if p, ok := s.aliases[name]; ok {
