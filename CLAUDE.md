@@ -102,7 +102,13 @@ appending. See `docs/THREAT-MODEL.md` for the threat model and the June 2026 inc
 19. **Keep the test matrix current.** Whenever a new OS/target, integration,
     environment, configuration, or installation method is implemented, add or
     update its row in `docs/TEST-MATRIX.md` in the same change — see PLAN.md
-    Phase 6 / open decision 24.
+    Phase 6 / open decision 24. Every ✅ names the feature (Rule 21) the test
+    verifies, so a reader can check the test against the promise rather than
+    against the code. A `—` or a documented ❌ must be justified by something
+    that **cannot exist** ("the Keychain has no daemon to freeze"), never by how
+    the product behaves today: "has no observable effect" is what a defect looks
+    like from the inside, and writing it into the matrix turns the defect into
+    its own excuse.
 
 20. **Exclude only genuinely untestable code from coverage.** Tag a block
     `//coverage:ignore` (with a plain-comment reason on the line above it,
@@ -112,3 +118,49 @@ appending. See `docs/THREAT-MODEL.md` for the threat model and the June 2026 inc
     when tempted, refactor the untestable part into a thin injectable seam and
     test the rest instead. `go-ignore-cov` (wired into `make test-json`) then
     counts the tagged block as covered so the reported percentage stays honest.
+
+21. **Every user-visible behaviour is a documented feature.** `docs/FEATURES.md`
+    is the authoritative catalogue of what SSHakku promises its users, each entry
+    carrying a stable id and stated as an outcome the user can observe — not as a
+    description of the implementation. Before implementing or changing behaviour,
+    read the feature it belongs to and confirm the implementation still satisfies
+    it; if the behaviour isn't in the catalogue yet, add it there **first**, in
+    the same change. A promise that lives only in prose (a README paragraph, a
+    commit message, someone's memory) cannot be referenced by a test, and what no
+    test references is what silently stops working.
+
+22. **Test the promise, not the implementation.** Unit tests verify that the code
+    does what it says: they are written from the code and that is their job.
+    Integration, acceptance and end-to-end tests verify that the *product does
+    what it promises*: they must be derived from a feature in `docs/FEATURES.md`
+    and from nothing else. Never write one by reading the implementation first — a
+    test derived from the code can only ever agree with the code, including where
+    the code is wrong, which is exactly how a broken feature keeps a green suite.
+    State in the test which feature it verifies.
+
+23. **Red before green.** A test must be observed **failing** before it is
+    committed passing, and the commit message says how it was made to fail. For a
+    bug: reproduce it first, then diagnose — never the reverse. For a feature:
+    write the assertion against the promise, watch it fail, then implement. A test
+    that has never been red proves only that it agrees with today's code. When a
+    fix and its test land together, commit the failing test first so the pairing
+    is visible in the history.
+
+24. **Never stub the decision under test.** A test may replace dependencies
+    *upstream* of what it asserts; it must never stub the very thing it exists to
+    judge. Forcing `guiAvailable = true` inside a test of the askpass wiring, or
+    substituting a fake secret backend in a test whose subject is the wallet, does
+    not test that seam — it asserts the seam away. The same defect wearing a
+    different hat: discarding an output stream whose content *is* the behaviour
+    (`io.Discard` over a command whose job is to print). When the honest version
+    of a test is hard to write, that difficulty is information about the product,
+    not an obstacle to route around.
+
+25. **"Verified" means the product ran.** Linters, unit tests and coverage verify
+    that the code is internally consistent; they are never evidence that a feature
+    works, and must not be reported as such. For any change to user-visible
+    behaviour, verification means driving the **real binary** through the user's
+    scenario in a disposable environment and observing the user-visible outcome —
+    see the `verify-e2e` skill. Report what was actually exercised and what was
+    not: "unit tests pass, the feature was not run end to end" is a useful,
+    honest statement; "verified" without a run is not.
