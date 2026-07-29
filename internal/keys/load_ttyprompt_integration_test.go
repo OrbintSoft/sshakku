@@ -35,7 +35,16 @@ const vaultStoresMarker = "sshakku-test: vault-stores="
 
 // ttyPromptTimeout bounds every read from the terminal, so a regression that
 // stops prompting (or stops answering) fails the test instead of hanging CI.
-const ttyPromptTimeout = 30 * time.Second
+// ttyHelperTimeout bounds the child as a whole, which walks through one real
+// ssh-add per attempt and so needs room for several of these in a row.
+const (
+	ttyPromptTimeout = 30 * time.Second
+	ttyHelperTimeout = 3 * time.Minute
+)
+
+// ttyPromptLine is what TTYPrompter writes to the terminal for the test key;
+// the tests count these to see how many times the user was asked.
+const ttyPromptLine = "Enter passphrase for id_test: "
 
 // TestLoadKeysFirstTimePromptRealTerminal drives the first-time passphrase
 // prompt over a real pseudo-terminal: an empty vault, no graphical prompter, a
@@ -65,7 +74,7 @@ func TestLoadKeysFirstTimePromptRealTerminal(t *testing.T) {
 	// Type only once the prompt has arrived, the way a user would: a terminal's
 	// line discipline echoes what it receives as it receives it, so this is
 	// exactly where a passphrase would become visible on screen.
-	seen := readUntil(t, master, "Enter passphrase for id_test: ")
+	seen := readUntil(t, master, ttyPromptLine)
 	if _, err := master.WriteString(passphrase + "\n"); err != nil {
 		t.Fatalf("type the passphrase on the terminal: %v", err)
 	}
@@ -85,6 +94,59 @@ func TestLoadKeysFirstTimePromptRealTerminal(t *testing.T) {
 	}
 
 	assertKeyInAgent(t, env.keyfile, true)
+}
+
+// TestLoadKeysWrongPassphraseRealTerminal answers the live prompt with the
+// wrong passphrase every time, over the same real pseudo-terminal, and checks
+// how the loader gives up: the user is asked exactly MaxAttempts times and no
+// more, is then told on the terminal that the key could not be loaded, and the
+// key is marked as abandoned so later shells stop re-prompting for it.
+//
+// A rejected passphrase must also leave no trace — not echoed onto the
+// terminal, and never written to the vault, which would poison later silent
+// loads with a passphrase already known to be wrong.
+func TestLoadKeysWrongPassphraseRealTerminal(t *testing.T) {
+	if os.Getenv(envTTYHelper) == "1" {
+		runTTYPromptHelper()
+	}
+	requireRealSSHBinaries(t)
+	requireUsableHandoff(t)
+
+	const wrong = "not-the-passphrase-for-this-key"
+	env := setupTTYPromptTest(t, "sshakku-live-terminal-test-passphrase")
+
+	master, slave := openPTY(t)
+	child := startTTYPromptHelper(t, env, slave)
+
+	var seen string
+	for attempt := 1; attempt <= defaultMaxAttempts; attempt++ {
+		seen += readUntil(t, master, ttyPromptLine)
+		if _, err := master.WriteString(wrong + "\n"); err != nil {
+			t.Fatalf("type the wrong passphrase (attempt %d): %v", attempt, err)
+		}
+	}
+	seen += drain(t, master)
+
+	if err := child.Wait(); err != nil {
+		t.Fatalf("helper: %v\nterminal output:\n%q", err, seen)
+	}
+	if got := strings.Count(seen, ttyPromptLine); got != defaultMaxAttempts {
+		t.Errorf("the user was asked %d times, want %d; output:\n%q", got, defaultMaxAttempts, seen)
+	}
+	if strings.Contains(seen, wrong) {
+		t.Errorf("the rejected passphrase was echoed back onto the terminal; output:\n%q", seen)
+	}
+	if want := fmt.Sprintf("sshakku: could not load key id_test after %d attempts", defaultMaxAttempts); !strings.Contains(seen, want) {
+		t.Errorf("the user was never told the key could not be loaded (want %q); output:\n%q", want, seen)
+	}
+	if want := vaultStoresMarker + "0"; !strings.Contains(seen, want) {
+		t.Errorf("a rejected passphrase reached the vault (want %q); output:\n%q", want, seen)
+	}
+	if _, err := os.Stat(filepath.Join(env.giveupDir, "id_test")); err != nil {
+		t.Errorf("no give-up recorded after the attempts ran out, so every later shell would prompt again: %v", err)
+	}
+
+	assertKeyInAgent(t, env.keyfile, false)
 }
 
 // ttyPromptEnv is the staged world a live-terminal prompt test runs against.
@@ -145,7 +207,7 @@ func setupTTYPromptTest(t *testing.T, passphrase string) ttyPromptEnv {
 func startTTYPromptHelper(t *testing.T, env ttyPromptEnv, slave *os.File) *exec.Cmd {
 	t.Helper()
 
-	ctx, cancel := context.WithTimeout(context.Background(), ttyPromptTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), ttyHelperTimeout)
 	t.Cleanup(cancel)
 
 	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^"+t.Name()+"$")
