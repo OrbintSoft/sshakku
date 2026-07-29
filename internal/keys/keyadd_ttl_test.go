@@ -12,14 +12,26 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/keyring"
 )
 
-// requireRealSSHTools skips the test when the real ssh-agent/ssh-add/ssh-keygen
-// and keyctl binaries this test drives aren't on PATH.
-func requireRealSSHTools(t *testing.T) {
+// requireRealSSHBinaries skips the test when the real ssh-agent/ssh-add/
+// ssh-keygen binaries it drives aren't on PATH.
+func requireRealSSHBinaries(t *testing.T) {
 	t.Helper()
-	for _, bin := range []string{"ssh-agent", "ssh-add", "ssh-keygen", "keyctl"} {
+	for _, bin := range []string{"ssh-agent", "ssh-add", "ssh-keygen"} {
 		if _, err := exec.LookPath(bin); err != nil {
 			t.Skipf("%s not on PATH", bin)
 		}
+	}
+}
+
+// requireRealSSHTools additionally requires keyctl, which tests that redeem the
+// stashed passphrase themselves — rather than through the sshakku binary — use
+// to read it back out of the kernel keyring. It is Linux-only, so tests calling
+// this skip on every other platform.
+func requireRealSSHTools(t *testing.T) {
+	t.Helper()
+	requireRealSSHBinaries(t)
+	if _, err := exec.LookPath("keyctl"); err != nil {
+		t.Skip("keyctl not on PATH")
 	}
 }
 
