@@ -40,16 +40,20 @@ func ReadTTYLine(prompt string, secret bool) (string, error) {
 	}
 	defer func() { _ = f.Close() }()
 
-	if _, err := fmt.Fprint(f, prompt); err != nil {
-		return "", err
-	}
-
+	// Echo goes off before the prompt is written, never after: the terminal
+	// echoes each character as it arrives, so anything typed (or pasted, or
+	// piped in) between the two would be printed in the clear. Seeing the
+	// prompt is then also the user's guarantee that echo is already off.
 	if secret {
 		restore, err := disableEcho(f)
 		if err != nil {
 			return "", err
 		}
 		defer restore()
+	}
+
+	if _, err := fmt.Fprint(f, prompt); err != nil {
+		return "", err
 	}
 
 	line, readErr := bufio.NewReader(f).ReadString('\n')

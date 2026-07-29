@@ -8,18 +8,6 @@ import (
 	"testing"
 )
 
-// requireRealSSHToolsNoKeyctl is requireRealSSHTools without the keyctl
-// check: keyctl is Linux-only and irrelevant here — this test exercises the
-// Darwin socket handoff (handoff_darwin.go), not the keyring.
-func requireRealSSHToolsNoKeyctl(t *testing.T) {
-	t.Helper()
-	for _, bin := range []string{"ssh-agent", "ssh-add", "ssh-keygen"} {
-		if _, err := exec.LookPath(bin); err != nil {
-			t.Skipf("%s not on PATH", bin)
-		}
-	}
-}
-
 // TestAddWithAskpassRealBinaryDarwin exercises the full production path on
 // Darwin: AddWithAskpass stashes the passphrase over a private Unix socket
 // (handoff_darwin.go/handoff_socket.go), spawns a real detached ssh-add,
@@ -30,7 +18,7 @@ func requireRealSSHToolsNoKeyctl(t *testing.T) {
 // binary with here, so this test builds and runs the real binary — the only
 // way to exercise the fetch side (cmd/sshakku's askpass dispatch) for real.
 func TestAddWithAskpassRealBinaryDarwin(t *testing.T) {
-	requireRealSSHToolsNoKeyctl(t)
+	requireRealSSHBinaries(t)
 
 	dir := shortDir(t)
 	sshakkuBin := filepath.Join(dir, "sshakku")

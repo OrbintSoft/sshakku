@@ -797,8 +797,15 @@ decisions 9, 20, 24.
    `TestEnsureAgentRealGracefulStopRemovesSocket` (a SIGTERM'd agent unlinks its
    own socket, so the next `EnsureAgent` is a clean start, not a zombie reap),
    running in the isolated container/macOS suites alongside the other
-   `TestEnsureAgentReal*` states. Other open cells in `docs/TEST-MATRIX.md`
-   remain.
+   `TestEnsureAgentReal*` states. The two live-terminal prompt cells are
+   closed on both platforms by `TestLoadKeysFirstTimePromptRealTerminal` and
+   `TestLoadKeysWrongPassphraseRealTerminal`: the loader runs in a child
+   process holding a real pseudo-terminal as its controlling terminal — the
+   only way a process can obtain one, and what the unit tests substitute a
+   socketpair plus stubbed termios ioctls for — while the test plays the user
+   on the other end. They also settled the open question about the stale
+   `test/bats/shell-plumbing.bats` comment that claimed the case was already
+   covered at the Go level. Other open cells in `docs/TEST-MATRIX.md` remain.
 
    Integration tests are heavier than the unit suite, so each lives in its own
    workflow that runs on `workflow_dispatch` or on a push whose head commit

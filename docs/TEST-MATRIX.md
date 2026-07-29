@@ -73,17 +73,18 @@ worth adding later.
 | One dead agent of ours plus multiple healthy foreign agents | ✅ `TestEnsureAgentRealDisasterReapsAndAdoptsLowestPID` | ✅ same |
 | `sshakku doctor --fix` recovers a dead own-agent | ✅ `TestDoctorDetectsAndFixesDeadOursAgent` | ✅ same |
 | Headless (no TTY at all), vault already has the passphrase, silent load | ✅ `TestLoadKeysHeadlessVaultHit` | ❌ (that test's "vault" stand-in is the Linux kernel keyring specifically) |
-| Live interactive TTY, vault empty, first-time passphrase prompt | ❌ | ❌ |
-| Wrong passphrase entered at the prompt | ❌ (only unit-tested against a mocked prompter) | ❌ |
+| Live interactive TTY, vault empty, first-time passphrase prompt | ✅ `TestLoadKeysFirstTimePromptRealTerminal` — the loader runs in a child process holding a real pseudo-terminal as its controlling terminal, with an empty vault and no graphical prompter, while the test plays the user on the other end: the prompt reaches the terminal, the typed passphrase is never echoed back onto it, it is stored for next time, and the key lands in a real `ssh-agent` through the real out-of-band handoff | ✅ same |
+| Wrong passphrase entered at the prompt | ✅ `TestLoadKeysWrongPassphraseRealTerminal` — the same live terminal, answered wrong every time: the user is asked exactly `MaxAttempts` times and no more, is told on the terminal that the key could not be loaded, and the key is marked as given up so later shells stop re-prompting; the rejected passphrase is neither echoed nor written to the vault, and the key stays out of the agent | ✅ same |
 | Secret backend unresponsive or hangs | ✅ `TestSecretServiceUnresponsiveDaemon` — a live `SecretServiceBackend` round-trips, then `gnome-keyring-daemon` is SIGSTOP-frozen (still alive and still owning the bus name, so the bus cannot respawn it) and the next `Lookup`, bounded by the client's `CallTimeout`, must return an error promptly instead of blocking forever; `desktop-stack.yml` runs it in a throwaway container | — (the Keychain is reached through a synchronous Security.framework call with no daemon SSHakku can freeze or put a deadline on, so there is no comparable unresponsive-backend scenario) |
 | Secret-service daemon stopped/crashed mid-session (clean disconnect, not just slow) | ✅ `TestSecretServiceMidSessionFailure` (daemon-stopped) — a live `SecretServiceBackend` round-trips, then `gnome-keyring-daemon` is SIGKILLed (with its D-Bus activation file removed so the bus cannot respawn it) and the next `Lookup` must return promptly with an error, never a stale hit or a hang; `desktop-stack.yml` runs it in a throwaway container | — (Keychain has no comparable daemon to stop) |
 | D-Bus session bus itself unreachable mid-session (lower-level than the daemon above) | ✅ `TestSecretServiceMidSessionFailure` (bus-unreachable) — same live round-trip, then the `dbus-daemon` session bus itself is SIGKILLed, severing the transport under the client, and the next `Lookup` must surface the broken connection promptly rather than hang | — |
 | Real environment variables tampered (`SSH_AUTH_SOCK`, `SSH_ASKPASS`, `SSH_ASKPASS_REQUIRE`, `SSHAKKU_ASKPASS`, `SSHAKKU_HANDOFF_TOKEN`) | ✅ `TestTamperedEnvVarsHandledSafely` — real `os.Getenv` reads feeding the real `gatherReport`/`dispatch`/`askpass`: a hijacked or cleared `SSH_AUTH_SOCK` is flagged unreachable, a leftover `SSHAKKU_ASKPASS` marker never hijacks a real subcommand, and a malformed `SSHAKKU_HANDOFF_TOKEN` redeems nothing from the real store. `SSH_ASKPASS`/`SSH_ASKPASS_REQUIRE` tampering has no observable effect without a live GUI, so it stays unit-only. | ✅ same |
 
-`test/bats/shell-plumbing.bats` has a comment claiming the live-TTY
-first-time-prompt case is "covered at the Go level instead" -- no such test
-was found; either it doesn't exist yet or the comment is stale. Worth
-resolving as its own follow-up, not silently assumed either way.
+The two live-terminal rows above are covered by the Go suite rather than by
+`test/bats/shell-plumbing.bats`: that suite runs in a container with no
+controlling terminal at all, while the Go tests allocate a pseudo-terminal
+of their own. They need no daemon and no container, so they run on both
+platforms in the ordinary test run.
 
 ## Init system (systemd/OpenRC/...)
 

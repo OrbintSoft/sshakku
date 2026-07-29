@@ -14,9 +14,9 @@
 # call the hook's own interactive branch makes.
 #
 # The container this runs in has no controlling terminal at all, so a live
-# interactive passphrase prompt cannot be driven here either — that is
-# covered at the Go level instead (internal/keys's headless integration
-# tests).
+# interactive passphrase prompt cannot be driven from here either — that
+# case is covered by the Go suite, which allocates a pseudo-terminal of
+# its own rather than depending on the one it was started from.
 #
 # agent_sock/agent_lock/log_file below come from `eval "$(sshakku
 # shell-init)"`, the same mechanism nn-ssh-init.sh itself uses — a
