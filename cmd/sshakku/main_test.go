@@ -173,6 +173,11 @@ func TestCrossUserGuard(t *testing.T) {
 	}
 }
 
+// TestAskpassExports pins the exported environment verbatim. All three lines are
+// load-bearing, and losing one breaks the wallet refill without breaking
+// anything a coarser assertion would notice: SSH_ASKPASS names the helper,
+// REQUIRE=prefer is what makes ssh consult it even when a terminal is available,
+// and the marker is how the helper knows its argv is a prompt to answer.
 func TestAskpassExports(t *testing.T) {
 	got := askpassExports("/usr/local/bin/sshakku")
 	want := "export SSH_ASKPASS='/usr/local/bin/sshakku'\n" +
