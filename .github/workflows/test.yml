@@ -116,6 +116,20 @@ jobs:
       - name: Run live keychain integration test
         run: make test-keychain
 
+      - name: Install bats-core
+        run: brew install bats-core
+
+      # A GitHub-hosted runner is thrown away after the job, which is what the
+      # suite's opt-in gate asks for. It runs after the keychain setup above so
+      # anything it stores lands in the throwaway keychain. Bounded because a
+      # shell suite that hangs is precisely one of the failures it exists to
+      # catch, and a hang here would otherwise run to the job's own limit.
+      - name: Run make test-bats
+        env:
+          SSHAKKU_TEST_ALLOW_BATS: "1"
+        timeout-minutes: 10
+        run: make test-bats
+
       - name: Build test-health report
         if: always()
         run: go run ./tools/testreport -os macos -coverprofile=coverage.out < test.json > report-macos.json
