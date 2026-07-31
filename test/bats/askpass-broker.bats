@@ -72,37 +72,59 @@ load helpers
 	grep -q "askpass: provided passphrase for id_test from the wallet" "$log_file"
 }
 
-# blocking_wallet puts a secret-tool that never answers ahead of the stub on
-# PATH, standing in for a wallet that is present but locked behind an unlock
-# prompt nobody is there to answer.
-# It goes under $TEST_ROOT so teardown's sweep reaches whatever it leaves
-# running: the stand-in outlives the caller that gave up on it.
+# blocking_wallet selects the named secret backend and puts a stand-in for its
+# CLI ahead of the real one on PATH — a wallet that is present but never
+# answers, waiting on something nobody is there to provide.
+#
+# The backend is named rather than inherited from the platform. F21 is a promise
+# about any program SSHakku runs, so it has to hold for every backend that runs
+# one; driving whichever implementation the host happens to default to would
+# make the coverage an accident of the machine rather than a statement about the
+# product. `secret-tool` is not "the wallet", it is one backend of several.
+#
+# The stand-in goes under $TEST_ROOT so teardown's sweep reaches whatever it
+# leaves running: it outlives the caller that gave up on it.
 blocking_wallet() {
-	mkdir -p "$TEST_ROOT/blocked"
-	cp "$BATS_TEST_DIRNAME/fixtures/blocking-secret-tool" "$TEST_ROOT/blocked/secret-tool"
-	chmod +x "$TEST_ROOT/blocked/secret-tool"
+	local backend="$1" binary="$2"
+	mkdir -p "$TEST_ROOT/blocked" "$XDG_CONFIG_HOME/sshakku"
+	cp "$BATS_TEST_DIRNAME/fixtures/blocking-$binary" "$TEST_ROOT/blocked/$binary"
+	chmod +x "$TEST_ROOT/blocked/$binary"
 	export PATH="$TEST_ROOT/blocked:$PATH"
+	cp "$BATS_TEST_DIRNAME/fixtures/${backend}-backend.toml" "$XDG_CONFIG_HOME/sshakku/config.toml"
 }
 
-# Verifies feature F17: a backend that cannot answer degrades to prompting
-# rather than failing the shell — and, before that can even be tried, must not
-# hold the shell up. Routing every ssh prompt through the broker means an
-# unbounded wallet call is no longer one slow login but every ssh in the
-# session, so both entry points are checked.
-@test "a wallet that never answers does not hold up an ssh" {
+# require_secret_service skips where that backend cannot exist: the Secret
+# Service is a freedesktop D-Bus API and has no macOS implementation, so there
+# is no such thing to drive there. The subject is absent, not inconvenient.
+require_secret_service() {
+	case "$OSTYPE" in
+	darwin*) skip "the freedesktop Secret Service has no macOS implementation, so this backend does not exist there" ;;
+	esac
+}
+
+# The four cases below verify feature F21 — no program SSHakku runs can hold the
+# shell up with no end — once per backend that reaches its wallet by running a
+# program, and once per entry point. Both entry points matter because routing
+# every ssh prompt through the broker turns an unbounded wallet call from one
+# slow login into every ssh in the session.
+#
+# Each names the budget that governs it, and they differ: secret-tool is a
+# lookup expected to answer on its own, so command_timeout bounds it, while `op`
+# may defer to the 1Password desktop app for approval and is bounded by
+# interactive_timeout. Setting the wrong one would leave the call unbounded and
+# the test passing for the wrong reason.
+
+@test "F21: a secret-service wallet that never answers does not hold up an ssh" {
+	require_secret_service
 	new_test_key id_test "test-passphrase"
-	blocking_wallet
-	# Also exercises the setting itself. ssh asks the helper once per passphrase
-	# attempt, so the wait the user actually sees is a small multiple of this.
+	blocking_wallet secret-service secret-tool
 	# Each bats test is its own subshell and wants its own value, which is what
 	# SC2030/SC2031 warn about here.
 	# shellcheck disable=SC2030,SC2031
 	export SSHAKKU_COMMAND_TIMEOUT=1s
 
-	trace "sourcing the hook"
 	# shellcheck source=/dev/null  # installed at a path only known at run time
 	source "$SSHAKKU_HOOK"
-	trace "hook sourced"
 
 	run no_tty_bounded 30 ssh-add "$HOME/.ssh/id_test"
 	# 124 is the limit expiring, i.e. it was still waiting on the wallet. Any
@@ -110,11 +132,35 @@ blocking_wallet() {
 	[ "$status" -ne 124 ]
 }
 
-@test "a wallet that never answers does not hold up a login shell" {
+@test "F21: a secret-service wallet that never answers does not hold up a login shell" {
+	require_secret_service
 	new_test_key id_test "test-passphrase"
-	blocking_wallet
+	blocking_wallet secret-service secret-tool
 	# shellcheck disable=SC2030,SC2031
 	export SSHAKKU_COMMAND_TIMEOUT=1s
+
+	run no_tty_bounded 30 "$SSHAKKU_BIN" load-keys
+	[ "$status" -ne 124 ]
+}
+
+@test "F21: a 1Password wallet that never answers does not hold up an ssh" {
+	new_test_key id_test "test-passphrase"
+	blocking_wallet onepassword op
+	# shellcheck disable=SC2030,SC2031
+	export SSHAKKU_INTERACTIVE_TIMEOUT=1s
+
+	# shellcheck source=/dev/null  # installed at a path only known at run time
+	source "$SSHAKKU_HOOK"
+
+	run no_tty_bounded 30 ssh-add "$HOME/.ssh/id_test"
+	[ "$status" -ne 124 ]
+}
+
+@test "F21: a 1Password wallet that never answers does not hold up a login shell" {
+	new_test_key id_test "test-passphrase"
+	blocking_wallet onepassword op
+	# shellcheck disable=SC2030,SC2031
+	export SSHAKKU_INTERACTIVE_TIMEOUT=1s
 
 	run no_tty_bounded 30 "$SSHAKKU_BIN" load-keys
 	[ "$status" -ne 124 ]
