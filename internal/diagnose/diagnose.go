@@ -106,8 +106,67 @@ type KeyView struct {
 	ExpiresAt   time.Time
 }
 
+// Requirement is one thing the configured wallet needs in order to work, and
+// whether it is here. Detail says where it was found, or what to do about it
+// not being.
+type Requirement struct {
+	Name    string
+	Detail  string
+	Present bool
+}
+
+// WalletView is the configured secret backend as the report presents it: which
+// wallet SSHakku would use, how it would be reached, and whether what that
+// wallet needs is here.
+//
+// It is filled in by the caller rather than gathered here, because knowing
+// which wallets exist and what each one needs belongs to the code that builds
+// them; this package presents the answer, it does not work it out. A zero
+// value prints nothing, which is what an invocation that never resolved a
+// backend should say.
+type WalletView struct {
+	Backend      string
+	Route        string // how the backend is reached, for the ones that offer a choice
+	Requirements []Requirement
+}
+
+// Missing returns the requirements that are not satisfied, in the order they
+// were given.
+func (w WalletView) Missing() []Requirement {
+	var missing []Requirement
+	for _, req := range w.Requirements {
+		if !req.Present {
+			missing = append(missing, req)
+		}
+	}
+	return missing
+}
+
+// walletBackendLine names the wallet, and the way it is reached when the
+// backend offers more than one. A backend with a single way to be reached names
+// no route, because there is nothing there for a user to have chosen wrongly.
+func walletBackendLine(w WalletView) string {
+	if w.Route == "" {
+		return w.Backend
+	}
+	return fmt.Sprintf("%s  (route: %s)", w.Backend, w.Route)
+}
+
+// WalletFindings states each unmet requirement as a finding, so a wallet that
+// cannot work shows up where a user looks for problems and not only in the
+// section describing the wallet.
+func WalletFindings(w WalletView) []string {
+	var out []string
+	for _, req := range w.Missing() {
+		out = append(out, fmt.Sprintf(
+			"the configured wallet (%s) needs %s: %s", w.Backend, req.Name, req.Detail))
+	}
+	return out
+}
+
 // Report is the read-only picture the doctor presents.
 type Report struct {
+	Wallet       WalletView
 	FixedSock    string
 	EnvSock      string
 	EnvReachable bool
@@ -394,6 +453,18 @@ func Format(w io.Writer, r Report) {
 		}
 		if r.KeysErr != nil {
 			p("  could not enumerate ~/.ssh: %v\n", r.KeysErr)
+		}
+	}
+
+	if r.Wallet.Backend != "" {
+		p("\nwallet:\n")
+		p("  %-22s %s\n", "backend:", walletBackendLine(r.Wallet))
+		for _, req := range r.Wallet.Requirements {
+			state := "found"
+			if !req.Present {
+				state = "missing"
+			}
+			p("  %-22s %s — %s\n", req.Name+":", state, req.Detail)
 		}
 	}
 

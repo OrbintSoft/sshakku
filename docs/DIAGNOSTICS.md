@@ -22,6 +22,8 @@ situation. It changes nothing. The report covers:
   process chain that launched it.
 - **Keys** — every key file under `~/.ssh`, whether it is currently loaded in
   the agent, and, for a loaded key, how much longer it has there.
+- **Wallet** — the secret backend that would be used, how it would be reached
+  when that backend offers a choice, and whether each thing it needs is here.
 - **Environment** — best-effort checks on conditions outside sshakku's own
   control that materially affect its threat model: disk encryption, `/tmp`,
   and TPM presence.
@@ -107,6 +109,34 @@ A loaded key can also show:
   `doctor` no longer trusts the stale record once this happens: a new shell
   will **not** refill the key either, since the loader dedups on an
   already-loaded fingerprint and skips it.
+
+### The wallet section
+
+Names the wallet SSHakku would use and, for a backend reachable more than one
+way, which way. Under it, one line per thing that wallet needs, marked `found`
+with where it was found or `missing` with what to do about it:
+
+```text
+wallet:
+  backend:               keepassxc  (route: cli)
+  keepassxc-cli:         missing — not on PATH; install KeePassXC's command-line tool, or configure a wallet that does not need it
+  database:              missing — keepassxc_database has to name the database file to use
+```
+
+What is looked for depends on the wallet: a command-line tool on `PATH`
+(`keepassxc-cli`, `op`, `bw`), the database file the KeePassXC `cli` route
+works on, a KeePassXC listening for the `native` route, a D-Bus session bus for
+anything reached through the Secret Service. A wallet the operating system
+provides directly — the macOS Keychain — needs nothing else and so lists
+nothing.
+
+Everything here is a look, not a use: no passphrase is read, written or removed
+to produce it, which is why it is safe on every `doctor` run. To find out
+whether the wallet actually *works*, rather than whether its pieces are
+present, use [`--test-backend`](#sshakku-doctor---test-backend-name).
+
+Anything missing is also repeated under **Findings**, so a wallet that cannot
+work is visible to someone scanning only that list.
 
 ### Environment hardening checks
 

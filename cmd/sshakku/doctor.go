@@ -190,7 +190,13 @@ func (d deps) doctor(stdout, stderr io.Writer, args []string) int {
 
 	layout := paths.Resolve(env, paths.ProbeDir).WithSocketToken(paths.SocketToken())
 
-	diagnose.Format(stdout, d.gather(env, layout))
+	// The wallet is described after the agent report is gathered, not inside
+	// it: which wallets exist and what each one needs is this package's
+	// knowledge, not the diagnose package's.
+	report := d.gather(env, layout)
+	report.Wallet = walletView(loadSettings(layout, "doctor", sessionlog.New(layout.LogFile)), realWalletProbe())
+	report.Findings = append(report.Findings, diagnose.WalletFindings(report.Wallet)...)
+	diagnose.Format(stdout, report)
 
 	exitCode := 0
 	if testBackend {

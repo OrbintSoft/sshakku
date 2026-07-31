@@ -51,6 +51,7 @@ question, tracked in [TEST-MATRIX.md](TEST-MATRIX.md).
 | F13 | `sshakku doctor` explains the current agent and key situation, including problems SSHakku cannot fix by itself. | Break something (kill the agent, leave a stale socket) and the report names it. |
 | F14 | `sshakku doctor --fix` repairs what it reports as fixable, and says what it did. | After `--fix` the same report comes back clean. |
 | F15 | `sshakku doctor --test-backend` proves the configured secret backend can store, look up, and delete for real. | It performs a real round trip and reports pass or fail per operation. |
+| F25 | `sshakku doctor` names the wallet it would use, and how it would reach it, and tells you when something that wallet needs is not there — without touching a single stored passphrase to find out. | Configure a wallet whose tool is not installed: the report names the wallet and says which piece is missing, instead of leaving you to discover it the next time `ssh` asks for a passphrase. |
 
 ## Configuration
 
