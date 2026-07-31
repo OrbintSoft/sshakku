@@ -1090,3 +1090,26 @@ user re-prompted on every release.
   it that way rather than leaving it undocumented.
 
 → feature F4; open decision: how releases are signed and notarised.
+
+### Phase 16 — Long home paths on macOS
+
+The out-of-band passphrase handoff binds a unix socket under
+`$HOME/Library/Caches/sshakku/`, and BSD limits a socket address to 104 bytes —
+a limit on the address, not on the file system. The socket path is roughly
+`$HOME` plus fifty characters, so a home much beyond about sixty characters
+leaves no room and `bind` fails with `invalid argument`, which says nothing
+about length. sshakku then reports that it could not load the key and the shell
+carries on, so the failure is visible but its cause is not.
+
+An ordinary `/Users/<name>` home is far inside the limit, which is why this has
+never been hit in normal use; it takes an unusually deep or long home directory.
+Found while making the shell suite run on macOS, where bats' own nested
+temporary directories reach that length on their own.
+
+- Confirm the limit is what it appears to be, and how much room a real home
+  leaves.
+- If it is worth supporting, give the socket a short base of its own rather than
+  deriving it from `$HOME`, and keep the error legible when the address is still
+  too long.
+
+→ feature F5, F6; not urgent — no observed user report, only a reachable case.
