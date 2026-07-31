@@ -1,0 +1,8 @@
+#!/bin/sh
+# Stands in for a wallet whose CLI never answers — present, but waiting on
+# something nobody is there to provide. Copied into a temp directory under the
+# name `op` by the tests that need it, so it is only ever on PATH for those.
+#
+# The sleep is bounded so a test that fails to bound its own call still ends,
+# rather than leaving a process behind for the length of the suite.
+sleep 300

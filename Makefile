@@ -245,7 +245,12 @@ print-paths:
 # Linting. Requires: shellcheck, shfmt, markdownlint-cli2, taplo, checkmake,
 # actionlint, editorconfig-checker, hadolint, zsh. Each tool reads its own
 # config file where it has one.
-SH_SCRIPTS = $(wildcard *.sh) $(wildcard .githooks/*) $(wildcard .github/scripts/*.sh) $(wildcard test/*.sh) $(wildcard test/containers/*.sh) $(wildcard test/bats/*.bats) $(wildcard test/bats/*.bash) $(wildcard test/bats/fixtures/*)
+# The bats fixtures are a mixed bag: executable stand-ins for real tools, which
+# are shell, alongside config files a test drops in to select a backend. Only
+# the former belong to shellcheck; the rest are linted by the tool for their own
+# format (config files by taplo, via lint-toml).
+BATS_FIXTURES = $(filter-out %.toml,$(wildcard test/bats/fixtures/*))
+SH_SCRIPTS = $(wildcard *.sh) $(wildcard .githooks/*) $(wildcard .github/scripts/*.sh) $(wildcard test/*.sh) $(wildcard test/containers/*.sh) $(wildcard test/bats/*.bats) $(wildcard test/bats/*.bash) $(BATS_FIXTURES)
 ZSH_SCRIPTS = $(wildcard *.zsh)
 DOCKERFILES = $(wildcard test/containers/*.Dockerfile)
 

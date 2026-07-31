@@ -37,30 +37,32 @@ load helpers
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"SOCK=$want_sock"* ]]
 
+	fingerprint=$(key_fingerprint id_test)
 	run ssh-add -l
-	[[ "$output" != *"id_test"* ]]
+	[[ "$output" != *"$fingerprint"* ]]
 }
 
 @test "a second shell sees the already-loaded key and does not add it again" {
 	require_keyring
 	new_test_key id_test "test-passphrase"
 	seed_vault id_test "test-passphrase"
+	fingerprint=$(key_fingerprint id_test)
 
 	eval "$("$SSHAKKU_BIN" shell-init)"
 	first_sock="$agent_sock"
 	"$SSHAKKU_BIN" load-keys
 	run ssh-add -l
-	[[ "$output" == *"id_test"* ]]
+	[[ "$output" == *"$fingerprint"* ]]
 
 	eval "$("$SSHAKKU_BIN" shell-init)"
 	[ "$agent_sock" = "$first_sock" ]
 	"$SSHAKKU_BIN" load-keys
 
 	run ssh-add -l
-	[[ "$output" == *"id_test"* ]]
-	# Exactly one key line in ssh-add -l: the second shell must not have
-	# added a duplicate.
-	key_lines=$(printf '%s\n' "$output" | grep -c "id_test")
+	[[ "$output" == *"$fingerprint"* ]]
+	# Exactly one line for this key in ssh-add -l: the second shell must not
+	# have added a duplicate.
+	key_lines=$(printf '%s\n' "$output" | grep -c "$fingerprint" || true)
 	[ "$key_lines" -eq 1 ]
 }
 
@@ -68,11 +70,12 @@ load helpers
 	require_keyring
 	new_test_key id_test "test-passphrase"
 	seed_vault id_test "test-passphrase"
+	fingerprint=$(key_fingerprint id_test)
 
 	eval "$("$SSHAKKU_BIN" shell-init)"
 	"$SSHAKKU_BIN" load-keys
 	run ssh-add -l
-	[[ "$output" == *"id_test"* ]]
+	[[ "$output" == *"$fingerprint"* ]]
 
 	before_sock="$agent_sock"
 	before_inode=$(socket_inode "$before_sock")
@@ -96,31 +99,33 @@ load helpers
 	[ "$after_pid" != "$before_pid" ]
 
 	run ssh-add -l
-	[[ "$output" == *"id_test"* ]]
+	[[ "$output" == *"$fingerprint"* ]]
 }
 
 @test "an empty vault does not load the key and never hangs or crashes with no terminal" {
 	new_test_key id_test "test-passphrase"
+	fingerprint=$(key_fingerprint id_test)
 
 	eval "$("$SSHAKKU_BIN" shell-init)"
-	run timeout --signal=KILL 5 setsid "$SSHAKKU_BIN" load-keys
+	run no_tty_bounded 5 "$SSHAKKU_BIN" load-keys
 	[ "$status" -eq 0 ]
 
 	run ssh-add -l
-	[[ "$output" != *"id_test"* ]]
+	[[ "$output" != *"$fingerprint"* ]]
 }
 
 @test "a vault-seeded passphrase loads silently even with no terminal at all" {
 	require_keyring
 	new_test_key id_test "test-passphrase"
 	seed_vault id_test "test-passphrase"
+	fingerprint=$(key_fingerprint id_test)
 
 	eval "$("$SSHAKKU_BIN" shell-init)"
-	run timeout --signal=KILL 5 setsid "$SSHAKKU_BIN" load-keys
+	run no_tty_bounded 5 "$SSHAKKU_BIN" load-keys
 	[ "$status" -eq 0 ]
 
 	run ssh-add -l
-	[[ "$output" == *"id_test"* ]]
+	[[ "$output" == *"$fingerprint"* ]]
 }
 
 @test "a reachable but empty agent is adopted, not killed and replaced" {
