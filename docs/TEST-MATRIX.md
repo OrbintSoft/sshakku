@@ -20,6 +20,7 @@ plan new integration tests where a cell shows a gap.
 | Mark | Meaning |
 | --- | --- |
 | ✅ | Covered by an integration test. |
+| ⚠️ | Partly covered — the cell says which part is and which is not. |
 | ❌ | Not integration-tested. |
 | — | Not applicable (the combination doesn't exist in practice). |
 
@@ -36,7 +37,7 @@ the other has no cell to be missing from, and the gap becomes invisible.
 | --- | --- | --- |
 | KDE Wallet (`ksecretd`/`kwalletd6`) | ✅ via `secret-service`, `kde.Dockerfile` | — (no D-Bus session bus or Secret Service on macOS) |
 | GNOME Keyring | ✅ via `secret-service`, `gnome-keyring.Dockerfile` | — (same) |
-| KeePassXC | ✅ all three routes: `secret-service` (`keepassxc.Dockerfile`, real GUI under Xvfb), `cli` (`TestKeePassXCCLIRealDatabase` — a real `keepassxc-cli` store/read/replace/list/forget round trip against a throwaway database, F4/F5/F6/F9) and `native` (`TestKeePassXCNativeFullRound` — the real binary and a dedicated `ssh-agent` against a real KeePassXC over its local protocol, F4/F5/F6/F9/F23) | ❌ implemented, untested — the same OS-portable code, not yet run on macOS (F22, F23, F24) |
+| KeePassXC | ✅ all three routes: `secret-service` (`keepassxc.Dockerfile`, real GUI under Xvfb), `cli` (`TestKeePassXCCLIRealDatabase` — a real `keepassxc-cli` store/read/replace/list/forget round trip against a throwaway database, F4/F5/F6/F9) and `native` (`TestKeePassXCNativeFullRound` — the real binary and a dedicated `ssh-agent` against a real KeePassXC over its local protocol, F4/F5/F6/F9/F23) | ⚠️ the `cli` route is covered — `TestKeePassXCCLIRealDatabase` against the `brew --cask keepassxc` build on `macos-latest` (F4/F5/F6/F9/F22). The `native` route is implemented and not covered: nothing has yet unlocked KeePassXC's GUI there without someone typing, and no runner grants the permission to type for it (F23, F24) |
 | 1Password (`op` CLI) | ✅ `TestOnePasswordBackendRealAccount`, `onepassword-real-account.yml` | ❌ supported, untested — that workflow runs on `ubuntu-latest` only |
 | Bitwarden (`bw` CLI) | ✅ real backend against Vaultwarden, `desktop-stack.yml` | ❌ supported, untested — that job runs on `ubuntu-latest` only |
 | macOS Keychain | — (Security.framework is macOS-only) | ✅ `TestDarwinKeychainClientRealRoundTrip` — a live `Add`/`Find`/`Update`/`Delete`/`List` round trip against a throwaway default keychain, plus the whole shell suite (`make test-bats`) driving it as the default backend |
