@@ -1163,8 +1163,30 @@ not rediscovered one at a time.
    (open decision 23): the native-messaging socket protocol is the primary
    route, `keepassxc-cli` the fallback, the wallet is named `keepassxc` on
    every platform, and the route stays pinnable — a pinned one is used and no
-   other. Implement (features F22, F23, F24), then give it a cell in the
-   secret-store table.
+   other. Features F22, F23, F24.
+
+   **Built, and verified only in part.** The protocol client, both routes, the
+   configuration and the wiring are implemented and unit-tested. The `cli`
+   route has been driven through a real `keepassxc-cli` against a real
+   database (`TestKeePassXCCLIRealDatabase`) — which is also what established
+   that `keepassxc-cli` still takes the database password on standard input,
+   something it offers no documented flag for.
+
+   **What is not verified, and must be before this is called done:**
+   - The **`native` route has never spoken to a real KeePassXC**, on any
+     platform. Its protocol client is tested against a server that speaks the
+     protocol for real, which says the two agree — not that KeePassXC agrees.
+     Verifying it needs the GUI running with Browser Integration enabled and
+     the one-time association dialog approved, on top of the Xvfb/xdotool
+     arrangement `keepassxc.Dockerfile` already has.
+   - **Neither route has run on macOS**, which is the platform this work
+     exists for.
+   - The round has to be the **whole user scenario, against a dedicated
+     `ssh-agent`** — a key loaded, expired, and silently refilled from
+     KeePassXC (F5, F6) — not a backend round trip in isolation. See the
+     `verify-e2e` skill and Rule 25.
+
+   Only then does the macOS cell in the secret-store table change.
 2. **Nothing bounds the keychain.** `SecItemCopyMatching` is a synchronous cgo
    call with no timeout, context or cancellation, so on macOS's default backend
    there is no deadline at all. F21 does not cover it either: it promises that
