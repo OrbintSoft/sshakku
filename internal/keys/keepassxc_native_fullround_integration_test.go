@@ -175,6 +175,15 @@ func setupNativeFullRound(t *testing.T, passphrase string) nativeFullRoundEnv {
 		t.Fatalf("write config.toml: %v", err)
 	}
 
+	stateDir := filepath.Join(root, "state")
+	// Where nothing else provides a running KeePassXC, this test provides one.
+	// The check that follows is what decides either way: with the opt-in given,
+	// an app that is not answering is a broken environment, not a reason to pass.
+	if app := os.Getenv("SSHAKKU_TEST_KEEPASSXC_APP"); app != "" {
+		stageKeePassXC(t, app, root, filepath.Join(stateDir, "sshakku"))
+	}
+	requireKeePassXCListening(t)
+
 	sock := filepath.Join(root, "agent.sock")
 	agentCmd := exec.Command("ssh-agent", "-D", "-a", sock)
 	if err := agentCmd.Start(); err != nil {
@@ -195,20 +204,22 @@ func setupNativeFullRound(t *testing.T, passphrase string) nativeFullRoundEnv {
 		keyfile:   keyfile,
 		agentSock: sock,
 		configDir: filepath.Dir(configDir),
-		stateDir:  filepath.Join(root, "state"),
+		stateDir:  stateDir,
 	}
 }
 
 // childEnv is what the binary runs with. DISPLAY is deliberately absent: this
 // is a session with no graphical prompter, so a question has to reach the
-// terminal, where the test can see it. XDG_RUNTIME_DIR is the session's own,
-// because that is where the running KeePassXC put its socket.
+// terminal, where the test can see it. XDG_RUNTIME_DIR and TMPDIR are the
+// session's own, because between them they are where a running KeePassXC put
+// its socket — which directory it picks depends on the platform.
 func (e nativeFullRoundEnv) childEnv() []string {
 	return []string{
 		"HOME=" + e.home,
 		"XDG_CONFIG_HOME=" + e.configDir,
 		"XDG_STATE_HOME=" + e.stateDir,
 		"XDG_RUNTIME_DIR=" + os.Getenv("XDG_RUNTIME_DIR"),
+		"TMPDIR=" + os.Getenv("TMPDIR"),
 		"SSH_AUTH_SOCK=" + e.agentSock,
 		"PATH=" + os.Getenv("PATH"),
 	}
@@ -282,21 +293,27 @@ func waitForAgentToDropKey(t *testing.T, keyfile string) {
 	}
 }
 
-// requireRealKeePassXCNative refuses to run without an explicit opt-in, and
-// then insists the thing it is supposed to talk to is actually there: with the
-// opt-in given, an absent KeePassXC is a broken environment, not a reason to
-// quietly pass.
+// requireRealKeePassXCNative refuses to run without an explicit opt-in: a
+// running KeePassXC is somebody's real wallet, and this test writes to it.
 func requireRealKeePassXCNative(t *testing.T) {
 	t.Helper()
 
 	if os.Getenv("SSHAKKU_TEST_ALLOW_REAL_KEEPASSXC_NATIVE") != "1" {
 		t.Skip("skipping: set SSHAKKU_TEST_ALLOW_REAL_KEEPASSXC_NATIVE=1 to run against a running KeePassXC, which this test writes to")
 	}
+}
+
+// requireKeePassXCListening insists the thing this test is supposed to talk to
+// is actually there: with the opt-in given, an absent KeePassXC is a broken
+// environment, not a reason to quietly pass.
+func requireKeePassXCListening(t *testing.T) {
+	t.Helper()
+
 	candidates := keepassxc.SocketPaths()
 	for _, p := range candidates {
 		if _, err := os.Stat(p); err == nil {
 			return
 		}
 	}
-	t.Fatalf("SSHAKKU_TEST_ALLOW_REAL_KEEPASSXC_NATIVE is set but KeePassXC is not listening on any of %v", candidates)
+	t.Fatalf("KeePassXC is not listening on any of %v", candidates)
 }

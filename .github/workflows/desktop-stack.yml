@@ -97,6 +97,15 @@ jobs:
           SSHAKKU_TEST_ALLOW_REAL_KEEPASSXC: "1"
         run: go test ./internal/keys -run TestKeePassXCCLIRealDatabase -count=1 -v
 
+      # The same user scenario the container runs, against the same app: no
+      # KeePassXC is running here, so the test is told where to find one and
+      # starts it itself.
+      - name: Run the real KeePassXC native round trip
+        env:
+          SSHAKKU_TEST_ALLOW_REAL_KEEPASSXC_NATIVE: "1"
+          SSHAKKU_TEST_KEEPASSXC_APP: /Applications/KeePassXC.app/Contents/MacOS/KeePassXC
+        run: go test ./internal/keys -run TestKeePassXCNativeFullRound -count=1 -v
+
       # Not a test: it reports whether the native route can be driven here at
       # all. It needs KeePassXC's window unlocked without anyone typing, and
       # its association approved without anyone clicking — a runner grants no
