@@ -10,6 +10,11 @@ set -euo pipefail
 
 readonly DISPLAY_NUM=":99"
 
+# The opt-in the Secret Service round trip refuses to run without. It belongs
+# here rather than in the entrypoint: this script is what makes it true, by
+# standing up the bus and the collection the tests then use.
+export SSHAKKU_TEST_ALLOW_REAL_SECRETSERVICE=1
+
 wait_for() {
 	local description="$1" tries=50
 	shift

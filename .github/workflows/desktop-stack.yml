@@ -57,6 +57,21 @@ jobs:
             --entrypoint bash sshakku-test-desktop-stack-keepassxc \
             -c 'mkdir -p /tmp/h && cd /src && go test ./internal/keys -run TestKeePassXCCLIRealDatabase -count=1 -v'
 
+      # The user's whole scenario over KeePassXC's local protocol, against a
+      # real GUI and an ssh-agent of the test's own. It carries a passphrase
+      # through the kernel keyring, which needs seccomp left alone (the default
+      # profile refuses keyctl outright) and a session keyring to possess the
+      # keys it adds — see keyring-session.sh.
+      - name: Run the real KeePassXC native round trip
+        if: matrix.name == 'keepassxc'
+        run: >
+          docker run --init --rm --security-opt seccomp=unconfined
+          -v "${{ github.workspace }}":/src:ro
+          -e SSHAKKU_SESSION_SCRIPT=keepassxc-native-session.sh
+          sshakku-test-desktop-stack-keepassxc
+          keyctl session - /opt/sshakku-desktop-stack/keyring-session.sh
+          go test ./internal/keys -run TestKeePassXCNativeFullRound -count=1 -v
+
   midsession-failure:
     name: mid-session failure (${{ matrix.scenario }})
     # Same integration gate as container-test: manual dispatch, or a push whose

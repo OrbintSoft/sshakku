@@ -23,8 +23,12 @@ RUN dnf install -y --setopt=install_weak_deps=False \
 
 ENV PATH="/usr/local/go/bin:${PATH}"
 
-COPY test/containers/keepassxc-entrypoint.sh test/containers/keepassxc-session.sh test/containers/keepassxc-create-collection.sh /opt/sshakku-desktop-stack/
-RUN chmod +x /opt/sshakku-desktop-stack/keepassxc-entrypoint.sh /opt/sshakku-desktop-stack/keepassxc-session.sh /opt/sshakku-desktop-stack/keepassxc-create-collection.sh
+COPY test/containers/keepassxc-entrypoint.sh test/containers/keepassxc-session.sh test/containers/keepassxc-create-collection.sh \
+    test/containers/keepassxc-native-session.sh test/containers/keepassxc-browser.ini test/containers/keyring-session.sh \
+    /opt/sshakku-desktop-stack/
+RUN chmod +x /opt/sshakku-desktop-stack/keepassxc-entrypoint.sh /opt/sshakku-desktop-stack/keepassxc-session.sh \
+    /opt/sshakku-desktop-stack/keepassxc-create-collection.sh /opt/sshakku-desktop-stack/keepassxc-native-session.sh \
+    /opt/sshakku-desktop-stack/keyring-session.sh
 
 WORKDIR /src
 

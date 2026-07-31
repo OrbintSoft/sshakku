@@ -1,7 +1,12 @@
 #!/bin/bash
 # Container entrypoint, run as root: creates the disposable test account and
-# its runtime dir, then hands off to keepassxc-session.sh (as that
-# account) to actually drive the test command.
+# its runtime dir, then hands off to a session script (as that account) to
+# actually drive the test command.
+#
+# Which session script depends on how KeePassXC is being reached: its Secret
+# Service integration by default, or its local browser protocol when
+# SSHAKKU_SESSION_SCRIPT names that one instead. Each session script brings up
+# what its own route needs.
 set -euo pipefail
 
 readonly TEST_USER="sshakku-keepassxc-test"
@@ -9,6 +14,7 @@ readonly TEST_UID="1000"
 readonly RUNTIME_DIR="/run/user/${TEST_UID}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly SCRIPT_DIR
+readonly SESSION_SCRIPT="${SSHAKKU_SESSION_SCRIPT:-keepassxc-session.sh}"
 
 # The D-Bus session bus refuses to start without a valid, non-empty machine
 # ID.
@@ -33,5 +39,4 @@ exec runuser -u "${TEST_USER}" -- env -i \
 	PATH="/usr/local/go/bin:${PATH}" \
 	XDG_RUNTIME_DIR="${RUNTIME_DIR}" \
 	DBUS_SESSION_BUS_ADDRESS="unix:path=${RUNTIME_DIR}/bus" \
-	SSHAKKU_TEST_ALLOW_REAL_SECRETSERVICE="1" \
-	"${SCRIPT_DIR}/keepassxc-session.sh" "$@"
+	"${SCRIPT_DIR}/${SESSION_SCRIPT}" "$@"
