@@ -26,14 +26,6 @@ setup_file() {
 		exit 1
 	fi
 
-	# Which of the external tools the tests reach for are actually present.
-	# Reported rather than required: a missing one otherwise surfaces as an
-	# unexplained failure deep inside whichever test happens to use it first.
-	local tool
-	for tool in timeout setsid perl security ssh-add ssh-keygen; do
-		printf 'tool %-10s %s\n' "$tool" "$(command -v "$tool" || echo MISSING)" >&2
-	done
-
 	SSHAKKU_BUILD_DIR="$BATS_FILE_TMPDIR/build"
 	mkdir -p "$SSHAKKU_BUILD_DIR"
 	make -C "$REPO_ROOT" build GO_BIN="$SSHAKKU_BUILD_DIR/sshakku" >&2
@@ -46,6 +38,52 @@ setup_file() {
 trace() {
 	[ -n "${SSHAKKU_BATS_TRACE:-}" ] || return 0
 	printf '%s %s\n' "$(date -u +%H:%M:%S)" "$*" >>"$SSHAKKU_BATS_TRACE"
+}
+
+# bounded runs a command with a hard time limit and without coreutils'
+# `timeout`, which macOS does not ship. A tool that stops to ask a person
+# something — a keychain wanting a password, with nowhere to display the
+# request — would otherwise stall the whole suite until CI kills the job, and
+# the only thing the report would say is that the job ran out of time. Exits
+# 124 on expiry, like `timeout` does, so a caller can tell the two apart.
+bounded() {
+	local secs="$1" pid ticks=0 rc=0
+	shift
+	"$@" &
+	pid=$!
+	while kill -0 "$pid" 2>/dev/null; do
+		if [ "$ticks" -ge $((secs * 10)) ]; then
+			kill -9 "$pid" 2>/dev/null || true
+			wait "$pid" 2>/dev/null || true
+			trace "bounded: '$*' did not finish within ${secs}s"
+			echo "bounded: '$*' did not finish within ${secs}s" >&2
+			return 124
+		fi
+		sleep 0.1
+		ticks=$((ticks + 1))
+	done
+	wait "$pid" || rc=$?
+	return "$rc"
+}
+
+# trace_environment records what this machine actually provides. It writes to
+# the trace rather than to stderr because bats keeps a passing setup's output
+# to itself, and the case worth diagnosing is a run that gets killed rather
+# than one that fails. Called once $HOME has been redirected, since on darwin
+# that is exactly what decides which keychain `security` resolves.
+trace_environment() {
+	local tool
+	for tool in timeout setsid perl security ssh-add ssh-keygen; do
+		trace "tool $tool: $(command -v "$tool" || echo MISSING)"
+	done
+	case "$OSTYPE" in
+	darwin*) ;;
+	*) return 0 ;;
+	esac
+	trace "HOME=$HOME"
+	trace "SSHAKKU_TEST_KEYCHAIN=${SSHAKKU_TEST_KEYCHAIN:-unset}"
+	trace "default-keychain: $(bounded 10 security default-keychain 2>&1 | tr -d '\n')"
+	trace "list-keychains: $(bounded 10 security list-keychains 2>&1 | tr '\n' ' ')"
 }
 
 setup() {
@@ -112,6 +150,19 @@ setup() {
 	# Names of the keys a test creates or seeds, so teardown can remove what
 	# outlives the per-test tmpdir (see forget_test_secrets).
 	TEST_KEYNAMES=()
+
+	# The keychain to name explicitly, when the caller provided one. It matters
+	# on darwin: `security` otherwise resolves the default keychain from the
+	# invoking user's preferences under $HOME, and $HOME has just been pointed
+	# at a throwaway tree that holds no such preferences — leaving the tool
+	# looking for a login keychain that does not exist there, and asking for a
+	# password to create one.
+	KEYCHAIN_ARGS=()
+	if [ -n "${SSHAKKU_TEST_KEYCHAIN:-}" ]; then
+		KEYCHAIN_ARGS=("$SSHAKKU_TEST_KEYCHAIN")
+	fi
+
+	trace_environment
 	trace "setup done"
 }
 
@@ -165,7 +216,9 @@ forget_test_secrets() {
 	local keyname
 	for keyname in ${TEST_KEYNAMES+"${TEST_KEYNAMES[@]}"}; do
 		trace "forget $keyname"
-		security delete-generic-password -s "SSH-Key-${keyname}" -a "$USER" >/dev/null 2>&1 || true
+		bounded 20 security delete-generic-password \
+			-s "SSH-Key-${keyname}" -a "$USER" \
+			${KEYCHAIN_ARGS+"${KEYCHAIN_ARGS[@]}"} >/dev/null 2>&1 || true
 		trace "forget $keyname done"
 	done
 }
@@ -211,7 +264,12 @@ seed_vault() {
 	case "$OSTYPE" in
 	darwin*)
 		trace "seed_vault $keyname start"
-		security add-generic-password -U -s "SSH-Key-${keyname}" -a "$USER" -w "$passphrase"
+		# -A: the item is written here by `security` and read back by sshakku,
+		# a different binary, and an item whose ACL names only its writer makes
+		# the reader ask the user for permission.
+		bounded 20 security add-generic-password -U -A \
+			-s "SSH-Key-${keyname}" -a "$USER" -w "$passphrase" \
+			${KEYCHAIN_ARGS+"${KEYCHAIN_ARGS[@]}"}
 		TEST_KEYNAMES+=("$keyname")
 		trace "seed_vault $keyname done"
 		;;
