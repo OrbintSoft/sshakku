@@ -47,6 +47,13 @@ type File struct {
 	OnePasswordVault *string `toml:"onepassword_vault"`
 	BitwardenEmail   *string `toml:"bitwarden_email"`
 	BitwardenServer  *string `toml:"bitwarden_server"`
+
+	// KeePassXCRoute pins how KeePassXC is reached. Absent, SSHakku picks per
+	// platform; set, the named route is used and no other, so a route that is
+	// unavailable is reported rather than quietly swapped for another.
+	KeePassXCRoute    *string `toml:"keepassxc_route"`
+	KeePassXCDatabase *string `toml:"keepassxc_database"`
+	KeePassXCKeyFile  *string `toml:"keepassxc_key_file"`
 }
 
 // Settings is the configuration resolved from environment, file, and defaults.
@@ -85,6 +92,17 @@ type Settings struct {
 	// BitwardenServer is empty for the default bitwarden.com.
 	BitwardenEmail  string
 	BitwardenServer string
+
+	// KeePassXCRoute is how KeePassXC is reached; one of the KeePassXCRoute*
+	// constants. Anything but "auto" is exclusive: that route is used and no
+	// other, and its being unavailable is reported rather than worked around.
+	// Consulted only when SecretBackend is SecretBackendKeePassXC.
+	KeePassXCRoute string
+	// KeePassXCDatabase and KeePassXCKeyFile locate the database file, needed
+	// only by the CLI route — the other routes talk to a KeePassXC that has
+	// already opened it.
+	KeePassXCDatabase string
+	KeePassXCKeyFile  string
 }
 
 // Wallet-store policy modes for Settings.WalletStoreMode.
@@ -107,6 +125,26 @@ const (
 	SecretBackendOnePassword   = "1password"
 	SecretBackendBitwarden     = "bitwarden"
 	SecretBackendKeychain      = "keychain"
+	SecretBackendKeePassXC     = "keepassxc"
+)
+
+// KeePassXC routes for Settings.KeePassXCRoute. The wallet is named by
+// secret_backend; this says how to reach it. A route is available wherever it
+// can work rather than on one platform only — the exception is the Secret
+// Service, which no macOS system provides.
+const (
+	// KeePassXCRouteAuto picks per platform: the Secret Service where there is
+	// one, the local protocol otherwise, falling back to the CLI. It is the
+	// only value that falls back at all.
+	KeePassXCRouteAuto = "auto"
+	// KeePassXCRouteSecretService reaches KeePassXC through the freedesktop
+	// Secret Service, which KeePassXC implements itself.
+	KeePassXCRouteSecretService = "secret-service"
+	// KeePassXCRouteNative speaks KeePassXC's local socket protocol to a
+	// running, unlocked instance.
+	KeePassXCRouteNative = "native"
+	// KeePassXCRouteCLI runs keepassxc-cli against the database file.
+	KeePassXCRouteCLI = "cli"
 )
 
 // StoresWallet reports whether keyname's passphrase should be persisted to the
@@ -209,6 +247,15 @@ func (f File) Merge(other File) File {
 	}
 	if other.BitwardenServer != nil {
 		merged.BitwardenServer = other.BitwardenServer
+	}
+	if other.KeePassXCRoute != nil {
+		merged.KeePassXCRoute = other.KeePassXCRoute
+	}
+	if other.KeePassXCDatabase != nil {
+		merged.KeePassXCDatabase = other.KeePassXCDatabase
+	}
+	if other.KeePassXCKeyFile != nil {
+		merged.KeePassXCKeyFile = other.KeePassXCKeyFile
 	}
 
 	return merged
@@ -326,6 +373,14 @@ func Resolve(file File, lookup func(string) (string, bool)) (Settings, []error) 
 	s.BitwardenEmail = derefString(file.BitwardenEmail)
 	s.BitwardenServer = derefString(file.BitwardenServer)
 
+	route, err := resolveKeePassXCRoute(file.KeePassXCRoute)
+	if err != nil {
+		errs = append(errs, err)
+	}
+	s.KeePassXCRoute = route
+	s.KeePassXCDatabase = derefString(file.KeePassXCDatabase)
+	s.KeePassXCKeyFile = derefString(file.KeePassXCKeyFile)
+
 	return s, errs
 }
 
@@ -369,10 +424,26 @@ func resolveSecretBackend(fileVal *string) (string, error) {
 		return SecretBackendSecretService, nil
 	}
 	switch *fileVal {
-	case SecretBackendSecretService, SecretBackendOnePassword, SecretBackendBitwarden, SecretBackendKeychain:
+	case SecretBackendSecretService, SecretBackendOnePassword, SecretBackendBitwarden, SecretBackendKeychain, SecretBackendKeePassXC:
 		return *fileVal, nil
 	default:
 		return SecretBackendSecretService, fmt.Errorf("invalid secret_backend %q, using %q", *fileVal, SecretBackendSecretService)
+	}
+}
+
+// resolveKeePassXCRoute is config-file only, like the backend choice it
+// refines. An absent or empty value means "auto"; an unrecognised one falls
+// back to "auto" and is reported, so a typo does not silently pin a route the
+// user did not name.
+func resolveKeePassXCRoute(fileVal *string) (string, error) {
+	if fileVal == nil || *fileVal == "" {
+		return KeePassXCRouteAuto, nil
+	}
+	switch *fileVal {
+	case KeePassXCRouteAuto, KeePassXCRouteSecretService, KeePassXCRouteNative, KeePassXCRouteCLI:
+		return *fileVal, nil
+	default:
+		return KeePassXCRouteAuto, fmt.Errorf("invalid keepassxc_route %q, using %q", *fileVal, KeePassXCRouteAuto)
 	}
 }
 

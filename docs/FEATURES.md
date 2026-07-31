@@ -32,7 +32,8 @@ question, tracked in [TEST-MATRIX.md](TEST-MATRIX.md).
 | F6 | After a key expires from the agent, the next `ssh` **in a shell that is already open** gets the passphrase from the wallet, with no prompt. | Wait out the key lifetime (or run `ssh-add -D`) without opening a new terminal, then `ssh` to a host: it connects silently. |
 | F7 | The passphrase never travels through an environment variable, a command line, or a file on disk. | `ps` and `/proc/<pid>/cmdline` never show it while a key is being added; no file under the runtime directory contains it. |
 | F8 | A wrong passphrase is retried a bounded number of times, then that key is left alone until the retry window passes — no repeated prompting in every new shell. | Answer wrong until it gives up: you are asked the configured number of times, told once that the key could not be loaded, and new shells stay quiet. |
-| F9 | `sshakku forget` removes stored passphrases, and the next use asks again. | After `sshakku forget <key>`, the wallet entry is gone and the following load prompts. |
+| F9 | `sshakku forget` removes stored passphrases, and the next use asks again. Where the wallet gives SSHakku no way to delete, it says so and names the entry for you to remove yourself — it never reports a passphrase as forgotten while it is still stored. | After `sshakku forget <key>`, the wallet entry is gone and the following load prompts; with a wallet that cannot be deleted from, you are told which entry to remove and nothing claims otherwise. |
+| F24 | A wallet that can only be opened with a password of its own asks you for it, once, rather than failing the shell — and being asked is the exception: a wallet already open never asks. | With KeePassXC closed you are asked for the database password and the key still loads; with KeePassXC open and unlocked, the same key loads with nothing typed. |
 
 ## Behaviour in the shell
 
@@ -58,6 +59,8 @@ question, tracked in [TEST-MATRIX.md](TEST-MATRIX.md).
 | F16 | The key lifetime in the agent is configurable, and a key really is dropped when it elapses. | Set a short lifetime; `ssh-add -l` stops listing the key once it passes. |
 | F17 | Which secret backend is used can be chosen, and an unavailable one degrades to prompting rather than failing the shell. | Point the configuration at a backend that isn't running: the shell still opens and you are prompted. |
 | F18 | Per-key policy is honoured: a key can be excluded from automatic loading, or from being stored in the wallet, without losing the other behaviour. | An excluded key is never auto-loaded but can still be added on demand; a non-stored key works in-session and leaves no wallet entry. |
+| F22 | KeePassXC can be chosen as your wallet by name, on every OS SSHakku supports. How SSHakku reaches it is not something you have to state: the same setting works on Linux and on macOS. | Put `secret_backend = "keepassxc"` in the configuration on either OS: your passphrases are saved into, and read back from, your open KeePassXC database. |
+| F23 | If you would rather decide how KeePassXC is reached, you can say so, and SSHakku uses that way and no other. Every way of reaching it is available wherever it can work, not only on the OS where SSHakku would have picked it. | Pin the route in the configuration: the chosen one is used even where SSHakku would have picked differently — on Linux you can bypass the Secret Service entirely — and if it is unavailable you are told which one failed instead of being silently moved to another. |
 
 ## Installation
 

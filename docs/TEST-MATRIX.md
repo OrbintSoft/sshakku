@@ -36,7 +36,7 @@ the other has no cell to be missing from, and the gap becomes invisible.
 | --- | --- | --- |
 | KDE Wallet (`ksecretd`/`kwalletd6`) | ✅ via `secret-service`, `kde.Dockerfile` | — (no D-Bus session bus or Secret Service on macOS) |
 | GNOME Keyring | ✅ via `secret-service`, `gnome-keyring.Dockerfile` | — (same) |
-| KeePassXC | ✅ via `secret-service`, `keepassxc.Dockerfile` | ❌ **not supported** — the Secret Service route does not carry over and no replacement is implemented; the design is still open (PLAN.md open decision 23) |
+| KeePassXC | ✅ two routes: `secret-service` (`keepassxc.Dockerfile`, real GUI under Xvfb) and `cli` (`TestKeePassXCCLIRealDatabase` — a real `keepassxc-cli` store/read/replace/list/forget round trip against a throwaway database, F4/F5/F6/F9) | ❌ implemented, untested — the `cli` route is the same OS-portable code and the `native` route is built (F22, F23, F24), but neither has been run on macOS, and the `native` route has not been run against a real KeePassXC on any OS |
 | 1Password (`op` CLI) | ✅ `TestOnePasswordBackendRealAccount`, `onepassword-real-account.yml` | ❌ supported, untested — that workflow runs on `ubuntu-latest` only |
 | Bitwarden (`bw` CLI) | ✅ real backend against Vaultwarden, `desktop-stack.yml` | ❌ supported, untested — that job runs on `ubuntu-latest` only |
 | macOS Keychain | — (Security.framework is macOS-only) | ✅ `TestDarwinKeychainClientRealRoundTrip` — a live `Add`/`Find`/`Update`/`Delete`/`List` round trip against a throwaway default keychain, plus the whole shell suite (`make test-bats`) driving it as the default backend |
@@ -78,6 +78,8 @@ table above has established where that backend is available at all.
 | --- | --- |
 | Keychain | `TestDarwinKeychainClientRealRoundTrip` — a live round trip through `DarwinKeychainClient` (`Add`/`Find`/`Update`/`Delete`/`List`, including the duplicate-add and update-missing error paths) against a throwaway default keychain the `test-macos` job stands up first (`test/macos-keychain-setup.sh`), so the runner's login keychain is never touched |
 | Secret Service | `TestSecretServiceBackendRealDaemon`, against each of the three daemons in its own container |
+| KeePassXC (`cli` route) | `TestKeePassXCCLIRealDatabase` — a real `keepassxc-cli` against a throwaway database it creates itself: store, read back, replace in place, list, forget, and a final lookup that must miss (F4, F5/F6, F9). Also the only check that `keepassxc-cli` still takes the database password on standard input, which it offers no documented flag for |
+| KeePassXC (`native` route) | ❌ nothing drives the local socket protocol against a real KeePassXC. The protocol client is unit-tested against a server that speaks it with real keys and real encryption, which is not the same claim: it says the two agree, not that KeePassXC agrees |
 | 1Password (`op` CLI) | `TestOnePasswordBackendRealAccount`, `onepassword-real-account.yml` |
 | Bitwarden (`bw` CLI) | real backend against Vaultwarden, `desktop-stack.yml` |
 

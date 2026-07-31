@@ -26,29 +26,32 @@ func newSecretBackend(user string, log keys.Logger, settings config.Settings) (k
 	case config.SecretBackendBitwarden:
 		return &keys.BitwardenBackend{
 			Runner:   keys.ExecRunner{Timeout: settings.CommandTimeout},
-			Prompter: newBitwardenPrompter(settings),
+			Prompter: newWalletPasswordPrompter(settings),
 			Email:    settings.BitwardenEmail,
 			Server:   settings.BitwardenServer,
 			Timeout:  settings.InteractiveTimeout,
 		}, func() {}
+	case config.SecretBackendKeePassXC:
+		return newKeePassXCBackend(user, log, settings)
 	default:
 		return newDefaultSecretBackend(user, log, settings)
 	}
 }
 
-// bitwardenMasterPrompter asks for BitwardenBackend's master password: via the
-// same graphical dialog as an SSH key's own passphrase when a display is
-// available, otherwise on the controlling terminal. This is a separate prompt
-// from the SSH key passphrase prompt — it never touches the wallet, and
-// unlike a wallet-backed key's passphrase it cannot be silently skipped, so
-// it needs a terminal fallback even where the SSH key prompt would just add
-// the key on the terminal directly instead.
-type bitwardenMasterPrompter struct {
+// walletPasswordPrompter asks for a wallet's own password — Bitwarden's master
+// password, a KeePassXC database's password — via the same graphical dialog as
+// an SSH key's own passphrase when a display is available, otherwise on the
+// controlling terminal. This is a separate prompt from the SSH key passphrase
+// prompt: it never touches the wallet, and unlike a wallet-backed key's
+// passphrase it cannot be silently skipped, so it needs a terminal fallback
+// even where the SSH key prompt would just add the key on the terminal
+// directly instead.
+type walletPasswordPrompter struct {
 	kdialog keys.KDialogPrompter
 	gui     bool
 }
 
-func (p bitwardenMasterPrompter) Prompt(keyname string) (string, error) {
+func (p walletPasswordPrompter) Prompt(keyname string) (string, error) {
 	if p.gui {
 		return p.kdialog.Prompt(keyname)
 	}
@@ -58,12 +61,12 @@ func (p bitwardenMasterPrompter) Prompt(keyname string) (string, error) {
 	return ttyPrompter{}.Prompt("Enter "+keyname, true)
 }
 
-func (bitwardenMasterPrompter) Available() bool { return true }
+func (walletPasswordPrompter) Available() bool { return true }
 
-func newBitwardenPrompter(settings config.Settings) keys.Prompter {
+func newWalletPasswordPrompter(settings config.Settings) keys.Prompter {
 	runner := keys.ExecRunner{Timeout: settings.CommandTimeout}
 	kdialog := keys.KDialogPrompter{Runner: runner, Timeout: settings.InteractiveTimeout}
-	return bitwardenMasterPrompter{kdialog: kdialog, gui: detectGUIAvailable()}
+	return walletPasswordPrompter{kdialog: kdialog, gui: detectGUIAvailable()}
 }
 
 // detectGUIAvailable reports whether a graphical passphrase prompt can be shown

@@ -93,7 +93,7 @@ environment variable, and there is no benefit to leaving it sitting in the
 process environment instead of the file:
 
 ```toml
-secret_backend = "bitwarden"                  # "secret-service" (default), "keychain", "1password", or "bitwarden"
+secret_backend = "bitwarden"                  # "secret-service" (default), "keychain", "keepassxc", "1password", or "bitwarden"
 onepassword_vault = "sshakku"                  # consulted only when secret_backend = "1password"
 bitwarden_email = "you@example.com"            # consulted only when secret_backend = "bitwarden"
 bitwarden_server = "https://vault.example.com" # optional; a self-hosted Vaultwarden instance
@@ -123,8 +123,71 @@ bitwarden_server = "https://vault.example.com" # optional; a self-hosted Vaultwa
   Bitwarden at all is that you still never retype an SSH key's own passphrase,
   only the one Bitwarden master password, once per shell that actually touches
   the vault.
+- `"keepassxc"` names KeePassXC as your wallet on every platform. How SSHakku
+  reaches it is chosen for you and can be overridden — see the next section.
 - An unrecognised `secret_backend` value falls back to `"secret-service"` and
   is logged.
+
+## Choosing how KeePassXC is reached
+
+You name the wallet, not the mechanism: `secret_backend = "keepassxc"` works on
+Linux and on macOS. SSHakku then picks a way to reach it — the Secret Service on
+Linux, which KeePassXC implements itself, and its local socket protocol
+elsewhere.
+
+If you would rather decide, `keepassxc_route` says so, and then that route is
+used **and no other**: an unavailable one is reported by name instead of being
+quietly swapped for a different one.
+
+```toml
+secret_backend = "keepassxc"
+keepassxc_route = "native"   # "auto" (default), "secret-service", "native", or "cli"
+keepassxc_database = "~/secrets.kdbx"  # only the "cli" route needs to be told where the database is
+keepassxc_key_file = "~/secrets.key"   # optional, for a database that also uses a key file
+```
+
+- `"auto"` (the default) is the only value that chooses, and the only one that
+  falls back.
+- `"secret-service"` reaches KeePassXC through the freedesktop Secret Service,
+  exactly as KDE Wallet and GNOME Keyring are reached. Linux only — macOS has
+  no such API to implement, and pinning it there tells you so.
+- `"native"` speaks KeePassXC's local socket protocol to a running instance
+  with its database unlocked, the same one its browser extension uses. It needs
+  **Browser Integration** switched on in KeePassXC's settings, and the first
+  time it connects KeePassXC asks you to approve SSHakku once; the approval is
+  remembered afterwards. Because it talks to a KeePassXC you have already
+  unlocked, it never asks you for anything again.
+- `"cli"` runs `keepassxc-cli` against the database file, so it works with no
+  KeePassXC running — but the database has to be opened each time, so it asks
+  for its password rather than being silent.
+
+Routes are not tied to an operating system; only the default is. On Linux you
+can pin `"native"` or `"cli"` and bypass the Secret Service entirely.
+
+An unrecognised `keepassxc_route` falls back to `"auto"` and is logged, so a
+typo never silently pins a route you did not name.
+
+### What KeePassXC can and cannot do for you
+
+SSHakku's entries live in an **SSHakku** group in your database, one per key,
+under a URL built from the same per-key name the other backends use
+(`sshakku://SSH-Key-id_ed25519`), which is also the entry's username.
+
+`sshakku forget` behaves differently by route, because the two can do different
+things:
+
+| | `"native"` / `"secret-service"` | `"cli"` |
+| --- | --- | --- |
+| read and write a passphrase | yes | yes |
+| `sshakku forget <key>` | **no** | yes |
+| `sshakku forget --all` | no | yes |
+| asks you for anything | no | the database password, once per shell |
+
+KeePassXC's local protocol can read and write an entry but has no way to delete
+one, so on the `"native"` route `sshakku forget` fails and names the entry for
+you to remove in KeePassXC. It will not tell you a passphrase is gone while it
+is still in your database. The `"cli"` route can delete, so `forget` works
+there.
 
 ## Where passphrases are stored
 

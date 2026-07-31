@@ -74,7 +74,7 @@ func TestNewSecretBackend(t *testing.T) {
 // trimmed stdout. Available is unconditionally true.
 func TestBitwardenMasterPrompterGUI(t *testing.T) {
 	runner := fakeRunner{res: keys.Result{Stdout: []byte("master-pass\n"), Code: 0}}
-	p := bitwardenMasterPrompter{kdialog: keys.KDialogPrompter{Runner: runner}, gui: true}
+	p := walletPasswordPrompter{kdialog: keys.KDialogPrompter{Runner: runner}, gui: true}
 
 	got, err := p.Prompt("Bitwarden master password")
 	if err != nil {

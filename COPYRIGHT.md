@@ -28,6 +28,9 @@ Compiled into the distributed binary:
 - **github.com/godbus/dbus/v5** — BSD-2-Clause (native D-Bus Secret Service
   client, replacing the `secret-tool` shell-out for scoped collection
   lock/unlock).
+- **golang.org/x/crypto** — BSD-3-Clause (NaCl box: the X25519 and
+  XSalsa20-Poly1305 primitives KeePassXC's local protocol encrypts every
+  message with).
 
 Imported only by tests, never linked into the distributed binary:
 
