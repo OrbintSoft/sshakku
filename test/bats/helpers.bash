@@ -11,12 +11,9 @@
 # is the same explicit-opt-in pattern internal/keys's real-daemon integration
 # tests already use, not a default-on convenience.
 #
-# One thing genuinely cannot be redirected under that tree: on darwin the
-# secret store is the OS keychain, which sshakku reaches in-process, so it
-# searches whatever the *default* keychain is. Repointing that at a throwaway
-# one before running this suite is the caller's job — the macOS CI job does it
-# with test/macos-keychain-setup.sh. Everything else here, the install paths
-# included, is confined to the per-test tmpdir.
+# The install paths, the secret store and the agent all live under one
+# per-test root ($TEST_ROOT), which on darwin is a short path of its own — see
+# setup() for why the length matters there.
 
 REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
 
@@ -138,8 +135,20 @@ setup_test_keychain() {
 
 setup() {
 	trace "setup start: ${BATS_TEST_DESCRIPTION:-?}"
-	local prefix="$BATS_TEST_TMPDIR/prefix"
-	local home="$BATS_TEST_TMPDIR/home"
+
+	# Everything this test owns lives under one root. On darwin that root is a
+	# short path of its own rather than the per-test bats tmpdir: bats nests
+	# suite, file and test under /var/folders/<random>/T/, and a unix socket
+	# bound below that overruns the 104-byte sun_path limit BSD imposes. It is a
+	# limit on the address, not on the file system, so it surfaces as bind()
+	# failing with "invalid argument" and nothing pointing at the length.
+	case "$OSTYPE" in
+	darwin*) TEST_ROOT=$(mktemp -d /tmp/sshakku-bats.XXXXXXXX) ;;
+	*) TEST_ROOT="$BATS_TEST_TMPDIR" ;;
+	esac
+
+	local prefix="$TEST_ROOT/prefix"
+	local home="$TEST_ROOT/home"
 	mkdir -p "$prefix" "$home"
 
 	# Every system path `make install` is able to write to is redirected under
@@ -166,12 +175,12 @@ setup() {
 	export HOME="$home"
 	export XDG_CONFIG_HOME="$home/.config"
 	export XDG_STATE_HOME="$home/.local/state"
-	export XDG_RUNTIME_DIR="$BATS_TEST_TMPDIR/runtime"
+	export XDG_RUNTIME_DIR="$TEST_ROOT/runtime"
 	unset XDG_CACHE_HOME
 	mkdir -p "$XDG_RUNTIME_DIR"
 	chmod 700 "$XDG_RUNTIME_DIR"
 
-	export SSHAKKU_TEST_VAULT="$BATS_TEST_TMPDIR/vault"
+	export SSHAKKU_TEST_VAULT="$TEST_ROOT/vault"
 	mkdir -p "$SSHAKKU_TEST_VAULT"
 
 	# This suite exercises the headless path deliberately: whatever graphical
@@ -199,7 +208,7 @@ setup() {
 
 	case "$OSTYPE" in
 	darwin*)
-		TEST_KEYCHAIN="$BATS_TEST_TMPDIR/sshakku-test.keychain-db"
+		TEST_KEYCHAIN="$TEST_ROOT/sshakku-test.keychain-db"
 		setup_test_keychain "$TEST_KEYCHAIN"
 		;;
 	esac
@@ -209,7 +218,7 @@ setup() {
 }
 
 # teardown kills every ssh-agent this test started (sshakku's own, and any
-# started directly by a test), identified by $BATS_TEST_TMPDIR appearing in
+# started directly by a test), identified by $TEST_ROOT appearing in
 # its command line — every socket path this suite ever uses lives under
 # there. sshakku deliberately keeps the agent running for the whole login
 # session, so nothing here would stop it on its own; left alive past the
@@ -225,7 +234,7 @@ teardown() {
 	darwin*)
 		while read -r pid cmdline; do
 			case "$cmdline" in
-			*"$BATS_TEST_TMPDIR"*) kill -9 "$pid" 2>/dev/null || true ;;
+			*"$TEST_ROOT"*) kill -9 "$pid" 2>/dev/null || true ;;
 			esac
 		done < <(ps -e -ww -o pid=,command=)
 		;;
@@ -234,10 +243,15 @@ teardown() {
 			[ -r "$pid/cmdline" ] || continue
 			cmdline=$(tr '\0' ' ' <"$pid/cmdline" 2>/dev/null) || continue
 			case "$cmdline" in
-			*"$BATS_TEST_TMPDIR"*) kill -9 "${pid#/proc/}" 2>/dev/null || true ;;
+			*"$TEST_ROOT"*) kill -9 "${pid#/proc/}" 2>/dev/null || true ;;
 			esac
 		done
 		;;
+	esac
+	# Only where setup() made a root of its own; elsewhere it is bats' own
+	# per-test tmpdir, which bats removes itself.
+	case "$OSTYPE" in
+	darwin*) rm -rf "$TEST_ROOT" ;;
 	esac
 	trace "teardown done"
 }

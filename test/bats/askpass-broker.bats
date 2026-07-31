@@ -75,11 +75,13 @@ load helpers
 # blocking_wallet puts a secret-tool that never answers ahead of the stub on
 # PATH, standing in for a wallet that is present but locked behind an unlock
 # prompt nobody is there to answer.
+# It goes under $TEST_ROOT so teardown's sweep reaches whatever it leaves
+# running: the stand-in outlives the caller that gave up on it.
 blocking_wallet() {
-	mkdir -p "$BATS_TEST_TMPDIR/blocked"
-	cp "$BATS_TEST_DIRNAME/fixtures/blocking-secret-tool" "$BATS_TEST_TMPDIR/blocked/secret-tool"
-	chmod +x "$BATS_TEST_TMPDIR/blocked/secret-tool"
-	export PATH="$BATS_TEST_TMPDIR/blocked:$PATH"
+	mkdir -p "$TEST_ROOT/blocked"
+	cp "$BATS_TEST_DIRNAME/fixtures/blocking-secret-tool" "$TEST_ROOT/blocked/secret-tool"
+	chmod +x "$TEST_ROOT/blocked/secret-tool"
+	export PATH="$TEST_ROOT/blocked:$PATH"
 }
 
 # Verifies feature F17: a backend that cannot answer degrades to prompting
