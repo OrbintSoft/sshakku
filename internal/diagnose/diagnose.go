@@ -22,9 +22,9 @@ import (
 // loginShellHint (OS-specific: paths and the login-shell command differ
 // between bash/profile.d on Linux and zsh/zprofile on macOS) is shared with
 // the plain "no agent" finding below, since both stem from the same cause.
-var askpassNotWiredMsg = "a graphical prompter is available but SSH_ASKPASS is not wired into " +
-	"this shell — ssh will prompt for passphrases on the raw terminal instead of routing them " +
-	"through the wallet; " + loginShellHint
+var askpassNotWiredMsg = "SSH_ASKPASS is not wired into this shell — once a key expires from the " +
+	"agent, ssh will ask for its passphrase on the terminal instead of taking it from the wallet; " +
+	loginShellHint
 
 // logTailLines is how many trailing session-log lines the report shows.
 const logTailLines = 10
@@ -77,13 +77,10 @@ type Inputs struct {
 	LogFile   string // session log to tail
 	OurUID    int    // the invoking user's uid, to tell same-user agents apart
 
-	// GUIAvailable, EnvAskpass, and EnvAskpassRequire describe whether this
-	// shell's ssh passphrase prompts are routed through sshakku's wallet-aware
-	// askpass broker, mirroring the same condition `sshakku askpass-env` uses
-	// to decide whether to wire it in. GUIAvailable is computed by the caller
-	// (see keys.GUIAvailable) rather than here, keeping this package free of
-	// any dependency on a display server or an external prompter binary.
-	GUIAvailable      bool
+	// EnvAskpass and EnvAskpassRequire describe whether this shell's ssh
+	// passphrase prompts are routed through sshakku's wallet-aware askpass
+	// broker, which is what refills a key that has expired from the agent
+	// without prompting.
 	EnvAskpass        string // SSH_ASKPASS as this shell sees it
 	EnvAskpassRequire string // SSH_ASKPASS_REQUIRE as this shell sees it
 }
@@ -348,7 +345,7 @@ func findings(in Inputs, r Report) []string {
 	if r.InspectErr != nil {
 		f = append(f, fmt.Sprintf("could not enumerate processes: %v (report is partial)", r.InspectErr))
 	}
-	if in.GUIAvailable && (in.EnvAskpass == "" || in.EnvAskpassRequire == "") {
+	if in.EnvAskpass == "" || in.EnvAskpassRequire == "" {
 		f = append(f, askpassNotWiredMsg)
 	}
 	f = append(f, hostFindings(r.Host)...)

@@ -176,12 +176,12 @@ func TestCrossUserGuard(t *testing.T) {
 // TestAskpassExports pins the exported environment verbatim. All three lines are
 // load-bearing, and losing one breaks the wallet refill without breaking
 // anything a coarser assertion would notice: SSH_ASKPASS names the helper,
-// REQUIRE=prefer is what makes ssh consult it even when a terminal is available,
-// and the marker is how the helper knows its argv is a prompt to answer.
+// REQUIRE=force is what makes ssh consult it at all in a session with no
+// DISPLAY, and the marker is how the helper knows its argv is a prompt to answer.
 func TestAskpassExports(t *testing.T) {
 	got := askpassExports("/usr/local/bin/sshakku")
 	want := "export SSH_ASKPASS='/usr/local/bin/sshakku'\n" +
-		"export SSH_ASKPASS_REQUIRE=prefer\n" +
+		"export SSH_ASKPASS_REQUIRE=force\n" +
 		"export SSHAKKU_ASKPASS=1\n"
 	if got != want {
 		t.Errorf("askpassExports = %q, want %q", got, want)
@@ -323,17 +323,22 @@ func TestDetectGUIAvailableHeadless(t *testing.T) {
 	}
 }
 
-// TestAskpassEnvHeadless confirms the headless branch: with no display server,
-// askpassEnv emits nothing (ssh keeps its own terminal prompting) and succeeds.
+// TestAskpassEnvHeadless confirms a session with no display server is wired the
+// same as a graphical one: the broker reads the wallet, which needs no display,
+// and a key that has expired from the agent must be refilled there too. Unlike
+// the case in cover_remaining_test.go this one leaves the GUI probe real, so it
+// also covers the detector actually reporting a headless session.
 func TestAskpassEnvHeadless(t *testing.T) {
 	t.Setenv("WAYLAND_DISPLAY", "")
 	t.Setenv("DISPLAY", "")
+	d := realDeps()
+	d.self = func() (string, error) { return "/opt/sshakku/bin/sshakku", nil }
 	var out, errOut bytes.Buffer
-	if got := realDeps().askpassEnv(&out, &errOut); got != 0 {
+	if got := d.askpassEnv(&out, &errOut); got != 0 {
 		t.Errorf("askpassEnv (headless) = %d, want 0", got)
 	}
-	if out.Len() != 0 {
-		t.Errorf("headless askpassEnv wrote %q to stdout, want no export lines", out.String())
+	if got, want := out.String(), askpassExports("/opt/sshakku/bin/sshakku"); got != want {
+		t.Errorf("headless askpassEnv wrote %q to stdout, want %q", got, want)
 	}
 }
 

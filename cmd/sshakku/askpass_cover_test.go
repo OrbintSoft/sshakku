@@ -9,23 +9,22 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/keys"
 )
 
-// TestAskpassEnvGUI covers askpass-env's GUI branch against a fake GUI probe and
-// executable lookup, so both run regardless of the test host's display: a
-// resolved path emits the three export lines, an os.Executable failure returns 1,
-// and a failing stdout surfaces as a write error.
-func TestAskpassEnvGUI(t *testing.T) {
+// TestAskpassEnv covers askpass-env against a fake executable lookup, so it runs
+// regardless of where the test binary lives: a resolved path emits the three
+// export lines, an os.Executable failure returns 1, and a failing stdout
+// surfaces as a write error.
+func TestAskpassEnv(t *testing.T) {
 	t.Run("resolved path emits the export lines", func(t *testing.T) {
 		d := realDeps()
-		d.guiAvailable = func() bool { return true }
 		d.self = func() (string, error) { return "/opt/sshakku/bin/sshakku", nil }
 		var out, errOut bytes.Buffer
 		if got := d.askpassEnv(&out, &errOut); got != 0 {
-			t.Fatalf("askpassEnv (GUI) = %d, want 0; stderr=%q", got, errOut.String())
+			t.Fatalf("askpassEnv = %d, want 0; stderr=%q", got, errOut.String())
 		}
 		s := out.String()
 		for _, want := range []string{
 			"export SSH_ASKPASS='/opt/sshakku/bin/sshakku'",
-			"export SSH_ASKPASS_REQUIRE=prefer",
+			"export SSH_ASKPASS_REQUIRE=force",
 			"export " + keys.EnvAskpassMode + "=1",
 		} {
 			if !strings.Contains(s, want) {
@@ -36,7 +35,6 @@ func TestAskpassEnvGUI(t *testing.T) {
 
 	t.Run("executable lookup failure returns 1", func(t *testing.T) {
 		d := realDeps()
-		d.guiAvailable = func() bool { return true }
 		d.self = func() (string, error) { return "", errors.New("no exe") }
 		var out, errOut bytes.Buffer
 		if got := d.askpassEnv(&out, &errOut); got != 1 {
@@ -52,7 +50,6 @@ func TestAskpassEnvGUI(t *testing.T) {
 
 	t.Run("stdout write error returns 1", func(t *testing.T) {
 		d := realDeps()
-		d.guiAvailable = func() bool { return true }
 		d.self = func() (string, error) { return "/opt/sshakku/bin/sshakku", nil }
 		var errOut bytes.Buffer
 		if got := d.askpassEnv(errWriter{}, &errOut); got != 1 {

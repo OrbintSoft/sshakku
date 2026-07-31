@@ -24,8 +24,8 @@
 # suite is a headless session by construction, which is the condition under
 # which the refill must still work.
 #
-# agent_sock/log_file below come from `eval "$(sshakku shell-init)"`, which a
-# static analyzer cannot trace.
+# log_file below comes from sourcing the installed hook, which a static analyzer
+# cannot trace.
 # shellcheck disable=SC2154
 
 load helpers
@@ -34,7 +34,7 @@ load helpers
 	run "$SSHAKKU_BIN" askpass-env
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"export SSH_ASKPASS='$SSHAKKU_BIN'"* ]]
-	[[ "$output" == *"export SSH_ASKPASS_REQUIRE=prefer"* ]]
+	[[ "$output" == *"export SSH_ASKPASS_REQUIRE=force"* ]]
 	[[ "$output" == *"export SSHAKKU_ASKPASS=1"* ]]
 }
 
@@ -42,20 +42,26 @@ load helpers
 	new_test_key id_test "test-passphrase"
 	seed_vault id_test "test-passphrase"
 
-	eval "$("$SSHAKKU_BIN" shell-init)"
-	eval "$("$SSHAKKU_BIN" askpass-env)"
+	# The hook itself, sourced non-interactively: it pins SSH_AUTH_SOCK and wires
+	# the broker but does not load keys, which is exactly the state F6 describes
+	# — a shell that is already open, with the key no longer in the agent.
+	# shellcheck source=/dev/null  # installed at a path only known at run time
+	source "$SSHAKKU_HOOK"
 
 	# Prove the run tests what it claims to: the broker, reached through the
 	# exports, and not the proactive stash.
 	[ -n "${SSH_ASKPASS:-}" ]
-	[ "${SSH_ASKPASS_REQUIRE:-}" = "prefer" ]
+	[ "${SSH_ASKPASS_REQUIRE:-}" = "force" ]
 	[ -z "${SSHAKKU_HANDOFF_TOKEN:-}" ]
 
 	run timeout --signal=KILL 10 setsid ssh-add "$HOME/.ssh/id_test"
 	[ "$status" -eq 0 ]
 
+	# Matched by fingerprint: `ssh-add -l` identifies a key by its comment
+	# (user@host), which says nothing about which file it came from.
+	fingerprint=$(ssh-keygen -lf "$HOME/.ssh/id_test.pub" | awk '{print $2}')
 	run ssh-add -l
-	[[ "$output" == *"id_test"* ]]
+	[[ "$output" == *"$fingerprint"* ]]
 
 	# The load-bearing assertion: the passphrase came from the wallet, not from
 	# a stray terminal, a cached agent entry, or an unencrypted key.

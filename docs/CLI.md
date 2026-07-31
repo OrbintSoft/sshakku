@@ -72,14 +72,14 @@ through sshakku's wallet-aware broker:
 
 ```sh
 export SSH_ASKPASS='…'
-export SSH_ASKPASS_REQUIRE=prefer
+export SSH_ASKPASS_REQUIRE=force
 export SSHAKKU_ASKPASS=1
 ```
 
-Prints nothing (and exits `0`) when no graphical prompter is available, since
-a headless session keeps ssh's own terminal prompting instead. The login hook
-evals this in every login shell, interactive or not — it is cheap even as a
-no-op, so gating it on interactivity isn't needed.
+Every session gets them, with or without a desktop: reading the wallet needs
+no graphical prompter, and when the wallet has no entry the broker asks on the
+terminal just as `ssh` would have. The login hook evals this in every login
+shell, interactive or not, since it only ever prints these lines.
 
 Once these are exported, `ssh` itself execs the same `sshakku` binary as its
 `SSH_ASKPASS` helper whenever it needs a passphrase or confirmation — that
