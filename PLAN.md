@@ -1113,3 +1113,33 @@ temporary directories reach that length on their own.
   too long.
 
 → feature F5, F6; not urgent — no observed user report, only a reachable case.
+
+### Phase 17 — Finish macOS support
+
+The shell suite runs on macOS now, and running it surfaced what is still
+missing there. These are separate pieces of work; the list exists so they are
+not rediscovered one at a time.
+
+1. **KeePassXC has no route on macOS.** On Linux it is reached generically
+   through the `secret-service` backend because KeePassXC implements that D-Bus
+   API itself. macOS has neither, so a wallet the project offers on one
+   platform is simply unavailable on the other. Open decision 23 holds the two
+   candidate designs — KeePassXC's native-messaging socket protocol, which
+   talks to the running, already-unlocked instance, versus `keepassxc-cli`,
+   which works on the database file and therefore needs the master password on
+   every call. The first preserves the silent refill F5 and F6 promise; the
+   second does not. Settle that decision first, then implement, then give it a
+   cell in the secret-store table.
+2. **Nothing bounds the keychain.** `SecItemCopyMatching` is a synchronous cgo
+   call with no timeout, context or cancellation, so on macOS's default backend
+   there is no deadline at all. F21 does not cover it either: it promises that
+   no *program* SSHakku runs can hold the shell up, and the keychain is not a
+   program. Decide whether F21 should be about anything SSHakku waits on rather
+   than only about programs — if so the wording changes and the gap becomes a
+   stated defect — and give the call a deadline it can be held to.
+3. **The CLI backends are untested on macOS.** 1Password and Bitwarden are
+   supported on both platforms, but the real-account jobs run on
+   `ubuntu-latest` only, so nothing exercises them where the rest of the
+   platform differs.
+
+→ features F5, F6, F17, F21; open decision 23.
