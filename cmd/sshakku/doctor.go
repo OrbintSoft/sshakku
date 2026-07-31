@@ -388,7 +388,6 @@ func gatherReport(env paths.Env, layout paths.Layout) diagnose.Report {
 		EnvSock:           os.Getenv("SSH_AUTH_SOCK"),
 		LogFile:           layout.LogFile,
 		OurUID:            env.UID,
-		GUIAvailable:      detectGUIAvailable(),
 		EnvAskpass:        os.Getenv("SSH_ASKPASS"),
 		EnvAskpassRequire: os.Getenv("SSH_ASKPASS_REQUIRE"),
 	}, agent.Inspector{}, agent.SocketProber{}, diagnose.ProcfsAncestry{}, diagnose.ProcfsCgroup{}, keySource,

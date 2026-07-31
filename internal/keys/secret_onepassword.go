@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // onePasswordBin is the 1Password CLI. It authenticates out of band — either
@@ -60,6 +61,22 @@ type onePasswordItemTemplate struct {
 type OnePasswordBackend struct {
 	Runner Runner
 	Vault  string
+	// Timeout bounds each op call. op can defer to the 1Password desktop app
+	// for approval, so the budget is a person's, not a machine's; zero selects
+	// DefaultInteractiveTimeout.
+	Timeout time.Duration
+}
+
+// run bounds every op call, so an approval nobody grants ends as an error
+// rather than as a shell that never comes back.
+func (b *OnePasswordBackend) run(c Cmd) (Result, error) {
+	if c.Timeout <= 0 {
+		c.Timeout = b.Timeout
+	}
+	if c.Timeout <= 0 {
+		c.Timeout = DefaultInteractiveTimeout
+	}
+	return b.Runner.Run(c)
 }
 
 // Lookup reads the item's password field via a secret reference
@@ -68,7 +85,7 @@ type OnePasswordBackend struct {
 // failures by exit code alone, the same ambiguity SecretToolBackend accepts.
 func (b *OnePasswordBackend) Lookup(service string) (string, bool, error) {
 	ref := fmt.Sprintf("op://%s/%s/password", b.Vault, service)
-	res, err := b.Runner.Run(Cmd{Name: onePasswordBin, Args: []string{"read", ref, "--no-newline"}})
+	res, err := b.run(Cmd{Name: onePasswordBin, Args: []string{"read", ref, "--no-newline"}})
 	if err != nil {
 		return "", false, err
 	}
@@ -99,7 +116,7 @@ func (b *OnePasswordBackend) Store(service, label, passphrase string) error {
 		return err
 	}
 
-	res, err := b.Runner.Run(Cmd{
+	res, err := b.run(Cmd{
 		Name:  onePasswordBin,
 		Args:  []string{"item", "create", "--vault", b.Vault, "-"},
 		Stdin: string(payload),
@@ -118,7 +135,7 @@ func (b *OnePasswordBackend) Store(service, label, passphrase string) error {
 // with a real deletion failure, the same shape SecretServiceBackend.Delete
 // uses (search, then delete only what search found).
 func (b *OnePasswordBackend) Delete(service string) error {
-	res, err := b.Runner.Run(Cmd{Name: onePasswordBin, Args: []string{"item", "get", service, "--vault", b.Vault, "--format", "json"}})
+	res, err := b.run(Cmd{Name: onePasswordBin, Args: []string{"item", "get", service, "--vault", b.Vault, "--format", "json"}})
 	if err != nil {
 		return err
 	}
@@ -126,7 +143,7 @@ func (b *OnePasswordBackend) Delete(service string) error {
 		return nil
 	}
 
-	res, err = b.Runner.Run(Cmd{Name: onePasswordBin, Args: []string{"item", "delete", service, "--vault", b.Vault}})
+	res, err = b.run(Cmd{Name: onePasswordBin, Args: []string{"item", "delete", service, "--vault", b.Vault}})
 	if err != nil {
 		return err
 	}
@@ -139,7 +156,7 @@ func (b *OnePasswordBackend) Delete(service string) error {
 // List enumerates every sshakku-tagged item's title in Vault. Since Vault is
 // dedicated to sshakku (see the type doc), every title is a service string.
 func (b *OnePasswordBackend) List() ([]string, error) {
-	res, err := b.Runner.Run(Cmd{Name: onePasswordBin, Args: []string{"item", "list", "--vault", b.Vault, "--tags", onePasswordTag, "--format", "json"}})
+	res, err := b.run(Cmd{Name: onePasswordBin, Args: []string{"item", "list", "--vault", b.Vault, "--tags", onePasswordTag, "--format", "json"}})
 	if err != nil {
 		return nil, err
 	}

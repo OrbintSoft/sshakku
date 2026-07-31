@@ -46,8 +46,8 @@ func (d deps) loadKeys(stderr io.Writer) int {
 		notifier = stderrNotifier{w: stderr}
 	}
 
-	runner := keys.ExecRunner{}
-	kdialog := keys.KDialogPrompter{Runner: runner}
+	runner := keys.ExecRunner{Timeout: settings.CommandTimeout}
+	kdialog := keys.KDialogPrompter{Runner: runner, Timeout: settings.InteractiveTimeout}
 	// The vault is always consulted first regardless of which of these is
 	// picked (see Loader.loadViaVaultThenPrompt); this only chooses how to
 	// ask when it misses — kdialog when a graphical session is usable,

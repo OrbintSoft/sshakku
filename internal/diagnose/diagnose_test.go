@@ -50,6 +50,10 @@ func TestGatherHealthy(t *testing.T) {
 		LegacyDir: legacy,
 		EnvSock:   fixed,
 		OurUID:    1000,
+		// A healthy shell has the broker wired: without it a key that expires
+		// from the agent starts prompting again, which is a problem to report.
+		EnvAskpass:        "/usr/bin/sshakku",
+		EnvAskpassRequire: "force",
 	}, src, prober, nil, nil, nil, nil)
 
 	if len(r.Agents) != 1 {
@@ -253,7 +257,7 @@ func TestGatherRecordedPID(t *testing.T) {
 }
 
 func TestGatherAskpassNotWired(t *testing.T) {
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000, GUIAvailable: true},
+	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000},
 		fakeSource{}, fakeProber{up: map[string]bool{fixed: true}}, nil, nil, nil, nil)
 	if !hasFinding(r, "SSH_ASKPASS is not wired") {
 		t.Errorf("findings = %v, want an askpass-not-wired finding", r.Findings)
@@ -263,7 +267,7 @@ func TestGatherAskpassNotWired(t *testing.T) {
 func TestGatherAskpassPartiallyWired(t *testing.T) {
 	r := Gather(Inputs{
 		FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000,
-		GUIAvailable: true, EnvAskpass: "/usr/bin/sshakku",
+		EnvAskpass: "/usr/bin/sshakku",
 	}, fakeSource{}, fakeProber{up: map[string]bool{fixed: true}}, nil, nil, nil, nil)
 	if !hasFinding(r, "SSH_ASKPASS is not wired") {
 		t.Errorf("findings = %v, want an askpass-not-wired finding when REQUIRE is missing", r.Findings)
@@ -276,7 +280,7 @@ func TestGatherAskpassWired(t *testing.T) {
 	}}
 	r := Gather(Inputs{
 		FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000,
-		GUIAvailable: true, EnvAskpass: "/usr/bin/sshakku", EnvAskpassRequire: "prefer",
+		EnvAskpass: "/usr/bin/sshakku", EnvAskpassRequire: "force",
 	}, src, fakeProber{up: map[string]bool{fixed: true}}, nil, nil, nil, nil)
 	if hasFinding(r, "SSH_ASKPASS is not wired") {
 		t.Errorf("findings = %v, want no askpass finding when fully wired", r.Findings)
@@ -286,11 +290,16 @@ func TestGatherAskpassWired(t *testing.T) {
 	}
 }
 
-func TestGatherAskpassNoGUI(t *testing.T) {
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000, GUIAvailable: false},
+// TestGatherAskpassNotWiredHeadless covers the session that needs the finding
+// most: one with no display server at all, where nothing else will explain why
+// a passphrase is being asked for on the terminal.
+func TestGatherAskpassNotWiredHeadless(t *testing.T) {
+	t.Setenv("DISPLAY", "")
+	t.Setenv("WAYLAND_DISPLAY", "")
+	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000},
 		fakeSource{}, fakeProber{up: map[string]bool{fixed: true}}, nil, nil, nil, nil)
-	if hasFinding(r, "SSH_ASKPASS is not wired") {
-		t.Errorf("findings = %v, want no askpass finding in a headless session", r.Findings)
+	if !hasFinding(r, "SSH_ASKPASS is not wired") {
+		t.Errorf("findings = %v, want an askpass-not-wired finding in a headless session too", r.Findings)
 	}
 }
 

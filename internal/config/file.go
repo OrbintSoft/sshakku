@@ -40,6 +40,9 @@ type File struct {
 	// cleanly, and an env var would leave the account identity (an email
 	// address, a vault name) sitting in the process environment for no
 	// benefit over the file.
+	CommandTimeout     *string `toml:"command_timeout"`
+	InteractiveTimeout *string `toml:"interactive_timeout"`
+
 	SecretBackend    *string `toml:"secret_backend"`
 	OnePasswordVault *string `toml:"onepassword_vault"`
 	BitwardenEmail   *string `toml:"bitwarden_email"`
@@ -52,7 +55,14 @@ type Settings struct {
 	MaxAttempts int           // 0 lets the loader use its own default
 	GiveupTTL   time.Duration // 0 never expires the give-up record
 	NoGiveup    bool          // true disables give-up tracking entirely
-	Quiet       bool          // true suppresses the failure notice
+
+	// CommandTimeout and InteractiveTimeout bound every external command
+	// SSHakku runs: the first for one that should answer on its own, the second
+	// for one waiting on a person. Both are always positive — there is no
+	// setting for "wait forever".
+	CommandTimeout     time.Duration
+	InteractiveTimeout time.Duration
+	Quiet              bool // true suppresses the failure notice
 
 	// WalletStoreMode is one of "all", "include", or "exclude"; see StoresWallet.
 	WalletStoreMode    string
@@ -274,6 +284,18 @@ func Resolve(file File, lookup func(string) (string, bool)) (Settings, []error) 
 		errs = append(errs, err)
 	}
 	s.GiveupTTL = ttl
+
+	cmdTimeout, err := CommandTimeout(coalesce(lookup, "SSHAKKU_COMMAND_TIMEOUT", file.CommandTimeout))
+	if err != nil {
+		errs = append(errs, err)
+	}
+	s.CommandTimeout = cmdTimeout
+
+	interactive, err := InteractiveTimeout(coalesce(lookup, "SSHAKKU_INTERACTIVE_TIMEOUT", file.InteractiveTimeout))
+	if err != nil {
+		errs = append(errs, err)
+	}
+	s.InteractiveTimeout = interactive
 
 	s.MaxAttempts = resolveMaxAttempts(lookup, file.MaxAttempts)
 	s.NoGiveup = resolveBool(lookup, "SSHAKKU_NO_GIVEUP", file.NoGiveup)

@@ -35,8 +35,7 @@ unset SSH_AGENT_PID
 # Wired in every login shell, not just interactive ones: some environments
 # resolve a terminal's inherited environment via a non-interactive login shell,
 # so gating this on interactivity would silently drop it there. It only prints
-# two export lines and is a no-op without a graphical prompter, so it stays
-# cheap for non-interactive logins too.
+# export lines, so it stays cheap for non-interactive logins too.
 eval "$("$sshakku_bin" askpass-env)"
 
 # Load keys only in interactive shells: key loading may prompt and writes to the

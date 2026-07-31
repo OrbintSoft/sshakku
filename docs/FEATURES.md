@@ -41,6 +41,7 @@ question, tracked in [TEST-MATRIX.md](TEST-MATRIX.md).
 | F10 | On success SSHakku is completely silent: nothing on stdout, nothing on stderr. | Opening a shell prints nothing, and command substitution or a script's output is never polluted. |
 | F11 | Something the user should act on — a key that could not be loaded — is said once, in plain language, on the terminal. | The give-up notice appears once in the shell that tried, not on every prompt. |
 | F12 | Logs record what happened and never contain a secret. | The session log shows the load decisions; grepping it for your passphrase finds nothing. |
+| F21 | No program SSHakku runs can hold your shell up with no end: one that neither answers nor fails is given up on, and you are asked on the terminal instead. How long to wait is configurable, separately for a program that should answer on its own and one that is waiting on you. | With a wallet that hangs rather than fails (locked, with an unlock prompt that cannot be shown), the shell still comes back and `ssh` asks you for the passphrase instead of waiting forever. |
 
 ## Diagnostics
 

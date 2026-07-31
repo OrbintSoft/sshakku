@@ -19,10 +19,17 @@ broker see them.
 | `SSHAKKU_GIVEUP_TTL` | `giveup_ttl` | `1h` | How long a key stays in the give-up state before it is retried, as a Go duration. A zero or negative value never expires (the state still clears at logout or reboot). |
 | `SSHAKKU_NO_GIVEUP` | `no_giveup` | unset | When truthy, disables the give-up memory entirely: every shell retries every key. |
 | `SSHAKKU_QUIET` | `quiet` | unset | When truthy, suppresses the user-facing failure notice on the terminal. |
+| `SSHAKKU_COMMAND_TIMEOUT` | `command_timeout` | `10s` | How long to wait for a program that should answer on its own — reading the wallet, checking the display — before giving up on it and falling back (usually to asking on the terminal). Lower it if you would rather be prompted quickly than wait on a wallet that may be locked. |
+| `SSHAKKU_INTERACTIVE_TIMEOUT` | `interactive_timeout` | `2m` | How long to wait for a program that is waiting for *you* — a password dialog, or a CLI deferring to its desktop app for approval. |
 
 Truthy means `1`, `true`, `yes`, or `on` (case-insensitive); in the config file a
 boolean key (`no_giveup`, `quiet`) is a TOML `true` or `false`. A malformed
 duration is ignored, logged to the session log, and the default is used.
+
+Unlike the other durations, the two timeouts have no "wait forever" value: zero
+and negative are refused and the default is used instead. A program with no
+limit can hold up the shell that is waiting on it, which is exactly what they
+exist to prevent.
 
 ## Config file
 
@@ -37,9 +44,12 @@ max_attempts = 3
 giveup_ttl = "1h"
 no_giveup = false
 quiet = false
+command_timeout = "10s"
+interactive_timeout = "2m"
 ```
 
-Durations (`key_lifetime`, `giveup_ttl`) are strings holding a Go duration,
+Durations (`key_lifetime`, `giveup_ttl`, `command_timeout`,
+`interactive_timeout`) are strings holding a Go duration,
 `max_attempts` is an integer, and `no_giveup` and `quiet` are booleans. A missing
 file is fine — SSHakku falls back to the environment and the defaults. A syntax
 error discards the whole file; an unrecognised key is ignored while the keys

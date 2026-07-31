@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // bitwardenBin is the Bitwarden CLI. Unlike SecretServiceBackend (PAM-linked
@@ -94,6 +95,23 @@ type BitwardenBackend struct {
 	// SecretSession): Lookup/Store/Delete/List skip their own prompt/unlock/
 	// lock bracket and reuse the held-open session instead.
 	held bool
+
+	// Timeout bounds each bw call. Logging in, unlocking and syncing all reach
+	// the network and run on a person's patience rather than a machine's; zero
+	// selects DefaultInteractiveTimeout.
+	Timeout time.Duration
+}
+
+// run bounds every bw call, so a vault that never answers ends as an error the
+// caller can fall back from rather than as a shell that never comes back.
+func (b *BitwardenBackend) run(c Cmd) (Result, error) {
+	if c.Timeout <= 0 {
+		c.Timeout = b.Timeout
+	}
+	if c.Timeout <= 0 {
+		c.Timeout = DefaultInteractiveTimeout
+	}
+	return b.Runner.Run(c)
 }
 
 func (b *BitwardenBackend) env() []string {
@@ -113,7 +131,7 @@ func (b *BitwardenBackend) Unlock() error {
 	}
 	passwordEnv := []string{bitwardenPasswordEnv + "=" + password}
 
-	check, err := b.Runner.Run(Cmd{Name: bitwardenBin, Args: []string{"login", "--check"}})
+	check, err := b.run(Cmd{Name: bitwardenBin, Args: []string{"login", "--check"}})
 	if err != nil {
 		return err
 	}
@@ -122,7 +140,7 @@ func (b *BitwardenBackend) Unlock() error {
 		// required before server config update"), so this only ever runs
 		// as part of the first login, not on every Unlock.
 		if b.Server != "" {
-			res, err := b.Runner.Run(Cmd{Name: bitwardenBin, Args: []string{"config", "server", b.Server}})
+			res, err := b.run(Cmd{Name: bitwardenBin, Args: []string{"config", "server", b.Server}})
 			if err != nil {
 				return err
 			}
@@ -131,7 +149,7 @@ func (b *BitwardenBackend) Unlock() error {
 			}
 		}
 
-		res, err := b.Runner.Run(Cmd{
+		res, err := b.run(Cmd{
 			Name: bitwardenBin,
 			Args: []string{"login", b.Email, "--passwordenv", bitwardenPasswordEnv},
 			Env:  passwordEnv,
@@ -144,7 +162,7 @@ func (b *BitwardenBackend) Unlock() error {
 		}
 	}
 
-	res, err := b.Runner.Run(Cmd{
+	res, err := b.run(Cmd{
 		Name: bitwardenBin,
 		Args: []string{"unlock", "--passwordenv", bitwardenPasswordEnv, "--raw"},
 		Env:  passwordEnv,
@@ -164,7 +182,7 @@ func (b *BitwardenBackend) Unlock() error {
 // Lock destroys the current session (`bw lock`) and forgets it, regardless
 // of whether the lock command itself succeeds.
 func (b *BitwardenBackend) Lock() error {
-	res, err := b.Runner.Run(Cmd{Name: bitwardenBin, Args: []string{"lock"}, Env: b.env()})
+	res, err := b.run(Cmd{Name: bitwardenBin, Args: []string{"lock"}, Env: b.env()})
 	b.Session = ""
 	b.held = false
 	if err != nil {
@@ -181,7 +199,7 @@ var _ SecretSession = (*BitwardenBackend)(nil)
 // findItemID looks up service by name and returns its id. A miss is
 // found=false, not an error.
 func (b *BitwardenBackend) findItemID(service string) (string, bool, error) {
-	res, err := b.Runner.Run(Cmd{Name: bitwardenBin, Args: []string{"get", "item", service}, Env: b.env()})
+	res, err := b.run(Cmd{Name: bitwardenBin, Args: []string{"get", "item", service}, Env: b.env()})
 	if err != nil {
 		return "", false, err
 	}
@@ -208,7 +226,7 @@ func (b *BitwardenBackend) Lookup(service string) (string, bool, error) {
 		defer func() { _ = b.Lock() }()
 	}
 
-	res, err := b.Runner.Run(Cmd{Name: bitwardenBin, Args: []string{"get", "password", service}, Env: b.env()})
+	res, err := b.run(Cmd{Name: bitwardenBin, Args: []string{"get", "password", service}, Env: b.env()})
 	if err != nil {
 		return "", false, err
 	}
@@ -251,7 +269,7 @@ func (b *BitwardenBackend) Store(service, label, passphrase string) error {
 	if found {
 		verb, args = "edit", []string{"edit", "item", id}
 	}
-	res, err := b.Runner.Run(Cmd{Name: bitwardenBin, Args: args, Stdin: encoded, Env: b.env()})
+	res, err := b.run(Cmd{Name: bitwardenBin, Args: args, Stdin: encoded, Env: b.env()})
 	if err != nil {
 		return err
 	}
@@ -282,7 +300,7 @@ func (b *BitwardenBackend) Delete(service string) error {
 		return nil
 	}
 
-	res, err := b.Runner.Run(Cmd{Name: bitwardenBin, Args: []string{"delete", "item", id, "--permanent"}, Env: b.env()})
+	res, err := b.run(Cmd{Name: bitwardenBin, Args: []string{"delete", "item", id, "--permanent"}, Env: b.env()})
 	if err != nil {
 		return err
 	}
@@ -304,7 +322,7 @@ func (b *BitwardenBackend) List() ([]string, error) {
 		defer func() { _ = b.Lock() }()
 	}
 
-	res, err := b.Runner.Run(Cmd{Name: bitwardenBin, Args: []string{"list", "items"}, Env: b.env()})
+	res, err := b.run(Cmd{Name: bitwardenBin, Args: []string{"list", "items"}, Env: b.env()})
 	if err != nil {
 		return nil, err
 	}

@@ -101,8 +101,9 @@ type deps struct {
 	// error branch is testable.
 	self func() (string, error)
 	// guiAvailable reports whether a graphical passphrase prompter is reachable
-	// (detectGUIAvailable); askpass-env emits its exports only when it is.
-	// Injected so both branches run regardless of the test host's display.
+	// (detectGUIAvailable), which decides whether load-keys prompts through a
+	// dialog or on the terminal. Injected so both branches run regardless of
+	// the test host's display.
 	guiAvailable func() bool
 	// fetchHandoff redeems a one-shot passphrase-handoff token (keys.FetchHandoff).
 	// Injected so askpass's handoff path is testable without a live kernel

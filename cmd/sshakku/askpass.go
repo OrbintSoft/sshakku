@@ -96,14 +96,13 @@ func tail(s string, n int) string {
 
 // askpassEnv prints the export lines that route this shell's ssh passphrase
 // prompts through sshakku's wallet-aware broker, so a key that expires from the
-// agent is refilled from the wallet without a terminal prompt. It emits them
-// only when a graphical prompter is available — a headless session keeps ssh's
-// own terminal prompting — and the login entrypoint evals it in every login
-// shell, interactive or not, since it only ever prints two export lines.
+// agent is refilled from the wallet without a terminal prompt. Every session
+// gets them, graphical or not: reading the wallet needs no display, and on a
+// wallet miss the broker prompts on the terminal exactly as ssh would have, so
+// there is nothing a headless session gains by being left unwired. The login
+// entrypoint evals it in every login shell, interactive or not, since it only
+// ever prints export lines.
 func (d deps) askpassEnv(stdout, stderr io.Writer) int {
-	if !d.guiAvailable() {
-		return 0
-	}
 	self, err := d.self()
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "sshakku: %v\n", err)
@@ -117,10 +116,14 @@ func (d deps) askpassEnv(stdout, stderr io.Writer) int {
 }
 
 // askpassExports returns the shell `export` lines pointing ssh's SSH_ASKPASS at
-// self's wallet-aware broker; REQUIRE=prefer makes ssh consult it even with a tty.
+// self's wallet-aware broker. REQUIRE=force is what routes every prompt to the
+// broker: `prefer` asks OpenSSH to favour the helper but still ignores it when
+// DISPLAY is unset, which is most terminal sessions and a Mac without an X
+// server. The broker keeps the terminal as its own fallback, so forcing it
+// costs a session nothing it had before.
 func askpassExports(self string) string {
 	return fmt.Sprintf(
-		"export SSH_ASKPASS=%s\nexport SSH_ASKPASS_REQUIRE=prefer\nexport %s=1\n",
+		"export SSH_ASKPASS=%s\nexport SSH_ASKPASS_REQUIRE=force\nexport %s=1\n",
 		shellSingleQuote(self), keys.EnvAskpassMode,
 	)
 }

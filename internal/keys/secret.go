@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // jsonMarshal is the item-template encoder the shell-out backends (Bitwarden,
@@ -48,6 +49,20 @@ type SecretToolBackend struct {
 	Runner Runner
 	// User is the "username" attribute, constant for the login session.
 	User string
+	// Timeout bounds each secret-tool call. The wallet may be locked behind an
+	// unlock prompt that nobody can answer, and something is waiting on the
+	// answer — a login shell, or an ssh at a passphrase prompt — so the wait is
+	// finite and the caller falls back to asking on the terminal. Zero selects
+	// DefaultCommandTimeout.
+	Timeout time.Duration
+}
+
+// run bounds every secret-tool call.
+func (b SecretToolBackend) run(c Cmd) (Result, error) {
+	if c.Timeout <= 0 {
+		c.Timeout = b.Timeout
+	}
+	return b.Runner.Run(c)
 }
 
 // Lookup runs `secret-tool lookup service <service> username <user>`. secret-tool
@@ -55,7 +70,7 @@ type SecretToolBackend struct {
 // the earlier shell version) is trimmed. A non-zero exit means no entry — handled
 // as a miss, not an error, so the loader falls back to prompting.
 func (b SecretToolBackend) Lookup(service string) (string, bool, error) {
-	res, err := b.Runner.Run(Cmd{
+	res, err := b.run(Cmd{
 		Name: secretToolBin,
 		Args: []string{"lookup", "service", service, "username", b.User},
 	})
@@ -72,7 +87,7 @@ func (b SecretToolBackend) Lookup(service string) (string, bool, error) {
 // <user>`, feeding the passphrase on stdin. Unlike the earlier `echo | …`, no
 // trailing newline is appended, so the secret is stored exactly.
 func (b SecretToolBackend) Store(service, label, passphrase string) error {
-	res, err := b.Runner.Run(Cmd{
+	res, err := b.run(Cmd{
 		Name:  secretToolBin,
 		Args:  []string{"store", "--label=" + label, "service", service, "username", b.User},
 		Stdin: passphrase,
@@ -94,7 +109,7 @@ func (b SecretToolBackend) Store(service, label, passphrase string) error {
 // fallback path (it exists only because the D-Bus session itself was
 // unreachable).
 func (b SecretToolBackend) Delete(service string) error {
-	res, err := b.Runner.Run(Cmd{
+	res, err := b.run(Cmd{
 		Name: secretToolBin,
 		Args: []string{"clear", "service", service, "username", b.User},
 	})

@@ -18,16 +18,21 @@ func newSecretBackend(user string, log keys.Logger, settings config.Settings) (k
 	case config.SecretBackendKeychain:
 		return newKeychainBackend(user), func() {}
 	case config.SecretBackendOnePassword:
-		return &keys.OnePasswordBackend{Runner: keys.ExecRunner{}, Vault: settings.OnePasswordVault}, func() {}
+		return &keys.OnePasswordBackend{
+			Runner:  keys.ExecRunner{Timeout: settings.CommandTimeout},
+			Vault:   settings.OnePasswordVault,
+			Timeout: settings.InteractiveTimeout,
+		}, func() {}
 	case config.SecretBackendBitwarden:
 		return &keys.BitwardenBackend{
-			Runner:   keys.ExecRunner{},
-			Prompter: newBitwardenPrompter(),
+			Runner:   keys.ExecRunner{Timeout: settings.CommandTimeout},
+			Prompter: newBitwardenPrompter(settings),
 			Email:    settings.BitwardenEmail,
 			Server:   settings.BitwardenServer,
+			Timeout:  settings.InteractiveTimeout,
 		}, func() {}
 	default:
-		return newDefaultSecretBackend(user, log)
+		return newDefaultSecretBackend(user, log, settings)
 	}
 }
 
@@ -55,9 +60,10 @@ func (p bitwardenMasterPrompter) Prompt(keyname string) (string, error) {
 
 func (bitwardenMasterPrompter) Available() bool { return true }
 
-func newBitwardenPrompter() keys.Prompter {
-	runner := keys.ExecRunner{}
-	return bitwardenMasterPrompter{kdialog: keys.KDialogPrompter{Runner: runner}, gui: detectGUIAvailable()}
+func newBitwardenPrompter(settings config.Settings) keys.Prompter {
+	runner := keys.ExecRunner{Timeout: settings.CommandTimeout}
+	kdialog := keys.KDialogPrompter{Runner: runner, Timeout: settings.InteractiveTimeout}
+	return bitwardenMasterPrompter{kdialog: kdialog, gui: detectGUIAvailable()}
 }
 
 // detectGUIAvailable reports whether a graphical passphrase prompt can be shown

@@ -185,7 +185,7 @@ func TestRunHelpAndUnknown(t *testing.T) {
 // TestRunDispatch covers run's remaining subcommand cases end to end, so the
 // dispatch wiring is exercised (not just the command bodies directly): shell-init
 // and ensure-agent drive a fake ensurer to a healthy socket, and askpass-env in a
-// headless session emits nothing and succeeds.
+// headless session wires the broker just as it does under a desktop.
 func TestRunDispatch(t *testing.T) {
 	t.Run("shell-init", func(t *testing.T) {
 		tempRuntimeEnv(t)
@@ -203,11 +203,20 @@ func TestRunDispatch(t *testing.T) {
 		}
 	})
 
+	// A session with no graphical prompter must still get the exports: reading
+	// the wallet needs no display, and without them ssh prompts on the terminal
+	// for a passphrase the wallet already holds. The exports are the whole
+	// mechanism, so asserting only the exit code would pass either way.
 	t.Run("askpass-env headless", func(t *testing.T) {
 		d := realDeps()
 		d.guiAvailable = func() bool { return false }
-		if got := d.run(io.Discard, io.Discard, []string{"askpass-env"}); got != 0 {
-			t.Errorf("run askpass-env (headless) = %d, want 0", got)
+		d.self = func() (string, error) { return "/opt/sshakku/bin/sshakku", nil }
+		var out, errOut bytes.Buffer
+		if got := d.run(&out, &errOut, []string{"askpass-env"}); got != 0 {
+			t.Fatalf("run askpass-env (headless) = %d, want 0; stderr=%q", got, errOut.String())
+		}
+		if out.String() != askpassExports("/opt/sshakku/bin/sshakku") {
+			t.Errorf("stdout = %q, want the same exports a graphical session gets", out.String())
 		}
 	})
 }
