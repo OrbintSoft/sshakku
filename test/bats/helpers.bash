@@ -206,6 +206,15 @@ new_test_key() {
 	TEST_KEYNAMES+=("$keyname")
 }
 
+# key_fingerprint prints keyname's SHA256 fingerprint, which is the only part
+# of `ssh-add -l`'s output that says which file a loaded key came from: that
+# listing identifies a key by its comment (user@host), the same for every key
+# generated on one machine, and never names the file at all. Matching on the
+# key's own name there can therefore neither succeed nor ever fail.
+key_fingerprint() {
+	ssh-keygen -lf "$HOME/.ssh/$1.pub" | awk '{print $2}'
+}
+
 # doctor_recorded_pid prints the pid `sshakku doctor` reports as the one it
 # started the agent under (agent.state), via sshakku's own diagnostics
 # rather than an external process-inspection tool.
