@@ -122,10 +122,15 @@ func TestDoctorDetectsAndFixesDeadOursAgent(t *testing.T) {
 		t.Fatalf("seed EnsureAgent: %v", err)
 	}
 
-	// EnvSock mirrors a shell whose SSH_AUTH_SOCK already points at the fixed
-	// path (the normal case once shell-init has run), so the report's
-	// findings reflect the agent's own health rather than an env mismatch.
-	in := Inputs{FixedSock: cfg.FixedSock, EnvSock: cfg.FixedSock, LegacyDir: cfg.LegacyDir, StatePath: cfg.StatePath, OurUID: cfg.OurUID}
+	// EnvSock and the askpass exports mirror a shell the login hook has already
+	// wired (the normal case once shell-init and askpass-env have run), so the
+	// report's findings reflect the agent's own health — what this test is
+	// about — rather than an environment this test never set up.
+	in := Inputs{
+		FixedSock: cfg.FixedSock, EnvSock: cfg.FixedSock, LegacyDir: cfg.LegacyDir,
+		StatePath: cfg.StatePath, OurUID: cfg.OurUID,
+		EnvAskpass: "/usr/local/bin/sshakku", EnvAskpassRequire: "force",
+	}
 
 	before := Gather(in, agent.Inspector{}, agent.SocketProber{}, nil, nil, nil, nil)
 	if before.State != StateOursHealthy {
