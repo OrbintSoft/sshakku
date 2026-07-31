@@ -84,6 +84,7 @@ func TestKeePassXCCLIStoreKeepsThePassphraseOffArgvToo(t *testing.T) {
 	const passphrase = "the-key-passphrase"
 	runner := &recordingRunner{results: []Result{
 		{Code: 1}, // the existence check: no such entry yet
+		{Code: 0}, // creating the group
 		{Code: 0}, // the add
 	}}
 	b := cliBackend(runner, &countingPrompter{password: dbPassword})
@@ -91,10 +92,10 @@ func TestKeePassXCCLIStoreKeepsThePassphraseOffArgvToo(t *testing.T) {
 	if err := b.Store("SSH-Key-id_ed25519", "", passphrase); err != nil {
 		t.Fatalf("Store: %v", err)
 	}
-	if len(runner.calls) != 2 {
-		t.Fatalf("ran %d commands, want a lookup then a write", len(runner.calls))
+	if len(runner.calls) != 3 {
+		t.Fatalf("ran %d commands, want a lookup, the group, then a write", len(runner.calls))
 	}
-	write := runner.calls[1]
+	write := runner.calls[2]
 	for _, arg := range write.Args {
 		if strings.Contains(arg, passphrase) || strings.Contains(arg, dbPassword) {
 			t.Fatalf("a secret appeared in argv: %v", write.Args)
@@ -106,14 +107,19 @@ func TestKeePassXCCLIStoreKeepsThePassphraseOffArgvToo(t *testing.T) {
 }
 
 func TestKeePassXCCLIStoreAddsThenEdits(t *testing.T) {
-	t.Run("a key with no entry yet is added", func(t *testing.T) {
-		runner := &recordingRunner{results: []Result{{Code: 1}, {Code: 0}}}
+	t.Run("a key with no entry yet is added, into a group that is made first", func(t *testing.T) {
+		runner := &recordingRunner{results: []Result{{Code: 1}, {Code: 0}, {Code: 0}}}
 		b := cliBackend(runner, &countingPrompter{password: "p"})
 		if err := b.Store("SSH-Key-new", "", "x"); err != nil {
 			t.Fatalf("Store: %v", err)
 		}
-		if runner.calls[1].Args[0] != "add" {
-			t.Errorf("verb = %q, want add", runner.calls[1].Args[0])
+		// A real keepassxc-cli refuses to add an entry to a group that does
+		// not exist, and a fresh database has none.
+		if runner.calls[1].Args[0] != "mkdir" {
+			t.Errorf("second verb = %q, want mkdir", runner.calls[1].Args[0])
+		}
+		if runner.calls[2].Args[0] != "add" {
+			t.Errorf("verb = %q, want add", runner.calls[2].Args[0])
 		}
 	})
 
@@ -126,6 +132,7 @@ func TestKeePassXCCLIStoreAddsThenEdits(t *testing.T) {
 		if err := b.Store("SSH-Key-existing", "", "x"); err != nil {
 			t.Fatalf("Store: %v", err)
 		}
+		// The group is already there, so an edit goes straight to the write.
 		if runner.calls[1].Args[0] != "edit" {
 			t.Errorf("verb = %q, want edit — adding again would leave a second copy of the secret", runner.calls[1].Args[0])
 		}
@@ -281,7 +288,7 @@ func TestKeePassXCCLIReportsACommandThatCannotRun(t *testing.T) {
 		{"list", func(b *KeePassXCCLIBackend) error { _, err := b.List(); return err }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			b := cliBackend(runnerErr(2), &countingPrompter{password: "p"})
+			b := cliBackend(runnerErr(3), &countingPrompter{password: "p"})
 			if err := tc.call(b); err == nil {
 				t.Fatal("a command that could not run must be reported, not read as an empty wallet")
 			}
@@ -292,6 +299,7 @@ func TestKeePassXCCLIReportsACommandThatCannotRun(t *testing.T) {
 func TestKeePassXCCLIStoreReportsAFailureItCannotName(t *testing.T) {
 	runner := &recordingRunner{results: []Result{
 		{Code: 1},
+		{Code: 0},
 		{Code: 1, Stderr: []byte("Group SSHakku not found\nsecond line\n")},
 	}}
 	b := cliBackend(runner, &countingPrompter{password: "p"})
@@ -312,8 +320,9 @@ func TestKeePassXCCLIReportsARefusedPasswordOnEveryOperation(t *testing.T) {
 	refusal := Result{Code: 1, Stderr: []byte("Failed to open the terminal for the password\n")}
 
 	t.Run("store", func(t *testing.T) {
-		// The existence check misses cleanly; the write is what is refused.
-		runner := &recordingRunner{results: []Result{{Code: 1}, refusal}}
+		// The existence check misses cleanly and the group is made; the write
+		// is what is refused.
+		runner := &recordingRunner{results: []Result{{Code: 1}, {Code: 0}, refusal}}
 		b := cliBackend(runner, &countingPrompter{password: "p"})
 		if err := b.Store("SSH-Key-k", "", "x"); !errors.Is(err, ErrPasswordNotAccepted) {
 			t.Fatalf("err = %v, want ErrPasswordNotAccepted", err)
@@ -372,12 +381,26 @@ func TestFirstLine(t *testing.T) {
 // existence check works and the write itself cannot start.
 func TestKeePassXCCLIStoreReportsAWriteThatCannotRun(t *testing.T) {
 	runner := &recordingRunner{
+		results: []Result{{Code: 1}, {Code: 0}},
+		errs:    []error{nil, nil, errors.New("keepassxc-cli vanished")},
+	}
+	b := cliBackend(runner, &countingPrompter{password: "p"})
+
+	if err := b.Store("SSH-Key-k", "", "x"); err == nil {
+		t.Fatal("a write that could not start must be reported")
+	}
+}
+
+// TestKeePassXCCLIStoreReportsAGroupThatCannotBeMade covers the step a real
+// keepassxc-cli made necessary: without the group, the add cannot land.
+func TestKeePassXCCLIStoreReportsAGroupThatCannotBeMade(t *testing.T) {
+	runner := &recordingRunner{
 		results: []Result{{Code: 1}},
 		errs:    []error{nil, errors.New("keepassxc-cli vanished")},
 	}
 	b := cliBackend(runner, &countingPrompter{password: "p"})
 
 	if err := b.Store("SSH-Key-k", "", "x"); err == nil {
-		t.Fatal("a write that could not start must be reported")
+		t.Fatal("a group that could not be created must be reported")
 	}
 }

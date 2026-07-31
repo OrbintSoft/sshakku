@@ -147,6 +147,17 @@ func (b *KeePassXCCLIBackend) Store(service, label, passphrase string) error {
 		verb = "edit"
 	}
 
+	if verb == "add" {
+		// keepassxc-cli will not create an entry inside a group that is not
+		// there, and a fresh database has no SSHakku group. Creating it is
+		// idempotent in effect: an "it already exists" failure is not
+		// distinguished, because the add that follows is the real test of
+		// whether the group is usable.
+		if _, err := b.run([]string{"mkdir", b.Database, keepassxcCLIGroup}); err != nil {
+			return err
+		}
+	}
+
 	// -p makes keepassxc-cli ask for the entry's own password, which follows
 	// the database password on standard input.
 	res, err := b.run([]string{verb, "-p", b.Database, path}, passphrase)
