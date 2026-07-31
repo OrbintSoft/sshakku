@@ -5,15 +5,18 @@
 # rather than from guesses about what a runner allows.
 #
 # One thing is left to find out, and it is the one a runner cannot do by hand:
-# opening a database with nobody at the keyboard. Two ways are tried, because
-# the app is known to differ by build — on Linux's 2.7.12 both crash it outright,
-# while macOS's build of the same version survives them:
+# opening a database with nobody at the keyboard. Three ways are tried, because
+# the app is known to differ by build — on Linux's 2.7.12 the credential flags
+# crash it outright, while macOS's build of the same version survives them:
 #
 #   a database whose only credential is a key file, opened with --keyfile, so
 #   there is no password to deliver at all
 #
 #   a password on stdin with the stream held open afterwards, in case closing it
 #   is what the earlier attempt died of
+#
+#   typing it into the unlock screen, which needs permission to drive another
+#   application's keyboard
 #
 # What decides it is the product's own answer, not a window nobody can see: a
 # locked database is reported as such, while any complaint about the client not
@@ -76,12 +79,24 @@ ask_the_product() {
 		sed -n '/testing secret backend/,$p'
 }
 
-# KeePassXC allows one instance at a time, so each attempt gets the field to
-# itself.
+# KeePassXC allows one instance at a time and refuses to start beside another,
+# so each attempt gets the field to itself. It is killed outright rather than
+# asked to quit: a request to quit is something the app may decline, and an
+# attempt that silently measured the previous app is worse than no measurement.
 stop_the_app() {
-	pkill -f "KeePassXC.app/Contents/MacOS/KeePassXC" 2>/dev/null
-	sleep 3
+	pkill -9 -f "KeePassXC.app/Contents/MacOS/KeePassXC" 2>/dev/null
+	local tries=20
+	while pgrep -f "KeePassXC.app/Contents/MacOS/KeePassXC" >/dev/null; do
+		tries=$((tries - 1))
+		if [ "${tries}" -le 0 ]; then
+			echo "the previous app would not die; what follows measures it, not the attempt" >&2
+			return
+		fi
+		sleep 0.5
+	done
 }
+
+stop_the_app
 
 say "attempt 1: a key-file-only database, nothing to type"
 "${APP}" --config "${WORK}/keepassxc.ini" --keyfile "${WORK}/db.keyx" \
@@ -114,6 +129,24 @@ fi
 echo "socket: $(look_for_socket | head -1)"
 echo "--- what it said:"
 cat "${WORK}/pwstdin.log"
+echo "--- what the product makes of it:"
+ask_the_product
+
+stop_the_app
+
+# The last resort, and the one a person would use: type the password into the
+# unlock screen. Driving the keyboard belongs to another application here, and
+# macOS grants that only to programs a human has ticked in the Privacy settings,
+# which a hosted runner has nobody to tick. Whatever this prints is the evidence
+# for whether that is refused or merely awkward.
+say "attempt 3: typing the password the way a person would"
+"${APP}" --config "${WORK}/keepassxc.ini" "${WORK}/password.kdbx" \
+	>"${WORK}/typed.log" 2>&1 &
+sleep 10
+osascript -e 'tell application "KeePassXC" to activate' 2>&1
+osascript -e "tell application \"System Events\" to keystroke \"${DB_PASSWORD}\"" 2>&1
+osascript -e 'tell application "System Events" to key code 36' 2>&1
+sleep 5
 echo "--- what the product makes of it:"
 ask_the_product
 
