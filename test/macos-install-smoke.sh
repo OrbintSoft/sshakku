@@ -7,6 +7,11 @@
 # runner (exercises the BSD `sed -i ''` syntax and /etc/zprofile marker-block
 # wiring the Linux install path never touches).
 #
+# Both the default login-shell wiring and the opt-in non-login one
+# (WIRE_ZSHRC=1) are covered, system-wide and per-user, in both shapes the
+# per-user installer can take: a drop-in into an existing ~/.zshrc.d, or a
+# marker block in ~/.zshrc when there is none.
+#
 # Usage: macos-install-smoke.sh <work_dir>
 set -euxo pipefail
 
@@ -47,3 +52,66 @@ if [ -f "$home/.zprofile" ] && grep -q sshakku "$home/.zprofile"; then
 	echo "per-user zprofile still wired after uninstall" >&2
 	exit 1
 fi
+
+# ---------------------------------------------------------------------------
+# System-wide opt-in non-login wiring (WIRE_ZSHRC=1). Verifies feature F20: the
+# opt-in is additive, so a login shell and a plain new tab must BOTH end up
+# wired — the zprofile hook is not replaced or disabled by asking for the
+# zshrc one — and uninstall must take both back out again.
+# ---------------------------------------------------------------------------
+zs="$work_dir/wire-zshrc"
+zs_destdir="$zs/root"
+zs_zprofile="$zs/etc/zprofile"
+zs_zshrc="$zs/etc/zshrc"
+mkdir -p "$zs_destdir"
+
+make install PREFIX="$zs/prefix" DESTDIR="$zs_destdir" WIRE_ZSHRC=1 \
+	ETC_ZPROFILE="$zs_zprofile" ETC_ZSHRC="$zs_zshrc"
+for f in "$zs_destdir$zs_zprofile" "$zs_destdir$zs_zshrc"; do
+	grep -qF sshakku "$f"
+	# The wiring has to point at a hook that is actually there: a marker block
+	# sourcing a missing file would satisfy a grep and do nothing in a shell.
+	sourced=$(sed -n 's/^\. "\(.*\)"$/\1/p' "$f")
+	test -x "$sourced"
+done
+
+make uninstall PREFIX="$zs/prefix" DESTDIR="$zs_destdir" WIRE_ZSHRC=1 \
+	ETC_ZPROFILE="$zs_zprofile" ETC_ZSHRC="$zs_zshrc"
+for f in "$zs_destdir$zs_zprofile" "$zs_destdir$zs_zshrc"; do
+	if [ -f "$f" ] && grep -q sshakku "$f"; then
+		echo "$f still wired after uninstall" >&2
+		exit 1
+	fi
+done
+
+# ---------------------------------------------------------------------------
+# Per-user opt-in non-login wiring, marker-block shape (no ~/.zshrc.d, so the
+# block goes into the single ~/.zshrc). Same F20 promise, per-user path.
+# ---------------------------------------------------------------------------
+home_rc="$work_dir/home-wire-file"
+mkdir -p "$home_rc"
+make install-user USER_HOME="$home_rc" WIRE_ZSHRC=1
+grep -qF sshakku "$home_rc/.zprofile"
+grep -qF sshakku "$home_rc/.zshrc"
+
+make uninstall-user USER_HOME="$home_rc" WIRE_ZSHRC=1
+for f in "$home_rc/.zprofile" "$home_rc/.zshrc"; do
+	if [ -f "$f" ] && grep -q sshakku "$f"; then
+		echo "per-user $f still wired after uninstall" >&2
+		exit 1
+	fi
+done
+
+# ---------------------------------------------------------------------------
+# Per-user opt-in non-login wiring, drop-in shape: an existing ~/.zshrc.d is
+# preferred over touching ~/.zshrc at all.
+# ---------------------------------------------------------------------------
+home_rcd="$work_dir/home-wire-dropin"
+mkdir -p "$home_rcd/.zshrc.d"
+make install-user USER_HOME="$home_rcd" WIRE_ZSHRC=1
+grep -qF sshakku "$home_rcd/.zprofile"
+test -f "$home_rcd/.zshrc.d/001-sshakku-init.sh"
+test ! -e "$home_rcd/.zshrc"
+
+make uninstall-user USER_HOME="$home_rcd" WIRE_ZSHRC=1
+test ! -e "$home_rcd/.zshrc.d/001-sshakku-init.sh"
