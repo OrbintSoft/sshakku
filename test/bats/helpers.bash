@@ -26,12 +26,30 @@ setup_file() {
 		exit 1
 	fi
 
+	# Which of the external tools the tests reach for are actually present.
+	# Reported rather than required: a missing one otherwise surfaces as an
+	# unexplained failure deep inside whichever test happens to use it first.
+	local tool
+	for tool in timeout setsid perl security ssh-add ssh-keygen; do
+		printf 'tool %-10s %s\n' "$tool" "$(command -v "$tool" || echo MISSING)" >&2
+	done
+
 	SSHAKKU_BUILD_DIR="$BATS_FILE_TMPDIR/build"
 	mkdir -p "$SSHAKKU_BUILD_DIR"
 	make -C "$REPO_ROOT" build GO_BIN="$SSHAKKU_BUILD_DIR/sshakku" >&2
 }
 
+# trace appends a progress line to $SSHAKKU_BATS_TRACE when the caller set one,
+# and does nothing otherwise. bats reports a test only once it has ended, so a
+# run killed from outside for taking too long says nothing about how far it
+# got; a trace written as the suite goes is the only record that survives.
+trace() {
+	[ -n "${SSHAKKU_BATS_TRACE:-}" ] || return 0
+	printf '%s %s\n' "$(date -u +%H:%M:%S)" "$*" >>"$SSHAKKU_BATS_TRACE"
+}
+
 setup() {
+	trace "setup start: ${BATS_TEST_DESCRIPTION:-?}"
 	local prefix="$BATS_TEST_TMPDIR/prefix"
 	local home="$BATS_TEST_TMPDIR/home"
 	mkdir -p "$prefix" "$home"
@@ -94,6 +112,7 @@ setup() {
 	# Names of the keys a test creates or seeds, so teardown can remove what
 	# outlives the per-test tmpdir (see forget_test_secrets).
 	TEST_KEYNAMES=()
+	trace "setup done"
 }
 
 # teardown kills every ssh-agent this test started (sshakku's own, and any
@@ -107,6 +126,7 @@ setup() {
 # which has no /proc at all. -ww keeps `ps` from truncating the command line
 # to the terminal width, which would hide the very path being matched on.
 teardown() {
+	trace "teardown start"
 	local pid cmdline
 	case "$OSTYPE" in
 	darwin*)
@@ -126,7 +146,9 @@ teardown() {
 		done
 		;;
 	esac
+	trace "teardown agents killed"
 	forget_test_secrets
+	trace "teardown done"
 }
 
 # forget_test_secrets removes stored passphrases that outlive the test. On
@@ -142,7 +164,9 @@ forget_test_secrets() {
 	esac
 	local keyname
 	for keyname in ${TEST_KEYNAMES+"${TEST_KEYNAMES[@]}"}; do
+		trace "forget $keyname"
 		security delete-generic-password -s "SSH-Key-${keyname}" -a "$USER" >/dev/null 2>&1 || true
+		trace "forget $keyname done"
 	done
 }
 
@@ -186,8 +210,10 @@ seed_vault() {
 	local keyname="$1" passphrase="$2"
 	case "$OSTYPE" in
 	darwin*)
+		trace "seed_vault $keyname start"
 		security add-generic-password -U -s "SSH-Key-${keyname}" -a "$USER" -w "$passphrase"
 		TEST_KEYNAMES+=("$keyname")
+		trace "seed_vault $keyname done"
 		;;
 	*)
 		printf '%s' "$passphrase" >"$SSHAKKU_TEST_VAULT/SSH-Key-${keyname}-${USER}"

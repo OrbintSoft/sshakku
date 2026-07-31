@@ -45,8 +45,10 @@ load helpers
 	# The hook itself, sourced non-interactively: it pins SSH_AUTH_SOCK and wires
 	# the broker but does not load keys, which is exactly the state F6 describes
 	# — a shell that is already open, with the key no longer in the agent.
+	trace "sourcing the hook"
 	# shellcheck source=/dev/null  # installed at a path only known at run time
 	source "$SSHAKKU_HOOK"
+	trace "hook sourced"
 
 	# Prove the run tests what it claims to: the broker, reached through the
 	# exports, and not the proactive stash.
@@ -54,7 +56,9 @@ load helpers
 	[ "${SSH_ASKPASS_REQUIRE:-}" = "force" ]
 	[ -z "${SSHAKKU_HANDOFF_TOKEN:-}" ]
 
+	trace "ssh-add start"
 	run timeout --signal=KILL 10 setsid ssh-add "$HOME/.ssh/id_test"
+	trace "ssh-add exited with $status"
 	[ "$status" -eq 0 ]
 
 	# Matched by fingerprint: `ssh-add -l` identifies a key by its comment
@@ -93,8 +97,10 @@ blocking_wallet() {
 	# shellcheck disable=SC2030,SC2031
 	export SSHAKKU_COMMAND_TIMEOUT=1s
 
+	trace "sourcing the hook"
 	# shellcheck source=/dev/null  # installed at a path only known at run time
 	source "$SSHAKKU_HOOK"
+	trace "hook sourced"
 
 	run timeout --signal=KILL 30 setsid ssh-add "$HOME/.ssh/id_test"
 	# 137 is the KILL from timeout, i.e. it was still waiting on the wallet.

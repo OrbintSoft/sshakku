@@ -116,6 +116,11 @@ jobs:
       - name: Run live keychain integration test
         run: make test-keychain
 
+      # Ahead of the shell suite: it shares nothing with it, and running it
+      # afterwards means a failing suite skips it entirely.
+      - name: Smoke-test make install/install-user (staged, not the real /etc or $HOME)
+        run: test/macos-install-smoke.sh "$RUNNER_TEMP/install-smoke"
+
       - name: Install bats-core
         run: brew install bats-core
 
@@ -127,8 +132,17 @@ jobs:
       - name: Run make test-bats
         env:
           SSHAKKU_TEST_ALLOW_BATS: "1"
-        timeout-minutes: 10
+          SSHAKKU_BATS_TRACE: ${{ runner.temp }}/bats-trace.log
+        timeout-minutes: 6
         run: make test-bats
+
+      # bats reports a test only once it has ended, so a run killed for
+      # exceeding the limit above leaves no record of which test it was in or
+      # how far that test got. The trace is written as the suite goes and is
+      # the only thing that survives being killed.
+      - name: Show the bats progress trace
+        if: always()
+        run: cat "$RUNNER_TEMP/bats-trace.log" || true
 
       - name: Build test-health report
         if: always()
@@ -162,9 +176,6 @@ jobs:
         with:
           name: coverage-macos
           path: coverage-macos.html
-
-      - name: Smoke-test make install/install-user (staged, not the real /etc or $HOME)
-        run: test/macos-install-smoke.sh "$RUNNER_TEMP/install-smoke"
 
   container-test:
     name: make test (container / ${{ matrix.name }})
