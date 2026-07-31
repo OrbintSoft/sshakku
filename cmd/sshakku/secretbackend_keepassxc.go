@@ -22,12 +22,14 @@ func newKeePassXCBackend(user string, log keys.Logger, settings config.Settings)
 	if route == "" || route == config.KeePassXCRouteAuto {
 		route = keepassxcRouteFor(runtime.GOOS)
 	}
-	if reason := keepassxcRouteUnavailable(route, runtime.GOOS); reason != nil {
+	if reason := keepassxcRouteUnavailable(route, runtime.GOOS, settings.KeePassXCDatabase); reason != nil {
 		return keys.UnavailableBackend{Reason: reason}, func() {}
 	}
 	switch route {
 	case config.KeePassXCRouteNative:
 		return newKeePassXCNativeRoute(settings), func() {}
+	case config.KeePassXCRouteCLI:
+		return newKeePassXCCLIRoute(settings), func() {}
 	default:
 		// The Secret Service route: KeePassXC implements that API itself, so
 		// reaching it is the same as reaching any other wallet behind it and
@@ -52,9 +54,11 @@ func keepassxcRouteFor(goos string) string {
 
 // keepassxcRouteUnavailable reports why a route cannot work here, or nil if it
 // can. Routes are not tied to a platform — only the defaults are — so the only
-// thing that can be missing is the Secret Service, which is a freedesktop API
-// no macOS system provides.
-func keepassxcRouteUnavailable(route, goos string) error {
+// platform-bound one is the Secret Service, a freedesktop API no macOS system
+// provides. The CLI route is bound to something else: a database file, which it
+// cannot discover, because a file on disk does not announce itself the way a
+// running KeePassXC knows what it has open.
+func keepassxcRouteUnavailable(route, goos, database string) error {
 	switch route {
 	case config.KeePassXCRouteSecretService:
 		if goos != "linux" {
@@ -62,9 +66,26 @@ func keepassxcRouteUnavailable(route, goos string) error {
 		}
 		return nil
 	case config.KeePassXCRouteCLI:
-		return fmt.Errorf("the cli route is not built into this binary")
+		if database == "" {
+			return fmt.Errorf("the cli route works on a database file, so keepassxc_database has to name one")
+		}
+		return nil
 	default:
 		return nil
+	}
+}
+
+// newKeePassXCCLIRoute runs keepassxc-cli against the database file, with no
+// KeePassXC running. It asks for the database password, so it is bounded by the
+// interactive budget — the one for a command waiting on a person — rather than
+// the shorter budget for a command expected to answer on its own.
+func newKeePassXCCLIRoute(settings config.Settings) keys.SecretBackend {
+	return &keys.KeePassXCCLIBackend{
+		Runner:   keys.ExecRunner{Timeout: settings.CommandTimeout},
+		Prompter: newWalletPasswordPrompter(settings),
+		Database: settings.KeePassXCDatabase,
+		KeyFile:  settings.KeePassXCKeyFile,
+		Timeout:  settings.InteractiveTimeout,
 	}
 }
 

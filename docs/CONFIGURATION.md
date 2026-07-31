@@ -173,10 +173,21 @@ SSHakku's entries live in an **SSHakku** group in your database, one per key,
 under a URL built from the same per-key name the other backends use
 (`sshakku://SSH-Key-id_ed25519`), which is also the entry's username.
 
-`sshakku forget` cannot remove them on the `"native"` route: KeePassXC's local
-protocol can read and write an entry but has no way to delete one, and SSHakku
-will not tell you a passphrase is gone while it is still in your database.
-It names the entry to remove, and you delete it in KeePassXC.
+`sshakku forget` behaves differently by route, because the two can do different
+things:
+
+| | `"native"` / `"secret-service"` | `"cli"` |
+| --- | --- | --- |
+| read and write a passphrase | yes | yes |
+| `sshakku forget <key>` | **no** | yes |
+| `sshakku forget --all` | no | yes |
+| asks you for anything | no | the database password, once per shell |
+
+KeePassXC's local protocol can read and write an entry but has no way to delete
+one, so on the `"native"` route `sshakku forget` fails and names the entry for
+you to remove in KeePassXC. It will not tell you a passphrase is gone while it
+is still in your database. The `"cli"` route can delete, so `forget` works
+there.
 
 ## Where passphrases are stored
 

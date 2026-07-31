@@ -82,21 +82,39 @@ func TestKeePassXCAutoRouteFollowsThePlatform(t *testing.T) {
 // Secret Service is platform-bound, because it is an API macOS does not have;
 // the rest are available wherever they can run.
 func TestKeePassXCRouteAvailability(t *testing.T) {
-	if err := keepassxcRouteUnavailable(config.KeePassXCRouteSecretService, "linux"); err != nil {
+	if err := keepassxcRouteUnavailable(config.KeePassXCRouteSecretService, "linux", ""); err != nil {
 		t.Errorf("the Secret Service exists on Linux, got %v", err)
 	}
-	err := keepassxcRouteUnavailable(config.KeePassXCRouteSecretService, "darwin")
+	err := keepassxcRouteUnavailable(config.KeePassXCRouteSecretService, "darwin", "")
 	if err == nil {
 		t.Fatal("macOS has no Secret Service, so pinning it must be reported")
 	}
 	if !strings.Contains(err.Error(), "secret-service") || !strings.Contains(err.Error(), "darwin") {
 		t.Errorf("reason = %v, want it to name the route and the platform", err)
 	}
-	if err := keepassxcRouteUnavailable(config.KeePassXCRouteNative, "darwin"); err != nil {
+	if err := keepassxcRouteUnavailable(config.KeePassXCRouteNative, "darwin", ""); err != nil {
 		t.Errorf("the native route runs anywhere, got %v", err)
 	}
-	if err := keepassxcRouteUnavailable(config.KeePassXCRouteNative, "linux"); err != nil {
+	if err := keepassxcRouteUnavailable(config.KeePassXCRouteNative, "linux", ""); err != nil {
 		t.Errorf("the native route is not Linux-forbidden, got %v", err)
+	}
+}
+
+// TestKeePassXCCLIRouteNeedsADatabase states what the CLI route is bound to.
+// It is not a platform: a file on disk does not announce itself the way a
+// running KeePassXC knows what it has open, so the user has to say which one.
+func TestKeePassXCCLIRouteNeedsADatabase(t *testing.T) {
+	err := keepassxcRouteUnavailable(config.KeePassXCRouteCLI, "linux", "")
+	if err == nil {
+		t.Fatal("the cli route with no database named must be reported")
+	}
+	if !strings.Contains(err.Error(), "keepassxc_database") {
+		t.Errorf("reason = %v, want it to name the setting that is missing", err)
+	}
+	for _, goos := range []string{"linux", "darwin", "freebsd"} {
+		if err := keepassxcRouteUnavailable(config.KeePassXCRouteCLI, goos, "/secrets.kdbx"); err != nil {
+			t.Errorf("the cli route runs on %s too, got %v", goos, err)
+		}
 	}
 }
 
@@ -111,7 +129,26 @@ func TestKeePassXCEmptyRouteIsTheAutomaticOne(t *testing.T) {
 	}
 }
 
-func TestKeePassXCPinnedCLIRouteReportsItself(t *testing.T) {
+func TestKeePassXCPinnedCLIRouteIsBuiltWhenItHasADatabase(t *testing.T) {
+	settings := keepassxcSettings(config.KeePassXCRouteCLI)
+	settings.KeePassXCDatabase = "/somewhere/secrets.kdbx"
+	settings.KeePassXCKeyFile = "/somewhere/secrets.key"
+	backend, closeFn := newSecretBackend("alice", fakeLogger{}, settings)
+	defer closeFn()
+
+	cli, ok := backend.(*keys.KeePassXCCLIBackend)
+	if !ok {
+		t.Fatalf("backend = %T, want the CLI KeePassXC backend", backend)
+	}
+	if cli.Database != "/somewhere/secrets.kdbx" || cli.KeyFile != "/somewhere/secrets.key" {
+		t.Errorf("database/key file = %q/%q, want what was configured", cli.Database, cli.KeyFile)
+	}
+	if cli.Prompter == nil {
+		t.Error("the CLI route has to ask for the database password, so it needs a prompter")
+	}
+}
+
+func TestKeePassXCPinnedCLIRouteWithNoDatabaseReportsItself(t *testing.T) {
 	backend, closeFn := newSecretBackend("alice", fakeLogger{}, keepassxcSettings(config.KeePassXCRouteCLI))
 	defer closeFn()
 
@@ -119,8 +156,8 @@ func TestKeePassXCPinnedCLIRouteReportsItself(t *testing.T) {
 	if !ok {
 		t.Fatalf("backend = %T, want an unavailable backend", backend)
 	}
-	if !strings.Contains(unavailable.Reason.Error(), "cli") {
-		t.Errorf("reason = %v, want it to name the route", unavailable.Reason)
+	if !strings.Contains(unavailable.Reason.Error(), "keepassxc_database") {
+		t.Errorf("reason = %v, want it to name what is missing", unavailable.Reason)
 	}
 }
 
