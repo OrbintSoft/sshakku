@@ -16,6 +16,10 @@
 #   the association must be approved without anyone clicking, which a runner
 #   grants no accessibility permission for
 #
+# Browser integration is turned on with --config, which takes the settings file
+# to use as an argument. Nothing here writes to the settings KeePassXC would
+# otherwise read, and no assumption is made about where those live.
+#
 # Everything it makes lives in a throwaway directory and is removed with it.
 set -uo pipefail
 
@@ -29,6 +33,13 @@ trap 'rm -rf "${WORK}"' EXIT
 
 say() { printf '\n=== %s\n' "$*"; }
 
+# look_for_socket prints every path the endpoint was found at, searching the
+# directories KeePassXC is known to use on any platform rather than only the one
+# this build is expected to pick.
+look_for_socket() {
+	find "${TMPDIR:-/tmp}" /tmp -maxdepth 3 -name "${SOCKET_NAME}" 2>/dev/null
+}
+
 say "what is installed"
 keepassxc-cli --version || echo "keepassxc-cli is not on PATH"
 [ -x "${APP}" ] && echo "app: ${APP}" || echo "app not found at ${APP}"
@@ -37,15 +48,15 @@ say "where the socket would live, against Darwin's 104-byte cap"
 socket_path="${TMPDIR:-/tmp}${SOCKET_NAME}"
 printf 'path: %s\nlength: %d\n' "${socket_path}" "${#socket_path}"
 
-say "browser integration on, then a database made without a GUI"
-mkdir -p "${HOME}/Library/Application Support/org.keepassxc.KeePassXC"
-cp "$(dirname "$0")/containers/keepassxc-browser.ini" \
-	"${HOME}/Library/Application Support/org.keepassxc.KeePassXC/keepassxc.ini"
+say "a database made without a GUI"
 printf '%s\n%s\n' "${DB_PASSWORD}" "${DB_PASSWORD}" |
 	keepassxc-cli db-create -p "${WORK}/probe.kdbx" || exit 0
 
-say "opening it with --pw-stdin, which nothing has to type into"
-printf '%s\n' "${DB_PASSWORD}" | "${APP}" --pw-stdin "${WORK}/probe.kdbx" >"${WORK}/app.log" 2>&1 &
+say "opening it with --pw-stdin, browser integration on, which nothing has to type into"
+cp "$(dirname "$0")/containers/keepassxc-browser.ini" "${WORK}/keepassxc.ini"
+printf '%s\n' "${DB_PASSWORD}" |
+	"${APP}" --config "${WORK}/keepassxc.ini" --pw-stdin "${WORK}/probe.kdbx" \
+		>"${WORK}/app.log" 2>&1 &
 app_pid=$!
 sleep 15
 
@@ -58,25 +69,35 @@ echo "--- what it said:"
 cat "${WORK}/app.log"
 
 say "is anything listening?"
-if [ -S "${socket_path}" ]; then
-	echo "socket present at ${socket_path}"
+found="$(look_for_socket)"
+if [ -n "${found}" ]; then
+	echo "${found}"
 else
-	echo "no socket at ${socket_path}; looking for one anywhere under TMPDIR:"
-	find "${TMPDIR:-/tmp}" -maxdepth 2 -name "${SOCKET_NAME}" 2>/dev/null || true
+	echo "nothing is listening anywhere under ${TMPDIR:-/tmp} or /tmp"
 fi
 
-# The decisive question, asked through the product rather than around it:
-# doctor --test-backend stores, reads back and removes a throwaway entry. Its
-# answer says which wall we are at — a locked database means --pw-stdin did not
-# open one, while an unapproved association means it did and only the approval
-# is missing.
-say "asking the product to use it"
+# KeePassXC saves its settings back into the file it was given, so keys it added
+# to the one we wrote are the evidence that --config was taken rather than
+# ignored in favour of wherever this build keeps its own.
+say "the settings file we handed over, as KeePassXC left it"
+cat "${WORK}/keepassxc.ini"
+
+# Two questions, asked through the product rather than around it. The plain
+# report only looks, and says which wallet would be used and whether what it
+# needs is here; --test-backend then stores, reads back and removes a throwaway
+# entry, and its answer says which wall we are at — a locked database means
+# --pw-stdin did not open one, while an unapproved association means it did and
+# only the approval is missing.
+say "asking the product what it sees"
 mkdir -p "${WORK}/config/sshakku"
 printf 'secret_backend = "keepassxc"\nkeepassxc_route = "native"\n' \
 	>"${WORK}/config/sshakku/config.toml"
 go build -o "${WORK}/sshakku" ./cmd/sshakku || exit 0
-XDG_CONFIG_HOME="${WORK}/config" "${WORK}/sshakku" doctor --test-backend keepassxc 2>&1 |
-	tail -30
+export XDG_CONFIG_HOME="${WORK}/config"
+"${WORK}/sshakku" doctor 2>&1 | tail -30
+
+say "asking the product to use it"
+"${WORK}/sshakku" doctor --test-backend keepassxc 2>&1 | tail -30
 
 kill "${app_pid}" 2>/dev/null
 say "probe done — nothing above is an assertion"
