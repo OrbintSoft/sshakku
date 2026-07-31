@@ -1,6 +1,7 @@
 package config
 
 import (
+	"github.com/OrbintSoft/sshakku/internal/keys"
 	"testing"
 	"time"
 )
@@ -89,5 +90,48 @@ func TestIsTruthy(t *testing.T) {
 		if IsTruthy(raw) {
 			t.Errorf("IsTruthy(%q) = true, want false", raw)
 		}
+	}
+}
+
+// TestCommandTimeout covers the rule that separates these budgets from every
+// other duration in the configuration: there is no way to ask for "no limit".
+// A key lifetime of 0 sensibly means "never expire"; a command timeout of 0
+// would mean a wallet or a dialog could hold a shell for as long as it liked,
+// which is the failure these settings exist to prevent — so it is rejected and
+// the default stands.
+func TestCommandTimeout(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		raw     string
+		want    time.Duration
+		wantErr bool
+	}{
+		{"empty takes the default", "", keys.DefaultCommandTimeout, false},
+		{"a duration is honoured", "3s", 3 * time.Second, false},
+		{"zero is refused", "0s", keys.DefaultCommandTimeout, true},
+		{"negative is refused", "-5s", keys.DefaultCommandTimeout, true},
+		{"malformed is refused", "soon", keys.DefaultCommandTimeout, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := CommandTimeout(tc.raw)
+			if got != tc.want {
+				t.Errorf("CommandTimeout(%q) = %v, want %v", tc.raw, got, tc.want)
+			}
+			if (err != nil) != tc.wantErr {
+				t.Errorf("CommandTimeout(%q) error = %v, want error: %v", tc.raw, err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestInteractiveTimeout(t *testing.T) {
+	if got, err := InteractiveTimeout(""); got != keys.DefaultInteractiveTimeout || err != nil {
+		t.Errorf("InteractiveTimeout(\"\") = %v, %v, want %v, nil", got, err, keys.DefaultInteractiveTimeout)
+	}
+	if got, err := InteractiveTimeout("90s"); got != 90*time.Second || err != nil {
+		t.Errorf("InteractiveTimeout(\"90s\") = %v, %v, want 90s, nil", got, err)
+	}
+	if got, err := InteractiveTimeout("0"); got != keys.DefaultInteractiveTimeout || err == nil {
+		t.Errorf("InteractiveTimeout(\"0\") = %v, %v, want the default and an error", got, err)
 	}
 }

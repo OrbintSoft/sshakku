@@ -1,6 +1,7 @@
 package config
 
 import (
+	"github.com/OrbintSoft/sshakku/internal/keys"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -167,7 +168,11 @@ func TestResolveDefaults(t *testing.T) {
 	if len(errs) != 0 {
 		t.Fatalf("unexpected errors: %v", errs)
 	}
-	want := Settings{KeyLifetime: DefaultKeyLifetime, GiveupTTL: DefaultGiveupTTL, WalletStoreMode: WalletStoreModeAll, AutoLoadMode: AutoLoadModeAll, SecretBackend: SecretBackendSecretService}
+	want := Settings{
+		KeyLifetime: DefaultKeyLifetime, GiveupTTL: DefaultGiveupTTL,
+		CommandTimeout: keys.DefaultCommandTimeout, InteractiveTimeout: keys.DefaultInteractiveTimeout,
+		WalletStoreMode: WalletStoreModeAll, AutoLoadMode: AutoLoadModeAll, SecretBackend: SecretBackendSecretService,
+	}
 	if !reflect.DeepEqual(s, want) {
 		t.Errorf("Resolve(empty) = %+v, want %+v", s, want)
 	}
@@ -186,14 +191,18 @@ func TestResolveFileWins(t *testing.T) {
 		t.Fatalf("unexpected errors: %v", errs)
 	}
 	want := Settings{
-		KeyLifetime:     2 * time.Hour,
-		MaxAttempts:     5,
-		GiveupTTL:       30 * time.Minute,
-		NoGiveup:        true,
-		Quiet:           true,
-		WalletStoreMode: WalletStoreModeAll,
-		AutoLoadMode:    AutoLoadModeAll,
-		SecretBackend:   SecretBackendSecretService,
+		KeyLifetime: 2 * time.Hour,
+		MaxAttempts: 5,
+		GiveupTTL:   30 * time.Minute,
+		NoGiveup:    true,
+		Quiet:       true,
+		// Not set in the file above: every command is bounded whether or not
+		// the user configured a budget.
+		CommandTimeout:     keys.DefaultCommandTimeout,
+		InteractiveTimeout: keys.DefaultInteractiveTimeout,
+		WalletStoreMode:    WalletStoreModeAll,
+		AutoLoadMode:       AutoLoadModeAll,
+		SecretBackend:      SecretBackendSecretService,
 	}
 	if !reflect.DeepEqual(s, want) {
 		t.Errorf("Resolve(file) = %+v, want %+v", s, want)

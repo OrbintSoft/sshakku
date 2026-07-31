@@ -67,3 +67,47 @@ load helpers
 	# a stray terminal, a cached agent entry, or an unencrypted key.
 	grep -q "askpass: provided passphrase for id_test from the wallet" "$log_file"
 }
+
+# blocking_wallet puts a secret-tool that never answers ahead of the stub on
+# PATH, standing in for a wallet that is present but locked behind an unlock
+# prompt nobody is there to answer.
+blocking_wallet() {
+	mkdir -p "$BATS_TEST_TMPDIR/blocked"
+	cp "$BATS_TEST_DIRNAME/fixtures/blocking-secret-tool" "$BATS_TEST_TMPDIR/blocked/secret-tool"
+	chmod +x "$BATS_TEST_TMPDIR/blocked/secret-tool"
+	export PATH="$BATS_TEST_TMPDIR/blocked:$PATH"
+}
+
+# Verifies feature F17: a backend that cannot answer degrades to prompting
+# rather than failing the shell — and, before that can even be tried, must not
+# hold the shell up. Routing every ssh prompt through the broker means an
+# unbounded wallet call is no longer one slow login but every ssh in the
+# session, so both entry points are checked.
+@test "a wallet that never answers does not hold up an ssh" {
+	new_test_key id_test "test-passphrase"
+	blocking_wallet
+	# Also exercises the setting itself. ssh asks the helper once per passphrase
+	# attempt, so the wait the user actually sees is a small multiple of this.
+	# Each bats test is its own subshell and wants its own value, which is what
+	# SC2030/SC2031 warn about here.
+	# shellcheck disable=SC2030,SC2031
+	export SSHAKKU_COMMAND_TIMEOUT=1s
+
+	# shellcheck source=/dev/null  # installed at a path only known at run time
+	source "$SSHAKKU_HOOK"
+
+	run timeout --signal=KILL 30 setsid ssh-add "$HOME/.ssh/id_test"
+	# 137 is the KILL from timeout, i.e. it was still waiting on the wallet.
+	# Any other status means it gave up on its own and ssh could move on.
+	[ "$status" -ne 137 ]
+}
+
+@test "a wallet that never answers does not hold up a login shell" {
+	new_test_key id_test "test-passphrase"
+	blocking_wallet
+	# shellcheck disable=SC2030,SC2031
+	export SSHAKKU_COMMAND_TIMEOUT=1s
+
+	run timeout --signal=KILL 30 setsid "$SSHAKKU_BIN" load-keys
+	[ "$status" -ne 137 ]
+}

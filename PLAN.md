@@ -1042,12 +1042,51 @@ phase starts.
   `SSH_ASKPASS=self`), so a prompter that consulted `$SSH_ASKPASS` to find "the
   system helper" would point back at sshakku. That approach is deliberately
   rejected.
-- **Also un-KDE the broker gate.** `askpassEnv` decides whether to wire the
-  wallet-aware `SSH_ASKPASS` broker off the same kdialog-only `guiAvailable()`
-  check; widen that detection so the broker wiring stops being KDE-only too.
+- **Note.** The broker gate this phase used to also cover was separated out and
+  fixed on its own (see "Un-gate the askpass broker" below): wiring the wallet
+  broker never depended on a graphical prompter, so it did not belong here.
 - **Licence (rule 16).** pinentry (GPL), kdialog (GPL), zenity, osascript are
   invoked as separate processes at runtime, never linked or embedded, so their
   licences do not affect EUPL compatibility or relicensing; recorded as
   runtime-invoked tools.
 
 → goals 11, 15; open decision 7.
+
+### Phase 14 — Un-gate the askpass broker ✅ Done
+
+Split out of Phase 13, which is about graphical dialogs: this is not. Reading
+the wallet needs no display, so gating the `SSH_ASKPASS` wiring on a graphical
+prompter left the reactive refill (F6) dead on macOS and on every kdialog-less
+desktop — the promise held only where a GUI happened to exist.
+
+- **Drop the gate** from `askpassEnv`, and with it the same gate on doctor's
+  askpass finding, which kept the report silent about the failure precisely
+  where it happened.
+- **`SSH_ASKPASS_REQUIRE=force`,** not `prefer`: OpenSSH ignores `prefer` when
+  `DISPLAY` is unset, so the exports alone changed nothing in a terminal session
+  or on a Mac without an X server.
+- **Bound every external command** (F21). Removing the gate routes every ssh
+  passphrase prompt through the broker, which turned an unbounded wallet call
+  from one slow login into every ssh in the session. Only 3 of 22 invocations
+  had a deadline. Two configurable budgets now cover all of them —
+  `command_timeout` and `interactive_timeout` — and the deadline kills the
+  command's whole process group, since a surviving grandchild holds the output
+  pipe that `ssh` itself is reading.
+
+→ features F6, F21; goals 1, 11.
+
+### Phase 15 — Sign the macOS builds
+
+A keychain item's ACL trusts the code identity of the binary that created it. An
+unsigned Go binary changes identity on every build, so after each rebuild macOS
+re-asks *"sshakku wants to use your confidential information"* even after a
+previous "Always Allow", and a non-interactive lookup fails with `-25308` or
+`-128` instead. During development this is noise; for distribution it is every
+user re-prompted on every release.
+
+- Decide the signing identity and where it lives (a developer ID in CI secrets,
+  or ad-hoc signing with a stable identifier).
+- Until it is settled, the rebuild-then-look-up case is expected to fail; record
+  it that way rather than leaving it undocumented.
+
+→ feature F4; open decision: how releases are signed and notarised.

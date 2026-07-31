@@ -6,6 +6,7 @@ package config
 
 import (
 	"fmt"
+	"github.com/OrbintSoft/sshakku/internal/keys"
 	"strconv"
 	"strings"
 	"time"
@@ -54,6 +55,43 @@ func GiveupTTL(raw string) (time.Duration, error) {
 	}
 	if d < 0 {
 		return 0, nil
+	}
+	return d, nil
+}
+
+// CommandTimeout parses the budget for an external command that is not waiting
+// on a person — reading the wallet, probing the display — expressed as a Go
+// duration, defaulting to keys.DefaultCommandTimeout when raw is empty.
+//
+// Unlike a key lifetime, zero and negative do not mean "no limit": a command
+// with no limit can hold a login shell, or an ssh at a passphrase prompt, for
+// as long as it likes. They fall back to the default and are returned with an
+// error for the caller to log.
+func CommandTimeout(raw string) (time.Duration, error) {
+	return positiveDuration(raw, keys.DefaultCommandTimeout, "command timeout")
+}
+
+// InteractiveTimeout parses the budget for a command that is waiting on a
+// person — a password dialog, a CLI deferring to a desktop app for approval —
+// defaulting to keys.DefaultInteractiveTimeout when raw is empty. It is
+// generous, since the limit is human, but finite for the same reason as
+// CommandTimeout: a dialog nobody answers must not strand the shell.
+func InteractiveTimeout(raw string) (time.Duration, error) {
+	return positiveDuration(raw, keys.DefaultInteractiveTimeout, "interactive timeout")
+}
+
+// positiveDuration parses raw as a Go duration that must be greater than zero,
+// falling back to fallback (with an error to log) for anything else.
+func positiveDuration(raw string, fallback time.Duration, what string) (time.Duration, error) {
+	if raw == "" {
+		return fallback, nil
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil {
+		return fallback, fmt.Errorf("invalid %s %q: %w", what, raw, err)
+	}
+	if d <= 0 {
+		return fallback, fmt.Errorf("invalid %s %q: must be greater than zero", what, raw)
 	}
 	return d, nil
 }
