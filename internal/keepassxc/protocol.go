@@ -75,7 +75,30 @@ type envelope struct {
 const (
 	errCodeDatabaseNotOpened = "1"
 	errCodeAssociationFailed = "4"
+	errCodeNoLogins          = "15"
 )
+
+// errNoLogins is how KeePassXC reports that a URL matched nothing. It says so
+// as an error rather than by answering with an empty list, so the one caller
+// that asks — GetLogins — turns it back into the empty list its callers expect.
+var errNoLogins = errors.New("keepassxc: no entry matches that URL")
+
+// replyStatus is the acceptance flag every encrypted reply carries **inside**
+// the encrypted message. The envelope wrapped around it does not repeat it: on
+// the wire, only a failure is named outside, and a reply that succeeded says so
+// only once it has been decrypted.
+type replyStatus struct {
+	Success string `json:"success"`
+}
+
+// succeeded reports whether KeePassXC accepted the request.
+func (s replyStatus) succeeded() bool { return s.Success == "true" }
+
+// encryptedReply is a reply whose acceptance can only be read after decrypting
+// it. Every encrypted reply type embeds replyStatus to satisfy this.
+type encryptedReply interface {
+	succeeded() bool
+}
 
 // randReader is the entropy every key and nonce here comes from. It is a seam
 // so the failure branches below — which the real reader does not take — can be

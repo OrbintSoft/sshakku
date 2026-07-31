@@ -53,7 +53,7 @@ func TestConnectReportsAFailureGeneratingItsClientId(t *testing.T) {
 	s := newFakeServer(t)
 	// One draw succeeds — the session key pair — and the client id's fails.
 	swapEntropy(t, &exhaustibleReader{left: 1})
-	if _, err := Connect(s.dial(), time.Second); err == nil {
+	if _, err := Connect(s.dial(), time.Second, time.Second); err == nil {
 		t.Fatal("Connect must fail when it cannot generate its client id")
 	}
 }
@@ -62,7 +62,7 @@ func TestConnectReportsAFailureGeneratingTheExchangeNonce(t *testing.T) {
 	s := newFakeServer(t)
 	// The key pair and the client id succeed; the key exchange's nonce fails.
 	swapEntropy(t, &exhaustibleReader{left: 2})
-	if _, err := Connect(s.dial(), time.Second); err == nil {
+	if _, err := Connect(s.dial(), time.Second, time.Second); err == nil {
 		t.Fatal("Connect must fail when it cannot generate the exchange nonce")
 	}
 }
@@ -79,9 +79,8 @@ func TestARequestThatCannotGenerateANonceIsRefused(t *testing.T) {
 func TestARequestThatCannotBeEncodedIsRefused(t *testing.T) {
 	s := newFakeServer(t)
 	c := s.connect()
-	var out map[string]any
 	// A channel has no JSON form, so sealing it cannot succeed.
-	if err := c.request(actionGetLogins, make(chan int), &out); err == nil {
+	if err := c.request(actionGetLogins, make(chan int), &getLoginsReply{}); err == nil {
 		t.Fatal("a request that cannot be encoded must be reported")
 	}
 }
@@ -116,7 +115,7 @@ func TestNewKeyPairReportsAnEntropyFailure(t *testing.T) {
 func TestConnectReportsAnEntropyFailure(t *testing.T) {
 	s := newFakeServer(t)
 	withoutEntropy(t)
-	if _, err := Connect(s.dial(), time.Second); err == nil {
+	if _, err := Connect(s.dial(), time.Second, time.Second); err == nil {
 		t.Fatal("Connect must fail when it cannot generate its session key")
 	}
 }
@@ -204,7 +203,7 @@ func TestKeyExchangeWithNoKeyIsAnError(t *testing.T) {
 		Action:  actionChangePublicKeys,
 		Success: "true",
 	}}
-	_, err := Connect(s.dial(), time.Second)
+	_, err := Connect(s.dial(), time.Second, time.Second)
 	if err == nil {
 		t.Fatal("a key exchange that returned no key must not be treated as done")
 	}
@@ -241,7 +240,12 @@ func TestNamedFailureIsReportedAsGiven(t *testing.T) {
 
 func TestUnnamedFailureStillReportsTheAction(t *testing.T) {
 	s := newFakeServer(t)
-	s.failWith[actionGetLogins] = envelope{Success: "false"}
+	// A refusal KeePassXC does not put a name to arrives inside the encrypted
+	// message, which is where acceptance is stated at all; the envelope carries
+	// a name only when there is one.
+	s.reply = func(string, map[string]any) any {
+		return map[string]any{"success": "false"}
+	}
 	c := s.connect()
 	_, err := c.GetLogins("ssh://k", Association{ID: "db", IDKey: "key"})
 	if err == nil || !strings.Contains(err.Error(), actionGetLogins) {
@@ -275,7 +279,7 @@ func (c *brokenConn) Write(p []byte) (int, error) {
 func TestADeadlineThatCannotBeSetIsReported(t *testing.T) {
 	s := newFakeServer(t)
 	conn := &brokenConn{Conn: s.dial(), failDeadline: true}
-	if _, err := Connect(conn, time.Second); err == nil {
+	if _, err := Connect(conn, time.Second, time.Second); err == nil {
 		t.Fatal("a deadline that cannot be set must not be ignored — it is what bounds the wait")
 	}
 }
@@ -283,7 +287,7 @@ func TestADeadlineThatCannotBeSetIsReported(t *testing.T) {
 func TestAWriteThatFailsIsReported(t *testing.T) {
 	s := newFakeServer(t)
 	conn := &brokenConn{Conn: s.dial(), failWrite: true}
-	if _, err := Connect(conn, time.Second); err == nil {
+	if _, err := Connect(conn, time.Second, time.Second); err == nil {
 		t.Fatal("a request that could not be sent must be reported")
 	}
 }
@@ -301,14 +305,45 @@ func TestAServerThatHangsUpIsReported(t *testing.T) {
 	}
 }
 
-func TestConnectDefaultsItsTimeout(t *testing.T) {
+func TestConnectDefaultsItsTimeouts(t *testing.T) {
 	s := newFakeServer(t)
-	c, err := Connect(s.dial(), 0)
+	c, err := Connect(s.dial(), 0, 0)
 	if err != nil {
 		t.Fatalf("Connect: %v", err)
 	}
 	if c.timeout != DefaultTimeout {
 		t.Errorf("timeout = %v, want DefaultTimeout for a caller that named none", c.timeout)
+	}
+	if c.interactive != DefaultInteractiveTimeout {
+		t.Errorf("interactive = %v, want DefaultInteractiveTimeout for a caller that named none", c.interactive)
+	}
+}
+
+// TestAssociateWaitsLongerThanAnOrdinaryExchange pins the distinction the two
+// budgets exist for: the association dialog is answered by a person, and a
+// person is slower than a socket. Held to the ordinary budget, the approval
+// would be abandoned while the user was still reading it.
+func TestAssociateWaitsLongerThanAnOrdinaryExchange(t *testing.T) {
+	s := newFakeServer(t)
+	// Long enough that a request held to it would not have expired by the time
+	// the reply arrives, and short enough that the test does not wait on it.
+	s.replyAfter = map[string]time.Duration{
+		actionAssociate: 120 * time.Millisecond,
+		actionGetLogins: 120 * time.Millisecond,
+	}
+	s.reply = func(string, map[string]any) any {
+		return map[string]any{"success": "true", "id": "db"}
+	}
+	c, err := Connect(s.dial(), 30*time.Millisecond, 5*time.Second)
+	if err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+
+	if _, err := c.Associate(); err != nil {
+		t.Errorf("Associate = %v, want the slower budget to have been used", err)
+	}
+	if _, err := c.GetLogins("sshakku://k", Association{ID: "db", IDKey: "key"}); err == nil {
+		t.Error("an ordinary exchange must still be held to the ordinary budget")
 	}
 }
 

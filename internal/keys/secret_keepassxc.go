@@ -20,8 +20,11 @@ import (
 // URL yields a non-empty host, which it rejects an entry without.
 const keepassxcURLScheme = "sshakku"
 
-// keepassxcGroup is the group new entries are created in, so a user opening
-// their database sees SSHakku's entries together instead of scattered.
+// keepassxcGroup is the group name sent with a new entry. KeePassXC files an
+// entry by the uuid of an existing group, not by a name, so a name alone does
+// not move it: entries land in the group KeePassXC keeps for entries saved over
+// this protocol. The name is still sent, because it is what a KeePassXC that
+// ever starts honouring it would use.
 const keepassxcGroup = "SSHakku"
 
 // ErrDeleteUnsupported is returned by a backend that can store and read a
@@ -71,8 +74,13 @@ type KeePassXCBackend struct {
 	SocketPaths []string
 	// Associations persists the approval this client was granted.
 	Associations AssociationStore
-	// Timeout bounds each exchange; zero selects the protocol's default.
+	// Timeout bounds each exchange KeePassXC answers on its own; zero selects
+	// the protocol's default.
 	Timeout time.Duration
+	// InteractiveTimeout bounds the one exchange that waits on a person: the
+	// approval dialog KeePassXC raises the first time this client associates.
+	// Zero selects the protocol's default.
+	InteractiveTimeout time.Duration
 }
 
 // entryURL is the URL a key's entry is stored under.
@@ -89,7 +97,7 @@ func (b KeePassXCBackend) connect() (KeePassXCSession, error) {
 	if err != nil {
 		return nil, err
 	}
-	client, err := keepassxc.Connect(conn, b.Timeout)
+	client, err := keepassxc.Connect(conn, b.Timeout, b.InteractiveTimeout)
 	if err != nil {
 		_ = conn.Close()
 		return nil, err

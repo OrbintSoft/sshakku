@@ -15,6 +15,12 @@ import (
 // a shell open, not to rush a healthy one.
 const DefaultTimeout = 10 * time.Second
 
+// DefaultInteractiveTimeout bounds the one exchange that is waiting on a
+// person: associating raises a dialog in KeePassXC that somebody has to read
+// and approve. Holding that to the same budget as a local socket round trip
+// would abandon the approval while the user is still looking at it.
+const DefaultInteractiveTimeout = 2 * time.Minute
+
 // Association is what survives between runs: KeePassXC recognises a client by
 // the identification key it associated, and names that association with an id.
 // Losing it costs the user another approval dialog, so the caller persists it.
@@ -48,16 +54,25 @@ type Client struct {
 	clientID string
 	session  keyPair
 	hostKey  *[keyLen]byte
+	// interactive bounds the one exchange that waits on a person rather than
+	// on KeePassXC: associating raises a dialog, and how long someone takes to
+	// read and answer it has nothing to do with how fast a local socket
+	// answers. Zero selects DefaultInteractiveTimeout.
+	interactive time.Duration
 }
 
 // Connect performs the key exchange over conn and returns a session ready to
 // carry encrypted messages. It takes ownership of conn: Close closes it.
 //
-// timeout bounds every later exchange as well as this one; zero selects
-// DefaultTimeout.
-func Connect(conn net.Conn, timeout time.Duration) (*Client, error) {
+// timeout bounds every exchange KeePassXC answers on its own; interactive
+// bounds the one that waits on a person to approve a dialog. Zero selects
+// DefaultTimeout and DefaultInteractiveTimeout respectively.
+func Connect(conn net.Conn, timeout, interactive time.Duration) (*Client, error) {
 	if timeout <= 0 {
 		timeout = DefaultTimeout
+	}
+	if interactive <= 0 {
+		interactive = DefaultInteractiveTimeout
 	}
 	session, err := newKeyPair()
 	if err != nil {
@@ -68,11 +83,12 @@ func Connect(conn net.Conn, timeout time.Duration) (*Client, error) {
 		return nil, err
 	}
 	c := &Client{
-		conn:     conn,
-		timeout:  timeout,
-		dec:      json.NewDecoder(conn),
-		clientID: base64.StdEncoding.EncodeToString(id[:]),
-		session:  session,
+		conn:        conn,
+		timeout:     timeout,
+		dec:         json.NewDecoder(conn),
+		clientID:    base64.StdEncoding.EncodeToString(id[:]),
+		session:     session,
+		interactive: interactive,
 	}
 	if err := c.changePublicKeys(); err != nil {
 		return nil, err
@@ -96,9 +112,15 @@ func (c *Client) changePublicKeys() error {
 		Nonce:     base64.StdEncoding.EncodeToString(nonce[:]),
 		ClientID:  c.clientID,
 	}
-	reply, err := c.exchange(req, actionChangePublicKeys)
+	reply, err := c.exchangeWithin(c.timeout, req, actionChangePublicKeys)
 	if err != nil {
 		return err
+	}
+	// The one reply that travels in the clear is also the one whose acceptance
+	// is stated on the envelope, since there is no encrypted message to put it
+	// in. Every other reply says so inside; see replyStatus.
+	if reply.Success != "true" {
+		return errors.New("keepassxc: the key exchange was refused")
 	}
 	if reply.PublicKey == "" {
 		return errors.New("keepassxc: the key exchange returned no public key")
@@ -120,11 +142,11 @@ type associateRequest struct {
 
 // associateReply is what associate and test-associate answer with.
 type associateReply struct {
-	Success string `json:"success"`
-	ID      string `json:"id"`
-	Hash    string `json:"hash"`
-	Nonce   string `json:"nonce"`
-	Error   string `json:"error"`
+	replyStatus
+	ID    string `json:"id"`
+	Hash  string `json:"hash"`
+	Nonce string `json:"nonce"`
+	Error string `json:"error"`
 }
 
 // Associate asks KeePassXC to remember this client. It raises a dialog the user
@@ -141,7 +163,9 @@ func (c *Client) Associate() (Association, error) {
 	}
 	idKey := base64.StdEncoding.EncodeToString(ident.public[:])
 	var reply associateReply
-	err = c.request(actionAssociate, associateRequest{
+	// The one exchange that waits on a person: KeePassXC raises a dialog and
+	// answers only once it has been approved.
+	err = c.requestWithin(c.interactive, actionAssociate, associateRequest{
 		Action: actionAssociate,
 		Key:    base64.StdEncoding.EncodeToString(c.session.public[:]),
 		IDKey:  idKey,
@@ -167,11 +191,19 @@ type testAssociateRequest struct {
 // generic failure, because the answer to it is specific: associate again.
 func (c *Client) TestAssociate(a Association) error {
 	var reply associateReply
-	return c.request(actionTestAssociate, testAssociateRequest{
+	err := c.request(actionTestAssociate, testAssociateRequest{
 		Action: actionTestAssociate,
 		ID:     a.ID,
 		Key:    a.IDKey,
 	}, &reply)
+	if err != nil && !errors.Is(err, ErrDatabaseLocked) && !errors.Is(err, ErrNotAssociated) {
+		// Asking whether an association still holds has only one way to be
+		// answered no, whichever shape the refusal arrives in. A locked
+		// database is excepted because it is not an answer to the question:
+		// KeePassXC cannot check anything until it is unlocked.
+		return ErrNotAssociated
+	}
+	return err
 }
 
 // associationKey names one stored association in a get-logins call.
@@ -189,9 +221,9 @@ type getLoginsRequest struct {
 
 // getLoginsReply is what get-logins answers with.
 type getLoginsReply struct {
+	replyStatus
 	Count   int     `json:"count"`
 	Entries []Entry `json:"entries"`
-	Success string  `json:"success"`
 	Nonce   string  `json:"nonce"`
 }
 
@@ -205,6 +237,13 @@ func (c *Client) GetLogins(url string, a Association) ([]Entry, error) {
 		URL:    url,
 		Keys:   []associationKey{{ID: a.ID, Key: a.IDKey}},
 	}, &reply)
+	if errors.Is(err, errNoLogins) {
+		// KeePassXC reports "nothing matched" as a failure rather than as an
+		// empty answer. It is not one: a key whose passphrase has never been
+		// saved is the ordinary first-use state, and reporting it as a broken
+		// wallet would send the caller down the wrong path entirely.
+		return nil, nil
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -227,9 +266,9 @@ type setLoginRequest struct {
 
 // setLoginReply is what set-login answers with.
 type setLoginReply struct {
-	Success string `json:"success"`
-	Nonce   string `json:"nonce"`
-	Error   string `json:"error"`
+	replyStatus
+	Nonce string `json:"nonce"`
+	Error string `json:"error"`
 }
 
 // SetLogin stores or updates the entry for url. Passing uuid updates that entry
@@ -254,8 +293,16 @@ func (c *Client) SetLogin(url, login, password, uuid, group string, a Associatio
 	}, &reply)
 }
 
-// request seals payload, sends it, and decrypts the reply into out.
-func (c *Client) request(action string, payload any, out any) error {
+// request seals payload, sends it, decrypts the reply into out, and reports a
+// refusal the reply only admits to once decrypted.
+func (c *Client) request(action string, payload any, out encryptedReply) error {
+	return c.requestWithin(c.timeout, action, payload, out)
+}
+
+// requestWithin is request under an explicit budget, so an exchange waiting on
+// a person is not held to the one meant for an exchange KeePassXC answers by
+// itself.
+func (c *Client) requestWithin(budget time.Duration, action string, payload any, out encryptedReply) error {
 	if c.hostKey == nil {
 		return errors.New("keepassxc: no key exchange has happened yet")
 	}
@@ -267,7 +314,7 @@ func (c *Client) request(action string, payload any, out any) error {
 	if err != nil {
 		return err
 	}
-	reply, err := c.exchange(envelope{
+	reply, err := c.exchangeWithin(budget, envelope{
 		Action:   action,
 		Message:  sealed,
 		Nonce:    base64.StdEncoding.EncodeToString(nonce[:]),
@@ -282,17 +329,24 @@ func (c *Client) request(action string, payload any, out any) error {
 	// The reply is encrypted under the request's nonce plus one. Opening it
 	// with anything else fails, which is what rejects a reply that was not
 	// produced for this request.
-	return open(reply.Message, incrementNonce(nonce), c.hostKey, c.session.secret, out)
+	if err := open(reply.Message, incrementNonce(nonce), c.hostKey, c.session.secret, out); err != nil {
+		return err
+	}
+	if !out.succeeded() {
+		return fmt.Errorf("keepassxc: %s was refused", action)
+	}
+	return nil
 }
 
-// exchange writes req and returns the first reply carrying want as its action.
+// exchangeWithin writes req and returns the first reply carrying want as its
+// action, giving up after budget.
 //
 // KeePassXC also pushes unsolicited frames — it announces the database being
 // locked or unlocked whenever it happens, not only when asked. Those arrive
 // interleaved with replies, so anything that is not the awaited action is
 // skipped rather than mistaken for the answer.
-func (c *Client) exchange(req envelope, want string) (envelope, error) {
-	deadline := time.Now().Add(c.timeout)
+func (c *Client) exchangeWithin(budget time.Duration, req envelope, want string) (envelope, error) {
+	deadline := time.Now().Add(budget)
 	if err := c.conn.SetDeadline(deadline); err != nil {
 		return envelope{}, fmt.Errorf("keepassxc: setting a deadline: %w", err)
 	}
@@ -323,21 +377,26 @@ func (c *Client) exchange(req envelope, want string) (envelope, error) {
 	}
 }
 
-// replyError turns a failure KeePassXC names into the error the caller can act
-// on. A locked database and a refused association each get their own error
-// because each has its own answer; anything else is reported as it came.
+// replyError turns a failure KeePassXC names on the envelope into the error the
+// caller can act on. A locked database, a refused association and a URL that
+// matched nothing each get their own error because each has its own answer;
+// anything else is reported as it came.
+//
+// Acceptance is deliberately not read here. An envelope names a failure when
+// there is one and stays silent otherwise: the flag saying a request succeeded
+// travels inside the encrypted message, so treating a missing envelope flag as
+// a failure would reject every reply that worked.
 func replyError(reply envelope) error {
-	if reply.Success == "true" {
-		return nil
-	}
 	switch reply.Code {
 	case errCodeDatabaseNotOpened:
 		return ErrDatabaseLocked
 	case errCodeAssociationFailed:
 		return ErrNotAssociated
+	case errCodeNoLogins:
+		return errNoLogins
 	}
 	if reply.Error != "" {
 		return fmt.Errorf("keepassxc: %s failed: %s", reply.Action, reply.Error)
 	}
-	return fmt.Errorf("keepassxc: %s failed", reply.Action)
+	return nil
 }

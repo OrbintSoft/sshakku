@@ -91,10 +91,15 @@ func newKeePassXCCLIRoute(settings config.Settings) keys.SecretBackend {
 
 // newKeePassXCNativeRoute speaks KeePassXC's local protocol to a running,
 // unlocked instance.
+//
+// Two budgets, because there are two kinds of wait: KeePassXC answers a lookup
+// by itself and quickly, while the one-time approval it raises is answered by
+// the user, at their own pace.
 func newKeePassXCNativeRoute(settings config.Settings) keys.SecretBackend {
 	return keys.KeePassXCBackend{
-		Associations: keys.FileAssociationStore{Path: keepassxcAssociationPath()},
-		Timeout:      settings.CommandTimeout,
+		Associations:       keys.FileAssociationStore{Path: keepassxcAssociationPath()},
+		Timeout:            settings.CommandTimeout,
+		InteractiveTimeout: settings.InteractiveTimeout,
 	}
 }
 
