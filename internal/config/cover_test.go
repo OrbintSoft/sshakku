@@ -3,6 +3,8 @@ package config
 import (
 	"reflect"
 	"testing"
+
+	"github.com/OrbintSoft/sshakku/internal/keys"
 )
 
 // TestMergeOtherWinsForEveryField sets every field in both base and other to a
@@ -74,5 +76,32 @@ func TestResolveMalformedGiveupTTLReportsAndDefaults(t *testing.T) {
 	}
 	if s.GiveupTTL != DefaultGiveupTTL {
 		t.Errorf("GiveupTTL = %v, want the default on a malformed value", s.GiveupTTL)
+	}
+}
+
+// TestResolveMalformedCommandTimeoutReportsAndDefaults covers Resolve's error
+// branch for the command budget. Reporting matters as much as the fallback: a
+// user who mistypes the value gets the default silently unless Resolve hands the
+// error back, and a wrong budget is invisible until something hangs.
+func TestResolveMalformedCommandTimeoutReportsAndDefaults(t *testing.T) {
+	s, errs := Resolve(File{}, lookupFrom(map[string]string{"SSHAKKU_COMMAND_TIMEOUT": "banana"}))
+	if len(errs) == 0 {
+		t.Fatal("a malformed command timeout must be reported")
+	}
+	if s.CommandTimeout != keys.DefaultCommandTimeout {
+		t.Errorf("CommandTimeout = %v, want the default on a malformed value", s.CommandTimeout)
+	}
+}
+
+// TestResolveMalformedInteractiveTimeoutReportsAndDefaults covers Resolve's
+// error branch for the interactive budget, the counterpart of the command one
+// above.
+func TestResolveMalformedInteractiveTimeoutReportsAndDefaults(t *testing.T) {
+	s, errs := Resolve(File{}, lookupFrom(map[string]string{"SSHAKKU_INTERACTIVE_TIMEOUT": "banana"}))
+	if len(errs) == 0 {
+		t.Fatal("a malformed interactive timeout must be reported")
+	}
+	if s.InteractiveTimeout != keys.DefaultInteractiveTimeout {
+		t.Errorf("InteractiveTimeout = %v, want the default on a malformed value", s.InteractiveTimeout)
 	}
 }
