@@ -48,8 +48,11 @@ func TestRun(t *testing.T) {
 	}
 }
 
+// Every name a user may put in secret_backend has to be a name the diagnostics
+// accept too: a wallet you can choose but cannot ask about is one you cannot
+// diagnose when it stops working.
 func TestValidSecretBackendName(t *testing.T) {
-	for _, name := range []string{"secret-service", "1password", "bitwarden", "keychain"} {
+	for _, name := range []string{"secret-service", "keepassxc", "1password", "bitwarden", "keychain"} {
 		if !validSecretBackendName(name) {
 			t.Errorf("validSecretBackendName(%q) = false, want true", name)
 		}

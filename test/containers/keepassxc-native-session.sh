@@ -60,8 +60,12 @@ sleep 2
 xdotool type --delay 30 "${DB_PASSWORD}"
 xdotool key Return
 
-# The socket appears only once a database is open, so waiting for it is also how
-# this waits for the unlock to have taken.
+# The socket is not the signal: KeePassXC listens on it from startup, database
+# open or not, and answers "database not opened" until one is. The window title
+# is the signal — it carries "[Locked]" until the unlock takes, and nothing else
+# here distinguishes the two.
+wait_for "the database to be unlocked" \
+	xdotool search --name '^Passwords\.kdbx - KeePassXC$'
 wait_for "the browser protocol socket" \
 	test -S "${XDG_RUNTIME_DIR}/app/org.keepassxc.KeePassXC/org.keepassxc.KeePassXC.BrowserServer"
 

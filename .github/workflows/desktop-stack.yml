@@ -72,6 +72,41 @@ jobs:
           keyctl session - /opt/sshakku-desktop-stack/keyring-session.sh
           go test ./internal/keys -run TestKeePassXCNativeFullRound -count=1 -v
 
+  keepassxc-macos:
+    name: KeePassXC on macOS
+    # Same integration gate as container-test: manual dispatch, or a push whose
+    # head commit opts in with [integration].
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[integration]')
+    runs-on: macos-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: ./.github/actions/setup-go-env
+
+      # The cask ships the command-line tool inside the app bundle; the cli
+      # route looks it up by name, so the bundle's directory goes on PATH.
+      - name: Install KeePassXC
+        run: |
+          brew install --cask keepassxc
+          echo "/Applications/KeePassXC.app/Contents/MacOS" >> "$GITHUB_PATH"
+
+      - name: Run the real keepassxc-cli round trip
+        env:
+          SSHAKKU_TEST_ALLOW_REAL_KEEPASSXC: "1"
+        run: go test ./internal/keys -run TestKeePassXCCLIRealDatabase -count=1 -v
+
+      # Not a test: it reports whether the native route can be driven here at
+      # all. It needs KeePassXC's window unlocked without anyone typing, and
+      # its association approved without anyone clicking — a runner grants no
+      # accessibility permission, so neither can be done the way the Linux
+      # container does it. Whatever this prints decides whether the round is
+      # implementable on macOS or has to be recorded as out of reach.
+      - name: Probe what the native route can reach here
+        continue-on-error: true
+        run: test/macos-keepassxc-native-probe.sh
+
   midsession-failure:
     name: mid-session failure (${{ matrix.scenario }})
     # Same integration gate as container-test: manual dispatch, or a push whose

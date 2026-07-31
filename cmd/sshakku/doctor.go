@@ -169,7 +169,7 @@ func (d deps) doctor(stdout, stderr io.Writer, args []string) int {
 	}
 	if testBackendName != "" && !validSecretBackendName(testBackendName) {
 		_, _ = fmt.Fprintf(stderr,
-			"sshakku: doctor --test-backend: unknown backend %q (want secret-service, 1password, bitwarden, or keychain)\n", testBackendName)
+			"sshakku: doctor --test-backend: unknown backend %q (want secret-service, keepassxc, 1password, bitwarden, or keychain)\n", testBackendName)
 		return 2
 	}
 

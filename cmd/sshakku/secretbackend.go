@@ -85,7 +85,8 @@ func detectGUIAvailable() bool {
 // newSecretBackend knows how to construct.
 func validSecretBackendName(name string) bool {
 	switch name {
-	case config.SecretBackendSecretService, config.SecretBackendOnePassword, config.SecretBackendBitwarden, config.SecretBackendKeychain:
+	case config.SecretBackendSecretService, config.SecretBackendOnePassword, config.SecretBackendBitwarden,
+		config.SecretBackendKeychain, config.SecretBackendKeePassXC:
 		return true
 	default:
 		return false
