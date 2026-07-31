@@ -297,11 +297,11 @@ func (c *Client) exchange(req envelope, want string) (envelope, error) {
 		return envelope{}, fmt.Errorf("keepassxc: setting a deadline: %w", err)
 	}
 	raw, err := json.Marshal(req)
-	// An envelope holds nothing but strings, so encoding one cannot fail. The
-	// error is still checked rather than discarded, in case the type grows a
-	// field that can.
-	//coverage:ignore
 	if err != nil {
+		// An envelope holds nothing but strings, so encoding one cannot fail.
+		// The error is still checked rather than discarded, in case the type
+		// grows a field that can.
+		//coverage:ignore
 		return envelope{}, fmt.Errorf("keepassxc: encoding a request: %w", err)
 	}
 	if _, err := c.conn.Write(raw); err != nil {

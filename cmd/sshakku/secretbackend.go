@@ -31,6 +31,8 @@ func newSecretBackend(user string, log keys.Logger, settings config.Settings) (k
 			Server:   settings.BitwardenServer,
 			Timeout:  settings.InteractiveTimeout,
 		}, func() {}
+	case config.SecretBackendKeePassXC:
+		return newKeePassXCBackend(user, log, settings)
 	default:
 		return newDefaultSecretBackend(user, log, settings)
 	}
