@@ -316,9 +316,9 @@ done are summarised; see the note at the top of this file for full detail.
       own-channel-first-then-upstream shape open decision 21 already uses for
       Gentoo's GURU overlay.
 
-23. **macOS secret backend support (goals 11, 12; open).** Raised
-    2026-07-19. Target backend set: Apple Keychain, 1Password, KeePassXC,
-    Bitwarden.
+23. **macOS secret backend support (goals 11, 12; KeePassXC route decided
+    2026-07-31, the rest open).** Raised 2026-07-19. Target backend set: Apple
+    Keychain, 1Password, KeePassXC, Bitwarden.
     - **Keychain. ✅ Done** — Phase 5 step 2, `internal/keys/secret_keychain_darwin.go`.
     - **1Password / Bitwarden.** Both backends (`internal/keys/secret_onepassword.go`,
       `secret_bitwarden.go`) shell out to the `op`/`bw` CLIs and carry no
@@ -326,17 +326,53 @@ done are summarised; see the note at the top of this file for full detail.
       before Phase 5 step 3 found the real `/proc` gap underneath the
       "no work needed" assumption. Treat as **unverified, not proven** until
       exercised for real on macOS CI — do not assume they just work.
-    - **KeePassXC.** On Linux this is *not* its own `SecretBackend` — it's
-      reached generically through the `secret-service` backend, because
-      KeePassXC implements the freedesktop Secret Service D-Bus API itself
-      (open decision 7). macOS has no D-Bus/Secret Service, so that path
-      doesn't carry over; KeePassXC support there needs its own design from
-      scratch. Candidates to research, not yet decided between: KeePassXC's
-      local native-messaging socket protocol (the same one its browser
-      extension uses — a defined JSON-over-Unix-socket protocol, no D-Bus
-      involved) versus shelling out to `keepassxc-cli` (need to check
-      whether it supports a stdin-fed passphrase the way this project's
-      argv rule, open decision 2, already requires of every other backend).
+    - **KeePassXC. ✅ Design decided 2026-07-31.** On Linux this is *not* its
+      own `SecretBackend` — it's reached generically through the
+      `secret-service` backend, because KeePassXC implements the freedesktop
+      Secret Service D-Bus API itself (open decision 7). macOS has no
+      D-Bus/Secret Service, so that path doesn't carry over.
+
+      **The user names the wallet, not the mechanism:** `secret_backend =
+      "keepassxc"` is valid on every platform, and the route is resolved per-OS
+      (Secret Service on Linux, native messaging on macOS). The mechanism stays
+      **configurable** — a separate route setting takes `secret-service`,
+      `native` or `cli`, and a pinned route is used *and no other*: configuring
+      `cli` means `keepassxc-cli` is used directly, not as a fallback behind an
+      attempted socket connection, and an unavailable pinned route reports which
+      one failed rather than silently switching. Only the unpinned default falls
+      back. Features F22 (name the wallet) and F23 (pin the route).
+
+      **The routes are not tied to an OS — only the defaults are.** A Linux
+      user who does not want the Secret Service can pin `native` or `cli` and
+      bypass it entirely; both work there (the socket lives under
+      `XDG_RUNTIME_DIR`, and the CLI is the same program). The single
+      exception is `secret-service`, which cannot exist on macOS because the
+      API does not. So route availability is a property of the route, not of
+      the platform, and each one is implemented and tested once rather than
+      per-OS.
+
+      **Primary route: the native-messaging socket protocol** — the one the
+      browser extension uses; JSON over a unix socket, encrypted with NaCl box
+      (X25519 + XSalsa20-Poly1305), reaching the running, already-unlocked
+      instance. Chosen because it has the *same preconditions as the Linux
+      route* (app running and unlocked), so F5 and F6 keep their silent refill
+      on both platforms. Non-browser precedent: `git-credential-keepassxc`.
+      Costs, accepted knowingly: the protocol is URL-keyed and has no
+      arbitrary named-secret verb, so entries need a synthetic URL; the user
+      must enable "Browser Integration" and approve a one-time association; and
+      the association key sits in plaintext, so a same-user process could
+      replay it — no new threat class, since `docs/THREAT-MODEL.md` already
+      lists same-user processes as *currently trusted*, but it is documented
+      rather than left implicit.
+
+      **Fallback route: `keepassxc-cli`,** which works on the database file
+      with no app running. Rejected as the *primary* route because it needs the
+      master password on every call, which would cost F5/F6 on macOS only, and
+      because it has **no documented** non-interactive password input (no
+      `--pw-stdin`; upstream #1297 and #11068 are open) — so the argv rule
+      (open decision 2) would rest on unspecified behaviour, to be probed at
+      run time rather than assumed. Its non-silent behaviour is its own
+      promise, F24.
 
 24. **Test coverage & reporting infrastructure (goal 16). Decided
     (2026-07-24):** every PR's CI posts/updates a single comment with
@@ -1123,13 +1159,12 @@ not rediscovered one at a time.
 1. **KeePassXC has no route on macOS.** On Linux it is reached generically
    through the `secret-service` backend because KeePassXC implements that D-Bus
    API itself. macOS has neither, so a wallet the project offers on one
-   platform is simply unavailable on the other. Open decision 23 holds the two
-   candidate designs — KeePassXC's native-messaging socket protocol, which
-   talks to the running, already-unlocked instance, versus `keepassxc-cli`,
-   which works on the database file and therefore needs the master password on
-   every call. The first preserves the silent refill F5 and F6 promise; the
-   second does not. Settle that decision first, then implement, then give it a
-   cell in the secret-store table.
+   platform is simply unavailable on the other. **Design decided 2026-07-31**
+   (open decision 23): the native-messaging socket protocol is the primary
+   route, `keepassxc-cli` the fallback, the wallet is named `keepassxc` on
+   every platform, and the route stays pinnable — a pinned one is used and no
+   other. Implement (features F22, F23, F24), then give it a cell in the
+   secret-store table.
 2. **Nothing bounds the keychain.** `SecItemCopyMatching` is a synchronous cgo
    call with no timeout, context or cancellation, so on macOS's default backend
    there is no deadline at all. F21 does not cover it either: it promises that

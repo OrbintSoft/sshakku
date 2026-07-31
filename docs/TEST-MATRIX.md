@@ -36,7 +36,7 @@ the other has no cell to be missing from, and the gap becomes invisible.
 | --- | --- | --- |
 | KDE Wallet (`ksecretd`/`kwalletd6`) | ✅ via `secret-service`, `kde.Dockerfile` | — (no D-Bus session bus or Secret Service on macOS) |
 | GNOME Keyring | ✅ via `secret-service`, `gnome-keyring.Dockerfile` | — (same) |
-| KeePassXC | ✅ via `secret-service`, `keepassxc.Dockerfile` | ❌ **not supported** — the Secret Service route does not carry over and no replacement is implemented; the design is still open (PLAN.md open decision 23) |
+| KeePassXC | ✅ via `secret-service`, `keepassxc.Dockerfile` | ❌ **not supported yet** — the Secret Service route does not carry over. The replacement is designed but not built: the native-messaging socket protocol as the primary route, `keepassxc-cli` as the fallback (features F22–F24, PLAN.md Phase 17 item 1) |
 | 1Password (`op` CLI) | ✅ `TestOnePasswordBackendRealAccount`, `onepassword-real-account.yml` | ❌ supported, untested — that workflow runs on `ubuntu-latest` only |
 | Bitwarden (`bw` CLI) | ✅ real backend against Vaultwarden, `desktop-stack.yml` | ❌ supported, untested — that job runs on `ubuntu-latest` only |
 | macOS Keychain | — (Security.framework is macOS-only) | ✅ `TestDarwinKeychainClientRealRoundTrip` — a live `Add`/`Find`/`Update`/`Delete`/`List` round trip against a throwaway default keychain, plus the whole shell suite (`make test-bats`) driving it as the default backend |
