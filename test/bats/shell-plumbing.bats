@@ -107,7 +107,7 @@ load helpers
 	fingerprint=$(key_fingerprint id_test)
 
 	eval "$("$SSHAKKU_BIN" shell-init)"
-	run timeout --signal=KILL 5 setsid "$SSHAKKU_BIN" load-keys
+	run no_tty_bounded 5 "$SSHAKKU_BIN" load-keys
 	[ "$status" -eq 0 ]
 
 	run ssh-add -l
@@ -121,7 +121,7 @@ load helpers
 	fingerprint=$(key_fingerprint id_test)
 
 	eval "$("$SSHAKKU_BIN" shell-init)"
-	run timeout --signal=KILL 5 setsid "$SSHAKKU_BIN" load-keys
+	run no_tty_bounded 5 "$SSHAKKU_BIN" load-keys
 	[ "$status" -eq 0 ]
 
 	run ssh-add -l

@@ -13,11 +13,11 @@
 # what routes it to the wallet broker instead of the proactive loader's one-shot
 # stash — and what a user's own ssh-add does.
 #
-# Every run is wrapped in `setsid` so there is no controlling terminal: the
-# terminal fallback cannot rescue a run that was supposed to be silent, so
-# either the wallet answers through the broker or the run fails. `timeout`
-# bounds it because a broker that hangs waiting for input would otherwise stall
-# the suite instead of failing it.
+# Every run goes through no_tty_bounded, so it has no controlling terminal and
+# a hard time limit: the terminal fallback cannot rescue a run that was supposed
+# to be silent — either the wallet answers through the broker or the run fails —
+# and a broker that hangs waiting for input fails the test instead of stalling
+# the suite.
 #
 # A stub secret-tool (test/bats/fixtures) stands in for a real Secret Service,
 # and helpers.bash unsets DISPLAY/WAYLAND_DISPLAY with no kdialog on PATH: this
@@ -57,7 +57,7 @@ load helpers
 	[ -z "${SSHAKKU_HANDOFF_TOKEN:-}" ]
 
 	trace "ssh-add start"
-	run timeout --signal=KILL 10 setsid ssh-add "$HOME/.ssh/id_test"
+	run no_tty_bounded 10 ssh-add "$HOME/.ssh/id_test"
 	trace "ssh-add exited with $status"
 	[ "$status" -eq 0 ]
 
@@ -102,10 +102,10 @@ blocking_wallet() {
 	source "$SSHAKKU_HOOK"
 	trace "hook sourced"
 
-	run timeout --signal=KILL 30 setsid ssh-add "$HOME/.ssh/id_test"
-	# 137 is the KILL from timeout, i.e. it was still waiting on the wallet.
-	# Any other status means it gave up on its own and ssh could move on.
-	[ "$status" -ne 137 ]
+	run no_tty_bounded 30 ssh-add "$HOME/.ssh/id_test"
+	# 124 is the limit expiring, i.e. it was still waiting on the wallet. Any
+	# other status means it gave up on its own and ssh could move on.
+	[ "$status" -ne 124 ]
 }
 
 @test "a wallet that never answers does not hold up a login shell" {
@@ -114,6 +114,6 @@ blocking_wallet() {
 	# shellcheck disable=SC2030,SC2031
 	export SSHAKKU_COMMAND_TIMEOUT=1s
 
-	run timeout --signal=KILL 30 setsid "$SSHAKKU_BIN" load-keys
-	[ "$status" -ne 137 ]
+	run no_tty_bounded 30 "$SSHAKKU_BIN" load-keys
+	[ "$status" -ne 124 ]
 }

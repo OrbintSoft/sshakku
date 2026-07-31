@@ -81,9 +81,59 @@ trace_environment() {
 	*) return 0 ;;
 	esac
 	trace "HOME=$HOME"
-	trace "SSHAKKU_TEST_KEYCHAIN=${SSHAKKU_TEST_KEYCHAIN:-unset}"
 	trace "default-keychain: $(bounded 10 security default-keychain 2>&1 | tr -d '\n')"
 	trace "list-keychains: $(bounded 10 security list-keychains 2>&1 | tr '\n' ' ')"
+}
+
+# no_tty_bounded runs a command with no controlling terminal and a hard time
+# limit, so a program that would rather ask a person cannot rescue itself by
+# prompting, and cannot stall the suite either.
+#
+# setsid is util-linux and does not exist on macOS, where there is then no way
+# to drop a controlling terminal — only a way to establish that there is none
+# to drop, which opening /dev/tty answers exactly. A run under CI has none, so
+# this costs nothing there; a developer running the suite from a terminal is
+# told why it stopped rather than quietly getting a weaker test than the name
+# promises.
+no_tty_bounded() {
+	local secs="$1"
+	shift
+	if command -v setsid >/dev/null 2>&1; then
+		bounded "$secs" setsid "$@"
+		return
+	fi
+	if (: </dev/tty) 2>/dev/null; then
+		skip "this shell has a controlling terminal and no setsid to drop it, so the command under test could fall back to prompting on it"
+	fi
+	bounded "$secs" "$@"
+}
+
+# setup_test_keychain gives the running test a keychain of its own, created
+# inside its tmpdir and registered through the redirected $HOME.
+#
+# It is what makes the darwin secret store reachable at all here. Both
+# `security` and sshakku resolve the user's default keychain from preferences
+# under $HOME, and a throwaway $HOME holds none: the search list it yields
+# contains only /Library/Keychains/System.keychain, which is not writable, and
+# asking for the default reports that there isn't one. Registering a keychain
+# here fixes that for every process the test starts, sshakku included, because
+# they all inherit the same $HOME.
+#
+# Being inside the tmpdir, it also cannot leak: what one test stores is
+# unreachable from the next, and nothing survives the run.
+setup_test_keychain() {
+	local keychain="$1"
+	# Guards nothing real — it exists so `security` can create and unlock the
+	# file without asking anyone.
+	local password="sshakku-bats"
+	mkdir -p "$HOME/Library/Preferences"
+	bounded 20 security create-keychain -p "$password" "$keychain"
+	# No idle or sleep timeout: nothing may re-lock it mid-test and turn a
+	# lookup into a password request with nowhere to display it.
+	bounded 20 security set-keychain-settings "$keychain"
+	bounded 20 security unlock-keychain -p "$password" "$keychain"
+	bounded 20 security list-keychains -d user -s "$keychain"
+	bounded 20 security default-keychain -d user -s "$keychain"
 }
 
 setup() {
@@ -147,20 +197,12 @@ setup() {
 	*) export SSHAKKU_HOOK="$prefix/profile.d/001-ssh-init.sh" ;;
 	esac
 
-	# Names of the keys a test creates or seeds, so teardown can remove what
-	# outlives the per-test tmpdir (see forget_test_secrets).
-	TEST_KEYNAMES=()
-
-	# The keychain to name explicitly, when the caller provided one. It matters
-	# on darwin: `security` otherwise resolves the default keychain from the
-	# invoking user's preferences under $HOME, and $HOME has just been pointed
-	# at a throwaway tree that holds no such preferences — leaving the tool
-	# looking for a login keychain that does not exist there, and asking for a
-	# password to create one.
-	KEYCHAIN_ARGS=()
-	if [ -n "${SSHAKKU_TEST_KEYCHAIN:-}" ]; then
-		KEYCHAIN_ARGS=("$SSHAKKU_TEST_KEYCHAIN")
-	fi
+	case "$OSTYPE" in
+	darwin*)
+		TEST_KEYCHAIN="$BATS_TEST_TMPDIR/sshakku-test.keychain-db"
+		setup_test_keychain "$TEST_KEYCHAIN"
+		;;
+	esac
 
 	trace_environment
 	trace "setup done"
@@ -197,30 +239,7 @@ teardown() {
 		done
 		;;
 	esac
-	trace "teardown agents killed"
-	forget_test_secrets
 	trace "teardown done"
-}
-
-# forget_test_secrets removes stored passphrases that outlive the test. On
-# Linux there are none to remove: the vault is a directory under the per-test
-# tmpdir and goes with it. The darwin keychain is a real, shared store that
-# survives the test, so an item left behind would still be there for the next
-# test — including the ones whose whole point is an empty vault, which would
-# then pass or fail for a reason that has nothing to do with what they assert.
-forget_test_secrets() {
-	case "$OSTYPE" in
-	darwin*) ;;
-	*) return 0 ;;
-	esac
-	local keyname
-	for keyname in ${TEST_KEYNAMES+"${TEST_KEYNAMES[@]}"}; do
-		trace "forget $keyname"
-		bounded 20 security delete-generic-password \
-			-s "SSH-Key-${keyname}" -a "$USER" \
-			${KEYCHAIN_ARGS+"${KEYCHAIN_ARGS[@]}"} >/dev/null 2>&1 || true
-		trace "forget $keyname done"
-	done
 }
 
 # require_keyring skips the calling test when the kernel user keyring (@u)
@@ -255,10 +274,9 @@ require_keyring() {
 # reaches in-process through Security.framework — no stand-in placed on PATH
 # would ever be consulted there.
 #
-# The darwin write lands in the *default* keychain, the same one sshakku's
-# lookup will search. Pointing that at a throwaway keychain is the caller's
-# job (test/macos-keychain-setup.sh), because nothing in the search path can
-# be overridden per-process.
+# The darwin write names the test's own keychain (setup_test_keychain), which
+# is also the default sshakku's lookup resolves, since both run under the same
+# redirected $HOME.
 seed_vault() {
 	local keyname="$1" passphrase="$2"
 	case "$OSTYPE" in
@@ -269,8 +287,7 @@ seed_vault() {
 		# the reader ask the user for permission.
 		bounded 20 security add-generic-password -U -A \
 			-s "SSH-Key-${keyname}" -a "$USER" -w "$passphrase" \
-			${KEYCHAIN_ARGS+"${KEYCHAIN_ARGS[@]}"}
-		TEST_KEYNAMES+=("$keyname")
+			"$TEST_KEYCHAIN"
 		trace "seed_vault $keyname done"
 		;;
 	*)
@@ -285,9 +302,6 @@ new_test_key() {
 	local keyname="$1" passphrase="$2"
 	mkdir -p "$HOME/.ssh"
 	ssh-keygen -t ed25519 -N "$passphrase" -f "$HOME/.ssh/$keyname" -q
-	# Recorded even when nothing is seeded: a test can drive sshakku into
-	# storing this key's passphrase itself, and that entry needs removing too.
-	TEST_KEYNAMES+=("$keyname")
 }
 
 # key_fingerprint prints keyname's SHA256 fingerprint, which is the only part

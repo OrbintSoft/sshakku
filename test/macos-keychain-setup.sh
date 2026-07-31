@@ -34,9 +34,3 @@ security unlock-keychain -p "$password" "$keychain"
 # here.
 security list-keychains -d user -s "$keychain" "$login_keychain"
 security default-keychain -d user -s "$keychain"
-
-# Printed so a caller can name this keychain explicitly instead of relying on
-# the default being resolved for it. That resolution reads the invoking user's
-# preferences under $HOME, which is not something every caller keeps pointed at
-# the real home.
-echo "$keychain"

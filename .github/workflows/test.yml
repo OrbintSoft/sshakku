@@ -110,11 +110,8 @@ jobs:
       - name: Run make test-json
         run: make test-json
 
-      # The script prints the keychain it set up; later steps name it rather
-      # than letting a tool resolve the default, which the shell suite's
-      # redirected $HOME would send looking in the wrong place.
       - name: Point the default keychain at a throwaway one
-        run: echo "SSHAKKU_TEST_KEYCHAIN=$(test/macos-keychain-setup.sh | tail -n1)" >> "$GITHUB_ENV"
+        run: test/macos-keychain-setup.sh
 
       - name: Run live keychain integration test
         run: make test-keychain
