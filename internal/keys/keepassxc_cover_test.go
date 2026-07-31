@@ -46,8 +46,8 @@ func TestUnavailableBackendLookupIsNotAMiss(t *testing.T) {
 
 func TestDialKeePassXCNamesEveryPathItTried(t *testing.T) {
 	absent := []string{
-		filepath.Join(t.TempDir(), "first.sock"),
-		filepath.Join(t.TempDir(), "second.sock"),
+		filepath.Join(shortDir(t), "a"),
+		filepath.Join(shortDir(t), "b"),
 	}
 	_, err := dialKeePassXCAt(absent)
 	if err == nil {
@@ -64,8 +64,8 @@ func TestDialKeePassXCNamesEveryPathItTried(t *testing.T) {
 }
 
 func TestDialKeePassXCTakesTheFirstThatAnswers(t *testing.T) {
-	dir := t.TempDir()
-	live := filepath.Join(dir, "live.sock")
+	dir := shortDir(t)
+	live := filepath.Join(dir, "live")
 	ln, err := net.Listen("unix", live)
 	if err != nil {
 		t.Fatalf("listening: %v", err)
@@ -78,7 +78,7 @@ func TestDialKeePassXCTakesTheFirstThatAnswers(t *testing.T) {
 		}
 	}()
 
-	conn, err := dialKeePassXCAt([]string{filepath.Join(dir, "absent.sock"), live})
+	conn, err := dialKeePassXCAt([]string{filepath.Join(dir, "absent"), live})
 	if err != nil {
 		t.Fatalf("a later candidate that answers must be used: %v", err)
 	}
@@ -101,7 +101,7 @@ func TestKeePassXCBackendDefaultsToThePlatformPaths(t *testing.T) {
 // path — no session seam — against paths that cannot answer.
 func TestKeePassXCConnectReportsAnUnreachableSocket(t *testing.T) {
 	b := KeePassXCBackend{
-		SocketPaths:  []string{filepath.Join(t.TempDir(), "absent.sock")},
+		SocketPaths:  []string{filepath.Join(shortDir(t), "absent")},
 		Associations: &memoryAssociations{},
 	}
 	if _, _, err := b.Lookup("id_ed25519"); !errors.Is(err, keepassxc.ErrNotRunning) {
@@ -113,7 +113,7 @@ func TestKeePassXCConnectReportsAnUnreachableSocket(t *testing.T) {
 // socket that accepts and then says nothing, which is not the same as nothing
 // listening.
 func TestKeePassXCConnectReportsAFailedHandshake(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "mute.sock")
+	path := filepath.Join(shortDir(t), "mute")
 	ln, err := net.Listen("unix", path)
 	if err != nil {
 		t.Fatalf("listening: %v", err)
@@ -210,7 +210,7 @@ func TestKeePassXCStoreEntersTheSSHakkuGroup(t *testing.T) {
 // does. Only the exchange is answered, so the lookup then stops at "not
 // associated" — which is the point: the connection itself was built for real.
 func TestKeePassXCConnectSucceedsOverARealSocket(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "kpxc.sock")
+	path := filepath.Join(shortDir(t), "s")
 	ln, err := net.Listen("unix", path)
 	if err != nil {
 		t.Fatalf("listening: %v", err)

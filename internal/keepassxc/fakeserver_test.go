@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -63,15 +64,14 @@ type fakeServer struct {
 }
 
 // newFakeServer starts a server on a unix socket and stops it when the test
-// ends. The directory is short on purpose: a unix socket address is capped near
-// 100 bytes, and a long path fails at bind rather than at connect.
+// ends.
 func newFakeServer(t *testing.T) *fakeServer {
 	t.Helper()
 	keys, err := newKeyPair()
 	if err != nil {
 		t.Fatalf("generating the server key pair: %v", err)
 	}
-	path := filepath.Join(t.TempDir(), "kpxc.sock")
+	path := filepath.Join(shortSocketDir(t), "s")
 	ln, err := net.Listen("unix", path)
 	if err != nil {
 		t.Fatalf("listening on %s: %v", path, err)
@@ -87,6 +87,23 @@ func newFakeServer(t *testing.T) *fakeServer {
 	t.Cleanup(func() { _ = ln.Close() })
 	go s.serve()
 	return s
+}
+
+// shortSocketDir returns a directory a unix socket can actually live in.
+//
+// A socket *address* is capped at 104 bytes on Darwin (108 on Linux), and the
+// name is checked at bind, not at connect. t.TempDir() is nowhere near short
+// enough on macOS, where TMPDIR is a per-user path under /var/folders and the
+// test's own name is appended to it — so the bind fails with EINVAL and every
+// test in the file goes red at once. /tmp is short on both platforms.
+func shortSocketDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("/tmp", "kpxc")
+	if err != nil {
+		t.Fatalf("mkdir temp: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
 }
 
 // rawBytes returns everything the client has sent so far.
