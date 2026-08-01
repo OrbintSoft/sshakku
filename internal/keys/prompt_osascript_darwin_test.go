@@ -78,11 +78,9 @@ func TestOsascriptPrompt(t *testing.T) {
 		}
 	})
 
-	t.Run("a script that cannot be written is an error, not a silent no-prompt", func(t *testing.T) {
-		wantErr := errors.New("no space left")
-		restore := writeDialogScript
-		defer func() { writeDialogScript = restore }()
-		writeDialogScript = func() (string, func(), error) { return "", nil, wantErr }
+	t.Run("a script file that cannot be created is an error, not a silent no-prompt", func(t *testing.T) {
+		wantErr := errors.New("read-only file system")
+		defer stubCreateDialogScript(t, func() (*os.File, error) { return nil, wantErr })()
 
 		r := newFakeRunner().on(osascriptBin, stdout("typed-pass\n", 0))
 		if _, err := (OsascriptPrompter{Runner: r}).Prompt("id_rsa"); !errors.Is(err, wantErr) {
@@ -92,6 +90,40 @@ func TestOsascriptPrompt(t *testing.T) {
 			t.Error("osascript was run with no script to run")
 		}
 	})
+
+	t.Run("a script that cannot be written is an error, and leaves nothing behind", func(t *testing.T) {
+		// A file already closed is one every write fails on, which is what a
+		// real temporary directory will not do on request.
+		var path string
+		defer stubCreateDialogScript(t, func() (*os.File, error) {
+			f, err := os.CreateTemp(t.TempDir(), "closed-*.applescript")
+			if err != nil {
+				return nil, err
+			}
+			path = f.Name()
+			return f, f.Close()
+		})()
+
+		r := newFakeRunner().on(osascriptBin, stdout("typed-pass\n", 0))
+		if _, err := (OsascriptPrompter{Runner: r}).Prompt("id_rsa"); err == nil {
+			t.Fatal("a script that could not be written must be an error")
+		}
+		if len(r.calls) != 0 {
+			t.Error("osascript was run with a script that was never written")
+		}
+		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("%s was left behind after the write failed", path)
+		}
+	})
+}
+
+// stubCreateDialogScript swaps the file-creation seam for the duration of a
+// test and returns the restore.
+func stubCreateDialogScript(t *testing.T, f func() (*os.File, error)) func() {
+	t.Helper()
+	restore := createDialogScript
+	createDialogScript = f
+	return func() { createDialogScript = restore }
 }
 
 func TestOsascriptAvailable(t *testing.T) {

@@ -35,24 +35,35 @@ type OsascriptPrompter struct {
 	lookPath func(string) (string, error)
 }
 
+// createDialogScript creates the file the script is written to. The name is
+// random and the file is created exclusively, because a predictable path in a
+// shared temporary directory is one another user can get there first with:
+// what osascript runs would then be theirs, as us.
+//
+// It is a variable so a test can hand back a file that cannot be written to,
+// which a real temporary directory will not do on request.
+var createDialogScript = func() (*os.File, error) {
+	return os.CreateTemp("", "sshakku-prompt-*.applescript")
+}
+
 // writeDialogScript materialises the embedded script where osascript can run
 // it as a program file, so the key name can be handed over as an argument
 // instead of being pasted into the source. The returned cleanup removes it.
 //
-// The file holds no secret: what the dialog collects is written to osascript's
+// The file holds no secret: what the dialog collects goes to osascript's
 // stdout, never back into the script.
-var writeDialogScript = func() (path string, cleanup func(), err error) {
-	f, err := os.CreateTemp("", "sshakku-prompt-*.applescript")
+func writeDialogScript() (path string, cleanup func(), err error) {
+	f, err := createDialogScript()
 	if err != nil {
 		return "", nil, err
 	}
+	// Closing is deferred and its error dropped: os.File writes go straight to
+	// the kernel, so once WriteString has returned the script is already where
+	// osascript will read it, and there is nothing left for Close to lose.
+	defer func() { _ = f.Close() }()
+
 	remove := func() { _ = os.Remove(f.Name()) }
 	if _, err := f.WriteString(passphraseDialog); err != nil {
-		_ = f.Close()
-		remove()
-		return "", nil, err
-	}
-	if err := f.Close(); err != nil {
 		remove()
 		return "", nil, err
 	}
