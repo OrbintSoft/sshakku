@@ -93,27 +93,6 @@ func TestStartedBy(t *testing.T) {
 	}
 }
 
-func TestGatherForeignAttribution(t *testing.T) {
-	const foreign = "/tmp/foreign.sock"
-	src := fakeSource{procs: []agent.AgentProc{
-		{PID: 200, UID: 1000, Socket: foreign},
-	}}
-	prober := fakeProber{up: map[string]bool{foreign: true}}
-	anc := fakeAncestry{
-		200: {ppid: 8, name: "ssh-agent"},
-		8:   {ppid: 1, name: "gnome-keyring-d"},
-		1:   {ppid: 0, name: "systemd"},
-	}
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000}, src, prober, anc, nil, nil, nil)
-
-	if len(r.Agents) != 1 || len(r.Agents[0].Ancestry) != 3 {
-		t.Fatalf("ancestry not populated: %+v", r.Agents)
-	}
-	if !hasFinding(r, "started by gnome-keyring-daemon") {
-		t.Errorf("findings = %v, want a foreign-attribution finding", r.Findings)
-	}
-}
-
 func TestGatherReparentedToInitCgroupFallback(t *testing.T) {
 	const foreign = "/tmp/foreign.sock"
 	src := fakeSource{procs: []agent.AgentProc{

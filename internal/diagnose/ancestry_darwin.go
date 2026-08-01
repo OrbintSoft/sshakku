@@ -59,11 +59,10 @@ func parsePS(out []byte) (int, string, bool) {
 	if err != nil {
 		return 0, "", false
 	}
-	name := string(bytes.TrimSpace(fields[1]))
-	if name == "" {
-		return 0, "", false
-	}
-	return ppid, name, true
+	// The line was trimmed before it was split, so a second field exists only
+	// when there is something in it: the len check above is the whole "no name
+	// here" case, and a further emptiness test could never fire.
+	return ppid, string(bytes.TrimSpace(fields[1])), true
 }
 
 // reparentedLabel says what can still be told about a daemon that double-forked

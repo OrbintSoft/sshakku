@@ -1,6 +1,7 @@
 package diagnose
 
 import (
+	"github.com/OrbintSoft/sshakku/internal/agent"
 	"strconv"
 	"testing"
 )
@@ -88,4 +89,53 @@ type fakeCgroup map[int]string
 func (f fakeCgroup) Cgroup(pid int) (string, bool) {
 	unit, ok := f[pid]
 	return unit, ok
+}
+
+// TestGatherForeignAttribution covers Gather naming whoever launched a foreign
+// agent (F13). It is deliberately not platform-bound: the walk and the
+// attribution are shared code, and `sshd` is a launcher both platforms' tables
+// recognise under the same name — so this runs, and covers Gather, on each.
+func TestGatherForeignAttribution(t *testing.T) {
+	const foreign = "/tmp/foreign.sock"
+	src := fakeSource{procs: []agent.AgentProc{
+		{PID: 200, UID: 1000, Socket: foreign},
+	}}
+	prober := fakeProber{up: map[string]bool{foreign: true}}
+	anc := fakeAncestry{
+		200: {ppid: 8, name: "ssh-agent"},
+		8:   {ppid: 1, name: "sshd"},
+		1:   {ppid: 0, name: "init"},
+	}
+	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000}, src, prober, anc, nil, nil, nil)
+
+	if len(r.Agents) != 1 || len(r.Agents[0].Ancestry) != 3 {
+		t.Fatalf("ancestry not populated: %+v", r.Agents)
+	}
+	if !hasFinding(r, "started by an SSH login session (sshd)") {
+		t.Errorf("findings = %v, want a foreign-attribution finding", r.Findings)
+	}
+}
+
+// TestGatherRecordsWhatTheCgroupSourceReports covers Gather storing what a
+// CgroupSource found, which is shared code and so has to be checked on every
+// platform — including the one whose real source always reports nothing.
+//
+// What is done with the value afterwards is the platform's business (Linux can
+// name a systemd unit from it, macOS has nothing comparable to name), and is
+// asserted beside each platform's own labels.
+func TestGatherRecordsWhatTheCgroupSourceReports(t *testing.T) {
+	const foreign = "/tmp/foreign.sock"
+	src := fakeSource{procs: []agent.AgentProc{{PID: 200, UID: 1000, Socket: foreign}}}
+	prober := fakeProber{up: map[string]bool{foreign: true}}
+	anc := fakeAncestry{200: {ppid: 1, name: "ssh-agent"}, 1: {ppid: 0, name: "init"}}
+	cg := fakeCgroup{200: "app-gpg-agent.service"}
+
+	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000}, src, prober, anc, cg, nil, nil)
+
+	if len(r.Agents) != 1 {
+		t.Fatalf("agents = %+v, want exactly one", r.Agents)
+	}
+	if r.Agents[0].Cgroup != "app-gpg-agent.service" {
+		t.Errorf("Cgroup = %q, want what the source reported", r.Agents[0].Cgroup)
+	}
 }

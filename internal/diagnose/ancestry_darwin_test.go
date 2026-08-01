@@ -32,6 +32,11 @@ func TestParsePS(t *testing.T) {
 		{"a header but no row", "\n", 0, "", false},
 		{"a ppid that is not a number", "notapid zsh\n", 0, "", false},
 		{"a ppid with no command after it", "501\n", 0, "", false},
+		// TrimSpace removes a trailing newline, so only a genuinely multi-line
+		// answer exercises the cut — `ps` given several pids returns one row each,
+		// and only the first is the parent asked about.
+		{"more than one row", "  1 launchd\n 501 zsh\n", 1, "launchd", true},
+		{"a ppid followed by only blanks", "501  \n", 0, "", false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
