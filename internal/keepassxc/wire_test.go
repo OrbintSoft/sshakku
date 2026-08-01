@@ -2,7 +2,9 @@ package keepassxc
 
 import (
 	"errors"
+	"strings"
 	"testing"
+	"time"
 )
 
 // These pin the parts of KeePassXC's wire format that cannot be inferred from
@@ -88,4 +90,43 @@ func TestAStaleAssociationIsReportedAsSuchHoweverItIsRefused(t *testing.T) {
 			t.Errorf("TestAssociate against a locked database = %v, want ErrDatabaseLocked", err)
 		}
 	})
+}
+
+// TestAKeyExchangeThatIsRefusedIsNotTreatedAsAgreed covers the one reply that
+// travels in the clear, and so is the one whose acceptance is stated on the
+// envelope rather than inside an encrypted message. Reading it as agreed when
+// it says otherwise would leave the client encrypting to a key the other side
+// never confirmed, and every exchange after it would fail somewhere less
+// obvious than here.
+func TestAKeyExchangeThatIsRefusedIsNotTreatedAsAgreed(t *testing.T) {
+	tests := []struct {
+		name  string
+		reply envelope
+		want  string
+	}{
+		{
+			name:  "refused outright",
+			reply: envelope{PublicKey: "irrelevant"},
+			want:  "refused",
+		},
+		{
+			name:  "accepted but naming no key to encrypt to",
+			reply: envelope{Success: "true"},
+			want:  "no public key",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newFakeServer(t)
+			s.failWith[actionChangePublicKeys] = tc.reply
+			_, err := Connect(s.dial(), 5*time.Second, 5*time.Second)
+			if err == nil {
+				t.Fatal("Connect succeeded on a key exchange that never agreed on a key")
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("Connect = %v, want it to mention %q", err, tc.want)
+			}
+		})
+	}
 }

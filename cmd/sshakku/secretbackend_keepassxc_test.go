@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"runtime"
 	"strings"
 	"testing"
@@ -54,6 +55,31 @@ func TestKeePassXCPinnedSecretServiceRouteIsHonoured(t *testing.T) {
 	}
 	if _, isNative := backend.(keys.KeePassXCBackend); isNative {
 		t.Error("pinning secret-service must not hand back the native route")
+	}
+}
+
+// TestKeePassXCSecretServiceRouteHandsOffToTheDefaultBackend states what that
+// route is: KeePassXC implements the Secret Service API itself, so reaching it
+// that way is reaching any other wallet behind that API, and the KeePassXC
+// backend must not appear.
+//
+// The platform is named rather than taken from the machine, because that route
+// exists on Linux alone: read from runtime.GOOS, this branch would be
+// unreachable — and so untested — on every other platform the product is built
+// for, which is exactly what it was.
+func TestKeePassXCSecretServiceRouteHandsOffToTheDefaultBackend(t *testing.T) {
+	settings := keepassxcSettings(config.KeePassXCRouteSecretService)
+
+	got, closeGot := newKeePassXCBackend("linux", "alice", fakeLogger{}, settings)
+	defer closeGot()
+	want, closeWant := newDefaultSecretBackend("alice", fakeLogger{}, settings)
+	defer closeWant()
+
+	if fmt.Sprintf("%T", got) != fmt.Sprintf("%T", want) {
+		t.Errorf("backend = %T, want the same %T the default route opens", got, want)
+	}
+	if _, isKeePassXC := got.(keys.KeePassXCBackend); isKeePassXC {
+		t.Error("the secret-service route opened KeePassXC's own protocol instead of the API it shares with every other wallet")
 	}
 }
 

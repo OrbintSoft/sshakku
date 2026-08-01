@@ -193,7 +193,11 @@ func (s *fakeServer) handle(conn net.Conn, req envelope) error {
 		time.Sleep(delay)
 	}
 
-	if req.Action == actionChangePublicKeys {
+	// The key exchange is answered before the failures below only when it is
+	// not one of them: it is the one frame a real KeePassXC can also refuse in
+	// the clear, and a fake that always accepted it would make that refusal
+	// impossible to test.
+	if _, refused := s.failWith[actionChangePublicKeys]; req.Action == actionChangePublicKeys && !refused {
 		return s.handleKeyExchange(conn, req)
 	}
 
