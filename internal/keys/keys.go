@@ -7,14 +7,6 @@ package keys
 
 import "time"
 
-// EnvAskpassMode marks an invocation as ssh-add's SSH_ASKPASS helper. The loader
-// sets it (to "1") in the ssh-add child environment and points SSH_ASKPASS at the
-// sshakku binary itself; the binary, seeing the marker, returns the passphrase
-// instead of dispatching a subcommand — ssh-add execs SSH_ASKPASS as a single
-// program with only the prompt as an argument, so a "sshakku askpass" command line
-// is not an option.
-const EnvAskpassMode = "SSHAKKU_ASKPASS"
-
 // EnvPassHandoffToken names the environment variable carrying the one-shot
 // passphrase-handoff token from the loader to the askpass helper — a kernel
 // keyring serial on Linux, a private Unix socket path on Darwin (see

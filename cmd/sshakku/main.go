@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/diagnose"
@@ -16,32 +17,20 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/paths"
 )
 
-// internalReadSocketTokenCmd is not a user-facing command: `doctor` execs the
-// binary under this name as a child running with another user's credentials,
+// internalReadSocketTokenCmd is not a user-facing command: `doctor` runs the
+// binary with this as its argument, as a child holding another user's credentials,
 // to read that user's per-login socket token from their own kernel keyring (a
 // keyring is only visible to the uid that owns it, unlike files, which root can
 // read regardless of owner). It is deliberately absent from usage/--help.
 const internalReadSocketTokenCmd = "__read-socket-token"
 
-// knownSubcommands lists every argv[1] value run dispatches below. main checks
-// it before trusting EnvAskpassMode: ssh always execs the SSH_ASKPASS helper
-// with just the prompt text as its one argument, never one of these exact
-// names, but askpass-env exports EnvAskpassMode into the whole login shell
-// (nn-ssh-init.sh), so it stays set for anything the user later types by
-// hand in that same shell — a real subcommand must win over it. Keep this in
-// sync with the switch in run.
-var knownSubcommands = map[string]bool{
-	"shell-init":               true,
-	"ensure-agent":             true,
-	"load-keys":                true,
-	"askpass-env":              true,
-	"doctor":                   true,
-	"forget":                   true,
-	"help":                     true,
-	"-h":                       true,
-	"--help":                   true,
-	internalReadSocketTokenCmd: true,
-}
+// askpassProgName is the name this binary answers ssh's passphrase prompts
+// under, installed beside it as a link. ssh execs its SSH_ASKPASS helper as a
+// single program with only the prompt as an argument, so a flag or a subcommand
+// cannot be passed to say what the invocation is for; the name is what says it,
+// and it is set by whoever runs the program rather than inferred from what they
+// ran it with.
+const askpassProgName = "sshakku-askpass"
 
 const usage = `sshakku — SSH agent and key shepherd
 
@@ -65,7 +54,7 @@ func main() {
 	// The process entry point: a single os.Exit around the testable dispatch,
 	// with nothing here to unit-test (a test can't observe os.Exit).
 	//coverage:ignore
-	os.Exit(dispatch(realDeps(), os.Stdout, os.Stderr, os.Args[1:], os.Getenv(keys.EnvAskpassMode) != ""))
+	os.Exit(dispatch(realDeps(), os.Stdout, os.Stderr, os.Args[0], os.Args[1:]))
 }
 
 // deps carries the process's injectable system seams so the command bodies can
@@ -138,28 +127,23 @@ func realDeps() deps {
 // body of main, split out so main stays a single os.Exit call and everything
 // here can be tested without spawning the process.
 //
-// ssh-add execs this binary as its SSH_ASKPASS program, passing only the prompt
-// as an argument and marking the call via the environment (askpassEnvSet).
-// Handle that before subcommand dispatch and return the stashed passphrase —
-// unless args actually name one of our own subcommands, which always wins (see
-// wantsAskpass).
-func dispatch(d deps, stdout, stderr io.Writer, args []string, askpassEnvSet bool) int {
-	if wantsAskpass(askpassEnvSet, args) {
+// invokedAs is the path the process was run under (argv[0]). ssh execs the
+// helper by the path it was given, and a person types the binary's own name, so
+// the two callers arrive under different names and there is nothing to work
+// out: args are a prompt to answer, or a subcommand, and never both.
+func dispatch(d deps, stdout, stderr io.Writer, invokedAs string, args []string) int {
+	if filepath.Base(invokedAs) == askpassProgName {
 		return d.askpass(stdout, args)
 	}
 	return d.run(stdout, stderr, args)
 }
 
-// wantsAskpass reports whether main should treat this invocation as ssh's
-// SSH_ASKPASS helper rather than dispatch args as a subcommand. askpassEnvSet
-// is EnvAskpassMode's presence in the environment; it alone is not enough,
-// because askpass-env exports it into the whole login shell
-// (nn-ssh-init.sh) so it stays set for anything typed by hand afterward
-// too — a real ssh invocation always execs the helper with just the prompt
-// text as its one argument, never one of our own subcommand names, so a known
-// subcommand always takes priority over the env marker.
-func wantsAskpass(askpassEnvSet bool, args []string) bool {
-	return askpassEnvSet && (len(args) == 0 || !knownSubcommands[args[0]])
+// askpassProg returns the path to hand ssh as its SSH_ASKPASS helper: the name
+// above, in the directory self was installed into. Derived from the running
+// binary rather than fixed at build time, so a copy run from anywhere reaches
+// the helper next to it and not one somewhere else on the system.
+func askpassProg(self string) string {
+	return filepath.Join(filepath.Dir(self), askpassProgName)
 }
 
 // run dispatches a subcommand and returns the process exit code. Output goes to

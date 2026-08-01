@@ -11,7 +11,7 @@ import (
 // TestAddWithAskpassRealBinaryDarwin exercises the full production path on
 // Darwin: AddWithAskpass stashes the passphrase over a private Unix socket
 // (handoff_darwin.go/handoff_socket.go), spawns a real detached ssh-add,
-// which execs the real sshakku binary as its SSH_ASKPASS helper, which
+// which execs the real askpass helper as its SSH_ASKPASS program, which
 // fetches the passphrase back over that same socket. Unlike this package's
 // Linux equivalent (keyadd_ttl_test.go), which redeems the stash directly
 // via `keyctl pipe`, there is no standalone CLI tool to bypass the sshakku
@@ -21,11 +21,7 @@ func TestAddWithAskpassRealBinaryDarwin(t *testing.T) {
 	requireRealSSHBinaries(t)
 
 	dir := shortDir(t)
-	sshakkuBin := filepath.Join(dir, "sshakku")
-	build := exec.Command("go", "build", "-o", sshakkuBin, "github.com/OrbintSoft/sshakku/cmd/sshakku")
-	if out, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build sshakku: %v: %s", err, out)
-	}
+	askpass := buildAskpassHelper(t, dir)
 
 	keyfile := filepath.Join(dir, "id_test")
 	const passphrase = "sshakku-darwin-handoff-test-passphrase"
@@ -46,7 +42,7 @@ func TestAddWithAskpassRealBinaryDarwin(t *testing.T) {
 	t.Setenv("SSH_AUTH_SOCK", sock)
 	t.Setenv("HOME", shortDir(t))
 
-	adder := ExecKeyAdder{AskpassProg: sshakkuBin}
+	adder := ExecKeyAdder{AskpassProg: askpass}
 	rc, err := adder.AddWithAskpass(keyfile, passphrase)
 	if err != nil {
 		t.Fatalf("AddWithAskpass: %v", err)

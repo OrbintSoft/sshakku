@@ -15,9 +15,10 @@ import (
 // loadKeys adds the user's ~/.ssh keys to the agent: it skips keys already loaded
 // and, for the rest, pulls each passphrase from the secret store (or prompts) and
 // hands it to ssh-add out of band. The login entrypoint calls it only in
-// interactive shells. SSH_ASKPASS points at this very binary, which ssh-add
-// re-execs to fetch the stashed passphrase. The success path is silent;
-// problems go to the session log (and stderr for a hard failure).
+// interactive shells. SSH_ASKPASS points at the askpass helper installed beside
+// this binary, which ssh-add execs to fetch the stashed passphrase. The success
+// path is silent; problems go to the session log (and stderr for a hard
+// failure).
 func (d deps) loadKeys(stderr io.Writer) int {
 	env := paths.FromOS()
 	layout := paths.Resolve(env, paths.ProbeDir).WithSocketToken(paths.SocketToken())
@@ -64,7 +65,7 @@ func (d deps) loadKeys(stderr io.Writer) int {
 		Runner:   runner,
 		Secret:   secret,
 		Prompt:   prompter,
-		Adder:    keys.ExecKeyAdder{AskpassProg: self, KeyLifetime: settings.KeyLifetime},
+		Adder:    keys.ExecKeyAdder{AskpassProg: askpassProg(self), KeyLifetime: settings.KeyLifetime},
 		Log:      log,
 		Notify:   notifier,
 		Giveup:   giveupStore,

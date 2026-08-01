@@ -46,6 +46,26 @@ const (
 // the tests count these to see how many times the user was asked.
 const ttyPromptLine = "Enter passphrase for id_test: "
 
+// buildAskpassHelper builds sshakku into dir and returns the path to hand ssh
+// as its SSH_ASKPASS program: the helper's own name, linked to the binary
+// beside it, the way an install lays the two down. The name is what tells the
+// binary that its argument is a prompt to answer rather than a command to run,
+// so handing over the binary's own path would exercise a layout no user has and
+// get a passphrase prompt answered with a usage error.
+func buildAskpassHelper(t *testing.T, dir string) string {
+	t.Helper()
+	binary := filepath.Join(dir, "sshakku")
+	build := exec.Command("go", "build", "-o", binary, "github.com/OrbintSoft/sshakku/cmd/sshakku")
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build sshakku: %v: %s", err, out)
+	}
+	helper := filepath.Join(dir, "sshakku-askpass")
+	if err := os.Symlink(binary, helper); err != nil {
+		t.Fatalf("link the askpass helper beside sshakku: %v", err)
+	}
+	return helper
+}
+
 // TestLoadKeysFirstTimePromptRealTerminal drives the first-time passphrase
 // prompt over a real pseudo-terminal: an empty vault, no graphical prompter, a
 // real ssh-agent, and the real TTYPrompter reading from a genuine controlling
@@ -173,11 +193,7 @@ func setupTTYPromptTest(t *testing.T, passphrase string) ttyPromptEnv {
 		t.Fatalf("ssh-keygen: %v: %s", err, out)
 	}
 
-	askpass := filepath.Join(dir, "sshakku")
-	build := exec.Command("go", "build", "-o", askpass, "github.com/OrbintSoft/sshakku/cmd/sshakku")
-	if out, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build sshakku: %v: %s", err, out)
-	}
+	askpass := buildAskpassHelper(t, dir)
 
 	sock := filepath.Join(dir, "agent.sock")
 	agentCmd := exec.Command("ssh-agent", "-D", "-a", sock)

@@ -28,11 +28,19 @@ cd "$repo_root"
 
 make install PREFIX="$prefix" DESTDIR="$destdir"
 test -x "$destdir$prefix/bin/sshakku"
+# The askpass helper is a link to the binary beside it: -L that it is a link at
+# all, -x that it resolves to something runnable, since a link made relative to
+# the wrong directory would still be a link.
+test -L "$destdir$prefix/bin/sshakku-askpass"
+test -x "$destdir$prefix/bin/sshakku-askpass"
 test -x "$rendered"
 grep -qF ". \"$rendered\"" "$destdir/etc/zprofile"
 
 make uninstall PREFIX="$prefix" DESTDIR="$destdir"
 test ! -e "$destdir$prefix/bin/sshakku"
+# -L rather than -e: -e follows the link, so one left pointing at the binary
+# just removed would report itself absent while still sitting there.
+test ! -L "$destdir$prefix/bin/sshakku-askpass"
 test ! -e "$rendered"
 if grep -q sshakku "$destdir/etc/zprofile"; then
 	echo "zprofile still wired after uninstall" >&2
@@ -41,6 +49,8 @@ fi
 
 make install-user USER_HOME="$home"
 test -x "$home/.local/bin/sshakku"
+test -L "$home/.local/bin/sshakku-askpass"
+test -x "$home/.local/bin/sshakku-askpass"
 grep -qF sshakku "$home/.zprofile"
 # install-user also wires the per-user bindir onto PATH (default WIRE_PATH=1),
 # since ~/.local/bin isn't on the macOS default PATH.
@@ -48,6 +58,7 @@ grep -qF "export PATH=\"$home/.local/bin:" "$home/.zprofile"
 
 make uninstall-user USER_HOME="$home"
 test ! -e "$home/.local/bin/sshakku"
+test ! -L "$home/.local/bin/sshakku-askpass"
 if [ -f "$home/.zprofile" ] && grep -q sshakku "$home/.zprofile"; then
 	echo "per-user zprofile still wired after uninstall" >&2
 	exit 1

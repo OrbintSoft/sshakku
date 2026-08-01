@@ -185,45 +185,42 @@ func TestCrossUserGuard(t *testing.T) {
 	}
 }
 
-// TestAskpassExports pins the exported environment verbatim. All three lines are
+// TestAskpassExports pins the exported environment verbatim. Both lines are
 // load-bearing, and losing one breaks the wallet refill without breaking
-// anything a coarser assertion would notice: SSH_ASKPASS names the helper,
-// REQUIRE=force is what makes ssh consult it at all in a session with no
-// DISPLAY, and the marker is how the helper knows its argv is a prompt to answer.
+// anything a coarser assertion would notice: SSH_ASKPASS names the helper
+// beside the binary rather than the binary itself, and REQUIRE=force is what
+// makes ssh consult it at all in a session with no DISPLAY.
 func TestAskpassExports(t *testing.T) {
 	got := askpassExports("/usr/local/bin/sshakku")
-	want := "export SSH_ASKPASS='/usr/local/bin/sshakku'\n" +
-		"export SSH_ASKPASS_REQUIRE=force\n" +
-		"export SSHAKKU_ASKPASS=1\n"
+	want := "export SSH_ASKPASS='/usr/local/bin/sshakku-askpass'\n" +
+		"export SSH_ASKPASS_REQUIRE=force\n"
 	if got != want {
 		t.Errorf("askpassExports = %q, want %q", got, want)
 	}
 }
 
-// TestWantsAskpass guards against askpass-env's shell-wide export of
-// EnvAskpassMode shadowing every later subcommand typed by hand in that same
-// shell (e.g. `sshakku doctor` silently turning into an askpass prompt).
-func TestWantsAskpass(t *testing.T) {
+// TestDispatchRoutesOnTheNameItWasRunAs covers the one thing that decides
+// whether args are a prompt to answer or a command to run. ssh execs the helper
+// by the path it was given, which is why a bare name and an absolute path must
+// both be recognised; everything else is somebody running the binary itself,
+// including the two names it is reached under for its own purposes.
+func TestDispatchRoutesOnTheNameItWasRunAs(t *testing.T) {
 	tests := []struct {
-		name          string
-		askpassEnvSet bool
-		args          []string
-		want          bool
+		invokedAs string
+		want      bool
 	}{
-		{"env unset, real prompt text", false, []string{"Enter passphrase for key '/home/u/.ssh/id_ed25519': "}, false},
-		{"env set, real prompt text", true, []string{"Enter passphrase for key '/home/u/.ssh/id_ed25519': "}, true},
-		{"env set, no args", true, nil, true},
-		{"env set, doctor", true, []string{"doctor"}, false},
-		{"env set, doctor with flags", true, []string{"doctor", "--user", "stefano"}, false},
-		{"env set, forget", true, []string{"forget", "--all"}, false},
-		{"env set, help", true, []string{"help"}, false},
-		{"env set, unknown command", true, []string{"bogus"}, true},
-		{"env unset, doctor", false, []string{"doctor"}, false},
+		{"sshakku-askpass", true},
+		{"/usr/local/bin/sshakku-askpass", true},
+		{"./sshakku-askpass", true},
+		{"sshakku", false},
+		{"/usr/local/bin/sshakku", false},
+		{"/tmp/go-build123/b001/sshakku.test", false},
+		{"sshakku-askpass-backup", false},
 	}
 	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := wantsAskpass(tc.askpassEnvSet, tc.args); got != tc.want {
-				t.Errorf("wantsAskpass(%v, %q) = %v, want %v", tc.askpassEnvSet, tc.args, got, tc.want)
+		t.Run(tc.invokedAs, func(t *testing.T) {
+			if got := filepath.Base(tc.invokedAs) == askpassProgName; got != tc.want {
+				t.Errorf("invoked as %q: askpass = %v, want %v", tc.invokedAs, got, tc.want)
 			}
 		})
 	}
@@ -354,14 +351,14 @@ func TestStderrNotifier(t *testing.T) {
 	}
 }
 
-// TestDispatchRoutesToRun covers dispatch's non-askpass branch: with the askpass
-// env unset, it must fall through to normal subcommand dispatch. The askpass
+// TestDispatchRoutesToRun covers dispatch's non-askpass branch: run under its
+// own name, it must fall through to normal subcommand dispatch. The askpass
 // branch is exercised via TestAskpassHandoff.
 func TestDispatchRoutesToRun(t *testing.T) {
-	if got := dispatch(realDeps(), io.Discard, io.Discard, []string{"help"}, false); got != 0 {
+	if got := dispatch(realDeps(), io.Discard, io.Discard, "/usr/local/bin/sshakku", []string{"help"}); got != 0 {
 		t.Errorf("dispatch(help) = %d, want 0", got)
 	}
-	if got := dispatch(realDeps(), io.Discard, io.Discard, nil, false); got != 2 {
+	if got := dispatch(realDeps(), io.Discard, io.Discard, "/usr/local/bin/sshakku", nil); got != 2 {
 		t.Errorf("dispatch(no args) = %d, want 2 (usage)", got)
 	}
 }

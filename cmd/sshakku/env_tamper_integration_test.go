@@ -4,7 +4,6 @@ package main
 
 import (
 	"bytes"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -60,22 +59,22 @@ func TestTamperedEnvVarsHandledSafely(t *testing.T) {
 		}
 	})
 
-	// SSHAKKU_ASKPASS lingers in every login shell once askpass-env runs, so a
-	// subcommand typed by hand afterwards must still dispatch as itself and
-	// never be hijacked into the SSH_ASKPASS broker by the leftover marker.
-	t.Run("SSHAKKU_ASKPASS does not hijack a real subcommand", func(t *testing.T) {
+	// SSHAKKU_ASKPASS is set in the login shells of installations that wired
+	// themselves in before SSHakku stopped reading it, and an environment
+	// SSHakku does not read must not be able to change what it does: a command
+	// typed in such a shell dispatches as itself.
+	t.Run("a leftover SSHAKKU_ASKPASS marker changes nothing", func(t *testing.T) {
 		tempRuntimeEnv(t)
-		t.Setenv(keys.EnvAskpassMode, "1")
+		t.Setenv("SSHAKKU_ASKPASS", "1")
 
 		var stdout, stderr bytes.Buffer
-		askpassEnvSet := os.Getenv(keys.EnvAskpassMode) != ""
-		code := dispatch(realDeps(), &stdout, &stderr, []string{"help"}, askpassEnvSet)
+		code := dispatch(realDeps(), &stdout, &stderr, "/usr/local/bin/sshakku", []string{"help"})
 
 		if code != 0 {
 			t.Fatalf("dispatch(help) exit = %d, want 0 (stderr: %s)", code, stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "usage: sshakku") {
-			t.Errorf("help output did not run; the askpass marker hijacked dispatch. stdout: %s", stdout.String())
+			t.Errorf("help output did not run; something still reads the marker. stdout: %s", stdout.String())
 		}
 	})
 
