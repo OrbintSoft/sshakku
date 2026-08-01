@@ -56,6 +56,13 @@ GO ?= go
 GO_MAIN = ./cmd/sshakku
 GO_BIN = bin/sshakku
 
+# The name ssh is pointed at to have a passphrase prompt answered. It is
+# installed as a link to sshakku, which serves that role when it is run under
+# this name, so there is one binary and no second program to keep in step. The
+# link is made relative, which keeps it valid both inside a DESTDIR staging
+# tree and on the system it is eventually unpacked onto.
+SSHAKKU_ASKPASS_NAME = sshakku-askpass
+
 ifeq ($(UNAME),Linux)
 SSH_INIT_INSTALL_SCRIPT = nn-ssh-init.sh
 INSTALL_PATH = $(DESTDIR)$(BINDIR)
@@ -70,6 +77,8 @@ SSHAKKU_RUNTIME_PATH = $(BINDIR)/sshakku
 install: build
 	@echo "Installing $(GO_BIN) to $(SSHAKKU_INSTALL_PATH)"
 	@install -Dm755 $(GO_BIN) $(SSHAKKU_INSTALL_PATH)
+	@echo "Linking $(INSTALL_PATH)/$(SSHAKKU_ASKPASS_NAME) to sshakku"
+	@ln -sf sshakku $(INSTALL_PATH)/$(SSHAKKU_ASKPASS_NAME)
 	@echo "Installing $(SSH_INIT_INSTALL_SCRIPT) to $(SSH_INIT_INSTALL_PATH)"
 	@install -Dm755 $(SSH_INIT_INSTALL_SCRIPT) $(SSH_INIT_INSTALL_PATH)
 	@echo "Setting binary paths in $(SSH_INIT_INSTALL_PATH)"
@@ -90,6 +99,8 @@ endif
 uninstall:
 	@echo "Uninstalling $(SSHAKKU_INSTALL_PATH)"
 	@rm -f $(SSHAKKU_INSTALL_PATH)
+	@echo "Uninstalling $(INSTALL_PATH)/$(SSHAKKU_ASKPASS_NAME)"
+	@rm -f $(INSTALL_PATH)/$(SSHAKKU_ASKPASS_NAME)
 	@echo "Uninstalling $(SSH_INIT_INSTALL_PATH)"
 	@rm -f $(SSH_INIT_INSTALL_PATH)
 	@./shell-hook-lib.sh remove-drop-in "$(SSH_INIT_BASHRC_DROPIN_PATH)"
@@ -103,6 +114,8 @@ uninstall:
 install-user: build
 	@echo "Installing $(GO_BIN) to $(USER_BINDIR)/sshakku"
 	@install -Dm755 $(GO_BIN) $(USER_BINDIR)/sshakku
+	@echo "Linking $(USER_BINDIR)/$(SSHAKKU_ASKPASS_NAME) to sshakku"
+	@ln -sf sshakku $(USER_BINDIR)/$(SSHAKKU_ASKPASS_NAME)
 	@echo "Wiring the per-user login hook"
 	@./install-user-hook.sh install "$(USER_HOME)" "$(USER_BINDIR)/sshakku" "$(NN)" "$(USER_WIRE_RC)" "$(USER_SHELL)" "$(WIRE_PATH)"
 	@echo "Installation complete."
@@ -110,6 +123,8 @@ install-user: build
 uninstall-user:
 	@echo "Uninstalling $(USER_BINDIR)/sshakku"
 	@rm -f $(USER_BINDIR)/sshakku
+	@echo "Uninstalling $(USER_BINDIR)/$(SSHAKKU_ASKPASS_NAME)"
+	@rm -f $(USER_BINDIR)/$(SSHAKKU_ASKPASS_NAME)
 	@echo "Removing the per-user login hook"
 	@./install-user-hook.sh uninstall "$(USER_HOME)" "$(NN)" "$(USER_SHELL)"
 	@echo "Uninstallation complete."
@@ -131,6 +146,8 @@ install: build
 	@echo "Installing $(GO_BIN) to $(SSHAKKU_INSTALL_PATH)"
 	@mkdir -p "$(dir $(SSHAKKU_INSTALL_PATH))"
 	@install -m755 $(GO_BIN) $(SSHAKKU_INSTALL_PATH)
+	@echo "Linking $(INSTALL_PATH)/$(SSHAKKU_ASKPASS_NAME) to sshakku"
+	@ln -sf sshakku $(INSTALL_PATH)/$(SSHAKKU_ASKPASS_NAME)
 	@echo "Rendering $(SSH_INIT_INSTALL_SCRIPT) to $(SSH_INIT_HOOK_RENDERED_PATH)"
 	@mkdir -p "$(dir $(SSH_INIT_HOOK_RENDERED_PATH))"
 	@install -m755 $(SSH_INIT_INSTALL_SCRIPT) $(SSH_INIT_HOOK_RENDERED_PATH)
@@ -148,6 +165,8 @@ endif
 uninstall:
 	@echo "Uninstalling $(SSHAKKU_INSTALL_PATH)"
 	@rm -f $(SSHAKKU_INSTALL_PATH)
+	@echo "Uninstalling $(INSTALL_PATH)/$(SSHAKKU_ASKPASS_NAME)"
+	@rm -f $(INSTALL_PATH)/$(SSHAKKU_ASKPASS_NAME)
 	@echo "Removing $(SSH_INIT_HOOK_RENDERED_PATH)"
 	@rm -f $(SSH_INIT_HOOK_RENDERED_PATH)
 	@rmdir "$(dir $(SSH_INIT_HOOK_RENDERED_PATH))" 2>/dev/null || true
@@ -167,6 +186,8 @@ install-user: build
 	@echo "Installing $(GO_BIN) to $(USER_BINDIR)/sshakku"
 	@mkdir -p "$(USER_BINDIR)"
 	@install -m755 $(GO_BIN) $(USER_BINDIR)/sshakku
+	@echo "Linking $(USER_BINDIR)/$(SSHAKKU_ASKPASS_NAME) to sshakku"
+	@ln -sf sshakku $(USER_BINDIR)/$(SSHAKKU_ASKPASS_NAME)
 	@echo "Wiring the per-user login hook"
 	@./install-user-hook.sh install "$(USER_HOME)" "$(USER_BINDIR)/sshakku" "$(NN)" "$(USER_WIRE_RC)" "$(USER_SHELL)" "$(WIRE_PATH)"
 	@echo "Installation complete."
@@ -174,6 +195,8 @@ install-user: build
 uninstall-user:
 	@echo "Uninstalling $(USER_BINDIR)/sshakku"
 	@rm -f $(USER_BINDIR)/sshakku
+	@echo "Uninstalling $(USER_BINDIR)/$(SSHAKKU_ASKPASS_NAME)"
+	@rm -f $(USER_BINDIR)/$(SSHAKKU_ASKPASS_NAME)
 	@echo "Removing the per-user login hook"
 	@./install-user-hook.sh uninstall "$(USER_HOME)" "$(NN)" "$(USER_SHELL)"
 	@echo "Uninstallation complete."
@@ -236,6 +259,7 @@ print-paths:
 	@echo "BINDIR: $(BINDIR)"
 	@echo "DESTDIR: $(DESTDIR)"
 	@echo "SSHAKKU_INSTALL_PATH: $(SSHAKKU_INSTALL_PATH)"
+	@echo "SSHAKKU_ASKPASS_INSTALL_PATH: $(INSTALL_PATH)/$(SSHAKKU_ASKPASS_NAME)"
 	@echo "SSHAKKU_RUNTIME_PATH: $(SSHAKKU_RUNTIME_PATH)"
 	@echo "SSH_INIT_INSTALL_PATH: $(SSH_INIT_INSTALL_PATH)"
 	@echo "USER_HOME: $(USER_HOME)"

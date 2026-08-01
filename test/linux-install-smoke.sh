@@ -37,11 +37,19 @@ sw_hook="$sw_destdir/etc/profile.d/001-ssh-init.sh"
 
 make install PREFIX="$sw_prefix" DESTDIR="$sw_destdir"
 test -x "$sw_destdir$sw_prefix/bin/sshakku"
+# The askpass helper is a link to the binary beside it: -L that it is a link at
+# all, -x that it resolves to something runnable, since a link made relative to
+# the wrong directory would still be a link.
+test -L "$sw_destdir$sw_prefix/bin/sshakku-askpass"
+test -x "$sw_destdir$sw_prefix/bin/sshakku-askpass"
 test -x "$sw_hook"
 grep -qF "$sw_runtime_bin" "$sw_hook"
 
 make uninstall PREFIX="$sw_prefix" DESTDIR="$sw_destdir"
 test ! -e "$sw_destdir$sw_prefix/bin/sshakku"
+# -L rather than -e: -e follows the link, so one left pointing at the binary
+# just removed would report itself absent while still sitting there.
+test ! -L "$sw_destdir$sw_prefix/bin/sshakku-askpass"
 test ! -e "$sw_hook"
 
 # ---------------------------------------------------------------------------
@@ -97,12 +105,15 @@ user_hook="$home/.local/share/sshakku/shell-hook.sh"
 
 make install-user USER_HOME="$home"
 test -x "$home/.local/bin/sshakku"
+test -L "$home/.local/bin/sshakku-askpass"
+test -x "$home/.local/bin/sshakku-askpass"
 test -x "$user_hook"
 grep -qF "$user_hook" "$profile"
 grep -qF "export PATH=\"$home/.local/bin:" "$profile"
 
 make uninstall-user USER_HOME="$home"
 test ! -e "$home/.local/bin/sshakku"
+test ! -L "$home/.local/bin/sshakku-askpass"
 test ! -e "$user_hook"
 if [ -f "$profile" ] && grep -q sshakku "$profile"; then
 	echo "per-user .bash_profile still wired after uninstall" >&2
