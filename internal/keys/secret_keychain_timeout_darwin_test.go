@@ -3,6 +3,7 @@
 package keys
 
 import (
+	"errors"
 	"testing"
 	"time"
 )
@@ -59,15 +60,21 @@ func TestKeychainGivesUpOnAKeychainThatNeverAnswers(t *testing.T) {
 	}
 	for _, op := range ops {
 		t.Run(op.name, func(t *testing.T) {
-			b := &KeychainBackend{Client: newBlockingKeychainClient(t), Account: "alice"}
+			b := &KeychainBackend{
+				Client:  newBlockingKeychainClient(t),
+				Account: "alice",
+				Timeout: 100 * time.Millisecond,
+			}
 
 			done := make(chan error, 1)
 			go func() { done <- op.call(b) }()
 
+			// Twenty times the budget: what is being judged is that the wait
+			// ends at all, not how punctually.
 			select {
 			case err := <-done:
-				if err == nil {
-					t.Fatalf("%s reported success; a keychain that never answered has done nothing", op.name)
+				if !errors.Is(err, ErrTimedOut) {
+					t.Fatalf("%s = %v; a keychain that never answered must be reported as not having answered", op.name, err)
 				}
 			case <-time.After(2 * time.Second):
 				t.Fatalf("%s never returned: a keychain that neither answers nor fails holds the shell for as long as it likes", op.name)
