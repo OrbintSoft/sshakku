@@ -165,27 +165,26 @@ appending. See `docs/THREAT-MODEL.md` for the threat model and the June 2026 inc
     not: "unit tests pass, the feature was not run end to end" is a useful,
     honest statement; "verified" without a run is not.
 
-26. **Never claim a capability by negation.** A build tag that *provides* a
-    platform's feature is named after the platform that has it (`_darwin.go`,
-    `_linux.go`) — never after the absence of another (`_other.go`,
-    `//go:build !linux`), because a negation silently claims every platform it
-    does not exclude. `//go:build !linux` on the wallet table offered the macOS
-    Keychain to FreeBSD and to Windows, which have none, so the wrong default
-    arrived quietly instead of failing to build.
+26. **Every platform-specific file names its platform.** A file that is only
+    for one operating system carries that system's name (`_darwin.go`,
+    `_linux.go`) — never a negation of another (`_other.go`, `//go:build
+    !linux`), and this holds whether the file *provides* the platform's feature
+    or merely reports it absent. A negation claims every platform it does not
+    exclude: `!linux` on the wallet table offered the macOS Keychain to FreeBSD
+    and Windows, which have none, so the wrong default arrived quietly instead
+    of the build failing; `!linux` on a do-nothing stub is milder but still
+    says "I know what to do on Windows", which is untrue. One rule with no
+    exceptions is the one that cannot be applied wrongly.
 
-    The mirror image is correct and stays: a tag that reports a capability
-    **absent** may be a negation, because the absence really is what every other
-    platform has in common — `//go:build !linux` on a stub whose every method
-    answers "no kernel keyring here" is true wherever it compiles.
-
-    So: negation for "this is missing", the platform's own name for "this is
-    how it works here". If no tag then covers the remainder, that is the right
-    outcome — this project targets Linux and macOS, and a third platform failing
-    to build says so out loud, where a wrong default would not. Applies to test
-    files too.
+    If no file then covers a platform, that is the answer, not a gap to paper
+    over: this project targets Linux and macOS, and a third platform failing to
+    build says so out loud where a silent no-op would not. Applies to test files
+    too, and to knowledge as much as to code — a parser for another system's
+    command output is that system's file, even though it is only bytes.
 
     The cost is real: a tagged branch cannot be exercised from the other
     platform (see Rule 20). Contain it by putting only the *data* behind the tag
     — the table of what this platform has — and keeping the logic that reads it
     platform-neutral, taking that table as an argument, so both answers stay
-    checkable from either machine.
+    checkable from either machine. Where that is not possible, move the test
+    with the code so the other platform's job still covers it.

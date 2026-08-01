@@ -1,7 +1,6 @@
 package main
 
 import (
-	"os"
 	"runtime"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
@@ -50,16 +49,16 @@ func newSecretBackend(user string, log keys.Logger, settings config.Settings) (k
 // even where the SSH key prompt would just add the key on the terminal
 // directly instead.
 type walletPasswordPrompter struct {
-	kdialog keys.KDialogPrompter
-	gui     bool
+	// graphical is the platform's dialog, or nil where this build has none.
+	graphical keys.Prompter
 }
 
 func (p walletPasswordPrompter) Prompt(keyname string) (string, error) {
-	if p.gui {
-		return p.kdialog.Prompt(keyname)
+	if p.graphical != nil {
+		return p.graphical.Prompt(keyname)
 	}
 	// Terminal fallback: reaches the real controlling terminal, so it cannot run
-	// in a unit test; the GUI branch above is unit-tested.
+	// in a unit test; the graphical branch above is unit-tested.
 	//coverage:ignore
 	return ttyPrompter{}.Prompt("Enter "+keyname, true)
 }
@@ -67,19 +66,11 @@ func (p walletPasswordPrompter) Prompt(keyname string) (string, error) {
 func (walletPasswordPrompter) Available() bool { return true }
 
 func newWalletPasswordPrompter(settings config.Settings) keys.Prompter {
-	runner := keys.ExecRunner{Timeout: settings.CommandTimeout}
-	kdialog := keys.KDialogPrompter{Runner: runner, Timeout: settings.InteractiveTimeout}
-	return walletPasswordPrompter{kdialog: kdialog, gui: detectGUIAvailable()}
+	return walletPasswordPrompter{graphical: newGraphicalPrompter(settings)}
 }
 
 // detectGUIAvailable reports whether a graphical passphrase prompt can be shown
 // in this environment, by the same test askpassEnv and doctor's askpass finding
-// both rely on: a reachable display server and an installed prompter.
-func detectGUIAvailable() bool {
-	runner := keys.ExecRunner{}
-	guiEnv := keys.GUIEnv{
-		WaylandDisplay: os.Getenv("WAYLAND_DISPLAY"),
-		Display:        os.Getenv("DISPLAY"),
-	}
-	return keys.GUIAvailable(guiEnv, runner, keys.KDialogPrompter{Runner: runner})
-}
+// both rely on. What counts as a usable graphical session is the platform's own
+// answer — see newGraphicalPrompter.
+func detectGUIAvailable() bool { return newGraphicalPrompter(config.Settings{}) != nil }

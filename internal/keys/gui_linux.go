@@ -1,6 +1,10 @@
+//go:build linux
+
 package keys
 
-// GUIEnv is the subset of the environment that GUI detection reads.
+// GUIEnv is the subset of the environment that GUI detection reads. Both
+// variables are freedesktop display-server conventions, which is why this
+// lives on the Linux side: no macOS session advertises itself this way.
 type GUIEnv struct {
 	WaylandDisplay string // $WAYLAND_DISPLAY
 	Display        string // $DISPLAY
