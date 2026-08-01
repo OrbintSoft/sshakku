@@ -310,6 +310,60 @@ seed_vault() {
 	esac
 }
 
+# seed_vault_needing_approval stores passphrase the way an item ends up when
+# nothing has said which programs may read it: on darwin, `security
+# add-generic-password` without -A leaves the item's access list naming only
+# the program that wrote it, so any later access by another one has to be
+# authorised by a person.
+#
+# Where that authorisation can be asked for, the access waits for it. Where it
+# cannot — a machine with no interactive GUI session for the dialog to appear
+# in, which is every hosted runner — the access fails instead. So this seeds an
+# entry the caller is not entitled to, not an entry the caller will wait on.
+#
+# It is the counterpart of seed_vault, which passes -A precisely to avoid this:
+# a fixture that has to be readable is seeded that way on purpose. A test that
+# wants the waiting to happen asks for it explicitly, here.
+seed_vault_needing_approval() {
+	local keyname="$1" passphrase="$2"
+	case "$OSTYPE" in
+	darwin*)
+		bounded 20 security add-generic-password -U \
+			-s "SSH-Key-${keyname}" -a "$USER" -w "$passphrase" \
+			"$TEST_KEYCHAIN"
+		;;
+	*)
+		skip "the store this suite uses off darwin is a file the fixture writes, which has no authorisation step for an access to wait on"
+		;;
+	esac
+}
+
+# refute_vault_entry fails unless keyname's entry is absent from the store
+# sshakku actually writes to on this platform.
+#
+# The darwin check reads attributes only, never the secret: `find-generic-password`
+# without -w answers whether the item exists without opening it, so this can tell
+# a deleted entry from a surviving one even when reading the surviving one would
+# need someone's permission.
+refute_vault_entry() {
+	local keyname="$1"
+	case "$OSTYPE" in
+	darwin*)
+		if bounded 20 security find-generic-password \
+			-s "SSH-Key-${keyname}" -a "$USER" "$TEST_KEYCHAIN" >/dev/null 2>&1; then
+			echo "the keychain still holds SSH-Key-${keyname}" >&2
+			return 1
+		fi
+		;;
+	*)
+		if [ -e "$SSHAKKU_TEST_VAULT/SSH-Key-${keyname}-${USER}" ]; then
+			echo "the vault still holds SSH-Key-${keyname}" >&2
+			return 1
+		fi
+		;;
+	esac
+}
+
 # new_test_key generates a throwaway ed25519 key named keyname under
 # $HOME/.ssh, encrypted with passphrase.
 new_test_key() {

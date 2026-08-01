@@ -1189,11 +1189,39 @@ not rediscovered one at a time.
    documented flag for.
 2. **Nothing bounds the keychain.** `SecItemCopyMatching` is a synchronous cgo
    call with no timeout, context or cancellation, so on macOS's default backend
-   there is no deadline at all. F21 does not cover it either: it promises that
-   no *program* SSHakku runs can hold the shell up, and the keychain is not a
-   program. Decide whether F21 should be about anything SSHakku waits on rather
-   than only about programs — if so the wording changes and the gap becomes a
-   stated defect — and give the call a deadline it can be held to.
+   there is no deadline at all. **Decided 2026-08-01**: F21 is about anything
+   SSHakku waits on, not only about programs it runs, so the gap is now a stated
+   violation of it rather than a case the promise never reached. What remains is
+   to make the product keep the promise.
+
+   The gap is read off the code; no observed symptom motivates it. An earlier
+   note here guessed that a report of `sshakku forget` not returning on a Mac
+   was this same defect from the other side, with the keychain waiting on an
+   authorization nobody grants. **That guess was wrong**, and running the
+   product is what disproved it: on a real Mac `sshakku doctor --test-backend`
+   stores, reads back and deletes its own keychain entry without asking anyone
+   anything. Items SSHakku creates need no approval, and the report turned out
+   to be two unrelated defects (items 4 and 5 below).
+
+   Note also what cannot be verified where: making Security.framework wait
+   needs an interactive GUI session for SecurityAgent to display in, and a
+   hosted macOS runner has none — it fails such a call instead of blocking. The
+   waiting keychain is therefore not reproducible in CI at all, on any runner
+   this project can reach.
+4. **A mistyped command asks for a secret instead of failing.** `SSHAKKU_ASKPASS`
+   is exported into the whole login shell, and any argument that is not a known
+   subcommand is taken for an ssh prompt. So `sshakku --forget` in a wired shell
+   prints `--forget` as a prompt, reads a line from the terminal with echo off,
+   and writes what was typed back to stdout — where a user expected "unknown
+   command". Not macOS-specific. **Decided 2026-08-01**: the guess goes away
+   rather than getting better — ssh is to exec an askpass program of its own, so
+   `sshakku` never has to infer what it is being run as. Needs a feature stating
+   the promise first, then a red test, then the split.
+5. **`doctor --test-backend` names a wallet it is not testing.** It prints the
+   configured backend name, which off Linux is still the default
+   `secret-service` — a backend macOS does not have — while actually probing the
+   keychain that `newSecretBackend` resolved to. The probe is real; the name on
+   it is not. Violates F25.
 3. **The CLI backends are untested on macOS.** 1Password and Bitwarden are
    supported on both platforms, but the real-account jobs run on
    `ubuntu-latest` only, so nothing exercises them where the rest of the
