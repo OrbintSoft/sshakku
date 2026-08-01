@@ -1,3 +1,5 @@
+//go:build linux
+
 package keys
 
 import (
@@ -46,4 +48,11 @@ func TestKDialogAvailable(t *testing.T) {
 	if missing.Available() {
 		t.Fatal("Available = true, want false when kdialog is absent")
 	}
+}
+
+// TestKDialogAvailableDefaultLookPath covers Available's nil-lookPath branch,
+// which falls back to the real os/exec PATH lookup. The result depends on
+// whether kdialog happens to be installed; only the branch matters here.
+func TestKDialogAvailableDefaultLookPath(t *testing.T) {
+	_ = KDialogPrompter{}.Available()
 }

@@ -7,15 +7,6 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/keys"
 )
 
-// fakeRunner returns a canned result for any command, so a prompter can be
-// exercised without launching a real dialog binary.
-type fakeRunner struct {
-	res keys.Result
-	err error
-}
-
-func (f fakeRunner) Run(keys.Cmd) (keys.Result, error) { return f.res, f.err }
-
 // TestNewSecretBackend covers the CLI-backed backend branches, whose
 // construction is pure (no D-Bus, no subprocess): the returned value has the
 // expected concrete type and fields, and the cleanup func is always callable.

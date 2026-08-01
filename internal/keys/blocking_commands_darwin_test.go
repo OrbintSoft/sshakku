@@ -4,6 +4,10 @@ package keys
 
 import "time"
 
+// platformBlockingTools names no extra program: what macOS adds to the wallets
+// every platform shares is the Keychain, which is not a program at all.
+func platformBlockingTools() []string { return nil }
+
 // platformBlockingCases adds nothing on macOS: the wallet this platform uses by
 // default is the Keychain, which SSHakku calls into in-process rather than by
 // running a program, so there is no command here for this test to block.

@@ -4,6 +4,11 @@ package keys
 
 import "time"
 
+// platformBlockingTools names the programs only a Linux system runs.
+func platformBlockingTools() []string {
+	return []string{secretToolBin, kdialogBin, "xset"}
+}
+
 // platformBlockingCases adds the programs only a Linux system reaches: the
 // libsecret CLI its default wallet is read through, and the X11/KDE pieces the
 // graphical passphrase prompt is made of.

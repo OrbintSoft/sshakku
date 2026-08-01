@@ -14,7 +14,8 @@ import (
 // quiet, a CLI waiting on a network that has gone away.
 //
 // PATH is the whole seam — every one of these is resolved by name — so nothing
-// about the components under test is replaced.
+// about the components under test is replaced. Which programs those are differs
+// per platform, so each names its own (platformBlockingTools).
 func blockingTools(t *testing.T) {
 	t.Helper()
 	src, err := os.ReadFile(filepath.Join("..", "..", "test", "bats", "fixtures", "blocking-secret-tool"))
@@ -22,7 +23,8 @@ func blockingTools(t *testing.T) {
 		t.Fatalf("read the blocking tool fixture: %v", err)
 	}
 	dir := t.TempDir()
-	for _, bin := range []string{secretToolBin, bitwardenBin, onePasswordBin, kdialogBin, "xset"} {
+	tools := append([]string{bitwardenBin, onePasswordBin}, platformBlockingTools()...)
+	for _, bin := range tools {
 		if err := os.WriteFile(filepath.Join(dir, bin), src, 0o755); err != nil {
 			t.Fatalf("install the blocking %s: %v", bin, err)
 		}

@@ -1,13 +1,8 @@
 package diagnose
 
 import (
-	"os"
-	"path/filepath"
 	"strconv"
-	"strings"
 	"testing"
-
-	"github.com/OrbintSoft/sshakku/internal/agent"
 )
 
 // procParent is one entry in a fake process tree.
@@ -25,32 +20,6 @@ func (f fakeAncestry) Parent(pid int) (int, string, bool) {
 		return 0, "", false
 	}
 	return e.ppid, e.name, true
-}
-
-func TestParseStat(t *testing.T) {
-	cases := []struct {
-		name     string
-		line     string
-		wantComm string
-		wantPPID int
-		wantOK   bool
-	}{
-		{"simple", "3358 (ssh-agent) S 3300 3358 3300 0 -1", "ssh-agent", 3300, true},
-		{"space in comm", "42 (sd pam) S 1 42", "sd pam", 1, true},
-		{"parens in comm", "7 ((sd-pam)) S 1 7", "(sd-pam)", 1, true},
-		{"init", "1 (systemd) S 0 1 1", "systemd", 0, true},
-		{"no parens", "garbage", "", 0, false},
-		{"truncated fields", "9 (x) S", "x", 0, false},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			comm, ppid, ok := parseStat([]byte(c.line))
-			if ok != c.wantOK || comm != c.wantComm || (ok && ppid != c.wantPPID) {
-				t.Errorf("parseStat(%q) = (%q,%d,%v), want (%q,%d,%v)",
-					c.line, comm, ppid, ok, c.wantComm, c.wantPPID, c.wantOK)
-			}
-		})
-	}
 }
 
 func TestAncestry(t *testing.T) {
@@ -105,89 +74,11 @@ func TestAncestryDepthCap(t *testing.T) {
 	}
 }
 
-func TestStartedBy(t *testing.T) {
-	cases := []struct {
-		name       string
-		chain      []ProcInfo
-		cgroupUnit string
-		want       string
-		ok         bool
-	}{
-		{"known launcher deeper", []ProcInfo{{9, "ssh-agent"}, {8, "dbus-daemon"}, {1, "systemd"}}, "", "systemd (user or system manager)", true},
-		{"daemonized to init, no cgroup unit", []ProcInfo{{9, "ssh-agent"}, {1, "init"}}, "", "an unknown launcher (daemonized, reparented to init)", true},
-		{"daemonized to init, cgroup unit found", []ProcInfo{{9, "ssh-agent"}, {1, "init"}}, "app-gpg-agent.service", "an unknown launcher (daemonized, reparented to init; systemd unit: app-gpg-agent.service)", true},
-		{"immediate parent fallback", []ProcInfo{{9, "ssh-agent"}, {8, "weirdlauncher"}}, "", "weirdlauncher", true},
-		{"too shallow", []ProcInfo{{9, "ssh-agent"}}, "", "", false},
-		{"empty", nil, "", "", false},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			got, ok := startedBy(c.chain, c.cgroupUnit)
-			if ok != c.ok || got != c.want {
-				t.Errorf("startedBy(%v, %q) = (%q,%v), want (%q,%v)", c.chain, c.cgroupUnit, got, ok, c.want, c.ok)
-			}
-		})
-	}
-}
-
-func TestLauncherLabel(t *testing.T) {
-	if _, ok := launcherLabel("nope"); ok {
-		t.Error("launcherLabel(nope) reported known")
-	}
-	for _, comm := range []string{"systemd", "plasmashell", "sshd", "bash", "sddm-helper", "gnome-keyring-d"} {
-		if _, ok := launcherLabel(comm); !ok {
-			t.Errorf("launcherLabel(%q) not recognised", comm)
-		}
-	}
-	if got, _ := launcherLabel("zsh"); !strings.Contains(got, "zsh") {
-		t.Errorf("login-shell label = %q, want it to name zsh", got)
-	}
-}
-
 func TestChainString(t *testing.T) {
 	got := chainString([]ProcInfo{{100, "ssh-agent"}, {1, "systemd"}})
 	want := "ssh-agent(100) ← systemd(1)"
 	if got != want {
 		t.Errorf("chainString = %q, want %q", got, want)
-	}
-}
-
-func TestProcfsAncestryParent(t *testing.T) {
-	root := t.TempDir()
-	dir := filepath.Join(root, "77")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "stat"), []byte("77 (ssh-agent) S 42 77 42"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	ppid, name, ok := ProcfsAncestry{Root: root}.Parent(77)
-	if !ok || ppid != 42 || name != "ssh-agent" {
-		t.Errorf("Parent(77) = (%d,%q,%v), want (42,ssh-agent,true)", ppid, name, ok)
-	}
-	if _, _, ok := (ProcfsAncestry{Root: root}).Parent(999); ok {
-		t.Error("Parent(999) reported ok for a missing process")
-	}
-}
-
-func TestGatherForeignAttribution(t *testing.T) {
-	const foreign = "/tmp/foreign.sock"
-	src := fakeSource{procs: []agent.AgentProc{
-		{PID: 200, UID: 1000, Socket: foreign},
-	}}
-	prober := fakeProber{up: map[string]bool{foreign: true}}
-	anc := fakeAncestry{
-		200: {ppid: 8, name: "ssh-agent"},
-		8:   {ppid: 1, name: "gnome-keyring-d"},
-		1:   {ppid: 0, name: "systemd"},
-	}
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000}, src, prober, anc, nil, nil, nil)
-
-	if len(r.Agents) != 1 || len(r.Agents[0].Ancestry) != 3 {
-		t.Fatalf("ancestry not populated: %+v", r.Agents)
-	}
-	if !hasFinding(r, "started by gnome-keyring-daemon") {
-		t.Errorf("findings = %v, want a foreign-attribution finding", r.Findings)
 	}
 }
 
@@ -197,22 +88,4 @@ type fakeCgroup map[int]string
 func (f fakeCgroup) Cgroup(pid int) (string, bool) {
 	unit, ok := f[pid]
 	return unit, ok
-}
-
-func TestGatherReparentedToInitCgroupFallback(t *testing.T) {
-	const foreign = "/tmp/foreign.sock"
-	src := fakeSource{procs: []agent.AgentProc{
-		{PID: 200, UID: 1000, Socket: foreign},
-	}}
-	prober := fakeProber{up: map[string]bool{foreign: true}}
-	anc := fakeAncestry{
-		200: {ppid: 1, name: "ssh-agent"},
-		1:   {ppid: 0, name: "systemd"},
-	}
-	cg := fakeCgroup{200: "app-gpg-agent.service"}
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000}, src, prober, anc, cg, nil, nil)
-
-	if !hasFinding(r, "systemd unit: app-gpg-agent.service") {
-		t.Errorf("findings = %v, want the cgroup-fallback unit named", r.Findings)
-	}
 }

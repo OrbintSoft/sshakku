@@ -19,13 +19,6 @@ func TestEnumeratorReadDirHardError(t *testing.T) {
 	}
 }
 
-// TestKDialogAvailableDefaultLookPath covers Available's nil-lookPath branch,
-// which falls back to the real os/exec PATH lookup. The result depends on
-// whether kdialog happens to be installed; only the branch matters here.
-func TestKDialogAvailableDefaultLookPath(t *testing.T) {
-	_ = KDialogPrompter{}.Available()
-}
-
 // TestExecRunnerRunStdinEnvAndStartFailure covers Run's stdin- and env-passing
 // branches (via a real `cat` that echoes its stdin) and its start-failure
 // branch (a binary that does not exist, which is a real error rather than a
