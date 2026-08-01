@@ -19,7 +19,7 @@ broker see them.
 | `SSHAKKU_GIVEUP_TTL` | `giveup_ttl` | `1h` | How long a key stays in the give-up state before it is retried, as a Go duration. A zero or negative value never expires (the state still clears at logout or reboot). |
 | `SSHAKKU_NO_GIVEUP` | `no_giveup` | unset | When truthy, disables the give-up memory entirely: every shell retries every key. |
 | `SSHAKKU_QUIET` | `quiet` | unset | When truthy, suppresses the user-facing failure notice on the terminal. |
-| `SSHAKKU_COMMAND_TIMEOUT` | `command_timeout` | `10s` | How long to wait for a program that should answer on its own — reading the wallet, checking the display — before giving up on it and falling back (usually to asking on the terminal). Lower it if you would rather be prompted quickly than wait on a wallet that may be locked. |
+| `SSHAKKU_COMMAND_TIMEOUT` | `command_timeout` | `10s` | How long to wait for something that should answer on its own — reading the wallet, checking the display — before giving up on it and falling back (usually to asking on the terminal). It covers the macOS keychain too, which SSHakku asks directly rather than by running anything. Lower it if you would rather be prompted quickly than wait on a wallet that may be locked. |
 | `SSHAKKU_INTERACTIVE_TIMEOUT` | `interactive_timeout` | `2m` | How long to wait for a program that is waiting for *you* — a password dialog, or a CLI deferring to its desktop app for approval. |
 
 Truthy means `1`, `true`, `yes`, or `on` (case-insensitive); in the config file a

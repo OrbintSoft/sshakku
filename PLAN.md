@@ -1187,14 +1187,28 @@ not rediscovered one at a time.
    (`TestKeePassXCCLIRealDatabase`), which is also what established that it
    still takes the database password on standard input, something it offers no
    documented flag for.
-2. **Nothing bounds the keychain.** `SecItemCopyMatching` is a synchronous cgo
-   call with no timeout, context or cancellation, so on macOS's default backend
-   there is no deadline at all. **Decided 2026-08-01**: F21 is about anything
-   SSHakku waits on, not only about programs it runs, so the gap is now a stated
-   violation of it rather than a case the promise never reached. What remains is
-   to make the product keep the promise.
+2. **Nothing bounded the keychain — done.** `SecItemCopyMatching` is a
+   synchronous cgo call with no timeout, context or cancellation, so on macOS's
+   default backend there was no deadline at all. **Decided 2026-08-01**: F21 is
+   about anything SSHakku waits on, not only about programs it runs, so the gap
+   was a stated violation of it rather than a case the promise never reached.
 
-   The gap is read off the code; no observed symptom motivates it. An earlier
+   `KeychainBackend` now takes `command_timeout`, the same budget every other
+   wallet gets, and applies it to each of the four operations — `forget --all`
+   waits on `List` and `Delete` exactly as `load-keys` waits on `Find`. What
+   elapses ends the waiting and not the call: nothing in Go can interrupt one
+   already inside the framework, so the goroutine holding it stays blocked for
+   as long as the framework does, deliberately and where the code says so.
+
+   **What is unverified, and cannot be verified here**: no test makes a *real*
+   keychain hang. The one that gives up is driven by a client that neither
+   answers nor fails, which is what the framework does while waiting on an
+   authorization nobody grants — but producing that state for real needs an
+   interactive GUI session for SecurityAgent to display in, and a hosted runner
+   has none: it fails such a call instead of blocking. See the two F21 keychain
+   rows in `docs/TEST-MATRIX.md`.
+
+   The gap was read off the code; no observed symptom motivated it. An earlier
    note here guessed that a report of `sshakku forget` not returning on a Mac
    was this same defect from the other side, with the keychain waiting on an
    authorization nobody grants. **That guess was wrong**, and running the
@@ -1203,11 +1217,6 @@ not rediscovered one at a time.
    anything. Items SSHakku creates need no approval, and the report turned out
    to be two unrelated defects (items 4 and 5 below).
 
-   Note also what cannot be verified where: making Security.framework wait
-   needs an interactive GUI session for SecurityAgent to display in, and a
-   hosted macOS runner has none — it fails such a call instead of blocking. The
-   waiting keychain is therefore not reproducible in CI at all, on any runner
-   this project can reach.
 4. **A mistyped command asks for a secret instead of failing.** `SSHAKKU_ASKPASS`
    is exported into the whole login shell, and any argument that is not a known
    subcommand is taken for an ssh prompt. So `sshakku --forget` in a wired shell

@@ -59,11 +59,13 @@ func GiveupTTL(raw string) (time.Duration, error) {
 	return d, nil
 }
 
-// CommandTimeout parses the budget for an external command that is not waiting
-// on a person — reading the wallet, probing the display — expressed as a Go
-// duration, defaulting to keys.DefaultCommandTimeout when raw is empty.
+// CommandTimeout parses the budget for something that is not waiting on a
+// person — reading the wallet, probing the display — expressed as a Go
+// duration, defaulting to keys.DefaultCommandTimeout when raw is empty. Most of
+// what it bounds is an external command; a wallet reached in-process rather
+// than by running anything, as the macOS keychain is, gets the same budget.
 //
-// Unlike a key lifetime, zero and negative do not mean "no limit": a command
+// Unlike a key lifetime, zero and negative do not mean "no limit": something
 // with no limit can hold a login shell, or an ssh at a passphrase prompt, for
 // as long as it likes. They fall back to the default and are returned with an
 // error for the caller to log.
