@@ -164,3 +164,28 @@ appending. See `docs/THREAT-MODEL.md` for the threat model and the June 2026 inc
     see the `verify-e2e` skill. Report what was actually exercised and what was
     not: "unit tests pass, the feature was not run end to end" is a useful,
     honest statement; "verified" without a run is not.
+
+26. **Never claim a capability by negation.** A build tag that *provides* a
+    platform's feature is named after the platform that has it (`_darwin.go`,
+    `_linux.go`) — never after the absence of another (`_other.go`,
+    `//go:build !linux`), because a negation silently claims every platform it
+    does not exclude. `//go:build !linux` on the wallet table offered the macOS
+    Keychain to FreeBSD and to Windows, which have none, so the wrong default
+    arrived quietly instead of failing to build.
+
+    The mirror image is correct and stays: a tag that reports a capability
+    **absent** may be a negation, because the absence really is what every other
+    platform has in common — `//go:build !linux` on a stub whose every method
+    answers "no kernel keyring here" is true wherever it compiles.
+
+    So: negation for "this is missing", the platform's own name for "this is
+    how it works here". If no tag then covers the remainder, that is the right
+    outcome — this project targets Linux and macOS, and a third platform failing
+    to build says so out loud, where a wrong default would not. Applies to test
+    files too.
+
+    The cost is real: a tagged branch cannot be exercised from the other
+    platform (see Rule 20). Contain it by putting only the *data* behind the tag
+    — the table of what this platform has — and keeping the logic that reads it
+    platform-neutral, taking that table as an argument, so both answers stay
+    checkable from either machine.
