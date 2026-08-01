@@ -106,16 +106,6 @@ jobs:
           SSHAKKU_TEST_KEEPASSXC_APP: /Applications/KeePassXC.app/Contents/MacOS/KeePassXC
         run: go test ./internal/keys -run TestKeePassXCNativeFullRound -count=1 -v
 
-      # Not a test: it reports whether the native route can be driven here at
-      # all. It needs KeePassXC's window unlocked without anyone typing, and
-      # its association approved without anyone clicking — a runner grants no
-      # accessibility permission, so neither can be done the way the Linux
-      # container does it. Whatever this prints decides whether the round is
-      # implementable on macOS or has to be recorded as out of reach.
-      - name: Probe what the native route can reach here
-        continue-on-error: true
-        run: test/macos-keepassxc-native-probe.sh
-
   midsession-failure:
     name: mid-session failure (${{ matrix.scenario }})
     # Same integration gate as container-test: manual dispatch, or a push whose
