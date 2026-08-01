@@ -12,6 +12,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -71,6 +73,11 @@ func stageKeePassXC(t *testing.T, app, root, stateDir string) {
 	// this build would otherwise keep them, and nothing writes to the settings
 	// of whoever is running the test.
 	cmd := exec.Command(app, "--config", settings, "--pw-stdin", database)
+	// Whatever the app says is kept, because the interesting failure is the one
+	// where it starts, answers, and never opens the database: without its own
+	// account of that there is nothing to diagnose but a timeout.
+	said := &lockedBuffer{}
+	cmd.Stdout, cmd.Stderr = said, said
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		t.Fatalf("open the staged app's stdin: %v", err)
@@ -88,7 +95,26 @@ func stageKeePassXC(t *testing.T, app, root, stateDir string) {
 	}
 	// stdin stays open on purpose; see above.
 
-	waitForOpenDatabase(t)
+	waitForOpenDatabase(t, cmd, said)
+}
+
+// lockedBuffer collects what the app writes while the test reads it from
+// another goroutine, which is what os/exec's copying amounts to here.
+type lockedBuffer struct {
+	mu sync.Mutex
+	b  strings.Builder
+}
+
+func (l *lockedBuffer) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.Write(p)
+}
+
+func (l *lockedBuffer) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.String()
 }
 
 // stageDatabase makes a database with the association already in it, and writes
@@ -158,7 +184,7 @@ func keepassxcCLI(t *testing.T, stdin string, args ...string) string {
 // actually open. The socket is not that signal: KeePassXC listens on it from
 // startup and answers "database not opened" until one is, so a test that waited
 // on the socket alone would go on to fail for a reason it had already been told.
-func waitForOpenDatabase(t *testing.T) {
+func waitForOpenDatabase(t *testing.T, app *exec.Cmd, said *lockedBuffer) {
 	t.Helper()
 
 	deadline := time.Now().Add(45 * time.Second)
@@ -185,5 +211,16 @@ func waitForOpenDatabase(t *testing.T) {
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
-	t.Fatalf("KeePassXC never reported an open database; last answer: %v", last)
+	// Which of the two it is decides what to do about it: an app that is gone
+	// crashed on the way in, while one still running is holding the database
+	// shut for a reason it may have printed.
+	// Signal 0 asks the kernel rather than os/exec: ProcessState stays empty
+	// until the process is waited for, and this one is only waited for on the
+	// way out, so it would report every corpse as healthy.
+	alive := "still running"
+	if err := app.Process.Signal(syscall.Signal(0)); err != nil {
+		alive = "no longer running (" + err.Error() + ")"
+	}
+	t.Fatalf("KeePassXC never reported an open database; last answer: %v\napp %s, and said:\n%s",
+		last, alive, said.String())
 }
