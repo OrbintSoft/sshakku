@@ -23,9 +23,8 @@ func TestAskpassEnv(t *testing.T) {
 		}
 		s := out.String()
 		for _, want := range []string{
-			"export SSH_ASKPASS='/opt/sshakku/bin/sshakku'",
+			"export SSH_ASKPASS='/opt/sshakku/bin/sshakku-askpass'",
 			"export SSH_ASKPASS_REQUIRE=force",
-			"export " + keys.EnvAskpassMode + "=1",
 		} {
 			if !strings.Contains(s, want) {
 				t.Errorf("output %q missing %q", s, want)

@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"os"
 	"strings"
 	"testing"
 
@@ -28,14 +27,11 @@ var _ keys.TTY = (*recordingTTY)(nil)
 // wiredShell puts the test in the environment a login shell has once SSHakku is
 // wired into it — the same variables askpass-env exports — so what runs
 // afterwards is a command typed in that shell rather than one typed in a bare
-// one. It returns the environment marker dispatch is given, read the way main
-// reads it.
-func wiredShell(t *testing.T) bool {
+// one.
+func wiredShell(t *testing.T) {
 	t.Helper()
-	t.Setenv("SSH_ASKPASS", "/opt/sshakku/bin/sshakku")
+	t.Setenv("SSH_ASKPASS", "/opt/sshakku/bin/"+askpassProgName)
 	t.Setenv("SSH_ASKPASS_REQUIRE", "force")
-	t.Setenv(keys.EnvAskpassMode, "1")
-	return os.Getenv(keys.EnvAskpassMode) != ""
 }
 
 // TestUnknownCommandIsNotASecretRequest verifies F30: a command SSHakku does not
@@ -55,14 +51,14 @@ func TestUnknownCommandIsNotASecretRequest(t *testing.T) {
 	for _, args := range mistyped {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			tempRuntimeEnv(t)
-			askpassEnvSet := wiredShell(t)
+			wiredShell(t)
 
 			tty := &recordingTTY{answer: "a passphrase nobody asked for"}
 			d := depsReturning(newMemoryBackend())
 			d.tty = tty
 
 			var stdout, stderr bytes.Buffer
-			code := dispatch(d, &stdout, &stderr, args, askpassEnvSet)
+			code := dispatch(d, &stdout, &stderr, "/usr/local/bin/sshakku", args)
 
 			if len(tty.asked) != 0 {
 				t.Errorf("the terminal was read %d time(s), for %q; a command SSHakku does not know is not a question to put to the user", len(tty.asked), tty.asked)

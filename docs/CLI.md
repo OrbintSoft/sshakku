@@ -71,10 +71,12 @@ Prints the `export` lines that route this shell's `ssh` passphrase prompts
 through sshakku's wallet-aware broker:
 
 ```sh
-export SSH_ASKPASS='…'
+export SSH_ASKPASS='…/sshakku-askpass'
 export SSH_ASKPASS_REQUIRE=force
-export SSHAKKU_ASKPASS=1
 ```
+
+`sshakku-askpass` is installed alongside `sshakku` and is the program `ssh`
+runs when it needs a passphrase; you never run it yourself.
 
 Every session gets them, with or without a desktop: reading the wallet needs
 no graphical prompter, and when the wallet has no entry the broker asks on the

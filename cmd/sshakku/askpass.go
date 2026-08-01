@@ -116,14 +116,18 @@ func (d deps) askpassEnv(stdout, stderr io.Writer) int {
 }
 
 // askpassExports returns the shell `export` lines pointing ssh's SSH_ASKPASS at
-// self's wallet-aware broker. REQUIRE=force is what routes every prompt to the
-// broker: `prefer` asks OpenSSH to favour the helper but still ignores it when
-// DISPLAY is unset, which is most terminal sessions and a Mac without an X
-// server. The broker keeps the terminal as its own fallback, so forcing it
-// costs a session nothing it had before.
+// the wallet-aware broker installed beside self. REQUIRE=force is what routes
+// every prompt to the broker: `prefer` asks OpenSSH to favour the helper but
+// still ignores it when DISPLAY is unset, which is most terminal sessions and a
+// Mac without an X server. The broker keeps the terminal as its own fallback,
+// so forcing it costs a session nothing it had before.
+//
+// Both lines land in every login shell and stay there, which is why neither may
+// say anything about a particular command: they describe where ssh should go for
+// a passphrase, and nothing else in the session is affected by them.
 func askpassExports(self string) string {
 	return fmt.Sprintf(
-		"export SSH_ASKPASS=%s\nexport SSH_ASKPASS_REQUIRE=force\nexport %s=1\n",
-		shellSingleQuote(self), keys.EnvAskpassMode,
+		"export SSH_ASKPASS=%s\nexport SSH_ASKPASS_REQUIRE=force\n",
+		shellSingleQuote(askpassProg(self)),
 	)
 }

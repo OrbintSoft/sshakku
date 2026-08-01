@@ -148,7 +148,7 @@ func TestDispatchRoutesToAskpass(t *testing.T) {
 	d := depsReturning(&fakeProbeBackend{lookupVal: "wallet-pass", lookupOK: true})
 	prompt := "Enter passphrase for key '/home/u/.ssh/id_ed25519': "
 	var out bytes.Buffer
-	if got := dispatch(d, &out, io.Discard, []string{prompt}, true); got != 0 {
+	if got := dispatch(d, &out, io.Discard, "/usr/local/bin/"+askpassProgName, []string{prompt}); got != 0 {
 		t.Fatalf("dispatch(askpass) = %d, want 0", got)
 	}
 	if out.String() != "wallet-pass\n" {

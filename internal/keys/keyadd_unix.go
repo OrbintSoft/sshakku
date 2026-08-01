@@ -39,8 +39,9 @@ var (
 
 // ExecKeyAdder adds keys with the real ssh-add.
 type ExecKeyAdder struct {
-	// AskpassProg is the absolute path to the SSH_ASKPASS helper — the sshakku
-	// binary under a name that runs `askpass`. Required by AddWithAskpass.
+	// AskpassProg is the absolute path to the SSH_ASKPASS helper, which ssh-add
+	// execs with the prompt as its one argument and reads the answer from its
+	// standard output. Required by AddWithAskpass.
 	AskpassProg string
 	// AddTimeout caps each ssh-add; 0 uses defaultAddTimeout.
 	AddTimeout time.Duration
@@ -70,7 +71,6 @@ func (a ExecKeyAdder) AddWithAskpass(keyfile, passphrase string) (int, error) {
 	env := []string{
 		"SSH_ASKPASS=" + a.AskpassProg,
 		"SSH_ASKPASS_REQUIRE=force",
-		EnvAskpassMode + "=1",
 		EnvPassHandoffToken + "=" + token,
 	}
 	env = passThrough(env, "PATH", "HOME", "USER", "DISPLAY", "WAYLAND_DISPLAY",

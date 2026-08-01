@@ -33,9 +33,11 @@ load helpers
 @test "the askpass broker is wired with no graphical prompter" {
 	run "$SSHAKKU_BIN" askpass-env
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"export SSH_ASKPASS='$SSHAKKU_BIN'"* ]]
+	# ssh is pointed at the helper installed beside the binary, not at the
+	# binary: that is what keeps a passphrase prompt and a typed command from
+	# arriving at the same place.
+	[[ "$output" == *"export SSH_ASKPASS='$(dirname "$SSHAKKU_BIN")/sshakku-askpass'"* ]]
 	[[ "$output" == *"export SSH_ASKPASS_REQUIRE=force"* ]]
-	[[ "$output" == *"export SSHAKKU_ASKPASS=1"* ]]
 }
 
 # Feature F30: a command SSHakku does not recognise is answered by naming it and
