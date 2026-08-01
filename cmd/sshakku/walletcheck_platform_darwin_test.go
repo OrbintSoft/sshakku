@@ -1,9 +1,10 @@
-//go:build !linux
+//go:build darwin
 
 package main
 
 import (
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
@@ -35,6 +36,34 @@ func TestDoctorReportOnAnUnconfiguredMachine(t *testing.T) {
 			t.Errorf("doctor asks for a D-Bus session bus on %s, which has none: %q",
 				runtime.GOOS, req.Detail)
 		}
+	}
+}
+
+// TestKeePassXCOverASecretServiceThisPlatformHasNot is the route rather than
+// the wallet. Unlike the wallet name, a route the user pinned is answered under
+// its own name instead of being swapped for another (F23) — so it is described
+// here too, but the answer is that this way in does not exist on this system,
+// not that a piece of it is missing.
+func TestKeePassXCOverASecretServiceThisPlatformHasNot(t *testing.T) {
+	settings := config.Settings{
+		SecretBackend:  config.SecretBackendKeePassXC,
+		KeePassXCRoute: config.KeePassXCRouteSecretService,
+	}
+
+	view := walletView(settings, probeWith(runtime.GOOS, nil, nil, "", nil))
+
+	if view.Route != config.KeePassXCRouteSecretService {
+		t.Errorf("route = %q, want the pinned one to be answered under its own name", view.Route)
+	}
+	req := requirement(t, view, "secret service")
+	if req.Present {
+		t.Error("a Secret Service must not be reported as present on a system that has none")
+	}
+	if !strings.Contains(req.Detail, "provides no freedesktop Secret Service") {
+		t.Errorf("detail = %q, want it to say the platform has no such API", req.Detail)
+	}
+	if !strings.Contains(req.Detail, runtime.GOOS) {
+		t.Errorf("detail = %q, want it to name the platform", req.Detail)
 	}
 }
 

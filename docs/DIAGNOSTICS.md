@@ -209,8 +209,8 @@ backend test: PASS
 ```
 
 With no name, it tests whichever backend `config.toml`'s `secret_backend`
-resolves to (see [`CONFIGURATION.md`](CONFIGURATION.md)). Naming one of
-`secret-service`, `keychain`, `1password`, or `bitwarden` explicitly tests
+resolves to (see [`CONFIGURATION.md`](CONFIGURATION.md)). Naming one your
+system offers — the command lists them if you name one it does not — tests
 that backend instead, using the same account fields (`onepassword_vault`,
 `bitwarden_email`, `bitwarden_server`) already in `config.toml` regardless of
 which backend is actually configured as the default — useful for checking a

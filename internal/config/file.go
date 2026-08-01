@@ -119,13 +119,18 @@ const (
 	AutoLoadModeExclude = "exclude"
 )
 
-// Secret backend choices for Settings.SecretBackend.
+// Secret backend choices for Settings.SecretBackend that any system can offer,
+// because they are programs a user installs rather than something the operating
+// system either has or has not.
+//
+// The two that are the operating system's own — the freedesktop Secret Service
+// and the OS keychain — are declared beside the platform that has them, in
+// backends_linux.go and backends_other.go, along with the list of what can be
+// chosen here and which is chosen by default.
 const (
-	SecretBackendSecretService = "secret-service"
-	SecretBackendOnePassword   = "1password"
-	SecretBackendBitwarden     = "bitwarden"
-	SecretBackendKeychain      = "keychain"
-	SecretBackendKeePassXC     = "keepassxc"
+	SecretBackendOnePassword = "1password"
+	SecretBackendBitwarden   = "bitwarden"
+	SecretBackendKeePassXC   = "keepassxc"
 )
 
 // KeePassXC routes for Settings.KeePassXCRoute. The wallet is named by
@@ -414,21 +419,56 @@ func resolveAutoLoadMode(fileVal *string) (string, error) {
 	}
 }
 
+// SecretBackends returns the wallets that can be chosen on this system, in the
+// order a message to the user should list them. It is the one list: a caller
+// that offers the user a choice, or rejects one, asks here rather than keeping
+// a copy that has to be remembered whenever this one changes.
+func SecretBackends() []string {
+	return append([]string(nil), platformSecretBackends...)
+}
+
+// DefaultSecretBackend is the wallet used when the configuration names none:
+// the one the operating system provides itself.
+func DefaultSecretBackend() string { return platformDefaultSecretBackend }
+
+// SecretBackendAvailable reports whether name is a wallet this system has.
+func SecretBackendAvailable(name string) bool {
+	for _, available := range platformSecretBackends {
+		if name == available {
+			return true
+		}
+	}
+	return false
+}
+
 // resolveSecretBackend is config-file only (no environment override, per
 // File's doc comment: the account identity fields it's paired with don't fit
-// an env var cleanly either). An absent or empty value defaults to
-// SecretBackendSecretService (today's only behaviour); an unrecognised value
-// falls back to the same default, reported as an error to log.
+// an env var cleanly either). It answers against the wallets this system
+// actually has.
 func resolveSecretBackend(fileVal *string) (string, error) {
+	return resolveSecretBackendFrom(fileVal, platformSecretBackends, platformDefaultSecretBackend)
+}
+
+// resolveSecretBackendFrom is the choice itself, with the wallets on offer and
+// the one to fall back on taken as arguments so every platform's answer can be
+// checked from any of them — the tables are per-platform, the rule is not.
+//
+// An absent or empty value takes the fallback. Anything else that is not on
+// offer takes it too and is reported: a name meant for another operating
+// system is a mistake in the configuration, not a wallet missing a piece the
+// user could install, and the two deserve different answers. Falling back
+// rather than failing keeps a bad line in a config file from taking the login
+// shell down with it.
+func resolveSecretBackendFrom(fileVal *string, available []string, fallback string) (string, error) {
 	if fileVal == nil || *fileVal == "" {
-		return SecretBackendSecretService, nil
+		return fallback, nil
 	}
-	switch *fileVal {
-	case SecretBackendSecretService, SecretBackendOnePassword, SecretBackendBitwarden, SecretBackendKeychain, SecretBackendKeePassXC:
-		return *fileVal, nil
-	default:
-		return SecretBackendSecretService, fmt.Errorf("invalid secret_backend %q, using %q", *fileVal, SecretBackendSecretService)
+	for _, name := range available {
+		if *fileVal == name {
+			return *fileVal, nil
+		}
 	}
+	return fallback, fmt.Errorf("secret_backend %q is not a wallet this system has, using %q", *fileVal, fallback)
 }
 
 // resolveKeePassXCRoute is config-file only, like the backend choice it

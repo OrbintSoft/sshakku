@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/diagnose"
 )
 
@@ -100,18 +101,48 @@ func TestDoctorSaysNothingIsMissingWhenNothingIs(t *testing.T) {
 	}
 }
 
-// A wallet that needs no outside tool must still be named: knowing which one
-// would be used is half the answer, and the report is where a user looks for
-// it.
-func TestDoctorNamesAWalletThatNeedsNothingElse(t *testing.T) {
-	d := configuredWallet(t, "secret_backend = \"keychain\"\n")
+// TestDoctorNamesTheWalletThatWouldBeUsed verifies F25 through the whole
+// command, for the machine most users have: one nobody has configured. Knowing
+// which wallet was meant is half the answer to "why was nothing saved", and the
+// report is where a user looks for it.
+//
+// The expected name comes from the configuration layer rather than being
+// written out, because which wallet an unconfigured machine uses is that
+// layer's answer to give, and it differs per operating system.
+func TestDoctorNamesTheWalletThatWouldBeUsed(t *testing.T) {
+	d := configuredWallet(t, "")
 	onlyOnPath(t)
 
 	var out, errOut bytes.Buffer
 	if got := d.doctor(&out, &errOut, nil); got != 0 {
 		t.Fatalf("doctor() = %d, want 0; stderr=%q", got, errOut.String())
 	}
-	if !strings.Contains(out.String(), "keychain") {
-		t.Errorf("the report never names the configured wallet:\n%s", out.String())
+	if want := config.DefaultSecretBackend(); !strings.Contains(out.String(), want) {
+		t.Errorf("the report never names %q, the wallet SSHakku would open:\n%s", want, out.String())
+	}
+}
+
+// TestDoctorRefusesAWalletThisSystemHasNot verifies F26 through the command: a
+// wallet named in the configuration that this operating system does not have is
+// a mistake in the configuration, so the report names the wallet actually in
+// use rather than the one that was asked for.
+func TestDoctorRefusesAWalletThisSystemHasNot(t *testing.T) {
+	absent := "keychain"
+	if config.SecretBackendAvailable(absent) {
+		absent = "secret-service"
+	}
+	d := configuredWallet(t, "secret_backend = \""+absent+"\"\n")
+	onlyOnPath(t)
+
+	var out, errOut bytes.Buffer
+	if got := d.doctor(&out, &errOut, nil); got != 0 {
+		t.Fatalf("doctor() = %d, want 0; stderr=%q", got, errOut.String())
+	}
+	report := out.String()
+	if strings.Contains(report, "backend:               "+absent) {
+		t.Errorf("the report names %q, a wallet this system has not got:\n%s", absent, report)
+	}
+	if want := config.DefaultSecretBackend(); !strings.Contains(report, want) {
+		t.Errorf("the report never names %q, the wallet actually in use:\n%s", want, report)
 	}
 }

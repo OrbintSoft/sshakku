@@ -9,15 +9,17 @@ import (
 )
 
 // newSecretBackend opens the secret backend settings.SecretBackend selects
-// (config.toml's secret_backend key; secret-service is the default).
-// 1password and bitwarden shell out to their own CLI, keychain uses the OS
-// keychain, and the default is resolved per-OS by newDefaultSecretBackend
-// (the freedesktop Secret Service on Linux, the keychain off it). The returned
+// (config.toml's secret_backend key). 1password and bitwarden shell out to
+// their own CLI; the wallet the operating system provides itself is opened by
+// newDefaultSecretBackend (the freedesktop Secret Service on Linux, the
+// keychain off it), which is also what an unnamed backend gets. The returned
 // func releases any resource the backend opened and must always be called.
+//
+// The OS wallets have no case of their own: each exists on one platform, where
+// it is that platform's default, and the configuration layer never yields a
+// name this system has not got.
 func newSecretBackend(user string, log keys.Logger, settings config.Settings) (keys.SecretBackend, func()) {
 	switch settings.SecretBackend {
-	case config.SecretBackendKeychain:
-		return newKeychainBackend(user), func() {}
 	case config.SecretBackendOnePassword:
 		return &keys.OnePasswordBackend{
 			Runner:  keys.ExecRunner{Timeout: settings.CommandTimeout},
@@ -80,16 +82,4 @@ func detectGUIAvailable() bool {
 		Display:        os.Getenv("DISPLAY"),
 	}
 	return keys.GUIAvailable(guiEnv, runner, keys.KDialogPrompter{Runner: runner})
-}
-
-// validSecretBackendName reports whether name is one of the secret backends
-// newSecretBackend knows how to construct.
-func validSecretBackendName(name string) bool {
-	switch name {
-	case config.SecretBackendSecretService, config.SecretBackendOnePassword, config.SecretBackendBitwarden,
-		config.SecretBackendKeychain, config.SecretBackendKeePassXC:
-		return true
-	default:
-		return false
-	}
 }

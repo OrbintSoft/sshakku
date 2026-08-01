@@ -68,7 +68,7 @@ func TestTestSecretBackend(t *testing.T) {
 			t.Fatalf("testSecretBackend = %d, want 0 (pass); stderr=%q", got, errOut.String())
 		}
 		s := out.String()
-		if !strings.Contains(s, "backend: "+config.SecretBackendSecretService) {
+		if !strings.Contains(s, "backend: "+config.DefaultSecretBackend()) {
 			t.Errorf("output = %q, want the default backend name in the header", s)
 		}
 		if !strings.Contains(s, "backend test: PASS") {

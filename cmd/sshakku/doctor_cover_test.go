@@ -47,7 +47,7 @@ func TestDoctorArgErrors(t *testing.T) {
 	}{
 		{"unknown argument", []string{"--nope"}, "unknown argument"},
 		{"--user without a value", []string{"--user"}, "--user requires a value"},
-		{"invalid --test-backend name", []string{"--test-backend", "bogus"}, "unknown backend"},
+		{"invalid --test-backend name", []string{"--test-backend", "bogus"}, "is not a wallet this system has"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

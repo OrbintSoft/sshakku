@@ -59,14 +59,9 @@ func TestNewSecretBackend(t *testing.T) {
 		}
 	})
 
-	t.Run("keychain", func(t *testing.T) {
-		s := config.Settings{SecretBackend: config.SecretBackendKeychain}
-		backend, closeFn := newSecretBackend("alice", fakeLogger{}, s)
-		defer closeFn()
-		if backend == nil {
-			t.Fatal("backend = nil, want a keychain backend")
-		}
-	})
+	// The wallet the operating system provides itself has no case of its own
+	// here: it is this platform's default, and is covered by the per-platform
+	// tests beside newDefaultSecretBackend.
 }
 
 // TestBitwardenMasterPrompterGUI covers the graphical branch of the bitwarden
