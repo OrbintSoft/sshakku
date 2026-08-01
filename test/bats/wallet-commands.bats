@@ -80,3 +80,27 @@ budget_5s() {
 		refute_vault_entry id_test
 	fi
 }
+
+@test "F27: forget --all forgets SSHakku's own entries and leaves other programs' alone" {
+	budget_5s
+	seed_vault id_test "test-passphrase"
+	seed_foreign_secret "Another App-credentials" "not-ours"
+
+	run no_tty_bounded 30 "$SSHAKKU_BIN" forget --all
+	[ "$status" -ne 124 ]
+
+	# What F27 promises is about what is left standing, so it is asserted
+	# whatever the command managed to do: a wallet with no way to enumerate its
+	# entries answers that it cannot forget everything, and that answer has to
+	# leave the other program's entry alone just the same.
+	assert_foreign_secret "Another App-credentials"
+
+	# And it is not merely left in place: an entry sshakku did not store is not
+	# sshakku's to enumerate either, so it has no business being named on the way
+	# past — as forgotten, as failed, or at all.
+	[[ "$output" != *"Another App-credentials"* ]]
+
+	if [[ "$output" == *"forgot SSH-Key-id_test"* ]]; then
+		refute_vault_entry id_test
+	fi
+}

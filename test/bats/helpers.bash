@@ -364,6 +364,50 @@ refute_vault_entry() {
 	esac
 }
 
+# seed_foreign_secret writes a generic password under some other program's
+# service name, in the same store and under the same account sshakku uses.
+# That is the ordinary state of a macOS login keychain: every application that
+# saves a password puts it there, beside everyone else's.
+#
+# It passes -A on purpose, so the item is one sshakku *could* delete. An entry
+# protected by its own access list would be refused by the keychain itself, and
+# a test that survived only because the OS said no would not be testing sshakku.
+seed_foreign_secret() {
+	local service="$1" passphrase="$2"
+	case "$OSTYPE" in
+	darwin*)
+		bounded 20 security add-generic-password -U -A \
+			-s "$service" -a "$USER" -w "$passphrase" \
+			"$TEST_KEYCHAIN"
+		;;
+	*)
+		printf '%s' "$passphrase" >"$SSHAKKU_TEST_VAULT/${service}-${USER}"
+		;;
+	esac
+}
+
+# assert_foreign_secret fails unless the entry seed_foreign_secret wrote is
+# still there. As in refute_vault_entry, the darwin check reads attributes only
+# and never the secret itself.
+assert_foreign_secret() {
+	local service="$1"
+	case "$OSTYPE" in
+	darwin*)
+		if ! bounded 20 security find-generic-password \
+			-s "$service" -a "$USER" "$TEST_KEYCHAIN" >/dev/null 2>&1; then
+			echo "another program's entry ${service} is gone from the keychain" >&2
+			return 1
+		fi
+		;;
+	*)
+		if [ ! -e "$SSHAKKU_TEST_VAULT/${service}-${USER}" ]; then
+			echo "another program's entry ${service} is gone from the vault" >&2
+			return 1
+		fi
+		;;
+	esac
+}
+
 # new_test_key generates a throwaway ed25519 key named keyname under
 # $HOME/.ssh, encrypted with passphrase.
 new_test_key() {
