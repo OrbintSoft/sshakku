@@ -100,11 +100,13 @@ type deps struct {
 	// bakes into the SSH_ASKPASS export lines. Injected so the lookup's
 	// error branch is testable.
 	self func() (string, error)
-	// guiAvailable reports whether a graphical passphrase prompter is reachable
-	// (detectGUIAvailable), which decides whether load-keys prompts through a
-	// dialog or on the terminal. Injected so both branches run regardless of
-	// the test host's display.
-	guiAvailable func() bool
+	// graphicalPrompter returns the dialog this platform can raise a passphrase
+	// prompt with, or nil when none can be shown here — which is what decides
+	// whether load-keys asks through a dialog or on the terminal. Injected so
+	// both branches run regardless of what the test host has, and platform-bound
+	// in production (newGraphicalPrompter): what counts as a usable graphical
+	// session, and what draws the dialog, are each platform's own answers.
+	graphicalPrompter func(config.Settings) keys.Prompter
 	// fetchHandoff redeems a one-shot passphrase-handoff token (keys.FetchHandoff).
 	// Injected so askpass's handoff path is testable without a live kernel
 	// keyring, which many containers and CI runners lack.
@@ -119,15 +121,15 @@ type deps struct {
 // realDeps wires deps to the production implementations.
 func realDeps() deps {
 	return deps{
-		newSecret:    newSecretBackend,
-		ensurer:      realEnsurer(),
-		gather:       gatherReport,
-		tokenSource:  execTokenSource{},
-		geteuid:      os.Geteuid,
-		self:         os.Executable,
-		guiAvailable: detectGUIAvailable,
-		fetchHandoff: keys.FetchHandoff,
-		tty:          ttyPrompter{},
+		newSecret:         newSecretBackend,
+		ensurer:           realEnsurer(),
+		gather:            gatherReport,
+		tokenSource:       execTokenSource{},
+		geteuid:           os.Geteuid,
+		self:              os.Executable,
+		graphicalPrompter: newGraphicalPrompter,
+		fetchHandoff:      keys.FetchHandoff,
+		tty:               ttyPrompter{},
 	}
 }
 

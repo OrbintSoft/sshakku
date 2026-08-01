@@ -68,9 +68,3 @@ func (walletPasswordPrompter) Available() bool { return true }
 func newWalletPasswordPrompter(settings config.Settings) keys.Prompter {
 	return walletPasswordPrompter{graphical: newGraphicalPrompter(settings)}
 }
-
-// detectGUIAvailable reports whether a graphical passphrase prompt can be shown
-// in this environment, by the same test askpassEnv and doctor's askpass finding
-// both rely on. What counts as a usable graphical session is the platform's own
-// answer — see newGraphicalPrompter.
-func detectGUIAvailable() bool { return newGraphicalPrompter(config.Settings{}) != nil }

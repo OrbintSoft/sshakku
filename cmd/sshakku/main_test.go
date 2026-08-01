@@ -327,19 +327,11 @@ func TestRandomProbeValue(t *testing.T) {
 	}
 }
 
-func TestDetectGUIAvailableHeadless(t *testing.T) {
-	t.Setenv("WAYLAND_DISPLAY", "")
-	t.Setenv("DISPLAY", "")
-	if detectGUIAvailable() {
-		t.Error("detectGUIAvailable() = true with no display server, want false")
-	}
-}
-
 // TestAskpassEnvHeadless confirms a session with no display server is wired the
 // same as a graphical one: the broker reads the wallet, which needs no display,
 // and a key that has expired from the agent must be refilled there too. Unlike
-// the case in cover_remaining_test.go this one leaves the GUI probe real, so it
-// also covers the detector actually reporting a headless session.
+// the case in cover_remaining_test.go this one leaves the platform's own
+// prompter lookup real, so it also covers it reporting a headless session.
 func TestAskpassEnvHeadless(t *testing.T) {
 	t.Setenv("WAYLAND_DISPLAY", "")
 	t.Setenv("DISPLAY", "")
