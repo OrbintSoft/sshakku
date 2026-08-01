@@ -38,6 +38,29 @@ load helpers
 	[[ "$output" == *"export SSHAKKU_ASKPASS=1"* ]]
 }
 
+# Feature F30: a command SSHakku does not recognise is answered by naming it and
+# showing what the commands are, never by asking for a secret. The wiring is what
+# makes it worth a test of its own — the exports above are in every login shell,
+# and this is the case where a mistyped command and an ssh prompt could be
+# confused for one another. It runs with no controlling terminal, so a run that
+# does go looking for one to prompt on fails here rather than stalling; what
+# that costs is that "did not ask" and "had nobody to ask" look alike at this
+# level, which is why the terminal itself is asserted on elsewhere.
+@test "F30: a mistyped command in a wired shell is reported, not taken for a prompt" {
+	# shellcheck source=/dev/null  # installed at a path only known at run time
+	source "$SSHAKKU_HOOK"
+
+	# Prove the shell really is wired, so a pass cannot come from the exports
+	# being absent.
+	[ -n "${SSH_ASKPASS:-}" ]
+	[ "${SSH_ASKPASS_REQUIRE:-}" = "force" ]
+
+	run no_tty_bounded 10 "$SSHAKKU_BIN" --forget
+	[ "$status" -eq 2 ]
+	[[ "$output" == *"--forget"* ]]
+	[[ "$output" == *"usage: sshakku"* ]]
+}
+
 @test "a key missing from the agent is refilled from the wallet with no terminal" {
 	new_test_key id_test "test-passphrase"
 	seed_vault id_test "test-passphrase"
