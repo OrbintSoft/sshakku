@@ -60,10 +60,12 @@ type bitwardenItemRef struct {
 // Bitwarden (or self-hosted Vaultwarden) account via the bw CLI, the same
 // shell-out pattern SecretToolBackend and OnePasswordBackend use.
 //
-// The account is assumed dedicated to sshakku, the same simplification the
-// dedicated Secret Service collection design made: `bw list items` returns
-// only sshakku's own items, and each is addressed by Name (the service
-// string sshakku itself generates) with no separate attribute search.
+// Each item is addressed by Name — the service string sshakku itself
+// generates — with no separate attribute search. The account is not assumed to
+// hold nothing else: `bw list items` has no way to ask for a subset, so it
+// answers with the whole vault and List keeps only sshakku's own names from
+// it. Anything else in there is someone's real password manager contents, and
+// SSHakku neither reports nor deletes it (F27).
 //
 // Unlike op, bw supports a true in-place edit of an existing item via stdin
 // (no argv-only limitation), so Store edits when an item already exists
@@ -310,10 +312,11 @@ func (b *BitwardenBackend) Delete(service string) error {
 	return nil
 }
 
-// List returns the name of every item in the account. Since the account is
-// dedicated to sshakku (see the type doc), every name is a service string.
-// Prompts for the master password and unlocks first unless already held
-// open by a batching caller (see SecretSession).
+// List returns the name of every item in the account that sshakku stored. `bw
+// list items` cannot be narrowed to a subset of the vault, so it answers with
+// everything and the rest is dropped here — the vault belongs to its owner,
+// not to sshakku. Prompts for the master password and unlocks first unless
+// already held open by a batching caller (see SecretSession).
 func (b *BitwardenBackend) List() ([]string, error) {
 	if !b.held {
 		if err := b.Unlock(); err != nil {
@@ -340,7 +343,7 @@ func (b *BitwardenBackend) List() ([]string, error) {
 	for _, it := range items {
 		names = append(names, it.Name)
 	}
-	return names, nil
+	return ownServices(names), nil
 }
 
 var _ SecretBackend = (*BitwardenBackend)(nil)

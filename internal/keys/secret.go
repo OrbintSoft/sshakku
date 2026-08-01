@@ -3,6 +3,7 @@ package keys
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 )
 
 // jsonMarshal is the item-template encoder the shell-out backends (Bitwarden,
@@ -14,6 +15,27 @@ var jsonMarshal = json.Marshal
 // its stored entries — e.g. SecretToolBackend, which has no generic
 // "list everything" verb without already knowing exact attributes.
 var ErrListUnsupported = errors.New("secret backend does not support listing stored entries")
+
+// ownServices keeps only the entries sshakku itself stored, dropping anything
+// else the store holds. Every service string sshakku generates begins with the
+// key prefix, so that prefix is what tells its own entries from the rest.
+//
+// It is for the backends whose store is shared with other programs and whose
+// enumeration cannot be narrowed at the query — the macOS login keychain, which
+// answers for every application that ever saved a password under this account,
+// and a Bitwarden vault, which `bw list items` returns whole. A backend that
+// already asks only for its own entries (a dedicated collection, a vault tag, a
+// database group) must not filter again: the query is where that guarantee
+// belongs, and a second filter downstream would hide its absence.
+func ownServices(names []string) []string {
+	own := make([]string, 0, len(names))
+	for _, name := range names {
+		if strings.HasPrefix(name, defaultServicePrefix+"-") {
+			own = append(own, name)
+		}
+	}
+	return own
+}
 
 // SecretBackend stores and retrieves a key's passphrase in the OS secret store.
 // It is the seam the platform secret stores plug into — the D-Bus Secret Service

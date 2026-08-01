@@ -205,13 +205,13 @@ func TestKeychainBackendListLeavesOtherItemsAlone(t *testing.T) {
 
 func TestKeychainBackendList(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		c := &fakeKeychainClient{items: map[string]string{"b": "x", "a": "y"}}
+		c := &fakeKeychainClient{items: map[string]string{"SSH-Key-b": "x", "SSH-Key-a": "y"}}
 		b := &KeychainBackend{Client: c, Account: "alice"}
 		got, err := b.List()
 		if err != nil {
 			t.Fatalf("List: %v", err)
 		}
-		want := []string{"a", "b"}
+		want := []string{"SSH-Key-a", "SSH-Key-b"}
 		if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
 			t.Fatalf("List = %v, want %v", got, want)
 		}

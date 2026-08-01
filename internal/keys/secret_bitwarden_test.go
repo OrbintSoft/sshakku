@@ -230,13 +230,13 @@ func TestBitwardenListLeavesOtherItemsAlone(t *testing.T) {
 
 func TestBitwardenList(t *testing.T) {
 	t.Run("returns each item's name", func(t *testing.T) {
-		r := newFakeRunner().on(bitwardenBin, stdout(`[{"name":"sshakku-id_rsa"},{"name":"sshakku-id_ed25519"}]`, 0))
+		r := newFakeRunner().on(bitwardenBin, stdout(`[{"name":"SSH-Key-id_rsa"},{"name":"SSH-Key-id_ed25519"}]`, 0))
 		b := &BitwardenBackend{Runner: r, Session: "sess-token", held: true}
 		got, err := b.List()
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		want := []string{"sshakku-id_rsa", "sshakku-id_ed25519"}
+		want := []string{"SSH-Key-id_rsa", "SSH-Key-id_ed25519"}
 		if !equalStrings(got, want) {
 			t.Fatalf("List = %v, want %v", got, want)
 		}
