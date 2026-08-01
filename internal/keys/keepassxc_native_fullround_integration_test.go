@@ -6,12 +6,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"testing"
 	"time"
 
 	"github.com/OrbintSoft/sshakku/internal/keepassxc"
+	"github.com/OrbintSoft/sshakku/internal/keyring"
 )
 
 // This is the user's own scenario against a running KeePassXC, reached over its
@@ -38,8 +40,7 @@ import (
 // and this test writes to it.
 func TestKeePassXCNativeFullRound(t *testing.T) {
 	requireRealKeePassXCNative(t)
-	requireRealSSHTools(t)
-	requireUsableHandoff(t)
+	requireEverythingTheRoundDrives(t)
 
 	const passphrase = "sshakku-native-full-round-passphrase"
 	env := setupNativeFullRound(t, passphrase)
@@ -300,6 +301,27 @@ func requireRealKeePassXCNative(t *testing.T) {
 
 	if os.Getenv("SSHAKKU_TEST_ALLOW_REAL_KEEPASSXC_NATIVE") != "1" {
 		t.Skip("skipping: set SSHAKKU_TEST_ALLOW_REAL_KEEPASSXC_NATIVE=1 to run against a running KeePassXC, which this test writes to")
+	}
+}
+
+// requireEverythingTheRoundDrives insists on the pieces the scenario is made
+// of. None of them is a reason to skip: the opt-in has already been given, so a
+// missing piece is a broken environment, and skipping would report a green run
+// for a round that never happened — which is exactly what a keyctl check
+// belonging to another test did here on macOS, on a job that passed.
+func requireEverythingTheRoundDrives(t *testing.T) {
+	t.Helper()
+
+	for _, bin := range []string{"ssh-agent", "ssh-add", "ssh-keygen"} {
+		if _, err := exec.LookPath(bin); err != nil {
+			t.Fatalf("%s is not on PATH, so the round cannot run", bin)
+		}
+	}
+	// The passphrase reaches a detached ssh-add through the kernel keyring on
+	// Linux; the other platforms hand it over by their own means, which need
+	// nothing arranged here.
+	if runtime.GOOS == "linux" && !keyring.Available() {
+		t.Fatal("the kernel user keyring is not usable here, so nothing could hand a passphrase to ssh-add (a session-keyring link is what a PAM login arranges)")
 	}
 }
 

@@ -52,6 +52,10 @@ const stagedPassword = "sshakku-native-full-round-database"
 func stageKeePassXC(t *testing.T, app, root, stateDir string) {
 	t.Helper()
 
+	if _, err := exec.LookPath("keepassxc-cli"); err != nil {
+		t.Fatal("keepassxc-cli is not on PATH, so no database can be made for the app to open")
+	}
+
 	settings := filepath.Join(root, "keepassxc.ini")
 	fragment, err := os.ReadFile(browserSettings)
 	if err != nil {
