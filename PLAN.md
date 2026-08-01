@@ -1165,28 +1165,28 @@ not rediscovered one at a time.
    every platform, and the route stays pinnable — a pinned one is used and no
    other. Features F22, F23, F24.
 
-   **Built, and verified only in part.** The protocol client, both routes, the
-   configuration and the wiring are implemented and unit-tested. The `cli`
-   route has been driven through a real `keepassxc-cli` against a real
-   database (`TestKeePassXCCLIRealDatabase`) — which is also what established
-   that `keepassxc-cli` still takes the database password on standard input,
-   something it offers no documented flag for.
+   **Done, and verified by running it.** Both routes have been driven against a
+   real KeePassXC on both platforms, as the whole user scenario rather than a
+   backend round trip: `TestKeePassXCNativeFullRound` has the real binary ask
+   once on a real terminal, save the passphrase over the local protocol, and
+   reload the key into a dedicated `ssh-agent` with nothing typed — again after
+   the key expires (F4, F5, F6, F9, F23). It runs in the container under
+   Xvfb/xdotool, and on `macos-latest`, where the test starts KeePassXC itself
+   because nothing there provides a running one.
 
-   **What is not verified, and must be before this is called done:**
-   - The **`native` route has never spoken to a real KeePassXC**, on any
-     platform. Its protocol client is tested against a server that speaks the
-     protocol for real, which says the two agree — not that KeePassXC agrees.
-     Verifying it needs the GUI running with Browser Integration enabled and
-     the one-time association dialog approved, on top of the Xvfb/xdotool
-     arrangement `keepassxc.Dockerfile` already has.
-   - **Neither route has run on macOS**, which is the platform this work
-     exists for.
-   - The round has to be the **whole user scenario, against a dedicated
-     `ssh-agent`** — a key loaded, expired, and silently refilled from
-     KeePassXC (F5, F6) — not a backend round trip in isolation. See the
-     `verify-e2e` skill and Rule 25.
+   Driving the real thing is also what found the defect that made the route
+   non-functional against any real KeePassXC: acceptance was read off the
+   envelope, where a real KeePassXC names only failures, and the whole unit
+   suite had endorsed it because the fake had been built from the
+   implementation. Two steps a person normally takes are staged on macOS — the
+   database is opened with `--pw-stdin` holding the stream open, and the
+   association is written into the database rather than approved in a dialog —
+   both preconditions of the route, not the promises under test.
 
-   Only then does the macOS cell in the secret-store table change.
+   The `cli` route runs against a real `keepassxc-cli` on both platforms
+   (`TestKeePassXCCLIRealDatabase`), which is also what established that it
+   still takes the database password on standard input, something it offers no
+   documented flag for.
 2. **Nothing bounds the keychain.** `SecItemCopyMatching` is a synchronous cgo
    call with no timeout, context or cancellation, so on macOS's default backend
    there is no deadline at all. F21 does not cover it either: it promises that
