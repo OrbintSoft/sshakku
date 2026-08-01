@@ -27,65 +27,14 @@ var ErrListUnsupported = errors.New("secret backend does not support listing sto
 // already asks only for its own entries (a dedicated collection, a vault tag, a
 // database group) must not filter again: the query is where that guarantee
 // belongs, and a second filter downstream would hide its absence.
-// The legacy prefix is kept here so an entry an older version wrote is still
-// sshakku's to forget: dropping it would leave those entries where nothing
-// this program offers could ever delete them.
 func ownServices(names []string) []string {
 	own := make([]string, 0, len(names))
 	for _, name := range names {
-		if strings.HasPrefix(name, defaultServicePrefix+"-") || strings.HasPrefix(name, legacyServicePrefix+"-") {
+		if strings.HasPrefix(name, defaultServicePrefix+"-") {
 			own = append(own, name)
 		}
 	}
 	return own
-}
-
-// legacyService is service under the name earlier versions of sshakku wrote,
-// or "" when service is not one sshakku itself names — a configured prefix
-// override was never written by an older version, so there is nothing there
-// to fall back to.
-func legacyService(service string) string {
-	name, ok := strings.CutPrefix(service, defaultServicePrefix+"-")
-	if !ok {
-		return ""
-	}
-	return legacyServicePrefix + "-" + name
-}
-
-// lookupWithLegacy reads service, and when nothing is stored under it, tries
-// the name earlier versions used — moving what it finds over to the current
-// name and deleting the old entry.
-//
-// Moving it is what ends the fallback. A key whose passphrase is never asked
-// for again would otherwise keep its old entry for good, and that old name
-// said what the entry held rather than who had put it there, which is a name
-// any program keeping an SSH passphrase might have chosen for itself.
-//
-// Failing to move is not failing to read: the passphrase was found and is
-// returned either way, and the tidying is tried again on the next lookup.
-func lookupWithLegacy(b SecretBackend, service, keyname string, logf func(level, format string, args ...any)) (string, bool, error) {
-	pass, found, err := b.Lookup(service)
-	if err != nil || found {
-		return pass, found, err
-	}
-
-	old := legacyService(service)
-	if old == "" {
-		return "", false, nil
-	}
-	pass, found, err = b.Lookup(old)
-	if err != nil || !found || strings.TrimSpace(pass) == "" {
-		return "", false, err
-	}
-
-	if err := b.Store(service, "SSH Passphrase for "+keyname, pass); err != nil {
-		logf("INFO", "kept reading %s under its old name: %v", keyname, err)
-		return pass, true, nil
-	}
-	if err := b.Delete(old); err != nil {
-		logf("INFO", "moved %s to its current name but could not remove the old entry: %v", keyname, err)
-	}
-	return pass, true, nil
 }
 
 // SecretBackend stores and retrieves a key's passphrase in the OS secret store.

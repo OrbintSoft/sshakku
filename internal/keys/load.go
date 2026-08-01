@@ -11,25 +11,16 @@ import (
 const (
 	defaultMaxAttempts = 3
 	// defaultServicePrefix names sshakku's own entries in a shared store, and
-	// is how they are told apart from everyone else's there: it says who put
-	// the entry there, not what kind of thing it is. "SSH-Key" said the
-	// latter, which any program keeping an SSH passphrase could have written.
+	// is how they are told apart from everyone else's there — so it names who
+	// put the entry there, not what the entry holds. A prefix of the second
+	// kind would be one any program keeping an SSH passphrase might pick too.
 	defaultServicePrefix = "SSHakku-Key"
-	// legacyServicePrefix is what sshakku wrote before that. Entries under it
-	// are still read and still forgotten, so an upgrade neither asks for a
-	// passphrase already stored nor strands one where nothing can delete it.
-	legacyServicePrefix = "SSH-Key"
 )
 
 // DefaultServicePrefix is the secret-store service prefix used when no
 // per-config override is set (Config.ServicePrefix is always "" today; a
 // config-file override is future work).
 const DefaultServicePrefix = defaultServicePrefix
-
-// LegacyServicePrefix is the prefix earlier versions stored under. Exported
-// for the same reason DefaultServicePrefix is: a caller building or checking
-// a service string must not spell either out itself.
-const LegacyServicePrefix = legacyServicePrefix
 
 // Logger records one level-tagged line. A nil Logger disables logging.
 type Logger interface {
@@ -300,7 +291,7 @@ func (l Loader) loadViaVaultThenPrompt(keyfile, keyname string, max int) (loaded
 // environment (no D-Bus session, no GUI) — an expected, recoverable miss, not
 // an operator problem — and is treated the same way as "no entry found".
 func (l Loader) storedPassphrase(service, keyname string) (string, bool) {
-	pass, found, err := lookupWithLegacy(l.Secret, service, keyname, l.logf)
+	pass, found, err := l.Secret.Lookup(service)
 	if err != nil {
 		l.logf("INFO", "secret lookup for %s: %v", keyname, err)
 		return "", false

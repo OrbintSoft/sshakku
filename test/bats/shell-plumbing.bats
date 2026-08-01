@@ -128,31 +128,6 @@ load helpers
 	[[ "$output" == *"$fingerprint"* ]]
 }
 
-# Verifies F28. An upgrade that renames the entries has every ingredient of a
-# silent regression: the key still loads, because a missed wallet entry falls
-# back to prompting, and on a machine with a terminal the person just types the
-# passphrase again and blames themselves. Run with no terminal at all, there is
-# nowhere to fall back to — so the key is in the agent only if the old entry
-# was actually found.
-@test "F28: a passphrase stored under the old entry name still loads, and is moved to the new one" {
-	require_keyring
-	new_test_key id_test "test-passphrase"
-	seed_named_secret "${LEGACY_PREFIX}-id_test" "test-passphrase"
-	fingerprint=$(key_fingerprint id_test)
-
-	eval "$("$SSHAKKU_BIN" shell-init)"
-	run no_tty_bounded 5 "$SSHAKKU_BIN" load-keys
-	[ "$status" -eq 0 ]
-
-	run ssh-add -l
-	[[ "$output" == *"$fingerprint"* ]]
-
-	# F28's second half: it was moved, not merely read. An entry left under the
-	# old name is one `sshakku forget` would no longer recognise as its own.
-	assert_named_secret "${SERVICE_PREFIX}-id_test"
-	refute_named_secret "${LEGACY_PREFIX}-id_test"
-}
-
 @test "a reachable but empty agent is adopted, not killed and replaced" {
 	eval "$("$SSHAKKU_BIN" shell-init)"
 	bootstrap_pid=$(doctor_recorded_pid)

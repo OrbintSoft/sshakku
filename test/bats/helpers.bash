@@ -17,19 +17,16 @@
 
 REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
 
-# SERVICE_PREFIX is the name sshakku stores an entry under, and LEGACY_PREFIX
-# the one earlier versions used. Both are written out here rather than read
-# back from the Go source on purpose: this suite is meant to say, from
-# outside, what the entries in a user's wallet are called. Taking the answer
-# from the code under test would make these tests agree with it whatever it
+# SERVICE_PREFIX is the name sshakku stores an entry under. It is written out
+# here rather than read back from the Go source on purpose: this suite is meant
+# to say, from outside, what the entries in a user's wallet are called, and one
+# that took the answer from the code under test would agree with it whatever it
 # said, including a rename nobody meant to make.
 #
 # Read by the .bats files that load this one, which shellcheck analyses
 # separately and so cannot see.
 # shellcheck disable=SC2034
 SERVICE_PREFIX="SSHakku-Key"
-# shellcheck disable=SC2034
-LEGACY_PREFIX="SSH-Key"
 
 setup_file() {
 	if [ "${SSHAKKU_TEST_ALLOW_BATS:-}" != "1" ]; then
@@ -418,26 +415,6 @@ assert_named_secret() {
 	*)
 		if [ ! -e "$SSHAKKU_TEST_VAULT/${service}-${USER}" ]; then
 			echo "the vault has no entry ${service}" >&2
-			return 1
-		fi
-		;;
-	esac
-}
-
-# refute_named_secret is the opposite: it fails while that entry still exists.
-refute_named_secret() {
-	local service="$1"
-	case "$OSTYPE" in
-	darwin*)
-		if bounded 20 security find-generic-password \
-			-s "$service" -a "$USER" "$TEST_KEYCHAIN" >/dev/null 2>&1; then
-			echo "the keychain still holds ${service}" >&2
-			return 1
-		fi
-		;;
-	*)
-		if [ -e "$SSHAKKU_TEST_VAULT/${service}-${USER}" ]; then
-			echo "the vault still holds ${service}" >&2
 			return 1
 		fi
 		;;

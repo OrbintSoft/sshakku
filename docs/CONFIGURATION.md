@@ -230,12 +230,6 @@ already-stored key is not found in the new `sshakku` collection, so it
 re-prompts once on the first load after upgrading and is then stored under
 `sshakku` — no migration, and every load after that behaves as before.
 
-Entries were once named `SSH-Key-<keyname>` rather than
-`SSHakku-Key-<keyname>`. One under the old name is still read, and is moved to
-the new one the first time it is used, so an upgrade asks for nothing you have
-already stored and leaves nothing behind that `sshakku forget --all` cannot
-remove.
-
 With `secret_backend = "keychain"` (macOS), each key's passphrase is a
 generic-password item in your default (login) keychain, labelled `SSH
 Passphrase for <keyname>` and scoped to your account. Unlike the Secret

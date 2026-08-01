@@ -81,7 +81,7 @@ func (b Broker) Answer(prompt string) (reply string, ok bool) {
 	// reachable in this environment (no D-Bus session, no GUI) — expected and
 	// recoverable, not an operator problem — so it is logged at INFO and
 	// treated the same as "no entry found".
-	pass, found, err := lookupWithLegacy(b.Secret, service, keyname, b.logf)
+	pass, found, err := b.Secret.Lookup(service)
 	if err != nil {
 		b.logf("INFO", "askpass: secret lookup for %s: %v", keyname, err)
 	} else if found && strings.TrimSpace(pass) != "" {
