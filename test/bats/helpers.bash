@@ -314,8 +314,12 @@ seed_vault() {
 # nothing has said which programs may read it: on darwin, `security
 # add-generic-password` without -A leaves the item's access list naming only
 # the program that wrote it, so any later access by another one has to be
-# authorised by a person. That is the state a wallet is in when it is waiting
-# on somebody, and there is nobody here to answer.
+# authorised by a person.
+#
+# Where that authorisation can be asked for, the access waits for it. Where it
+# cannot — a machine with no interactive GUI session for the dialog to appear
+# in, which is every hosted runner — the access fails instead. So this seeds an
+# entry the caller is not entitled to, not an entry the caller will wait on.
 #
 # It is the counterpart of seed_vault, which passes -A precisely to avoid this:
 # a fixture that has to be readable is seeded that way on purpose. A test that

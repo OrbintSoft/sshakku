@@ -2,7 +2,7 @@
 # The two commands that reach the wallet on their own, driven the way a user
 # runs them: `sshakku doctor --test-backend` and `sshakku forget`.
 #
-# Verifies features F15, F9 and F21 (docs/FEATURES.md). Neither command had ever
+# Verifies features F15 and F9 (docs/FEATURES.md). Neither command had ever
 # been run against a real wallet by any test: the rest of the suite reaches the
 # store through the loader, and seeds it first. On darwin that seeding passes
 # `security add-generic-password -A`, which marks the item readable by any
@@ -13,8 +13,8 @@
 # Every run goes through no_tty_bounded: no controlling terminal, so nothing can
 # rescue itself by asking whoever started it, and a hard limit, so a command
 # waiting for an answer nobody will give fails this test instead of stalling the
-# suite. Status 124 is that limit expiring, and it is the failure these tests
-# exist to catch — a command still waiting is exactly what F21 forbids.
+# suite. Status 124 is that limit expiring: a command still waiting when it
+# expires is what F21 forbids, so no case here may end that way.
 # shellcheck disable=SC2154
 
 load helpers
@@ -60,13 +60,23 @@ budget_5s() {
 	refute_vault_entry id_test
 }
 
-@test "F21: forget comes back on a wallet entry that needs someone to approve access" {
+# What this does NOT cover: a wallet that actually makes SSHakku wait. Getting
+# Security.framework to wait needs an interactive GUI session for SecurityAgent
+# to put its dialog in, and a hosted macOS runner has none — it fails such a
+# call rather than blocking on it. So the entry below is one SSHakku is not
+# entitled to touch, and what is asserted is that it is handled, not that a wait
+# was survived. F21's keychain half cannot be reached from CI at all.
+@test "F9: forget handles an entry written by another program rather than hanging on it" {
 	budget_5s
 	seed_vault_needing_approval id_test "test-passphrase"
 
-	# Whether the entry is deleted is not the promise under test: nobody is here
-	# to authorise it, so it may well survive. The promise is that SSHakku stops
-	# waiting and hands the terminal back, rather than holding it with no end.
+	# Deleting it may or may not be permitted, and which one is not the promise:
+	# F9 says SSHakku must never report a passphrase as forgotten while it is
+	# still stored. So either outcome is fine as long as the two agree.
 	run no_tty_bounded 30 "$SSHAKKU_BIN" forget id_test
 	[ "$status" -ne 124 ]
+
+	if [[ "$output" == *"forgot SSH-Key-id_test"* ]]; then
+		refute_vault_entry id_test
+	fi
 }
