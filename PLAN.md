@@ -1189,11 +1189,18 @@ not rediscovered one at a time.
    documented flag for.
 2. **Nothing bounds the keychain.** `SecItemCopyMatching` is a synchronous cgo
    call with no timeout, context or cancellation, so on macOS's default backend
-   there is no deadline at all. F21 does not cover it either: it promises that
-   no *program* SSHakku runs can hold the shell up, and the keychain is not a
-   program. Decide whether F21 should be about anything SSHakku waits on rather
-   than only about programs — if so the wording changes and the gap becomes a
-   stated defect — and give the call a deadline it can be held to.
+   there is no deadline at all. **Decided 2026-08-01**: F21 is about anything
+   SSHakku waits on, not only about programs it runs, so the gap is now a stated
+   violation of it rather than a case the promise never reached. What remains is
+   to make the product keep the promise.
+
+   A second symptom, reported from a real Mac, is very likely the same defect
+   seen from the other side: `sshakku forget` does not return there. Every
+   deletion needs the keychain's authorization, and Security.framework waits
+   without limit for a person to grant it — there is a switch that makes it
+   report an error instead (`SecKeychainSetUserInteractionAllowed`), and SSHakku
+   never sets it. Reproduce that before fixing anything: a deadline alone would
+   hide it rather than answer it.
 3. **The CLI backends are untested on macOS.** 1Password and Bitwarden are
    supported on both platforms, but the real-account jobs run on
    `ubuntu-latest` only, so nothing exercises them where the rest of the

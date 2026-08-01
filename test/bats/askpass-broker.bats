@@ -102,9 +102,11 @@ require_secret_service() {
 	esac
 }
 
-# The four cases below verify feature F21 — no program SSHakku runs can hold the
-# shell up with no end — once per backend that reaches its wallet by running a
-# program, and once per entry point. Both entry points matter because routing
+# The four cases below verify feature F21 — nothing SSHakku waits on can hold the
+# shell up with no end — for the half of it reached by running a program: once per
+# backend that reaches its wallet that way, and once per entry point. A wallet
+# SSHakku calls into directly is the other half, covered elsewhere because no
+# shell test can block it. Both entry points matter because routing
 # every ssh prompt through the broker turns an unbounded wallet call from one
 # slow login into every ssh in the session.
 #
