@@ -7,15 +7,23 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/keys"
 )
 
-// newGraphicalPrompter returns no dialog on macOS, so every passphrase this
-// platform has to ask for is asked on the terminal.
+// newGraphicalPrompter returns the dialog this platform can raise a passphrase
+// prompt with, or nil when none can be shown here.
 //
-// This is a gap, not an absence. A Mac in a login session always has a window
-// server, and `osascript -e 'display dialog … with hidden answer'` would draw
-// the prompt with nothing extra installed; what does not exist is an
-// implementation of it here. Returning nil keeps the behaviour SSHakku has
-// always had on this platform — the Linux detection could only ever answer
-// "no", since it looks for WAYLAND_DISPLAY, an X server and kdialog, none of
-// which a Mac has — while stating it, so it can be found and fixed rather than
-// being an accident of a missing binary.
-func newGraphicalPrompter(config.Settings) keys.Prompter { return nil }
+// On macOS that means a session with a screen to put one on — which is not the
+// same as being on a Mac. Someone logged in over SSH, or booted into single
+// user mode, has no window server, and a dialog raised there would be a login
+// shell waiting on something that can never arrive; launchctl is what tells
+// those apart. The interpreter that draws it is part of the base system, so
+// unlike the Linux side there is rarely anything to install — but it is still
+// checked for, since a prompter that is not there has nowhere to draw either.
+func newGraphicalPrompter(settings config.Settings) keys.Prompter {
+	dialog := keys.OsascriptPrompter{
+		Runner:  keys.ExecRunner{Timeout: settings.InteractiveTimeout},
+		Timeout: settings.InteractiveTimeout,
+	}
+	if !keys.GraphicalSession(keys.ExecRunner{Timeout: settings.CommandTimeout}) || !dialog.Available() {
+		return nil
+	}
+	return dialog
+}

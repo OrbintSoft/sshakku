@@ -254,7 +254,9 @@ SH_SCRIPTS = $(wildcard *.sh) $(wildcard .githooks/*) $(wildcard .github/scripts
 ZSH_SCRIPTS = $(wildcard *.zsh)
 DOCKERFILES = $(wildcard test/containers/*.Dockerfile)
 
-lint: lint-sh lint-zsh lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go lint-docker
+APPLESCRIPTS = $(wildcard internal/keys/*.applescript)
+
+lint: lint-sh lint-zsh lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go lint-docker lint-applescript
 
 lint-sh:
 	shellcheck $(SH_SCRIPTS)
@@ -289,5 +291,15 @@ lint-go:
 lint-docker:
 	hadolint $(DOCKERFILES)
 
-.PHONY: install uninstall install-user uninstall-user build test test-json test-leakprofile test-keychain test-bats print-paths lint lint-sh lint-zsh lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go lint-docker
+# osacompile is the only AppleScript checker there is, and it ships only with
+# macOS — so on any other system this reports that it did not run rather than
+# passing quietly, which would read the same as having checked.
+lint-applescript:
+	@if ! command -v osacompile >/dev/null 2>&1; then \
+		echo "skipping lint-applescript: osacompile is macOS-only and is not installed here"; \
+	else \
+		for f in $(APPLESCRIPTS); do echo "osacompile $$f"; osacompile -o /dev/null "$$f" || exit 1; done; \
+	fi
+
+.PHONY: install uninstall install-user uninstall-user build test test-json test-leakprofile test-keychain test-bats print-paths lint lint-sh lint-zsh lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go lint-docker lint-applescript
 .DEFAULT_GOAL := install

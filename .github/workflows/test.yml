@@ -110,6 +110,11 @@ jobs:
       - name: Run make test-json
         run: make test-json
 
+      # The only AppleScript checker there is ships with macOS, so this is the
+      # one job that can actually run it; make lint skips it everywhere else.
+      - name: Run make lint-applescript
+        run: make lint-applescript
+
       - name: Point the default keychain at a throwaway one
         run: test/macos-keychain-setup.sh
 

@@ -106,8 +106,18 @@ load helpers
 	new_test_key id_test "test-passphrase"
 	fingerprint=$(key_fingerprint id_test)
 
+	# With nothing stored and no terminal, what is left to ask on is a dialog —
+	# and on a machine whose session says it has a screen, one is raised. This
+	# runner's does, and there is nobody in front of it, which is F21's case
+	# exactly: sshakku has to give up on its own rather than be waited out. The
+	# budget is named so that giving up is what is measured; left at its two
+	# minute default, a run that never gave up would look the same.
+	# shellcheck disable=SC2030
+	export SSHAKKU_INTERACTIVE_TIMEOUT=5s
+
 	eval "$("$SSHAKKU_BIN" shell-init)"
-	run no_tty_bounded 5 "$SSHAKKU_BIN" load-keys
+	run no_tty_bounded 20 "$SSHAKKU_BIN" load-keys
+	[ "$status" -ne 124 ]
 	[ "$status" -eq 0 ]
 
 	run ssh-add -l
