@@ -180,6 +180,29 @@ func TestKeychainBackendDelete(t *testing.T) {
 	})
 }
 
+// TestKeychainBackendListLeavesOtherItemsAlone verifies F27 for the state a
+// real login keychain is in: every application that saves a password puts it
+// there, under the same account, so a query that names only the account
+// answers with everyone's secrets. Whatever List reports is what
+// `forget --all` goes on to delete.
+func TestKeychainBackendListLeavesOtherItemsAlone(t *testing.T) {
+	c := &fakeKeychainClient{items: map[string]string{
+		"SSH-Key-id_ed25519":       "x",
+		"Another App-credentials":  "y",
+		"AirPort network password": "z",
+		"SSH-Key-id_rsa":           "w",
+	}}
+	b := &KeychainBackend{Client: c, Account: "alice"}
+	got, err := b.List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	want := []string{"SSH-Key-id_ed25519", "SSH-Key-id_rsa"}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("List = %v, want %v — the rest of the keychain is someone else's", got, want)
+	}
+}
+
 func TestKeychainBackendList(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		c := &fakeKeychainClient{items: map[string]string{"b": "x", "a": "y"}}

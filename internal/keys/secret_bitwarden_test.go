@@ -211,6 +211,23 @@ func TestBitwardenDelete(t *testing.T) {
 	})
 }
 
+// TestBitwardenListLeavesOtherItemsAlone verifies F27 against a vault holding
+// more than sshakku's own items, which is any vault a person actually uses:
+// `bw list items` answers with the whole vault, and whatever List reports is
+// what `forget --all` goes on to delete.
+func TestBitwardenListLeavesOtherItemsAlone(t *testing.T) {
+	r := newFakeRunner().on(bitwardenBin, stdout(`[{"name":"github.com"},{"name":"SSH-Key-id_ed25519"},{"name":"Bank"},{"name":"SSH-Key-id_rsa"},{"name":"Passport scan"}]`, 0))
+	b := &BitwardenBackend{Runner: r, Session: "sess-token", held: true}
+	got, err := b.List()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := []string{"SSH-Key-id_ed25519", "SSH-Key-id_rsa"}
+	if !equalStrings(got, want) {
+		t.Fatalf("List = %v, want %v — everything else in the vault belongs to someone else", got, want)
+	}
+}
+
 func TestBitwardenList(t *testing.T) {
 	t.Run("returns each item's name", func(t *testing.T) {
 		r := newFakeRunner().on(bitwardenBin, stdout(`[{"name":"sshakku-id_rsa"},{"name":"sshakku-id_ed25519"}]`, 0))
