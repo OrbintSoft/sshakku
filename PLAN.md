@@ -1217,14 +1217,31 @@ not rediscovered one at a time.
    rather than getting better — ssh is to exec an askpass program of its own, so
    `sshakku` never has to infer what it is being run as. Needs a feature stating
    the promise first, then a red test, then the split.
-5. **`doctor --test-backend` names a wallet it is not testing.** It prints the
-   configured backend name, which off Linux is still the default
-   `secret-service` — a backend macOS does not have — while actually probing the
-   keychain that `newSecretBackend` resolved to. The probe is real; the name on
-   it is not. Violates F25.
-3. **The CLI backends are untested on macOS.** 1Password and Bitwarden are
+5. **A wallet the platform has not got could be named and chosen.** **Done.**
+   `resolveSecretBackend` defaulted an unset `secret_backend` to
+   `secret-service` on every platform, so on macOS the report named a wallet
+   that cannot exist there and demanded a D-Bus session bus, while the
+   passphrases went to the Keychain. Each platform now declares what it has
+   (F26), the freedesktop probe is compiled on Linux alone, and one list —
+   `config.SecretBackends` — answers every caller that offers or rejects a name.
+
+   The review this opened found the same shape in three more places, all fixed
+   here: the graphical prompt (X11/Wayland and kdialog, compiled on macOS where
+   none of the three exist), the doctor's process ancestry and cgroup reads
+   (procfs, wired on every platform, so on a Mac every agent was attributed to
+   nobody), and the two macOS output parsers in `hostcheck.go`. Rule 26 records
+   the rule; no negated build tag is left in the tree.
+
+6. **macOS has no graphical passphrase prompt.** Found by the review above,
+   not fixed: `newGraphicalPrompter` returns nil there, so every passphrase is
+   asked for on the terminal. This is a gap and not an absence — a Mac in a
+   login session always has a window server, and `osascript -e 'display dialog …
+   with hidden answer'` would draw the prompt with nothing extra installed.
+   `guiprompt_darwin.go` says so where a reader will find it. Needs a promise
+   (F4 covers being asked, not how), a red test, then the implementation.
+7. **The CLI backends are untested on macOS.** 1Password and Bitwarden are
    supported on both platforms, but the real-account jobs run on
    `ubuntu-latest` only, so nothing exercises them where the rest of the
    platform differs.
 
-→ features F5, F6, F17, F21; open decision 23.
+→ features F5, F6, F13, F17, F21, F25, F26; open decision 23.
