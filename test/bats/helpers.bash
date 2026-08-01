@@ -17,6 +17,17 @@
 
 REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
 
+# SERVICE_PREFIX is the name sshakku stores an entry under. It is written out
+# here rather than read back from the Go source on purpose: this suite is meant
+# to say, from outside, what the entries in a user's wallet are called, and one
+# that took the answer from the code under test would agree with it whatever it
+# said, including a rename nobody meant to make.
+#
+# Read by the .bats files that load this one, which shellcheck analyses
+# separately and so cannot see.
+# shellcheck disable=SC2034
+SERVICE_PREFIX="SSHakku-Key"
+
 setup_file() {
 	if [ "${SSHAKKU_TEST_ALLOW_BATS:-}" != "1" ]; then
 		echo "skipping: set SSHAKKU_TEST_ALLOW_BATS=1 to run this suite — only safe in a disposable environment (the container test suite), never on a real machine with its own sshakku install" >&2
@@ -300,12 +311,12 @@ seed_vault() {
 		# a different binary, and an item whose ACL names only its writer makes
 		# the reader ask the user for permission.
 		bounded 20 security add-generic-password -U -A \
-			-s "SSH-Key-${keyname}" -a "$USER" -w "$passphrase" \
+			-s "${SERVICE_PREFIX}-${keyname}" -a "$USER" -w "$passphrase" \
 			"$TEST_KEYCHAIN"
 		trace "seed_vault $keyname done"
 		;;
 	*)
-		printf '%s' "$passphrase" >"$SSHAKKU_TEST_VAULT/SSH-Key-${keyname}-${USER}"
+		printf '%s' "$passphrase" >"$SSHAKKU_TEST_VAULT/${SERVICE_PREFIX}-${keyname}-${USER}"
 		;;
 	esac
 }
@@ -329,7 +340,7 @@ seed_vault_needing_approval() {
 	case "$OSTYPE" in
 	darwin*)
 		bounded 20 security add-generic-password -U \
-			-s "SSH-Key-${keyname}" -a "$USER" -w "$passphrase" \
+			-s "${SERVICE_PREFIX}-${keyname}" -a "$USER" -w "$passphrase" \
 			"$TEST_KEYCHAIN"
 		;;
 	*)
@@ -350,14 +361,60 @@ refute_vault_entry() {
 	case "$OSTYPE" in
 	darwin*)
 		if bounded 20 security find-generic-password \
-			-s "SSH-Key-${keyname}" -a "$USER" "$TEST_KEYCHAIN" >/dev/null 2>&1; then
-			echo "the keychain still holds SSH-Key-${keyname}" >&2
+			-s "${SERVICE_PREFIX}-${keyname}" -a "$USER" "$TEST_KEYCHAIN" >/dev/null 2>&1; then
+			echo "the keychain still holds ${SERVICE_PREFIX}-${keyname}" >&2
 			return 1
 		fi
 		;;
 	*)
-		if [ -e "$SSHAKKU_TEST_VAULT/SSH-Key-${keyname}-${USER}" ]; then
-			echo "the vault still holds SSH-Key-${keyname}" >&2
+		if [ -e "$SSHAKKU_TEST_VAULT/${SERVICE_PREFIX}-${keyname}-${USER}" ]; then
+			echo "the vault still holds ${SERVICE_PREFIX}-${keyname}" >&2
+			return 1
+		fi
+		;;
+	esac
+}
+
+# seed_named_secret writes a passphrase under an exact service name, rather
+# than under the one sshakku would choose for a key. Two things need that: an
+# entry belonging to another program, which on macOS lives in the very same
+# login keychain sshakku uses, and an entry left by an older version of
+# sshakku itself, under the name it used to write.
+#
+# The darwin write passes -A on purpose, so the item is one sshakku *could*
+# reach. An entry protected by its own access list would be refused by the
+# keychain itself, and a test that passed only because the OS said no would
+# not be testing sshakku at all.
+seed_named_secret() {
+	local service="$1" passphrase="$2"
+	case "$OSTYPE" in
+	darwin*)
+		bounded 20 security add-generic-password -U -A \
+			-s "$service" -a "$USER" -w "$passphrase" \
+			"$TEST_KEYCHAIN"
+		;;
+	*)
+		printf '%s' "$passphrase" >"$SSHAKKU_TEST_VAULT/${service}-${USER}"
+		;;
+	esac
+}
+
+# assert_named_secret fails unless an entry under that exact service name is
+# there. As in refute_vault_entry, the darwin check reads attributes only and
+# never the secret itself.
+assert_named_secret() {
+	local service="$1"
+	case "$OSTYPE" in
+	darwin*)
+		if ! bounded 20 security find-generic-password \
+			-s "$service" -a "$USER" "$TEST_KEYCHAIN" >/dev/null 2>&1; then
+			echo "the keychain has no entry ${service}" >&2
+			return 1
+		fi
+		;;
+	*)
+		if [ ! -e "$SSHAKKU_TEST_VAULT/${service}-${USER}" ]; then
+			echo "the vault has no entry ${service}" >&2
 			return 1
 		fi
 		;;

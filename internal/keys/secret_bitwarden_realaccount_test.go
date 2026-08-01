@@ -53,12 +53,20 @@ func TestBitwardenBackendRealAccount(t *testing.T) {
 		Server:   os.Getenv("SSHAKKU_TEST_BW_SERVER"),
 	}
 
-	testService := "sshakku-integration-test-probe-" + time.Now().UTC().Format("20060102T150405.000000000")
+	// The probe is named the way sshakku names what it stores, since that is
+	// what the backend is being asked to handle: a name of some other shape
+	// would be a different item than any real one.
+	stamp := time.Now().UTC().Format("20060102T150405.000000000")
+	testService := DefaultServicePrefix + "-integration-test-probe-" + stamp
+	// foreignService imitates what else lives in a vault someone actually
+	// uses — a saved password that has nothing to do with sshakku.
+	foreignService := "not-sshakku-integration-test-probe-" + stamp
 	const (
 		testLabel = "sshakku integration test probe"
 		testPass  = "probe-passphrase-not-a-real-secret"
 	)
 	t.Cleanup(func() { _ = backend.Delete(testService) })
+	t.Cleanup(func() { _ = backend.Delete(foreignService) })
 
 	// Each call below unlocks and locks for itself (held stays false), the
 	// same standalone bracket the reactive askpass-broker path uses — so
@@ -79,12 +87,26 @@ func TestBitwardenBackendRealAccount(t *testing.T) {
 		t.Fatalf("Lookup passphrase = %q, want %q", got, testPass)
 	}
 
+	// F27, against the real CLI: `bw list items` answers with the whole vault,
+	// so an item sshakku did not store has to be dropped before List returns —
+	// whatever List reports is what `forget --all` goes on to delete.
+	if err := backend.Store(foreignService, "not sshakku's", "someone-elses-password"); err != nil {
+		t.Fatalf("Store (foreign item): %v", err)
+	}
+
 	services, err := backend.List()
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
 	if !containsString(services, testService) {
 		t.Fatalf("List = %v, want it to contain %q", services, testService)
+	}
+	if containsString(services, foreignService) {
+		t.Fatalf("List reported %q, which sshakku did not store", foreignService)
+	}
+
+	if err := backend.Delete(foreignService); err != nil {
+		t.Fatalf("Delete (foreign item): %v", err)
 	}
 
 	const updatedPass = "probe-passphrase-updated-not-a-real-secret"

@@ -206,7 +206,7 @@ func TestClientSearchCreateGetSecret(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Collection: %v", err)
 	}
-	attrs := map[string]string{"service": "SSH-Key-id_rsa", "username": "alice"}
+	attrs := map[string]string{"service": "test-service-id_rsa", "username": "alice"}
 
 	t.Run("a search with no match is empty, not an error", func(t *testing.T) {
 		items, err := client.SearchItems(col, attrs)
@@ -272,7 +272,7 @@ func TestClientItemsAttributesDelete(t *testing.T) {
 			t.Fatalf("Items on empty collection = %v, %v, want none, no error", items, err)
 		}
 
-		attrs := map[string]string{"service": "SSH-Key-id_rsa", "username": "alice"}
+		attrs := map[string]string{"service": "test-service-id_rsa", "username": "alice"}
 		if err := client.CreateItem(col, "SSH Passphrase for id_rsa", attrs, "hunter2", true); err != nil {
 			t.Fatalf("CreateItem: %v", err)
 		}

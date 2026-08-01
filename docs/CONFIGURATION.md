@@ -122,10 +122,10 @@ bitwarden_server = "https://vault.example.com" # optional; a self-hosted Vaultwa
   exposure, but a passphrase does, and `security add-generic-password -w`
   has no way to take it other than on the command line. It is the default
   there, so a macOS install needs no configuration to use it.
-- `"1password"` shells out to the `op` CLI. `onepassword_vault` names a vault
-  dedicated to SSHakku — every item in it is assumed to be SSHakku's own, the
-  same dedicated-collection assumption the default backend makes. `op` must
-  already be signed in (the desktop app's own integration, or, for a Business/
+- `"1password"` shells out to the `op` CLI. `onepassword_vault` names the vault
+  to keep the entries in; SSHakku tags every item it creates there and only
+  ever reads or deletes its own, so the vault does not have to be one you keep
+  for nothing else. `op` must already be signed in (the desktop app's own integration, or, for a Business/
   Teams account, `OP_SERVICE_ACCOUNT_TOKEN` in the environment) — SSHakku
   never drives an interactive `op signin` itself.
 - `"bitwarden"` shells out to the `bw` CLI, against bitwarden.com or a
@@ -187,7 +187,7 @@ typo never silently pins a route you did not name.
 
 SSHakku's entries live in an **SSHakku** group in your database, one per key,
 under a URL built from the same per-key name the other backends use
-(`sshakku://SSH-Key-id_ed25519`), which is also the entry's username.
+(`sshakku://SSHakku-Key-id_ed25519`), which is also the entry's username.
 
 `sshakku forget` behaves differently by route, because the two can do different
 things:
@@ -223,7 +223,7 @@ appear in wallet GUIs that only browse the default collection (e.g.
 KWalletManager on KDE, where `ksecretd` — the Secret Service backend — and
 `kwalletd6` — KWalletManager's own backend — are different daemons entirely).
 Inspect it with `secret-tool` if needed, e.g.
-`secret-tool search --unlock service SSH-Key-id_rsa`.
+`secret-tool search --unlock service SSHakku-Key-id_rsa`.
 
 Upgrading from a version that stored passphrases in the default collection: an
 already-stored key is not found in the new `sshakku` collection, so it

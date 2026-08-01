@@ -71,12 +71,12 @@ func TestNoCommandBlocksIndefinitely(t *testing.T) {
 
 	cases := []blockingCase{
 		{"1Password Lookup", func() {
-			_, _, _ = (&OnePasswordBackend{Runner: ExecRunner{}, Vault: "sshakku", Timeout: brief}).Lookup("SSH-Key-id_test")
+			_, _, _ = (&OnePasswordBackend{Runner: ExecRunner{}, Vault: "sshakku", Timeout: brief}).Lookup(defaultServicePrefix + "-id_test")
 		}},
 		{"Bitwarden Lookup", func() {
 			_, _, _ = (&BitwardenBackend{
 				Runner: ExecRunner{}, Prompter: fixedPrompter{}, Email: "u@example.invalid", Timeout: brief,
-			}).Lookup("SSH-Key-id_test")
+			}).Lookup(defaultServicePrefix + "-id_test")
 		}},
 	}
 	// The wallets each platform reaches by running a program differ, and so does

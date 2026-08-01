@@ -211,15 +211,32 @@ func TestBitwardenDelete(t *testing.T) {
 	})
 }
 
+// TestBitwardenListLeavesOtherItemsAlone verifies F27 against a vault holding
+// more than sshakku's own items, which is any vault a person actually uses:
+// `bw list items` answers with the whole vault, and whatever List reports is
+// what `forget --all` goes on to delete.
+func TestBitwardenListLeavesOtherItemsAlone(t *testing.T) {
+	r := newFakeRunner().on(bitwardenBin, stdout(`[{"name":"github.com"},{"name":"`+defaultServicePrefix+`-id_ed25519"},{"name":"Bank"},{"name":"`+defaultServicePrefix+`-id_rsa"},{"name":"Passport scan"}]`, 0))
+	b := &BitwardenBackend{Runner: r, Session: "sess-token", held: true}
+	got, err := b.List()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := []string{defaultServicePrefix + "-id_ed25519", defaultServicePrefix + "-id_rsa"}
+	if !equalStrings(got, want) {
+		t.Fatalf("List = %v, want %v — everything else in the vault belongs to someone else", got, want)
+	}
+}
+
 func TestBitwardenList(t *testing.T) {
 	t.Run("returns each item's name", func(t *testing.T) {
-		r := newFakeRunner().on(bitwardenBin, stdout(`[{"name":"sshakku-id_rsa"},{"name":"sshakku-id_ed25519"}]`, 0))
+		r := newFakeRunner().on(bitwardenBin, stdout(`[{"name":"`+defaultServicePrefix+`-id_rsa"},{"name":"`+defaultServicePrefix+`-id_ed25519"}]`, 0))
 		b := &BitwardenBackend{Runner: r, Session: "sess-token", held: true}
 		got, err := b.List()
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		want := []string{"sshakku-id_rsa", "sshakku-id_ed25519"}
+		want := []string{defaultServicePrefix + "-id_rsa", defaultServicePrefix + "-id_ed25519"}
 		if !equalStrings(got, want) {
 			t.Fatalf("List = %v, want %v", got, want)
 		}

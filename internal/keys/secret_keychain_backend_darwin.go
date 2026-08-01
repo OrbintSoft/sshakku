@@ -63,9 +63,18 @@ func (b *KeychainBackend) Delete(service string) error {
 	return b.Client.Delete(b.Account, service)
 }
 
-// List returns the service identifiers of every item stored under Account.
+// List returns the service identifiers of the items sshakku stored under
+// Account. A generic-password query can be narrowed by account but not by any
+// prefix of the service, and the login keychain is where every application on
+// the machine keeps its passwords — so the client answers with all of them and
+// the rest is dropped here. Another program's secret is not sshakku's to
+// report, let alone to hand to `forget --all` (F27).
 func (b *KeychainBackend) List() ([]string, error) {
-	return b.Client.List(b.Account)
+	services, err := b.Client.List(b.Account)
+	if err != nil {
+		return nil, err
+	}
+	return ownServices(services), nil
 }
 
 var _ SecretBackend = (*KeychainBackend)(nil)

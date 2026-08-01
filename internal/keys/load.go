@@ -9,8 +9,12 @@ import (
 )
 
 const (
-	defaultMaxAttempts   = 3
-	defaultServicePrefix = "SSH-Key"
+	defaultMaxAttempts = 3
+	// defaultServicePrefix names sshakku's own entries in a shared store, and
+	// is how they are told apart from everyone else's there — so it names who
+	// put the entry there, not what the entry holds. A prefix of the second
+	// kind would be one any program keeping an SSH passphrase might pick too.
+	defaultServicePrefix = "SSHakku-Key"
 )
 
 // DefaultServicePrefix is the secret-store service prefix used when no
@@ -69,7 +73,8 @@ type Notifier interface {
 
 // Config tunes a Loader.
 type Config struct {
-	// ServicePrefix prefixes the per-key secret-store service; "" uses "SSH-Key".
+	// ServicePrefix prefixes the per-key secret-store service; "" uses the
+	// default (see defaultServicePrefix).
 	ServicePrefix string
 	// MaxAttempts bounds the retries per key; <1 uses 3.
 	MaxAttempts int

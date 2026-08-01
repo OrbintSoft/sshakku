@@ -1234,11 +1234,21 @@ not rediscovered one at a time.
 
 6. **macOS has no graphical passphrase prompt.** Found by the review above,
    not fixed: `newGraphicalPrompter` returns nil there, so every passphrase is
-   asked for on the terminal. This is a gap and not an absence — a Mac in a
-   login session always has a window server, and `osascript -e 'display dialog …
-   with hidden answer'` would draw the prompt with nothing extra installed.
-   `guiprompt_darwin.go` says so where a reader will find it. Needs a promise
-   (F4 covers being asked, not how), a red test, then the implementation.
+   asked for on the terminal. This is a gap and not an absence — `osascript -e
+   'display dialog … with hidden answer'` would draw the prompt with nothing
+   extra installed. `guiprompt_darwin.go` says so where a reader will find it.
+   Needs a promise (F4 covers being asked, not how), a red test, then the
+   implementation.
+
+   Whatever implements it must **probe for graphic access, not assume it**.
+   Being on a Mac says nothing: a single-user-mode boot and an SSH login from
+   another machine are both sessions with no window server to draw in, and a
+   dialog sent to one of those is a login shell waiting on something that can
+   never appear (F21). What answers the question is the session's own kind —
+   `launchctl managername` reports `Aqua` for a graphical login and something
+   else otherwise, and `SessionGetInfo` carries the same in
+   `sessionHasGraphicAccess`. This mirrors the Linux side, where the display
+   server is probed rather than presumed from the OS.
 7. **The CLI backends are untested on macOS.** 1Password and Bitwarden are
    supported on both platforms, but the real-account jobs run on
    `ubuntu-latest` only, so nothing exercises them where the rest of the
