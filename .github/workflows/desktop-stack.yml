@@ -104,7 +104,7 @@ jobs:
         env:
           SSHAKKU_TEST_ALLOW_REAL_KEEPASSXC_NATIVE: "1"
           SSHAKKU_TEST_KEEPASSXC_APP: /Applications/KeePassXC.app/Contents/MacOS/KeePassXC
-        run: go test ./internal/keys -run TestKeePassXCNativeFullRound -count=1 -v
+        run: go test ./internal/keys -run TestKeePassXCNativeFullRound -count=5 -v -timeout 20m
 
   midsession-failure:
     name: mid-session failure (${{ matrix.scenario }})
