@@ -48,7 +48,9 @@ cd sshakku
 sudo make install
 ```
 
-On Linux, installs the `sshakku` binary to `/usr/local/bin`, plus a login
+On Linux, installs the `sshakku` binary to `/usr/local/bin` — with
+`sshakku-askpass` beside it, a link to the same binary, which is what `ssh`
+runs when it needs a passphrase and which you never run yourself — plus a login
 hook to `/etc/profile.d` that wires it into every user's `bash`. On macOS,
 the binary goes to the same path, and the hook is instead rendered to
 `/usr/local/share/sshakku/` with a marker block added to `/etc/zprofile`
@@ -81,8 +83,9 @@ install elsewhere (e.g. packaging into a staging root).
 make install-user
 ```
 
-No `sudo` needed. Installs the binary to `$HOME/.local/bin/sshakku` and
-wires the same login hook into your own shell only. On Linux: if
+No `sudo` needed. Installs the binary to `$HOME/.local/bin/sshakku` (with
+`sshakku-askpass` linked beside it, as above) and wires the same login hook
+into your own shell only. On Linux: if
 `$HOME/.bash_profile.d/` already exists, a file is dropped there; otherwise
 a clearly delimited block is added to `$HOME/.bash_profile` (created if it
 doesn't exist yet). On macOS: the same, but for `zsh` — `$HOME/.zprofile.d/`

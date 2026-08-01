@@ -1217,15 +1217,46 @@ not rediscovered one at a time.
    anything. Items SSHakku creates need no approval, and the report turned out
    to be two unrelated defects (items 4 and 5 below).
 
-4. **A mistyped command asks for a secret instead of failing.** `SSHAKKU_ASKPASS`
-   is exported into the whole login shell, and any argument that is not a known
-   subcommand is taken for an ssh prompt. So `sshakku --forget` in a wired shell
-   prints `--forget` as a prompt, reads a line from the terminal with echo off,
-   and writes what was typed back to stdout — where a user expected "unknown
-   command". Not macOS-specific. **Decided 2026-08-01**: the guess goes away
-   rather than getting better — ssh is to exec an askpass program of its own, so
-   `sshakku` never has to infer what it is being run as. Needs a feature stating
-   the promise first, then a red test, then the split.
+4. **A mistyped command asked for a secret instead of failing — done.**
+   `SSHAKKU_ASKPASS` was exported into the whole login shell, and any argument
+   that was not a known subcommand was taken for an ssh prompt. So
+   `sshakku --forget` in a wired shell printed `--forget` as a prompt, read a
+   line from the terminal with echo off, and wrote what was typed back to
+   stdout — where a user expected "unknown command". Not macOS-specific. The
+   promise is F30.
+
+   **Decided 2026-08-01**: the guess goes away rather than getting better. ssh
+   is pointed at `sshakku-askpass`, a link to the same binary installed beside
+   it, and the binary reads the name it was run under. `SSHAKKU_ASKPASS` is
+   deleted; nothing reads it.
+
+   Why a name and not a better guess, established by experiment rather than
+   from the manual: OpenSSH execs the whole `SSH_ASKPASS` value as one
+   filename — `SSH_ASKPASS="<path> --askpass"` fails with `No such file or
+   directory` — and always passes exactly one argument, the prompt. So no flag
+   can be handed over, "no arguments" can never mean askpass, and "exactly one
+   argument" would not have helped either: `sshakku --forget` is exactly one.
+   The name is left, and it is not the same kind of signal as the marker was:
+   the marker was identical in both situations and could only be resolved by
+   guessing, while the name differs by construction — ssh execs the path it was
+   given, a person types the binary's own name.
+
+   A second binary was considered and rejected: Go links its runtime into each
+   one, so it costs ~2.2 MB and an exec per prompt, and the link needs the same
+   install and uninstall work either way. Backwards compatibility was declared
+   out of scope: a login shell open across the upgrade keeps the old
+   `SSH_ASKPASS` until re-login and falls back to prompting on the terminal.
+
+   **What was run.** The real binary, installed, in a shell carrying the real
+   exports: `sshakku --forget` answers `unknown command "--forget"` with the
+   usage and exit 2, no prompt and no echo. `test/bats/askpass-broker.bats`
+   drives the installed binary the same way, and its wallet-refill case proves
+   the exports still reach a real `ssh-add` through the link. Two integration
+   tests failed on the way and were right to: they built the binary and handed
+   its own path as the askpass program, a layout no install produces.
+
+   **What is unverified**: the macOS half of all of it runs only in the macOS
+   job — nothing here can drive it.
 5. **A wallet the platform has not got could be named and chosen.** **Done.**
    `resolveSecretBackend` defaulted an unset `secret_backend` to
    `secret-service` on every platform, so on macOS the report named a wallet
