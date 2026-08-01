@@ -1,4 +1,4 @@
-//go:build unix && !linux
+//go:build darwin
 
 package keys
 

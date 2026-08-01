@@ -1,4 +1,4 @@
-//go:build !linux
+//go:build darwin
 
 // The freedesktop Secret Service is a Linux D-Bus protocol
 // (org.freedesktop.secrets); there is no equivalent to talk to off Linux, so

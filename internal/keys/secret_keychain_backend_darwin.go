@@ -1,3 +1,5 @@
+//go:build darwin
+
 package keys
 
 // KeychainClient is the subset of macOS's Security.framework generic-password

@@ -49,6 +49,13 @@ func (fixedPrompter) Available() bool               { return true }
 // The bound asserted here is deliberately loose. It is not a performance
 // budget: any finite answer proves a deadline exists, and no answer at all is
 // the defect.
+// blockingCase is one call that must come back, and the name it is reported
+// under. Platform-specific ones are contributed by platformBlockingCases.
+type blockingCase struct {
+	name string
+	call func()
+}
+
 func TestNoCommandBlocksIndefinitely(t *testing.T) {
 	const patience = 30 * time.Second
 
@@ -60,27 +67,7 @@ func TestNoCommandBlocksIndefinitely(t *testing.T) {
 
 	blockingTools(t)
 
-	for _, tc := range []struct {
-		name string
-		call func()
-	}{
-		// Left on the bare default on purpose: this one witnesses the structural
-		// net, that a call site choosing no budget still gets a finite one.
-		{"GUI detection (xset)", func() {
-			GUIAvailable(GUIEnv{Display: ":0"}, ExecRunner{}, KDialogPrompter{})
-		}},
-		{"graphical passphrase prompt (kdialog)", func() {
-			_, _ = KDialogPrompter{Runner: ExecRunner{}, Timeout: brief}.Prompt("id_test")
-		}},
-		{"secret-tool Lookup", func() {
-			_, _, _ = SecretToolBackend{Runner: ExecRunner{}, User: "u", Timeout: brief}.Lookup("SSH-Key-id_test")
-		}},
-		{"secret-tool Store", func() {
-			_ = SecretToolBackend{Runner: ExecRunner{}, User: "u", Timeout: brief}.Store("SSH-Key-id_test", "label", "s3cret")
-		}},
-		{"secret-tool Delete", func() {
-			_ = SecretToolBackend{Runner: ExecRunner{}, User: "u", Timeout: brief}.Delete("SSH-Key-id_test")
-		}},
+	cases := []blockingCase{
 		{"1Password Lookup", func() {
 			_, _, _ = (&OnePasswordBackend{Runner: ExecRunner{}, Vault: "sshakku", Timeout: brief}).Lookup("SSH-Key-id_test")
 		}},
@@ -89,7 +76,12 @@ func TestNoCommandBlocksIndefinitely(t *testing.T) {
 				Runner: ExecRunner{}, Prompter: fixedPrompter{}, Email: "u@example.invalid", Timeout: brief,
 			}).Lookup("SSH-Key-id_test")
 		}},
-	} {
+	}
+	// The wallets each platform reaches by running a program differ, and so does
+	// which of them exist at all; each platform names its own.
+	cases = append(cases, platformBlockingCases(brief)...)
+
+	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
