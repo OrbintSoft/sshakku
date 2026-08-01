@@ -81,32 +81,47 @@ same way a problem in `config.toml` itself is.
 
 ## Choosing the secret backend
 
-By default SSHakku stores passphrases in a dedicated Secret Service collection
-(KDE Wallet, GNOME Keyring, or KeePassXC via its Secret Service integration —
-see the next section). This default only works on Linux — macOS has no D-Bus
-session bus or Secret Service implementation to fall back to, so a macOS
-install must set `secret_backend = "keychain"` explicitly. `secret_backend`
-in `config.toml` can also switch to 1Password or Bitwarden on either
-platform. Like `wallet_store_mode`, these four keys are config-file only — an
-account identity (an email address, a vault name) doesn't fit a single
-environment variable, and there is no benefit to leaving it sitting in the
-process environment instead of the file:
+Left alone, SSHakku uses the wallet your operating system provides itself, and
+you need configure nothing: a dedicated Secret Service collection on Linux (KDE
+Wallet, GNOME Keyring, or KeePassXC via its Secret Service integration — see the
+next section), and the Keychain on macOS.
+
+Which wallets you can name depends on the system, because two of them *are* the
+system:
+
+| Value | Linux | macOS |
+| --- | --- | --- |
+| `"secret-service"` | ✅ the default | ❌ no such API exists there |
+| `"keychain"` | ❌ no such API exists there | ✅ the default |
+| `"keepassxc"` | ✅ | ✅ |
+| `"1password"` | ✅ | ✅ |
+| `"bitwarden"` | ✅ | ✅ |
+
+Naming one your system has not got is a mistake in the configuration, not a
+wallet waiting for you to install something: SSHakku logs it and carries on with
+your platform's default, so a stale config file cannot take your login shell
+down with it.
+
+Like `wallet_store_mode`, these four keys are config-file only — an account
+identity (an email address, a vault name) doesn't fit a single environment
+variable, and there is no benefit to leaving it sitting in the process
+environment instead of the file:
 
 ```toml
-secret_backend = "bitwarden"                  # "secret-service" (default), "keychain", "keepassxc", "1password", or "bitwarden"
+secret_backend = "bitwarden"                  # see the table above for what your system accepts
 onepassword_vault = "sshakku"                  # consulted only when secret_backend = "1password"
 bitwarden_email = "you@example.com"            # consulted only when secret_backend = "bitwarden"
 bitwarden_server = "https://vault.example.com" # optional; a self-hosted Vaultwarden instance
 ```
 
-- `"secret-service"` (the default) is described in the next section.
-  Linux only.
+- `"secret-service"` (the Linux default) is described in the next section.
 - `"keychain"` stores passphrases as generic-password items in the macOS
   Keychain, one per key, scoped to your account. SSHakku talks to
   Security.framework directly (via cgo), never shelling out to the `security`
   CLI — a plain status read has no secret material to protect from `ps`/argv
   exposure, but a passphrase does, and `security add-generic-password -w`
-  has no way to take it other than on the command line. macOS only.
+  has no way to take it other than on the command line. It is the default
+  there, so a macOS install needs no configuration to use it.
 - `"1password"` shells out to the `op` CLI. `onepassword_vault` names a vault
   dedicated to SSHakku — every item in it is assumed to be SSHakku's own, the
   same dedicated-collection assumption the default backend makes. `op` must
@@ -125,8 +140,9 @@ bitwarden_server = "https://vault.example.com" # optional; a self-hosted Vaultwa
   the vault.
 - `"keepassxc"` names KeePassXC as your wallet on every platform. How SSHakku
   reaches it is chosen for you and can be overridden — see the next section.
-- An unrecognised `secret_backend` value falls back to `"secret-service"` and
-  is logged.
+- A `secret_backend` value this system does not offer — a misspelling, or a
+  wallet belonging to the other platform — falls back to your platform's
+  default and is logged.
 
 ## Choosing how KeePassXC is reached
 

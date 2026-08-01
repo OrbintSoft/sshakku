@@ -47,14 +47,13 @@ func (d deps) loadKeys(stderr io.Writer) int {
 	}
 
 	runner := keys.ExecRunner{Timeout: settings.CommandTimeout}
-	kdialog := keys.KDialogPrompter{Runner: runner, Timeout: settings.InteractiveTimeout}
 	// The vault is always consulted first regardless of which of these is
 	// picked (see Loader.loadViaVaultThenPrompt); this only chooses how to
-	// ask when it misses — kdialog when a graphical session is usable,
-	// otherwise the terminal, which needs no external binary.
+	// ask when it misses — the platform's dialog where there is one, otherwise
+	// the terminal, which needs no external binary.
 	var prompter keys.Prompter = keys.TTYPrompter{}
-	if d.guiAvailable() {
-		prompter = kdialog
+	if graphical := d.graphicalPrompter(settings); graphical != nil {
+		prompter = graphical
 	}
 
 	secret, closeSecret := d.newSecret(currentUser(), log, settings)

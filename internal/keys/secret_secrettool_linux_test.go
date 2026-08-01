@@ -1,3 +1,5 @@
+//go:build linux
+
 package keys
 
 import (
@@ -115,16 +117,4 @@ func TestSecretToolList(t *testing.T) {
 	if _, err := b.List(); !errors.Is(err, ErrListUnsupported) {
 		t.Fatalf("error = %v, want %v", err, ErrListUnsupported)
 	}
-}
-
-func equalStrings(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }

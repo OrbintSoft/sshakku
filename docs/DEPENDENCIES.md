@@ -31,11 +31,10 @@ Always required, regardless of configuration:
   (Linux) or `~/.zshrc`/`~/.zshrc.d/` (macOS) via `make install-user
   WIRE_BASHRC=1`/`WIRE_ZSHRC=1` to additionally cover non-login shells.
 
-Required only for the default secret backend (`secret_backend =
-"secret-service"`, i.e. no `secret_backend` set at all). This default does
-not work on macOS — there is no D-Bus session bus or Secret Service
-implementation to fall back to — so macOS installs must set `secret_backend
-= "keychain"` explicitly in `config.toml` (see
+Required only for the Secret Service backend, which is what a Linux install
+uses when no `secret_backend` is set. It is a freedesktop mechanism and exists
+on Linux alone: a macOS install defaults to the Keychain instead and needs
+none of this, nor any configuration to get it (see
 [Choosing the secret backend](CONFIGURATION.md#choosing-the-secret-backend)):
 
 - **A reachable D-Bus session bus** with a Secret Service implementation
@@ -48,9 +47,9 @@ implementation to fall back to — so macOS installs must set `secret_backend
   non-interactive or non-desktop login) — see
   [Where passphrases are stored](CONFIGURATION.md#where-passphrases-are-stored).
 
-On macOS, `secret_backend = "keychain"` needs nothing beyond what's already
-on every Mac: SSHakku talks to Security.framework directly (via cgo), never
-shelling out to the `security` CLI.
+On macOS the Keychain — the default there — needs nothing beyond what is
+already on every Mac: SSHakku talks to Security.framework directly (via cgo),
+never shelling out to the `security` CLI.
 
 Required only when a graphical passphrase prompt is used (a GUI session is
 detected — Wayland or X11 with a live `$DISPLAY` confirmed via `xset` on

@@ -14,7 +14,8 @@ import (
 // quiet, a CLI waiting on a network that has gone away.
 //
 // PATH is the whole seam — every one of these is resolved by name — so nothing
-// about the components under test is replaced.
+// about the components under test is replaced. Which programs those are differs
+// per platform, so each names its own (platformBlockingTools).
 func blockingTools(t *testing.T) {
 	t.Helper()
 	src, err := os.ReadFile(filepath.Join("..", "..", "test", "bats", "fixtures", "blocking-secret-tool"))
@@ -22,7 +23,8 @@ func blockingTools(t *testing.T) {
 		t.Fatalf("read the blocking tool fixture: %v", err)
 	}
 	dir := t.TempDir()
-	for _, bin := range []string{secretToolBin, bitwardenBin, onePasswordBin, kdialogBin, "xset"} {
+	tools := append([]string{bitwardenBin, onePasswordBin}, platformBlockingTools()...)
+	for _, bin := range tools {
 		if err := os.WriteFile(filepath.Join(dir, bin), src, 0o755); err != nil {
 			t.Fatalf("install the blocking %s: %v", bin, err)
 		}
@@ -49,6 +51,13 @@ func (fixedPrompter) Available() bool               { return true }
 // The bound asserted here is deliberately loose. It is not a performance
 // budget: any finite answer proves a deadline exists, and no answer at all is
 // the defect.
+// blockingCase is one call that must come back, and the name it is reported
+// under. Platform-specific ones are contributed by platformBlockingCases.
+type blockingCase struct {
+	name string
+	call func()
+}
+
 func TestNoCommandBlocksIndefinitely(t *testing.T) {
 	const patience = 30 * time.Second
 
@@ -60,27 +69,7 @@ func TestNoCommandBlocksIndefinitely(t *testing.T) {
 
 	blockingTools(t)
 
-	for _, tc := range []struct {
-		name string
-		call func()
-	}{
-		// Left on the bare default on purpose: this one witnesses the structural
-		// net, that a call site choosing no budget still gets a finite one.
-		{"GUI detection (xset)", func() {
-			GUIAvailable(GUIEnv{Display: ":0"}, ExecRunner{}, KDialogPrompter{})
-		}},
-		{"graphical passphrase prompt (kdialog)", func() {
-			_, _ = KDialogPrompter{Runner: ExecRunner{}, Timeout: brief}.Prompt("id_test")
-		}},
-		{"secret-tool Lookup", func() {
-			_, _, _ = SecretToolBackend{Runner: ExecRunner{}, User: "u", Timeout: brief}.Lookup("SSH-Key-id_test")
-		}},
-		{"secret-tool Store", func() {
-			_ = SecretToolBackend{Runner: ExecRunner{}, User: "u", Timeout: brief}.Store("SSH-Key-id_test", "label", "s3cret")
-		}},
-		{"secret-tool Delete", func() {
-			_ = SecretToolBackend{Runner: ExecRunner{}, User: "u", Timeout: brief}.Delete("SSH-Key-id_test")
-		}},
+	cases := []blockingCase{
 		{"1Password Lookup", func() {
 			_, _, _ = (&OnePasswordBackend{Runner: ExecRunner{}, Vault: "sshakku", Timeout: brief}).Lookup("SSH-Key-id_test")
 		}},
@@ -89,7 +78,12 @@ func TestNoCommandBlocksIndefinitely(t *testing.T) {
 				Runner: ExecRunner{}, Prompter: fixedPrompter{}, Email: "u@example.invalid", Timeout: brief,
 			}).Lookup("SSH-Key-id_test")
 		}},
-	} {
+	}
+	// The wallets each platform reaches by running a program differ, and so does
+	// which of them exist at all; each platform names its own.
+	cases = append(cases, platformBlockingCases(brief)...)
+
+	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 

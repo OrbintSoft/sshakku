@@ -171,7 +171,7 @@ func TestResolveDefaults(t *testing.T) {
 	want := Settings{
 		KeyLifetime: DefaultKeyLifetime, GiveupTTL: DefaultGiveupTTL,
 		CommandTimeout: keys.DefaultCommandTimeout, InteractiveTimeout: keys.DefaultInteractiveTimeout,
-		WalletStoreMode: WalletStoreModeAll, AutoLoadMode: AutoLoadModeAll, SecretBackend: SecretBackendSecretService,
+		WalletStoreMode: WalletStoreModeAll, AutoLoadMode: AutoLoadModeAll, SecretBackend: platformDefaultSecretBackend,
 		// No route named means SSHakku chooses one per platform; only this
 		// value ever falls back.
 		KeePassXCRoute: KeePassXCRouteAuto,
@@ -205,7 +205,7 @@ func TestResolveFileWins(t *testing.T) {
 		InteractiveTimeout: keys.DefaultInteractiveTimeout,
 		WalletStoreMode:    WalletStoreModeAll,
 		AutoLoadMode:       AutoLoadModeAll,
-		SecretBackend:      SecretBackendSecretService,
+		SecretBackend:      platformDefaultSecretBackend,
 		KeePassXCRoute:     KeePassXCRouteAuto,
 	}
 	if !reflect.DeepEqual(s, want) {
@@ -415,18 +415,55 @@ func TestResolveInvalidEnvMaxAttemptsFallsToFile(t *testing.T) {
 	}
 }
 
-func TestResolveSecretBackendDefaultsToSecretService(t *testing.T) {
+// TestSecretBackendsIsTheOneList guards what the exported answers are for:
+// every caller that offers the user a choice of wallet, or turns one down,
+// reads them here instead of keeping a copy of its own. Two copies is how the
+// diagnostics came to accept a name the configuration would not.
+func TestSecretBackendsIsTheOneList(t *testing.T) {
+	names := SecretBackends()
+	if len(names) == 0 {
+		t.Fatal("this system offers no wallet at all")
+	}
+	for _, name := range names {
+		if !SecretBackendAvailable(name) {
+			t.Errorf("SecretBackendAvailable(%q) = false for a wallet the same package offers", name)
+		}
+		s, errs := Resolve(File{SecretBackend: ptr(name)}, lookupFrom(nil))
+		if len(errs) != 0 || s.SecretBackend != name {
+			t.Errorf("naming %q resolved to %q with errors %v; an offered wallet must be accepted", name, s.SecretBackend, errs)
+		}
+	}
+	if SecretBackendAvailable("bogus") {
+		t.Error(`SecretBackendAvailable("bogus") = true, want false`)
+	}
+	if !SecretBackendAvailable(DefaultSecretBackend()) {
+		t.Errorf("the default wallet %q is not among the ones offered", DefaultSecretBackend())
+	}
+
+	// The returned slice is the caller's own: handing out the live one would
+	// let any caller reorder or empty the list every other caller reads.
+	names[0] = "tampered"
+	if SecretBackends()[0] == "tampered" {
+		t.Error("SecretBackends hands out the list itself, so a caller can change what every other caller sees")
+	}
+}
+
+func TestResolveSecretBackendDefaultsToThePlatformWallet(t *testing.T) {
 	s, errs := Resolve(File{}, lookupFrom(nil))
 	if len(errs) != 0 {
 		t.Fatalf("unexpected errors: %v", errs)
 	}
-	if s.SecretBackend != SecretBackendSecretService {
-		t.Errorf("SecretBackend = %q, want %q", s.SecretBackend, SecretBackendSecretService)
+	if s.SecretBackend != platformDefaultSecretBackend {
+		t.Errorf("SecretBackend = %q, want %q", s.SecretBackend, platformDefaultSecretBackend)
 	}
 }
 
+// TestResolveSecretBackendFromFile walks whatever this system offers rather
+// than a written-out list, so it cannot drift from the list the product
+// actually consults. Which names those are on each platform is pinned in
+// backend_platform_linux_test.go and backend_platform_other_test.go.
 func TestResolveSecretBackendFromFile(t *testing.T) {
-	for _, backend := range []string{SecretBackendSecretService, SecretBackendOnePassword, SecretBackendBitwarden, SecretBackendKeychain} {
+	for _, backend := range platformSecretBackends {
 		file := File{SecretBackend: ptr(backend)}
 		s, errs := Resolve(file, lookupFrom(nil))
 		if len(errs) != 0 {
@@ -438,14 +475,73 @@ func TestResolveSecretBackendFromFile(t *testing.T) {
 	}
 }
 
-func TestResolveSecretBackendInvalidFallsBackToSecretService(t *testing.T) {
+func TestResolveSecretBackendInvalidFallsBackToThePlatformWallet(t *testing.T) {
 	file := File{SecretBackend: ptr("bogus")}
 	s, errs := Resolve(file, lookupFrom(nil))
 	if len(errs) == 0 {
 		t.Fatal("an invalid secret_backend must be reported")
 	}
-	if s.SecretBackend != SecretBackendSecretService {
-		t.Errorf("SecretBackend = %q, want %q on an invalid value", s.SecretBackend, SecretBackendSecretService)
+	if s.SecretBackend != platformDefaultSecretBackend {
+		t.Errorf("SecretBackend = %q, want %q on an invalid value", s.SecretBackend, platformDefaultSecretBackend)
+	}
+}
+
+// TestResolveSecretBackendFromEitherPlatformsWallets checks the rule itself
+// against both platforms' tables, from whichever platform is running it.
+//
+// The tables are per-platform and the code for one is not compiled on the
+// other; the rule that reads them is neither, and this is what keeps a change
+// to it from being provable on one operating system alone.
+func TestResolveSecretBackendFromEitherPlatformsWallets(t *testing.T) {
+	const (
+		secretService = "secret-service"
+		keychain      = "keychain"
+	)
+	linux := []string{secretService, SecretBackendOnePassword, SecretBackendBitwarden, SecretBackendKeePassXC}
+	elsewhere := []string{keychain, SecretBackendOnePassword, SecretBackendBitwarden, SecretBackendKeePassXC}
+
+	tests := []struct {
+		name      string
+		named     *string
+		available []string
+		fallback  string
+		want      string
+		wantErr   string // a fragment the error must contain, "" for no error
+	}{
+		{name: "nothing named on linux", available: linux, fallback: secretService, want: secretService},
+		{name: "nothing named elsewhere", available: elsewhere, fallback: keychain, want: keychain},
+		{name: "a wallet this system has", named: ptr(SecretBackendBitwarden), available: elsewhere, fallback: keychain, want: SecretBackendBitwarden},
+		{
+			name: "the keychain named on linux", named: ptr(keychain), available: linux, fallback: secretService,
+			want: secretService, wantErr: keychain,
+		},
+		{
+			name: "the secret service named elsewhere", named: ptr(secretService), available: elsewhere, fallback: keychain,
+			want: keychain, wantErr: secretService,
+		},
+		{
+			name: "a name no system has", named: ptr("bogus"), available: linux, fallback: secretService,
+			want: secretService, wantErr: "bogus",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := resolveSecretBackendFrom(tc.named, tc.available, tc.fallback)
+			if got != tc.want {
+				t.Errorf("backend = %q, want %q", got, tc.want)
+			}
+			switch {
+			case tc.wantErr == "":
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+			case err == nil:
+				t.Fatalf("want an error naming %q, got none", tc.wantErr)
+			case !strings.Contains(err.Error(), tc.wantErr):
+				t.Errorf("error = %v, want it to name %q", err, tc.wantErr)
+			}
+		})
 	}
 }
 

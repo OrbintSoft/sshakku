@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/keys"
 	"github.com/OrbintSoft/sshakku/internal/paths"
 )
@@ -50,15 +51,23 @@ func TestRun(t *testing.T) {
 
 // Every name a user may put in secret_backend has to be a name the diagnostics
 // accept too: a wallet you can choose but cannot ask about is one you cannot
-// diagnose when it stops working.
-func TestValidSecretBackendName(t *testing.T) {
-	for _, name := range []string{"secret-service", "keepassxc", "1password", "bitwarden", "keychain"} {
-		if !validSecretBackendName(name) {
-			t.Errorf("validSecretBackendName(%q) = false, want true", name)
+// diagnose when it stops working. The names come from the one list rather than
+// being written out again here, which is what stopped them agreeing before.
+func TestEveryChoosableWalletCanBeDiagnosed(t *testing.T) {
+	names := config.SecretBackends()
+	if len(names) == 0 {
+		t.Fatal("this system offers no wallet at all")
+	}
+	for _, name := range names {
+		if !config.SecretBackendAvailable(name) {
+			t.Errorf("SecretBackendAvailable(%q) = false, want true for a wallet that can be chosen", name)
 		}
 	}
-	if validSecretBackendName("bogus") {
-		t.Error(`validSecretBackendName("bogus") = true, want false`)
+	if config.SecretBackendAvailable("bogus") {
+		t.Error(`SecretBackendAvailable("bogus") = true, want false`)
+	}
+	if !config.SecretBackendAvailable(config.DefaultSecretBackend()) {
+		t.Errorf("the default wallet %q is not among the ones this system offers", config.DefaultSecretBackend())
 	}
 }
 
@@ -318,19 +327,11 @@ func TestRandomProbeValue(t *testing.T) {
 	}
 }
 
-func TestDetectGUIAvailableHeadless(t *testing.T) {
-	t.Setenv("WAYLAND_DISPLAY", "")
-	t.Setenv("DISPLAY", "")
-	if detectGUIAvailable() {
-		t.Error("detectGUIAvailable() = true with no display server, want false")
-	}
-}
-
 // TestAskpassEnvHeadless confirms a session with no display server is wired the
 // same as a graphical one: the broker reads the wallet, which needs no display,
 // and a key that has expired from the agent must be refilled there too. Unlike
-// the case in cover_remaining_test.go this one leaves the GUI probe real, so it
-// also covers the detector actually reporting a headless session.
+// the case in cover_remaining_test.go this one leaves the platform's own
+// prompter lookup real, so it also covers it reporting a headless session.
 func TestAskpassEnvHeadless(t *testing.T) {
 	t.Setenv("WAYLAND_DISPLAY", "")
 	t.Setenv("DISPLAY", "")

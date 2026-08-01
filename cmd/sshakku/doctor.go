@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/OrbintSoft/sshakku/internal/agent"
+	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/diagnose"
 	"github.com/OrbintSoft/sshakku/internal/keys"
 	"github.com/OrbintSoft/sshakku/internal/keystate"
@@ -167,9 +168,12 @@ func (d deps) doctor(stdout, stderr io.Writer, args []string) int {
 			return 2
 		}
 	}
-	if testBackendName != "" && !validSecretBackendName(testBackendName) {
+	if testBackendName != "" && !config.SecretBackendAvailable(testBackendName) {
+		// The wallets are listed from the one place that knows them, so this
+		// never offers the user a name this system has not got.
 		_, _ = fmt.Fprintf(stderr,
-			"sshakku: doctor --test-backend: unknown backend %q (want secret-service, keepassxc, 1password, bitwarden, or keychain)\n", testBackendName)
+			"sshakku: doctor --test-backend: %q is not a wallet this system has (want %s)\n",
+			testBackendName, strings.Join(config.SecretBackends(), ", "))
 		return 2
 	}
 
@@ -370,7 +374,7 @@ func (d deps) doctorCrossUser(stdout, stderr io.Writer, invoking paths.Env, targ
 		StatePath: filepath.Join(filepath.Dir(layout.AgentSock), "agent.state"),
 		LogFile:   layout.LogFile,
 		OurUID:    target.UID,
-	}, agent.Inspector{}, agent.UIDGatedProber{UID: target.UID, Prober: agent.SocketProber{}}, diagnose.ProcfsAncestry{}, diagnose.ProcfsCgroup{},
+	}, agent.Inspector{}, agent.UIDGatedProber{UID: target.UID, Prober: agent.SocketProber{}}, newAncestrySource(), newCgroupSource(),
 		nil, // the keys section only covers the invoking user's own ~/.ssh (see gatherReport)
 		newHostSource(targetEnv.Home),
 	))
@@ -396,7 +400,7 @@ func gatherReport(env paths.Env, layout paths.Layout) diagnose.Report {
 		OurUID:            env.UID,
 		EnvAskpass:        os.Getenv("SSH_ASKPASS"),
 		EnvAskpassRequire: os.Getenv("SSH_ASKPASS_REQUIRE"),
-	}, agent.Inspector{}, agent.SocketProber{}, diagnose.ProcfsAncestry{}, diagnose.ProcfsCgroup{}, keySource,
+	}, agent.Inspector{}, agent.SocketProber{}, newAncestrySource(), newCgroupSource(), keySource,
 		newHostSource(env.Home))
 }
 

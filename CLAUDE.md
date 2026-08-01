@@ -164,3 +164,27 @@ appending. See `docs/THREAT-MODEL.md` for the threat model and the June 2026 inc
     see the `verify-e2e` skill. Report what was actually exercised and what was
     not: "unit tests pass, the feature was not run end to end" is a useful,
     honest statement; "verified" without a run is not.
+
+26. **Every platform-specific file names its platform.** A file that is only
+    for one operating system carries that system's name (`_darwin.go`,
+    `_linux.go`) — never a negation of another (`_other.go`, `//go:build
+    !linux`), and this holds whether the file *provides* the platform's feature
+    or merely reports it absent. A negation claims every platform it does not
+    exclude: `!linux` on the wallet table offered the macOS Keychain to FreeBSD
+    and Windows, which have none, so the wrong default arrived quietly instead
+    of the build failing; `!linux` on a do-nothing stub is milder but still
+    says "I know what to do on Windows", which is untrue. One rule with no
+    exceptions is the one that cannot be applied wrongly.
+
+    If no file then covers a platform, that is the answer, not a gap to paper
+    over: this project targets Linux and macOS, and a third platform failing to
+    build says so out loud where a silent no-op would not. Applies to test files
+    too, and to knowledge as much as to code — a parser for another system's
+    command output is that system's file, even though it is only bytes.
+
+    The cost is real: a tagged branch cannot be exercised from the other
+    platform (see Rule 20). Contain it by putting only the *data* behind the tag
+    — the table of what this platform has — and keeping the logic that reads it
+    platform-neutral, taking that table as an argument, so both answers stay
+    checkable from either machine. Where that is not possible, move the test
+    with the code so the other platform's job still covers it.

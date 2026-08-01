@@ -7,15 +7,6 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/keys"
 )
 
-// fakeRunner returns a canned result for any command, so a prompter can be
-// exercised without launching a real dialog binary.
-type fakeRunner struct {
-	res keys.Result
-	err error
-}
-
-func (f fakeRunner) Run(keys.Cmd) (keys.Result, error) { return f.res, f.err }
-
 // TestNewSecretBackend covers the CLI-backed backend branches, whose
 // construction is pure (no D-Bus, no subprocess): the returned value has the
 // expected concrete type and fields, and the cleanup func is always callable.
@@ -59,31 +50,36 @@ func TestNewSecretBackend(t *testing.T) {
 		}
 	})
 
-	t.Run("keychain", func(t *testing.T) {
-		s := config.Settings{SecretBackend: config.SecretBackendKeychain}
-		backend, closeFn := newSecretBackend("alice", fakeLogger{}, s)
-		defer closeFn()
-		if backend == nil {
-			t.Fatal("backend = nil, want a keychain backend")
-		}
-	})
+	// The wallet the operating system provides itself has no case of its own
+	// here: it is this platform's default, and is covered by the per-platform
+	// tests beside newDefaultSecretBackend.
 }
 
-// TestBitwardenMasterPrompterGUI covers the graphical branch of the bitwarden
-// master-password prompter: with gui set it delegates to kdialog, returning its
-// trimmed stdout. Available is unconditionally true.
+// TestBitwardenMasterPrompterGUI covers the graphical branch of the wallet
+// master-password prompter: given a dialog, it delegates to it and returns the
+// answer trimmed. Available is unconditionally true.
+//
+// The dialog is a stand-in rather than the platform's own, because which dialog
+// a platform draws with is not what this test judges — that it is used when
+// there is one, and that the terminal is not reached for, is.
 func TestBitwardenMasterPrompterGUI(t *testing.T) {
-	runner := fakeRunner{res: keys.Result{Stdout: []byte("master-pass\n"), Code: 0}}
-	p := walletPasswordPrompter{kdialog: keys.KDialogPrompter{Runner: runner}, gui: true}
+	p := walletPasswordPrompter{graphical: fixedPrompter{answer: "master-pass"}}
 
 	got, err := p.Prompt("Bitwarden master password")
 	if err != nil {
 		t.Fatalf("Prompt: %v", err)
 	}
 	if got != "master-pass" {
-		t.Errorf("Prompt = %q, want %q (kdialog stdout, trimmed)", got, "master-pass")
+		t.Errorf("Prompt = %q, want %q, the answer the dialog gave", got, "master-pass")
 	}
 	if !p.Available() {
 		t.Error("Available() = false, want true")
 	}
 }
+
+// fixedPrompter is a dialog that always answers, standing in for whichever one
+// the platform would draw with.
+type fixedPrompter struct{ answer string }
+
+func (p fixedPrompter) Prompt(string) (string, error) { return p.answer, nil }
+func (fixedPrompter) Available() bool                 { return true }

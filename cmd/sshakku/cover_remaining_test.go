@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/OrbintSoft/sshakku/internal/agent"
+	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/keys"
 	"github.com/OrbintSoft/sshakku/internal/paths"
 )
@@ -209,7 +210,7 @@ func TestRunDispatch(t *testing.T) {
 	// mechanism, so asserting only the exit code would pass either way.
 	t.Run("askpass-env headless", func(t *testing.T) {
 		d := realDeps()
-		d.guiAvailable = func() bool { return false }
+		d.graphicalPrompter = func(config.Settings) keys.Prompter { return nil }
 		d.self = func() (string, error) { return "/opt/sshakku/bin/sshakku", nil }
 		var out, errOut bytes.Buffer
 		if got := d.run(&out, &errOut, []string{"askpass-env"}); got != 0 {
@@ -293,10 +294,10 @@ func TestLoadKeysSeams(t *testing.T) {
 		}
 	})
 
-	t.Run("GUI available selects the graphical prompter", func(t *testing.T) {
+	t.Run("a platform with a dialog selects it over the terminal", func(t *testing.T) {
 		tempRuntimeEnv(t)
 		d := depsReturning(newMemoryBackend())
-		d.guiAvailable = func() bool { return true }
+		d.graphicalPrompter = func(config.Settings) keys.Prompter { return fixedPrompter{answer: "from the dialog"} }
 		var errOut bytes.Buffer
 		if got := d.loadKeys(&errOut); got != 0 {
 			t.Fatalf("loadKeys (GUI, no keys) = %d, want 0; stderr=%q", got, errOut.String())

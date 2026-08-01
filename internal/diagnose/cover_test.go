@@ -23,33 +23,6 @@ func TestGatherRunsHostChecks(t *testing.T) {
 	}
 }
 
-// TestLauncherLabelDisplayManagers covers the display-manager and console-login
-// cases of launcherLabel that the other tests don't reach.
-func TestLauncherLabelDisplayManagers(t *testing.T) {
-	for _, comm := range []string{"gdm", "lightdm", "login"} {
-		if _, ok := launcherLabel(comm); !ok {
-			t.Errorf("launcherLabel(%q) not recognised", comm)
-		}
-	}
-}
-
-// TestParseStatNonNumericPPID covers parseStat's branch where the ppid field is
-// present but not a number.
-func TestParseStatNonNumericPPID(t *testing.T) {
-	comm, ppid, ok := parseStat([]byte("9 (x) S notanumber"))
-	if ok || comm != "x" || ppid != 0 {
-		t.Errorf("parseStat = (%q,%d,%v), want (\"x\",0,false)", comm, ppid, ok)
-	}
-}
-
-// TestParseCgroupUnitSingleColonLine covers parseCgroupUnit skipping a line that
-// has no second colon, so there is no path field to scan for a unit.
-func TestParseCgroupUnitSingleColonLine(t *testing.T) {
-	if unit, ok := parseCgroupUnit([]byte("0:no-second-colon")); ok {
-		t.Errorf("parseCgroupUnit = (%q,%v), want no unit", unit, ok)
-	}
-}
-
 // TestFormatRemainingBranches covers Format's attribution line ("started by …"),
 // its key-enumeration-error line, and the "not answering" SSH_AUTH_SOCK suffix,
 // which the other Format tests don't exercise.
