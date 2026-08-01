@@ -31,7 +31,7 @@ func TestConnectRejectsAKeyOfTheWrongWidth(t *testing.T) {
 		Success:   "true",
 	}}
 
-	_, err := Connect(s.dial(), 2*time.Second)
+	_, err := Connect(s.dial(), 2*time.Second, 2*time.Second)
 	if err == nil {
 		t.Fatal("a public key of the wrong width must be refused")
 	}
@@ -268,7 +268,7 @@ func TestIncrementNonce(t *testing.T) {
 
 func TestRequestBeforeKeyExchangeIsRefused(t *testing.T) {
 	c := &Client{timeout: time.Second}
-	if err := c.request(actionGetLogins, struct{}{}, &struct{}{}); err == nil {
+	if err := c.request(actionGetLogins, struct{}{}, &getLoginsReply{}); err == nil {
 		t.Fatal("a request before the key exchange must not be attempted")
 	}
 }

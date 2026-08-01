@@ -52,6 +52,11 @@ type fakeServer struct {
 	// without answering, standing in for KeePassXC exiting mid-session.
 	hangUpOn string
 
+	// replyAfter delays the answer to an action, standing in for an exchange
+	// that waits on something slower than a socket — a dialog somebody has to
+	// read, for instance.
+	replyAfter map[string]time.Duration
+
 	mu sync.Mutex
 	// clientPub is learned from the key exchange and is what replies are
 	// encrypted to.
@@ -135,7 +140,7 @@ func (s *fakeServer) dial() net.Conn {
 // does not complete.
 func (s *fakeServer) connect() *Client {
 	s.t.Helper()
-	c, err := Connect(s.dial(), 5*time.Second)
+	c, err := Connect(s.dial(), 5*time.Second, 5*time.Second)
 	if err != nil {
 		s.t.Fatalf("Connect: %v", err)
 	}
@@ -184,7 +189,15 @@ func (s *fakeServer) handle(conn net.Conn, req envelope) error {
 		return errServerHungUp
 	}
 
-	if req.Action == actionChangePublicKeys {
+	if delay := s.replyAfter[req.Action]; delay > 0 {
+		time.Sleep(delay)
+	}
+
+	// The key exchange is answered before the failures below only when it is
+	// not one of them: it is the one frame a real KeePassXC can also refuse in
+	// the clear, and a fake that always accepted it would make that refusal
+	// impossible to test.
+	if _, refused := s.failWith[actionChangePublicKeys]; req.Action == actionChangePublicKeys && !refused {
 		return s.handleKeyExchange(conn, req)
 	}
 
@@ -223,11 +236,13 @@ func (s *fakeServer) handle(conn net.Conn, req envelope) error {
 	if err != nil {
 		return err
 	}
+	// No success on the envelope: a real KeePassXC states acceptance only
+	// inside the encrypted message, and names a failure outside. A fake that
+	// also set it here would let a client that reads the wrong one pass.
 	return writeJSON(conn, envelope{
 		Action:  req.Action,
 		Message: sealed,
 		Nonce:   base64.StdEncoding.EncodeToString(replyNonce[:]),
-		Success: "true",
 	})
 }
 

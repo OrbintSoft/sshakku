@@ -57,6 +57,55 @@ jobs:
             --entrypoint bash sshakku-test-desktop-stack-keepassxc \
             -c 'mkdir -p /tmp/h && cd /src && go test ./internal/keys -run TestKeePassXCCLIRealDatabase -count=1 -v'
 
+      # The user's whole scenario over KeePassXC's local protocol, against a
+      # real GUI and an ssh-agent of the test's own. It carries a passphrase
+      # through the kernel keyring, which needs seccomp left alone (the default
+      # profile refuses keyctl outright) and a session keyring to possess the
+      # keys it adds — see keyring-session.sh.
+      - name: Run the real KeePassXC native round trip
+        if: matrix.name == 'keepassxc'
+        run: >
+          docker run --init --rm --security-opt seccomp=unconfined
+          -v "${{ github.workspace }}":/src:ro
+          -e SSHAKKU_SESSION_SCRIPT=keepassxc-native-session.sh
+          sshakku-test-desktop-stack-keepassxc
+          keyctl session - /opt/sshakku-desktop-stack/keyring-session.sh
+          go test ./internal/keys -run TestKeePassXCNativeFullRound -count=1 -v
+
+  keepassxc-macos:
+    name: KeePassXC on macOS
+    # Same integration gate as container-test: manual dispatch, or a push whose
+    # head commit opts in with [integration].
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[integration]')
+    runs-on: macos-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: ./.github/actions/setup-go-env
+
+      # The cask ships the command-line tool inside the app bundle; the cli
+      # route looks it up by name, so the bundle's directory goes on PATH.
+      - name: Install KeePassXC
+        run: |
+          brew install --cask keepassxc
+          echo "/Applications/KeePassXC.app/Contents/MacOS" >> "$GITHUB_PATH"
+
+      - name: Run the real keepassxc-cli round trip
+        env:
+          SSHAKKU_TEST_ALLOW_REAL_KEEPASSXC: "1"
+        run: go test ./internal/keys -run TestKeePassXCCLIRealDatabase -count=1 -v
+
+      # The same user scenario the container runs, against the same app: no
+      # KeePassXC is running here, so the test is told where to find one and
+      # starts it itself.
+      - name: Run the real KeePassXC native round trip
+        env:
+          SSHAKKU_TEST_ALLOW_REAL_KEEPASSXC_NATIVE: "1"
+          SSHAKKU_TEST_KEEPASSXC_APP: /Applications/KeePassXC.app/Contents/MacOS/KeePassXC
+        run: go test ./internal/keys -run TestKeePassXCNativeFullRound -count=1 -v
+
   midsession-failure:
     name: mid-session failure (${{ matrix.scenario }})
     # Same integration gate as container-test: manual dispatch, or a push whose

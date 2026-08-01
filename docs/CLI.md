@@ -93,14 +93,19 @@ sshakku doctor [--fix] [--user <name|uid>] [--test-backend [name]]
 ```
 
 Reports the ssh-agent situation: lifecycle state, sockets, processes, keys
-and their remaining time, environment hardening checks, findings, and a
-recommendation. Plain `doctor` only inspects and changes nothing.
+and their remaining time, the wallet it would use and whether what that
+wallet needs is present, environment hardening checks, findings, and a
+recommendation. Plain `doctor` only inspects and changes nothing — the wallet
+section looks for the pieces (a command-line tool, a database file, a running
+KeePassXC, a session bus) without reading or storing a single passphrase.
 
 - `--fix` — applies the same self-heal the login path runs, then re-reports.
 - `--user <name|uid>` — reports on a different user's session (root only,
   read-only).
 - `--test-backend [name]` — actively exercises a secret backend end to end
-  (store, look up, delete a throwaway probe entry).
+  (store, look up, delete a throwaway probe entry). This is the deliberate
+  version of the wallet section above: that one says whether the pieces are
+  there, this one says whether they work.
 
 Full details on the report, each flag, and cross-user diagnosis are in
 [docs/DIAGNOSTICS.md](DIAGNOSTICS.md).

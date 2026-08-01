@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"path/filepath"
-	"runtime"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/keys"
@@ -17,12 +16,16 @@ import (
 // only "auto" may fall back: a route the user pinned that cannot work is
 // reported as unavailable under its own name, because silently using a
 // different one would answer a question the user did not ask.
-func newKeePassXCBackend(user string, log keys.Logger, settings config.Settings) (keys.SecretBackend, func()) {
+//
+// Taking the platform as an argument, as the route decisions below do, keeps
+// every route checkable from any platform — including the one route that only
+// exists on Linux, which no test running elsewhere could otherwise reach.
+func newKeePassXCBackend(goos, user string, log keys.Logger, settings config.Settings) (keys.SecretBackend, func()) {
 	route := settings.KeePassXCRoute
 	if route == "" || route == config.KeePassXCRouteAuto {
-		route = keepassxcRouteFor(runtime.GOOS)
+		route = keepassxcRouteFor(goos)
 	}
-	if reason := keepassxcRouteUnavailable(route, runtime.GOOS, settings.KeePassXCDatabase); reason != nil {
+	if reason := keepassxcRouteUnavailable(route, goos, settings.KeePassXCDatabase); reason != nil {
 		return keys.UnavailableBackend{Reason: reason}, func() {}
 	}
 	switch route {
@@ -91,10 +94,15 @@ func newKeePassXCCLIRoute(settings config.Settings) keys.SecretBackend {
 
 // newKeePassXCNativeRoute speaks KeePassXC's local protocol to a running,
 // unlocked instance.
+//
+// Two budgets, because there are two kinds of wait: KeePassXC answers a lookup
+// by itself and quickly, while the one-time approval it raises is answered by
+// the user, at their own pace.
 func newKeePassXCNativeRoute(settings config.Settings) keys.SecretBackend {
 	return keys.KeePassXCBackend{
-		Associations: keys.FileAssociationStore{Path: keepassxcAssociationPath()},
-		Timeout:      settings.CommandTimeout,
+		Associations:       keys.FileAssociationStore{Path: keepassxcAssociationPath()},
+		Timeout:            settings.CommandTimeout,
+		InteractiveTimeout: settings.InteractiveTimeout,
 	}
 }
 

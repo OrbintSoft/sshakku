@@ -20,6 +20,7 @@ plan new integration tests where a cell shows a gap.
 | Mark | Meaning |
 | --- | --- |
 | ✅ | Covered by an integration test. |
+| ⚠️ | Partly covered — the cell says which part is and which is not. |
 | ❌ | Not integration-tested. |
 | — | Not applicable (the combination doesn't exist in practice). |
 
@@ -36,7 +37,7 @@ the other has no cell to be missing from, and the gap becomes invisible.
 | --- | --- | --- |
 | KDE Wallet (`ksecretd`/`kwalletd6`) | ✅ via `secret-service`, `kde.Dockerfile` | — (no D-Bus session bus or Secret Service on macOS) |
 | GNOME Keyring | ✅ via `secret-service`, `gnome-keyring.Dockerfile` | — (same) |
-| KeePassXC | ✅ two routes: `secret-service` (`keepassxc.Dockerfile`, real GUI under Xvfb) and `cli` (`TestKeePassXCCLIRealDatabase` — a real `keepassxc-cli` store/read/replace/list/forget round trip against a throwaway database, F4/F5/F6/F9) | ❌ implemented, untested — the `cli` route is the same OS-portable code and the `native` route is built (F22, F23, F24), but neither has been run on macOS, and the `native` route has not been run against a real KeePassXC on any OS |
+| KeePassXC | ✅ all three routes: `secret-service` (`keepassxc.Dockerfile`, real GUI under Xvfb), `cli` (`TestKeePassXCCLIRealDatabase` — a real `keepassxc-cli` store/read/replace/list/forget round trip against a throwaway database, F4/F5/F6/F9) and `native` (`TestKeePassXCNativeFullRound` — the real binary and a dedicated `ssh-agent` against a real KeePassXC over its local protocol, F4/F5/F6/F9/F23) | ✅ two routes against the `brew --cask keepassxc` build on `macos-latest`: `cli` (`TestKeePassXCCLIRealDatabase`, F4/F5/F6/F9/F22) and `native` (`TestKeePassXCNativeFullRound`, F4/F5/F6/F9/F23 — the test starts KeePassXC itself, since nothing on that platform provides a running one). `secret-service` has no cell here: macOS offers no such API. Two steps a person normally takes are taken without one — the database is opened with `--pw-stdin` holding the stream open, and the association is written into the database rather than approved in a dialog, both being preconditions of the route rather than the promises under test |
 | 1Password (`op` CLI) | ✅ `TestOnePasswordBackendRealAccount`, `onepassword-real-account.yml` | ❌ supported, untested — that workflow runs on `ubuntu-latest` only |
 | Bitwarden (`bw` CLI) | ✅ real backend against Vaultwarden, `desktop-stack.yml` | ❌ supported, untested — that job runs on `ubuntu-latest` only |
 | macOS Keychain | — (Security.framework is macOS-only) | ✅ `TestDarwinKeychainClientRealRoundTrip` — a live `Add`/`Find`/`Update`/`Delete`/`List` round trip against a throwaway default keychain, plus the whole shell suite (`make test-bats`) driving it as the default backend |
@@ -79,7 +80,7 @@ table above has established where that backend is available at all.
 | Keychain | `TestDarwinKeychainClientRealRoundTrip` — a live round trip through `DarwinKeychainClient` (`Add`/`Find`/`Update`/`Delete`/`List`, including the duplicate-add and update-missing error paths) against a throwaway default keychain the `test-macos` job stands up first (`test/macos-keychain-setup.sh`), so the runner's login keychain is never touched |
 | Secret Service | `TestSecretServiceBackendRealDaemon`, against each of the three daemons in its own container |
 | KeePassXC (`cli` route) | `TestKeePassXCCLIRealDatabase` — a real `keepassxc-cli` against a throwaway database it creates itself: store, read back, replace in place, list, forget, and a final lookup that must miss (F4, F5/F6, F9). Also the only check that `keepassxc-cli` still takes the database password on standard input, which it offers no documented flag for |
-| KeePassXC (`native` route) | ❌ nothing drives the local socket protocol against a real KeePassXC. The protocol client is unit-tested against a server that speaks it with real keys and real encryption, which is not the same claim: it says the two agree, not that KeePassXC agrees |
+| KeePassXC (`native` route) | `TestKeePassXCNativeFullRound` — not a backend round trip but the user's own scenario: the real binary asks once on a real terminal, saves the passphrase in a real KeePassXC over its local protocol, then loads the key into a dedicated `ssh-agent` with nothing typed, again after the key expires, and reports that this wallet cannot be forgotten from (F4, F5, F6, F9, F23). The silent steps run with a terminal attached, so a regression that starts asking is caught rather than passing for want of one |
 | 1Password (`op` CLI) | `TestOnePasswordBackendRealAccount`, `onepassword-real-account.yml` |
 | Bitwarden (`bw` CLI) | real backend against Vaultwarden, `desktop-stack.yml` |
 

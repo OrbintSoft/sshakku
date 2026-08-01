@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"runtime"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/keys"
@@ -32,7 +33,7 @@ func newSecretBackend(user string, log keys.Logger, settings config.Settings) (k
 			Timeout:  settings.InteractiveTimeout,
 		}, func() {}
 	case config.SecretBackendKeePassXC:
-		return newKeePassXCBackend(user, log, settings)
+		return newKeePassXCBackend(runtime.GOOS, user, log, settings)
 	default:
 		return newDefaultSecretBackend(user, log, settings)
 	}
@@ -85,7 +86,8 @@ func detectGUIAvailable() bool {
 // newSecretBackend knows how to construct.
 func validSecretBackendName(name string) bool {
 	switch name {
-	case config.SecretBackendSecretService, config.SecretBackendOnePassword, config.SecretBackendBitwarden, config.SecretBackendKeychain:
+	case config.SecretBackendSecretService, config.SecretBackendOnePassword, config.SecretBackendBitwarden,
+		config.SecretBackendKeychain, config.SecretBackendKeePassXC:
 		return true
 	default:
 		return false
