@@ -78,7 +78,7 @@ func TestBrokerNilLoggerDoesNotPanic(t *testing.T) {
 }
 
 // TestBrokerCustomServicePrefix covers servicePrefixOf's non-default branch:
-// a configured prefix replaces "SSH-Key" in the service the passphrase is
+// a configured prefix replaces the default one in the service the passphrase is
 // stored under.
 func TestBrokerCustomServicePrefix(t *testing.T) {
 	secret := &fakeSecret{lookupFound: false}

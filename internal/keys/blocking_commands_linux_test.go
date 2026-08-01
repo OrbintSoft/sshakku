@@ -25,13 +25,13 @@ func platformBlockingCases(brief time.Duration) []blockingCase {
 			_, _ = KDialogPrompter{Runner: ExecRunner{}, Timeout: brief}.Prompt("id_test")
 		}},
 		{"secret-tool Lookup", func() {
-			_, _, _ = SecretToolBackend{Runner: ExecRunner{}, User: "u", Timeout: brief}.Lookup("SSH-Key-id_test")
+			_, _, _ = SecretToolBackend{Runner: ExecRunner{}, User: "u", Timeout: brief}.Lookup(defaultServicePrefix + "-id_test")
 		}},
 		{"secret-tool Store", func() {
-			_ = SecretToolBackend{Runner: ExecRunner{}, User: "u", Timeout: brief}.Store("SSH-Key-id_test", "label", "s3cret")
+			_ = SecretToolBackend{Runner: ExecRunner{}, User: "u", Timeout: brief}.Store(defaultServicePrefix+"-id_test", "label", "s3cret")
 		}},
 		{"secret-tool Delete", func() {
-			_ = SecretToolBackend{Runner: ExecRunner{}, User: "u", Timeout: brief}.Delete("SSH-Key-id_test")
+			_ = SecretToolBackend{Runner: ExecRunner{}, User: "u", Timeout: brief}.Delete(defaultServicePrefix + "-id_test")
 		}},
 	}
 }

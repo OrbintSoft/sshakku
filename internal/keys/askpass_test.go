@@ -77,7 +77,7 @@ func TestBrokerWalletMissPromptsAndStores(t *testing.T) {
 	if len(tty.calls) != 1 || !tty.calls[0].secret {
 		t.Fatalf("want one no-echo passphrase prompt, got %+v", tty.calls)
 	}
-	if len(secret.stored) != 1 || secret.stored[0].service != "SSH-Key-id_rsa" || secret.stored[0].passphrase != "typed" {
+	if len(secret.stored) != 1 || secret.stored[0].service != defaultServicePrefix+"-id_rsa" || secret.stored[0].passphrase != "typed" {
 		t.Fatalf("the typed passphrase must be stored under SSH-Key-id_rsa, got %v", secret.stored)
 	}
 }

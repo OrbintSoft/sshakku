@@ -121,7 +121,7 @@ func TestSecretServiceLookup(t *testing.T) {
 		}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		pass, found, err := b.Lookup("SSH-Key-id_rsa")
+		pass, found, err := b.Lookup(defaultServicePrefix + "-id_rsa")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -134,7 +134,7 @@ func TestSecretServiceLookup(t *testing.T) {
 		if len(c.locked) != 1 || c.locked[0] != col {
 			t.Fatalf("locked = %v, want [%v]", c.locked, col)
 		}
-		want := map[string]string{"service": "SSH-Key-id_rsa", "username": "alice"}
+		want := map[string]string{"service": defaultServicePrefix + "-id_rsa", "username": "alice"}
 		if !equalAttrs(c.searchedAttrs, want) {
 			t.Fatalf("searched attrs = %v, want %v", c.searchedAttrs, want)
 		}
@@ -144,7 +144,7 @@ func TestSecretServiceLookup(t *testing.T) {
 		c := &fakeSecretServiceClient{collection: col}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		_, found, err := b.Lookup("SSH-Key-id_rsa")
+		_, found, err := b.Lookup(defaultServicePrefix + "-id_rsa")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -293,7 +293,7 @@ func TestSecretServiceStore(t *testing.T) {
 		c := &fakeSecretServiceClient{collection: col}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		if err := b.Store("SSH-Key-id_rsa", "SSH Passphrase for id_rsa", "hunter2"); err != nil {
+		if err := b.Store(defaultServicePrefix+"-id_rsa", "SSH Passphrase for id_rsa", "hunter2"); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if len(c.unlocked) != 1 || c.unlocked[0] != col {
@@ -306,7 +306,7 @@ func TestSecretServiceStore(t *testing.T) {
 			t.Fatalf("createdItems = %v, want exactly one", c.createdItems)
 		}
 		got := c.createdItems[0]
-		wantAttrs := map[string]string{"service": "SSH-Key-id_rsa", "username": "alice"}
+		wantAttrs := map[string]string{"service": defaultServicePrefix + "-id_rsa", "username": "alice"}
 		if got.collection != col || got.label != "SSH Passphrase for id_rsa" || got.passphrase != "hunter2" || !got.replace || !equalAttrs(got.attrs, wantAttrs) {
 			t.Fatalf("CreateItem call = %+v, want collection=%v label=%q passphrase=hunter2 replace=true attrs=%v", got, col, "SSH Passphrase for id_rsa", wantAttrs)
 		}
@@ -360,7 +360,7 @@ func TestSecretServiceDelete(t *testing.T) {
 		c := &fakeSecretServiceClient{collection: col, items: []dbus.ObjectPath{item}}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		if err := b.Delete("SSH-Key-id_rsa"); err != nil {
+		if err := b.Delete(defaultServicePrefix + "-id_rsa"); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if len(c.unlocked) != 1 || c.unlocked[0] != col {
@@ -378,7 +378,7 @@ func TestSecretServiceDelete(t *testing.T) {
 		c := &fakeSecretServiceClient{collection: col}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		if err := b.Delete("SSH-Key-id_rsa"); err != nil {
+		if err := b.Delete(defaultServicePrefix + "-id_rsa"); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if len(c.locked) != 1 {
@@ -452,8 +452,8 @@ func TestSecretServiceList(t *testing.T) {
 			collection:        col,
 			itemsByCollection: map[dbus.ObjectPath][]dbus.ObjectPath{col: {item1, item2}},
 			attrsByItem: map[dbus.ObjectPath]map[string]string{
-				item1: {"service": "SSH-Key-id_rsa", "username": "alice"},
-				item2: {"service": "SSH-Key-id_ed25519", "username": "alice"},
+				item1: {"service": defaultServicePrefix + "-id_rsa", "username": "alice"},
+				item2: {"service": defaultServicePrefix + "-id_ed25519", "username": "alice"},
 			},
 		}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
@@ -462,7 +462,7 @@ func TestSecretServiceList(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		want := []string{"SSH-Key-id_rsa", "SSH-Key-id_ed25519"}
+		want := []string{defaultServicePrefix + "-id_rsa", defaultServicePrefix + "-id_ed25519"}
 		if !equalStrings(got, want) {
 			t.Fatalf("List = %v, want %v", got, want)
 		}

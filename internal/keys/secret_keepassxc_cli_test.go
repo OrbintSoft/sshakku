@@ -59,7 +59,7 @@ func TestKeePassXCCLIPasswordNeverReachesArgv(t *testing.T) {
 	runner := &recordingRunner{results: []Result{{Code: 0, Stdout: []byte("passphrase\n")}}}
 	b := cliBackend(runner, &countingPrompter{password: password})
 
-	if _, _, err := b.Lookup("SSH-Key-id_ed25519"); err != nil {
+	if _, _, err := b.Lookup(defaultServicePrefix + "-id_ed25519"); err != nil {
 		t.Fatalf("Lookup: %v", err)
 	}
 	if len(runner.calls) != 1 {
@@ -89,7 +89,7 @@ func TestKeePassXCCLIStoreKeepsThePassphraseOffArgvToo(t *testing.T) {
 	}}
 	b := cliBackend(runner, &countingPrompter{password: dbPassword})
 
-	if err := b.Store("SSH-Key-id_ed25519", "", passphrase); err != nil {
+	if err := b.Store(defaultServicePrefix+"-id_ed25519", "", passphrase); err != nil {
 		t.Fatalf("Store: %v", err)
 	}
 	if len(runner.calls) != 3 {
@@ -110,7 +110,7 @@ func TestKeePassXCCLIStoreAddsThenEdits(t *testing.T) {
 	t.Run("a key with no entry yet is added, into a group that is made first", func(t *testing.T) {
 		runner := &recordingRunner{results: []Result{{Code: 1}, {Code: 0}, {Code: 0}}}
 		b := cliBackend(runner, &countingPrompter{password: "p"})
-		if err := b.Store("SSH-Key-new", "", "x"); err != nil {
+		if err := b.Store(defaultServicePrefix+"-new", "", "x"); err != nil {
 			t.Fatalf("Store: %v", err)
 		}
 		// A real keepassxc-cli refuses to add an entry to a group that does
@@ -129,7 +129,7 @@ func TestKeePassXCCLIStoreAddsThenEdits(t *testing.T) {
 			{Code: 0},
 		}}
 		b := cliBackend(runner, &countingPrompter{password: "p"})
-		if err := b.Store("SSH-Key-existing", "", "x"); err != nil {
+		if err := b.Store(defaultServicePrefix+"-existing", "", "x"); err != nil {
 			t.Fatalf("Store: %v", err)
 		}
 		// The group is already there, so an edit goes straight to the write.
@@ -149,10 +149,10 @@ func TestKeePassXCCLIAsksForThePasswordOnlyOnce(t *testing.T) {
 	prompter := &countingPrompter{password: "p"}
 	b := cliBackend(runner, prompter)
 
-	if _, _, err := b.Lookup("SSH-Key-one"); err != nil {
+	if _, _, err := b.Lookup(defaultServicePrefix + "-one"); err != nil {
 		t.Fatalf("Lookup: %v", err)
 	}
-	if _, _, err := b.Lookup("SSH-Key-two"); err != nil {
+	if _, _, err := b.Lookup(defaultServicePrefix + "-two"); err != nil {
 		t.Fatalf("Lookup: %v", err)
 	}
 	if prompter.asked != 1 {
@@ -164,7 +164,7 @@ func TestKeePassXCCLILookupOfAnAbsentEntryIsAMiss(t *testing.T) {
 	runner := &recordingRunner{results: []Result{{Code: 1, Stderr: []byte("Could not find entry\n")}}}
 	b := cliBackend(runner, &countingPrompter{password: "p"})
 
-	_, found, err := b.Lookup("SSH-Key-absent")
+	_, found, err := b.Lookup(defaultServicePrefix + "-absent")
 	if err != nil {
 		t.Fatalf("a miss must not be an error: %v", err)
 	}
@@ -184,7 +184,7 @@ func TestKeePassXCCLIReportsARefusedPassword(t *testing.T) {
 	}}}
 	b := cliBackend(runner, &countingPrompter{password: "p"})
 
-	if _, _, err := b.Lookup("SSH-Key-id_ed25519"); !errors.Is(err, ErrPasswordNotAccepted) {
+	if _, _, err := b.Lookup(defaultServicePrefix + "-id_ed25519"); !errors.Is(err, ErrPasswordNotAccepted) {
 		t.Fatalf("err = %v, want ErrPasswordNotAccepted — a refused interface is not an empty wallet", err)
 	}
 }
@@ -195,13 +195,13 @@ func TestKeePassXCCLICanDelete(t *testing.T) {
 	runner := &recordingRunner{results: []Result{{Code: 0}}}
 	b := cliBackend(runner, &countingPrompter{password: "p"})
 
-	if err := b.Delete("SSH-Key-id_ed25519"); err != nil {
+	if err := b.Delete(defaultServicePrefix + "-id_ed25519"); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
 	if runner.calls[0].Args[0] != "rm" {
 		t.Errorf("verb = %q, want rm", runner.calls[0].Args[0])
 	}
-	if !strings.Contains(strings.Join(runner.calls[0].Args, " "), "SSHakku/SSH-Key-id_ed25519") {
+	if !strings.Contains(strings.Join(runner.calls[0].Args, " "), "SSHakku/"+defaultServicePrefix+"-id_ed25519") {
 		t.Errorf("args = %v, want the entry path inside the SSHakku group", runner.calls[0].Args)
 	}
 }
@@ -210,7 +210,7 @@ func TestKeePassXCCLIDeleteOfAnAbsentEntryIsSuccess(t *testing.T) {
 	runner := &recordingRunner{results: []Result{{Code: 1, Stderr: []byte("Entry not found\n")}}}
 	b := cliBackend(runner, &countingPrompter{password: "p"})
 
-	if err := b.Delete("SSH-Key-gone"); err != nil {
+	if err := b.Delete(defaultServicePrefix + "-gone"); err != nil {
 		t.Fatalf("forgetting an already-forgotten key must succeed: %v", err)
 	}
 }
@@ -218,7 +218,7 @@ func TestKeePassXCCLIDeleteOfAnAbsentEntryIsSuccess(t *testing.T) {
 func TestKeePassXCCLIListsWhatItStored(t *testing.T) {
 	runner := &recordingRunner{results: []Result{{
 		Code:   0,
-		Stdout: []byte("SSH-Key-id_ed25519\nSSH-Key-id_rsa\nnested/\n\n"),
+		Stdout: []byte(defaultServicePrefix + "-id_ed25519\n" + defaultServicePrefix + "-id_rsa\nnested/\n\n"),
 	}}}
 	b := cliBackend(runner, &countingPrompter{password: "p"})
 
@@ -226,7 +226,7 @@ func TestKeePassXCCLIListsWhatItStored(t *testing.T) {
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
-	want := []string{"SSH-Key-id_ed25519", "SSH-Key-id_rsa"}
+	want := []string{defaultServicePrefix + "-id_ed25519", defaultServicePrefix + "-id_rsa"}
 	if len(got) != len(want) {
 		t.Fatalf("List = %v, want %v — a trailing slash marks a group, not an entry", got, want)
 	}
@@ -239,7 +239,7 @@ func TestKeePassXCCLIListsWhatItStored(t *testing.T) {
 
 func TestKeePassXCCLIWithNoDatabaseSaysSo(t *testing.T) {
 	b := &KeePassXCCLIBackend{Runner: &recordingRunner{}, Prompter: &countingPrompter{password: "p"}}
-	if _, _, err := b.Lookup("SSH-Key-id_ed25519"); !errors.Is(err, ErrNoDatabase) {
+	if _, _, err := b.Lookup(defaultServicePrefix + "-id_ed25519"); !errors.Is(err, ErrNoDatabase) {
 		t.Fatalf("err = %v, want ErrNoDatabase", err)
 	}
 }
@@ -249,7 +249,7 @@ func TestKeePassXCCLIPassesTheKeyFileWhenConfigured(t *testing.T) {
 	b := cliBackend(runner, &countingPrompter{password: "p"})
 	b.KeyFile = "/db.key"
 
-	if _, _, err := b.Lookup("SSH-Key-id_ed25519"); err != nil {
+	if _, _, err := b.Lookup(defaultServicePrefix + "-id_ed25519"); err != nil {
 		t.Fatalf("Lookup: %v", err)
 	}
 	joined := strings.Join(runner.calls[0].Args, " ")
@@ -262,7 +262,7 @@ func TestKeePassXCCLIReportsARefusedPrompt(t *testing.T) {
 	refused := errors.New("the user dismissed the dialog")
 	b := cliBackend(&recordingRunner{}, &countingPrompter{err: refused})
 
-	if _, _, err := b.Lookup("SSH-Key-id_ed25519"); !errors.Is(err, refused) {
+	if _, _, err := b.Lookup(defaultServicePrefix + "-id_ed25519"); !errors.Is(err, refused) {
 		t.Fatalf("err = %v, want the refusal", err)
 	}
 }
@@ -282,9 +282,9 @@ func TestKeePassXCCLIReportsACommandThatCannotRun(t *testing.T) {
 		name string
 		call func(*KeePassXCCLIBackend) error
 	}{
-		{"lookup", func(b *KeePassXCCLIBackend) error { _, _, err := b.Lookup("SSH-Key-k"); return err }},
-		{"store", func(b *KeePassXCCLIBackend) error { return b.Store("SSH-Key-k", "", "p") }},
-		{"delete", func(b *KeePassXCCLIBackend) error { return b.Delete("SSH-Key-k") }},
+		{"lookup", func(b *KeePassXCCLIBackend) error { _, _, err := b.Lookup(defaultServicePrefix + "-k"); return err }},
+		{"store", func(b *KeePassXCCLIBackend) error { return b.Store(defaultServicePrefix+"-k", "", "p") }},
+		{"delete", func(b *KeePassXCCLIBackend) error { return b.Delete(defaultServicePrefix + "-k") }},
 		{"list", func(b *KeePassXCCLIBackend) error { _, err := b.List(); return err }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -304,7 +304,7 @@ func TestKeePassXCCLIStoreReportsAFailureItCannotName(t *testing.T) {
 	}}
 	b := cliBackend(runner, &countingPrompter{password: "p"})
 
-	err := b.Store("SSH-Key-k", "", "x")
+	err := b.Store(defaultServicePrefix+"-k", "", "x")
 	if err == nil {
 		t.Fatal("a write that failed must be reported")
 	}
@@ -324,14 +324,14 @@ func TestKeePassXCCLIReportsARefusedPasswordOnEveryOperation(t *testing.T) {
 		// is what is refused.
 		runner := &recordingRunner{results: []Result{{Code: 1}, {Code: 0}, refusal}}
 		b := cliBackend(runner, &countingPrompter{password: "p"})
-		if err := b.Store("SSH-Key-k", "", "x"); !errors.Is(err, ErrPasswordNotAccepted) {
+		if err := b.Store(defaultServicePrefix+"-k", "", "x"); !errors.Is(err, ErrPasswordNotAccepted) {
 			t.Fatalf("err = %v, want ErrPasswordNotAccepted", err)
 		}
 	})
 
 	t.Run("delete", func(t *testing.T) {
 		b := cliBackend(&recordingRunner{results: []Result{refusal}}, &countingPrompter{password: "p"})
-		if err := b.Delete("SSH-Key-k"); !errors.Is(err, ErrPasswordNotAccepted) {
+		if err := b.Delete(defaultServicePrefix + "-k"); !errors.Is(err, ErrPasswordNotAccepted) {
 			t.Fatalf("err = %v, want ErrPasswordNotAccepted — otherwise forget would claim success", err)
 		}
 	})
@@ -386,7 +386,7 @@ func TestKeePassXCCLIStoreReportsAWriteThatCannotRun(t *testing.T) {
 	}
 	b := cliBackend(runner, &countingPrompter{password: "p"})
 
-	if err := b.Store("SSH-Key-k", "", "x"); err == nil {
+	if err := b.Store(defaultServicePrefix+"-k", "", "x"); err == nil {
 		t.Fatal("a write that could not start must be reported")
 	}
 }
@@ -400,7 +400,7 @@ func TestKeePassXCCLIStoreReportsAGroupThatCannotBeMade(t *testing.T) {
 	}
 	b := cliBackend(runner, &countingPrompter{password: "p"})
 
-	if err := b.Store("SSH-Key-k", "", "x"); err == nil {
+	if err := b.Store(defaultServicePrefix+"-k", "", "x"); err == nil {
 		t.Fatal("a group that could not be created must be reported")
 	}
 }

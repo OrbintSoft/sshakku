@@ -33,7 +33,7 @@ func TestKeePassXCCLIRealDatabase(t *testing.T) {
 	}
 
 	const dbPassword = "throwaway-database-password"
-	const service = "SSH-Key-id_ed25519"
+	const service = defaultServicePrefix + "-id_ed25519"
 	const passphrase = "the-key-passphrase"
 
 	db := filepath.Join(t.TempDir(), "throwaway.kdbx")

@@ -244,7 +244,7 @@ func TestForgetOnAWalletThatCannotDeleteTellsTheUserWhatToDo(t *testing.T) {
 	if !strings.Contains(msg, "KeePassXC") {
 		t.Errorf("stderr = %q, want it to say where the entry still is", msg)
 	}
-	if !strings.Contains(msg, "SSH-Key-id_ed25519") {
+	if !strings.Contains(msg, keys.DefaultServicePrefix+"-id_ed25519") {
 		t.Errorf("stderr = %q, want it to name the entry to remove by hand", msg)
 	}
 }

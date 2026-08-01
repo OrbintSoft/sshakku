@@ -12,14 +12,14 @@ func TestSecretToolLookup(t *testing.T) {
 	t.Run("hit trims the trailing newline", func(t *testing.T) {
 		r := newFakeRunner().on("secret-tool", stdout("hunter2\n", 0))
 		b := SecretToolBackend{Runner: r, User: "alice"}
-		pass, found, err := b.Lookup("SSH-Key-id_rsa")
+		pass, found, err := b.Lookup(defaultServicePrefix + "-id_rsa")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if !found || pass != "hunter2" {
 			t.Fatalf("Lookup = (%q, %v), want (hunter2, true)", pass, found)
 		}
-		want := []string{"lookup", "service", "SSH-Key-id_rsa", "username", "alice"}
+		want := []string{"lookup", "service", defaultServicePrefix + "-id_rsa", "username", "alice"}
 		if got := r.calls[0].Args; !equalStrings(got, want) {
 			t.Fatalf("args = %v, want %v", got, want)
 		}
@@ -28,7 +28,7 @@ func TestSecretToolLookup(t *testing.T) {
 	t.Run("miss is found=false, no error", func(t *testing.T) {
 		r := newFakeRunner().on("secret-tool", stdout("", 1))
 		b := SecretToolBackend{Runner: r, User: "alice"}
-		_, found, err := b.Lookup("SSH-Key-id_rsa")
+		_, found, err := b.Lookup(defaultServicePrefix + "-id_rsa")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -52,7 +52,7 @@ func TestSecretToolStore(t *testing.T) {
 	t.Run("passphrase goes on stdin, never in argv", func(t *testing.T) {
 		r := newFakeRunner().on("secret-tool", stdout("", 0))
 		b := SecretToolBackend{Runner: r, User: "alice"}
-		if err := b.Store("SSH-Key-id_rsa", "SSH Passphrase for id_rsa", passphrase); err != nil {
+		if err := b.Store(defaultServicePrefix+"-id_rsa", "SSH Passphrase for id_rsa", passphrase); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		call := r.calls[0]
@@ -84,10 +84,10 @@ func TestSecretToolDelete(t *testing.T) {
 	t.Run("clears the entry", func(t *testing.T) {
 		r := newFakeRunner().on("secret-tool", stdout("", 0))
 		b := SecretToolBackend{Runner: r, User: "alice"}
-		if err := b.Delete("SSH-Key-id_rsa"); err != nil {
+		if err := b.Delete(defaultServicePrefix + "-id_rsa"); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		want := []string{"clear", "service", "SSH-Key-id_rsa", "username", "alice"}
+		want := []string{"clear", "service", defaultServicePrefix + "-id_rsa", "username", "alice"}
 		if got := r.calls[0].Args; !equalStrings(got, want) {
 			t.Fatalf("args = %v, want %v", got, want)
 		}

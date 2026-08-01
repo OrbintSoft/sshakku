@@ -79,7 +79,7 @@ func TestLoadKeysPromptThenStore(t *testing.T) {
 		t.Fatalf("a prompted passphrase must be stored once, got %v", secret.stored)
 	}
 	got := secret.stored[0]
-	if got.service != "SSH-Key-id_rsa" || got.label != "SSH Passphrase for id_rsa" || got.passphrase != "typed-pass" {
+	if got.service != defaultServicePrefix+"-id_rsa" || got.label != "SSH Passphrase for id_rsa" || got.passphrase != "typed-pass" {
 		t.Fatalf("store = %+v, want service/label/pass for id_rsa", got)
 	}
 }
