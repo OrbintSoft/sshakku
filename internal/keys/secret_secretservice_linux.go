@@ -83,9 +83,22 @@ func (b *SecretServiceBackend) Lock() error {
 
 var _ SecretSession = (*SecretServiceBackend)(nil)
 
+// collectionNames is how the collection is addressed: the configured name,
+// else the one SSHakku makes for itself. Both are returned because a service
+// that supports collection aliases resolves the alias, while one that does not
+// is matched on the label — a name applied to only one of them would land in
+// the configured collection on one desktop and in SSHakku's own on another.
+func (b *SecretServiceBackend) collectionNames() (alias, label string) {
+	if b.Container != "" {
+		return b.Container, b.Container
+	}
+	return secretServiceAlias, secretServiceLabel
+}
+
 func (b *SecretServiceBackend) resolveCollection() (dbus.ObjectPath, error) {
 	if b.collection == "" {
-		col, err := b.Client.Collection(secretServiceAlias, secretServiceLabel)
+		alias, label := b.collectionNames()
+		col, err := b.Client.Collection(alias, label)
 		if err != nil {
 			return "", err
 		}

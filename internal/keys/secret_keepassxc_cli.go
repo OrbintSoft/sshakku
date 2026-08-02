@@ -13,9 +13,9 @@ import (
 // not the way SSHakku reaches KeePassXC by default.
 const keepassxcCLIBin = "keepassxc-cli"
 
-// keepassxcCLIGroup is the group entries are kept in, matching the one the
-// local-protocol route creates, so the same database read either way looks the
-// same to the user.
+// keepassxcCLIGroup is the group entries are kept in unless another is
+// configured, matching the one the local-protocol route names, so the same
+// database read either way looks the same to the user.
 const keepassxcCLIGroup = "SSHakku"
 
 // ErrNoDatabase reports that no database file was configured. The CLI route
@@ -62,9 +62,18 @@ type KeePassXCCLIBackend struct {
 	password string
 }
 
+// group is the group to keep entries in: the configured one, else the one
+// SSHakku makes for itself.
+func (b *KeePassXCCLIBackend) group() string {
+	if b.Group != "" {
+		return b.Group
+	}
+	return keepassxcCLIGroup
+}
+
 // entryPath is where a key's entry lives inside the database.
-func keepassxcCLIEntryPath(service string) string {
-	return keepassxcCLIGroup + "/" + service
+func (b *KeePassXCCLIBackend) entryPath(service string) string {
+	return b.group() + "/" + service
 }
 
 // unlock returns the database password, asking for it the first time.
@@ -121,7 +130,7 @@ func refusedPassword(res Result) bool {
 
 // Lookup returns the passphrase stored for service.
 func (b *KeePassXCCLIBackend) Lookup(service string) (string, bool, error) {
-	res, err := b.run([]string{"show", "-s", "-a", "Password", b.Database, keepassxcCLIEntryPath(service)})
+	res, err := b.run([]string{"show", "-s", "-a", "Password", b.Database, b.entryPath(service)})
 	if err != nil {
 		return "", false, err
 	}
@@ -142,7 +151,7 @@ func (b *KeePassXCCLIBackend) Store(service, label, passphrase string) error {
 	// label has nowhere to go: the entry is named by its path, which is built
 	// from the service identifier.
 	_ = label
-	path := keepassxcCLIEntryPath(service)
+	path := b.entryPath(service)
 
 	verb := "add"
 	if _, found, err := b.Lookup(service); err != nil {
@@ -153,11 +162,11 @@ func (b *KeePassXCCLIBackend) Store(service, label, passphrase string) error {
 
 	if verb == "add" {
 		// keepassxc-cli will not create an entry inside a group that is not
-		// there, and a fresh database has no SSHakku group. Creating it is
-		// idempotent in effect: an "it already exists" failure is not
-		// distinguished, because the add that follows is the real test of
+		// there, and a database that has never held one has no such group.
+		// Creating it is idempotent in effect: an "it already exists" failure is
+		// not distinguished, because the add that follows is the real test of
 		// whether the group is usable.
-		if _, err := b.run([]string{"mkdir", b.Database, keepassxcCLIGroup}); err != nil {
+		if _, err := b.run([]string{"mkdir", b.Database, b.group()}); err != nil {
 			return err
 		}
 	}
@@ -180,7 +189,7 @@ func (b *KeePassXCCLIBackend) Store(service, label, passphrase string) error {
 // Delete removes the entry for service. Unlike the local-protocol route, the
 // CLI can delete, so `sshakku forget` works here.
 func (b *KeePassXCCLIBackend) Delete(service string) error {
-	res, err := b.run([]string{"rm", b.Database, keepassxcCLIEntryPath(service)})
+	res, err := b.run([]string{"rm", b.Database, b.entryPath(service)})
 	if err != nil {
 		return err
 	}
@@ -197,7 +206,7 @@ func (b *KeePassXCCLIBackend) Delete(service string) error {
 
 // List returns every entry SSHakku keeps in the database.
 func (b *KeePassXCCLIBackend) List() ([]string, error) {
-	res, err := b.run([]string{"ls", "-f", b.Database, keepassxcCLIGroup})
+	res, err := b.run([]string{"ls", "-f", b.Database, b.group()})
 	if err != nil {
 		return nil, err
 	}
@@ -215,7 +224,7 @@ func (b *KeePassXCCLIBackend) List() ([]string, error) {
 		if name == "" || strings.HasSuffix(name, "/") {
 			continue
 		}
-		services = append(services, strings.TrimPrefix(name, keepassxcCLIGroup+"/"))
+		services = append(services, strings.TrimPrefix(name, b.group()+"/"))
 	}
 	return services, nil
 }

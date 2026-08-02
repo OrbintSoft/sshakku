@@ -83,6 +83,39 @@ func TestKeePassXCCLIUsesTheConfiguredContainer(t *testing.T) {
 	})
 }
 
+// TestKeePassXCNativeSendsTheConfiguredGroup covers the group name the local
+// protocol carries. KeePassXC files an entry into a group of its own choosing
+// and ignores the name it is handed, so this changes nothing the user can
+// observe today — which is why F33 promises them nothing here. It is still the
+// configured name that goes on the wire rather than a fixed one, so that a
+// KeePassXC which ever starts honouring it honours what was asked for.
+func TestKeePassXCNativeSendsTheConfiguredGroup(t *testing.T) {
+	t.Run("the configured name", func(t *testing.T) {
+		kp := &fakeKeePassXC{}
+		b := kp.backendFor(&memoryAssociations{})
+		b.Group = "my-own-compartment"
+
+		if err := b.Store("id_ed25519", "", "secret"); err != nil {
+			t.Fatalf("Store: %v", err)
+		}
+		if kp.lastSet.group != "my-own-compartment" {
+			t.Errorf("group = %q, want the configured name", kp.lastSet.group)
+		}
+	})
+
+	t.Run("SSHakku's own when none is configured", func(t *testing.T) {
+		kp := &fakeKeePassXC{}
+		b := kp.backendFor(&memoryAssociations{})
+
+		if err := b.Store("id_ed25519", "", "secret"); err != nil {
+			t.Fatalf("Store: %v", err)
+		}
+		if kp.lastSet.group != keepassxcGroup {
+			t.Errorf("group = %q, want %q", kp.lastSet.group, keepassxcGroup)
+		}
+	})
+}
+
 // lastArg is the argument keepassxc-cli takes as the path to act on, which is
 // always the final one.
 func lastArg(args []string) string {

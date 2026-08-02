@@ -88,6 +88,7 @@ func newKeePassXCCLIRoute(settings config.Settings) keys.SecretBackend {
 		Prompter: newWalletPasswordPrompter(settings),
 		Database: settings.KeePassXCDatabase,
 		KeyFile:  settings.KeePassXCKeyFile,
+		Group:    settings.SecretContainer,
 		Timeout:  settings.InteractiveTimeout,
 	}
 }
@@ -101,6 +102,7 @@ func newKeePassXCCLIRoute(settings config.Settings) keys.SecretBackend {
 func newKeePassXCNativeRoute(settings config.Settings) keys.SecretBackend {
 	return keys.KeePassXCBackend{
 		Associations:       keys.FileAssociationStore{Path: keepassxcAssociationPath()},
+		Group:              settings.SecretContainer,
 		Timeout:            settings.CommandTimeout,
 		InteractiveTimeout: settings.InteractiveTimeout,
 	}

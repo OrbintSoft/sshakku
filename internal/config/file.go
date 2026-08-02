@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -407,6 +408,12 @@ func Resolve(file File, lookup func(string) (string, bool)) (Settings, []error) 
 	}
 	s.ServicePrefix = prefix
 
+	container, err := resolveSecretContainer(file.SecretContainer)
+	if err != nil {
+		errs = append(errs, err)
+	}
+	s.SecretContainer = container
+
 	backend, err := resolveSecretBackend(file.SecretBackend)
 	if err != nil {
 		errs = append(errs, err)
@@ -442,10 +449,49 @@ func resolveServicePrefix(fileVal *string) (string, error) {
 	switch {
 	case prefix == "":
 		return keys.DefaultServicePrefix, nil
-	case strings.ContainsFunc(prefix, unicode.IsSpace), strings.Contains(prefix, "/"):
+	case unusableName(prefix):
 		return keys.DefaultServicePrefix, fmt.Errorf("invalid service_prefix %q: whitespace and %q are not allowed, using %q", prefix, "/", keys.DefaultServicePrefix)
 	}
 	return prefix, nil
+}
+
+// unusableName reports whether a name a user chose for SSHakku's entries, or
+// for the compartment holding them, is one no store can be relied on to hold
+// verbatim: whitespace makes a name the store's own tools cannot easily be
+// pointed at, and a slash reads as a folder separator to some of them — a
+// KeePassXC group is addressed by path.
+func unusableName(name string) bool {
+	return strings.ContainsFunc(name, unicode.IsSpace) || strings.Contains(name, "/")
+}
+
+// desktopOwnWallets are the names a desktop uses for the wallet it keeps for
+// itself. Resolving a collection by name can adopt an existing one rather than
+// create it, and SSHakku empties its own compartment without reading whose
+// entry is whose, so a compartment named any of these would put every password
+// the desktop holds within reach of `sshakku forget --all`.
+//
+// It is the list SSHakku knows to refuse, not every name some wallet somewhere
+// answers to; CONFIGURATION.md says so, and says to pick a name nothing else
+// has taken.
+var desktopOwnWallets = []string{"default", "login", "session", "kdewallet"}
+
+// resolveSecretContainer is config-file only (per File's doc comment). Unlike
+// resolveServicePrefix it returns the empty string for an absent value rather
+// than a default: the collection and the group SSHakku makes for itself are
+// called different things, and each backend fills its own in. A refused value
+// resolves the same way, so a name SSHakku will not take leaves the entries
+// where they already are instead of somewhere else again.
+func resolveSecretContainer(fileVal *string) (string, error) {
+	container := derefString(fileVal)
+	switch {
+	case container == "":
+		return "", nil
+	case unusableName(container):
+		return "", fmt.Errorf("invalid secret_container %q: whitespace and %q are not allowed, using SSHakku's own", container, "/")
+	case slices.Contains(desktopOwnWallets, strings.ToLower(container)):
+		return "", fmt.Errorf("invalid secret_container %q: that name belongs to your desktop's own wallet, whose contents are not SSHakku's to delete; using SSHakku's own", container)
+	}
+	return container, nil
 }
 
 // resolveWalletStoreMode is config-file only (no environment override, per
