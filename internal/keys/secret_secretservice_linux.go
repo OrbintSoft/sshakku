@@ -2,6 +2,8 @@ package keys
 
 import "github.com/godbus/dbus/v5"
 
+// The collection SSHakku makes for itself, addressed by both alias and label,
+// when the caller names none of its own.
 const (
 	secretServiceAlias = "sshakku"
 	secretServiceLabel = "sshakku"
@@ -57,7 +59,7 @@ type SecretServiceBackend struct {
 	held bool
 }
 
-// Unlock unlocks the sshakku collection and keeps it unlocked for subsequent
+// Unlock unlocks SSHakku's collection and keeps it unlocked for subsequent
 // Lookup/Store/Delete calls until Lock is called.
 func (b *SecretServiceBackend) Unlock() error {
 	col, err := b.resolveCollection()
@@ -71,7 +73,7 @@ func (b *SecretServiceBackend) Unlock() error {
 	return nil
 }
 
-// Lock re-locks the sshakku collection previously unlocked via Unlock.
+// Lock re-locks SSHakku's collection previously unlocked via Unlock.
 func (b *SecretServiceBackend) Lock() error {
 	col, err := b.resolveCollection()
 	if err != nil {
@@ -107,7 +109,7 @@ func (b *SecretServiceBackend) resolveCollection() (dbus.ObjectPath, error) {
 	return b.collection, nil
 }
 
-// Lookup unlocks the sshakku collection, searches it for service, reads the
+// Lookup unlocks SSHakku's collection, searches it for service, reads the
 // secret if found, and re-locks the collection before returning — on a hit, a
 // miss, or an error alike. When the collection is already held unlocked (see
 // SecretSession), it skips its own unlock/lock and leaves that to the holder.
@@ -134,7 +136,7 @@ func (b *SecretServiceBackend) Lookup(service string) (string, bool, error) {
 	return passphrase, true, nil
 }
 
-// Store unlocks the sshakku collection, creates or replaces the item for
+// Store unlocks SSHakku's collection, creates or replaces the item for
 // service, and re-locks the collection before returning — on success or
 // error alike. When the collection is already held unlocked (see
 // SecretSession), it skips its own unlock/lock and leaves that to the holder.
@@ -154,7 +156,7 @@ func (b *SecretServiceBackend) Store(service, label, passphrase string) error {
 	return b.Client.CreateItem(col, label, attrs, passphrase, true)
 }
 
-// Delete unlocks the sshakku collection, deletes every item matching service,
+// Delete unlocks SSHakku's collection, deletes every item matching service,
 // and re-locks the collection before returning — on success, a miss, or an
 // error alike. A miss (nothing to delete) is success, not an error. When the
 // collection is already held unlocked (see SecretSession), it skips its own
@@ -183,9 +185,10 @@ func (b *SecretServiceBackend) Delete(service string) error {
 	return nil
 }
 
-// List unlocks the sshakku collection, reads the "service" attribute of every
-// item it holds, and re-locks the collection before returning. Since the
-// collection is dedicated to sshakku, every item in it is sshakku-managed.
+// List unlocks SSHakku's collection, reads the "service" attribute of every
+// item it holds, and re-locks the collection before returning. Every item in it
+// counts as sshakku-managed, because the collection is sshakku's own — which is
+// exactly what Container is trusted not to break.
 // When the collection is already held unlocked (see
 // SecretSession), it skips its own unlock/lock and leaves that to the holder.
 func (b *SecretServiceBackend) List() ([]string, error) {
