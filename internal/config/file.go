@@ -58,6 +58,14 @@ type File struct {
 	// config-file only for the same reason ServicePrefix is.
 	SecretContainer *string `toml:"secret_container"`
 
+	// KeyDir and KeyPatterns say which files SSHakku treats as the user's
+	// keys: where to look, and which names there are keys. Both are
+	// config-file only — a list of patterns does not fit one environment
+	// variable, and the two halves of one rule are better read from one place
+	// than from two that can disagree.
+	KeyDir      *string  `toml:"key_dir"`
+	KeyPatterns []string `toml:"key_patterns"`
+
 	SecretBackend    *string `toml:"secret_backend"`
 	OnePasswordVault *string `toml:"onepassword_vault"`
 	BitwardenEmail   *string `toml:"bitwarden_email"`
@@ -107,6 +115,13 @@ type Settings struct {
 	// named none: there is no one default to put here, since the collection and
 	// the group are called different things, so each backend supplies its own.
 	SecretContainer string
+
+	// KeyDir and KeyPatterns are what the user asked for, unresolved: KeyDir
+	// as written (possibly relative to home, which this layer does not know)
+	// and KeyPatterns nil whenever SSHakku's own rule applies. KeyEnumerator
+	// turns the pair into the enumerator every caller uses.
+	KeyDir      string
+	KeyPatterns []string
 
 	// SecretBackend selects which SecretBackend implementation the caller
 	// should construct; one of the SecretBackend* constants.
@@ -213,6 +228,15 @@ func (s Settings) AutoLoads(keyname string) bool {
 	}
 }
 
+// KeyEnumerator turns the discovery settings into the enumerator every caller
+// reads its keys through, given the home directory a relative KeyDir is
+// resolved against. It exists so there is one such mapping: what SSHakku loads
+// and what it reports are then the same set by construction, and a report of a
+// directory nobody read is the most misleading thing a diagnostic can say.
+func (s Settings) KeyEnumerator(home string) keys.Enumerator {
+	return keys.Enumerator{Dir: filepath.Join(home, ".ssh")}
+}
+
 func containsKey(keys []string, keyname string) bool {
 	for _, k := range keys {
 		if k == keyname {
@@ -273,6 +297,12 @@ func (f File) Merge(other File) File {
 	}
 	if other.SecretContainer != nil {
 		merged.SecretContainer = other.SecretContainer
+	}
+	if other.KeyDir != nil {
+		merged.KeyDir = other.KeyDir
+	}
+	if other.KeyPatterns != nil {
+		merged.KeyPatterns = other.KeyPatterns
 	}
 	if other.SecretBackend != nil {
 		merged.SecretBackend = other.SecretBackend

@@ -70,6 +70,10 @@ type KeyStateSource interface {
 // agent/TTL state. A nil KeySource (the Gather parameter) skips the keys
 // section entirely; a nil Lister field does the same.
 type KeySource struct {
+	// Dir is the directory Lister reads, for the report to name. The report
+	// is how a user checks which directory SSHakku was told to look in, so it
+	// must name that one and not the one it would otherwise have assumed.
+	Dir         string
 	Lister      KeyLister
 	Fingerprint KeyFingerprinter
 	State       KeyStateSource
