@@ -8,8 +8,11 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/BurntSushi/toml"
+
+	"github.com/OrbintSoft/sshakku/internal/keys"
 )
 
 // File mirrors the on-disk TOML config. Each field is a pointer so an absent key
@@ -42,6 +45,12 @@ type File struct {
 	// benefit over the file.
 	CommandTimeout     *string `toml:"command_timeout"`
 	InteractiveTimeout *string `toml:"interactive_timeout"`
+
+	// ServicePrefix names sshakku's own entries in whatever store is in use,
+	// and is config-file only for a reason of its own: it decides where
+	// passphrases live, so a variable exported in one shell and not the next
+	// would have sshakku save under one name and look under another.
+	ServicePrefix *string `toml:"service_prefix"`
 
 	SecretBackend    *string `toml:"secret_backend"`
 	OnePasswordVault *string `toml:"onepassword_vault"`
@@ -80,6 +89,12 @@ type Settings struct {
 	AutoLoadMode    string
 	AutoLoadInclude []string // key names consulted only when mode is "include"
 	AutoLoadExclude []string // key names consulted only when mode is "exclude"
+
+	// ServicePrefix is the name SSHakku's entries carry in the secret store,
+	// ahead of the key's own name. It is always set: what a store writes, what
+	// a lookup reads back and what `forget` deletes are all built from it, and
+	// leaving it empty for one of them to fill in is how they come to disagree.
+	ServicePrefix string
 
 	// SecretBackend selects which SecretBackend implementation the caller
 	// should construct; one of the SecretBackend* constants.
@@ -241,6 +256,9 @@ func (f File) Merge(other File) File {
 		merged.AutoLoadExclude = other.AutoLoadExclude
 	}
 
+	if other.ServicePrefix != nil {
+		merged.ServicePrefix = other.ServicePrefix
+	}
 	if other.SecretBackend != nil {
 		merged.SecretBackend = other.SecretBackend
 	}
@@ -369,6 +387,12 @@ func Resolve(file File, lookup func(string) (string, bool)) (Settings, []error) 
 	s.AutoLoadInclude = file.AutoLoadInclude
 	s.AutoLoadExclude = file.AutoLoadExclude
 
+	prefix, err := resolveServicePrefix(file.ServicePrefix)
+	if err != nil {
+		errs = append(errs, err)
+	}
+	s.ServicePrefix = prefix
+
 	backend, err := resolveSecretBackend(file.SecretBackend)
 	if err != nil {
 		errs = append(errs, err)
@@ -387,6 +411,27 @@ func Resolve(file File, lookup func(string) (string, bool)) (Settings, []error) 
 	s.KeePassXCKeyFile = derefString(file.KeePassXCKeyFile)
 
 	return s, errs
+}
+
+// resolveServicePrefix is config-file only (per File's doc comment). An absent
+// or empty value takes the default; a value carrying whitespace or a slash is
+// refused and the default used instead, reported as an error to log — a slash
+// reads as a folder separator to some wallets, and whitespace makes an entry
+// name that its store's own tools cannot easily be pointed at.
+//
+// Nothing here judges whether a prefix is distinctive enough to be sshakku's
+// alone, because nothing can: in a store shared with other programs that is
+// what keeps `forget --all` off their entries, and it is the person choosing
+// the name who knows what else lives there. CONFIGURATION.md says so.
+func resolveServicePrefix(fileVal *string) (string, error) {
+	prefix := derefString(fileVal)
+	switch {
+	case prefix == "":
+		return keys.DefaultServicePrefix, nil
+	case strings.ContainsFunc(prefix, unicode.IsSpace), strings.Contains(prefix, "/"):
+		return keys.DefaultServicePrefix, fmt.Errorf("invalid service_prefix %q: whitespace and %q are not allowed, using %q", prefix, "/", keys.DefaultServicePrefix)
+	}
+	return prefix, nil
 }
 
 // resolveWalletStoreMode is config-file only (no environment override, per

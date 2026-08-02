@@ -14,5 +14,5 @@ import (
 // unused here — nothing to fall back from — but kept for signature parity with
 // the Linux implementation.
 func newDefaultSecretBackend(user string, log keys.Logger, settings config.Settings) (keys.SecretBackend, func()) {
-	return newKeychainBackend(user, settings.CommandTimeout), func() {}
+	return newKeychainBackend(user, settings.CommandTimeout, settings.ServicePrefix), func() {}
 }

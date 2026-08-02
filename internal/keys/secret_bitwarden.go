@@ -103,6 +103,12 @@ type BitwardenBackend struct {
 	// the network and run on a person's patience rather than a machine's; zero
 	// selects DefaultInteractiveTimeout.
 	Timeout time.Duration
+
+	// ServicePrefix is the name sshakku's own items carry in a vault it shares
+	// with everything else its owner keeps there, and so is what List goes by
+	// when deciding which items are sshakku's to report. It must be the prefix
+	// the entries were written under; zero selects the default.
+	ServicePrefix string
 }
 
 // run bounds every bw call, so a vault that never answers ends as an error the
@@ -344,7 +350,7 @@ func (b *BitwardenBackend) List() ([]string, error) {
 	for _, it := range items {
 		names = append(names, it.Name)
 	}
-	return ownServices(names), nil
+	return ownServices(names, b.ServicePrefix), nil
 }
 
 var _ SecretBackend = (*BitwardenBackend)(nil)

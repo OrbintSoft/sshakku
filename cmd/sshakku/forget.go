@@ -69,7 +69,7 @@ func (d deps) forget(stdout, stderr io.Writer, args []string) int {
 	} else {
 		services = make([]string, len(names))
 		for i, name := range names {
-			services[i] = keys.DefaultServicePrefix + "-" + name
+			services[i] = settings.ServicePrefix + "-" + name
 		}
 	}
 
