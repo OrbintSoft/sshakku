@@ -336,6 +336,59 @@ stays where it is with its entries in it, outside SSHakku's view: each key
 prompts once more and is saved into the new one, and `sshakku forget --all` will
 not empty the old one. Move or remove it with your wallet's own tools.
 
+## Choosing which files are your keys
+
+SSHakku looks in `~/.ssh` for files whose names begin with `id_`, which is
+OpenSSH's own convention and covers the keys `ssh-keygen` creates when you do
+not tell it otherwise. A key you named yourself — `work-github`, `deploy` — is
+not found by that rule, and nothing goes wrong visibly: it is simply never
+loaded and never listed. `key_dir` and `key_patterns` in `config.toml` state
+the two halves of the rule. Like the include/exclude lists below they are
+config-file only, since a list of patterns does not fit one environment
+variable cleanly:
+
+```toml
+key_dir = ".ssh"                       # relative to your home directory
+key_patterns = ["id_*", "work-*"]      # file names, matched as shell globs
+```
+
+- `key_dir` is where SSHakku looks. A relative path is relative to your home
+  directory, a leading `~/` means the same thing, and an absolute path is taken
+  as it is. It is not searched recursively: keys in a subdirectory are not
+  found, and neither is anything that is not a regular file.
+- `key_patterns` are matched against the **file name** alone, not the path,
+  with the usual shell wildcards (`*`, `?`, `[a-z]`). A file matching any one
+  pattern in the list is a key. An empty list, or a pattern that is not valid,
+  is refused and logged, and the default rule stays in force — so a typo does
+  not silently leave you with no keys at all.
+
+Both settings apply everywhere SSHakku decides what your keys are: what
+`sshakku load-keys` adds at login, and what `sshakku doctor` reports. The
+report names the directory it read, so if it lists nothing you can see which
+directory it was told to look in.
+
+Widening the patterns does not widen what SSHakku is willing to load. These are
+never treated as keys, whatever you write:
+
+- `*.pub` — the public halves;
+- the files OpenSSH keeps in that directory for its own use: `config`,
+  `known_hosts` (and `known_hosts.old`), `authorized_keys` (and
+  `authorized_keys2`), `environment`, `rc`.
+
+So `key_patterns = ["*"]` means "every key in there", not "every file in
+there". As with the wallet names above, that list is what SSHakku knows to
+leave alone, not proof that a file matching your patterns is a key — point
+`key_dir` at a directory full of other things and SSHakku will try them.
+
+### When the directory is not there
+
+An account with no `~/.ssh` at all is normal: there are no keys, the shell
+opens, and nothing is said. A directory you asked for by name is different — a
+mistyped `key_dir` looks exactly like a directory with no keys in it, so
+SSHakku says so in the session log instead of loading nothing quietly. It does
+not fall back to `~/.ssh`: you asked for a directory, and loading keys you did
+not ask for is the worse of the two answers.
+
 ## Choosing which keys' passphrases are stored
 
 By default every passphrase you type is stored in the wallet, so every key
@@ -367,7 +420,9 @@ path.
 
 ## Choosing which keys are auto-loaded
 
-By default every key found in `~/.ssh` is proactively added to the agent at
+By default every key SSHakku finds — see
+[Choosing which files are your keys](#choosing-which-files-are-your-keys) — is
+proactively added to the agent at
 shell-init. `auto_load_mode` in `config.toml` narrows that with an include or
 exclude list, in the same shape as `wallet_store_mode` above and, like it,
 config-file only:
