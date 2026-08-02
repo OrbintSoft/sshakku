@@ -24,6 +24,8 @@ situation. It changes nothing. The report covers:
   the agent, and, for a loaded key, how much longer it has there.
 - **Wallet** — the secret backend that would be used, how it would be reached
   when that backend offers a choice, and whether each thing it needs is here.
+- **Environment variables** — every variable SSHakku reads, with the value this
+  shell gave it; the ones holding secrets show only whether they are set.
 - **Environment** — best-effort checks on conditions outside sshakku's own
   control that materially affect its threat model: disk encryption, `/tmp`,
   and TPM presence.
@@ -138,6 +140,32 @@ present, use [`--test-backend`](#sshakku-doctor---test-backend-name).
 Anything missing is also repeated under **Findings**, so a wallet that cannot
 work is visible to someone scanning only that list.
 
+### Environment variables
+
+Every variable SSHakku reads is listed with the value your shell gave it, or
+`(unset)` where it gave none:
+
+```text
+environment variables:
+  SSH_AUTH_SOCK:               /run/user/1000/sshakku/agent.sock
+  SSH_ASKPASS:                 /usr/local/bin/sshakku-askpass
+  SSH_ASKPASS_REQUIRE:         force
+  SSHAKKU_KEY_LIFETIME:        30m
+  SSHAKKU_QUIET:               (unset)
+  SSHAKKU_HANDOFF_TOKEN:       (set)
+```
+
+The first three are the wiring a login shell exports; if they read `(unset)`,
+the hook was not sourced (see [Login shell not picked
+up](#login-shell-not-picked-up)). The `SSHAKKU_*` entries are settings that
+override `config.toml` — worth checking whenever SSHakku behaves in a way the
+configuration file does not explain, since an override leaves no trace in the
+file it overrides.
+
+Two of them hold secrets — `SSHAKKU_HANDOFF_TOKEN` and `SSHAKKU_BW_PASSWORD` —
+and are shown only as `(set)` or `(unset)`. Their values are never printed, so the
+report stays safe to paste into a bug report.
+
 ### Environment hardening checks
 
 sshakku's own threat model assumes the wallet database and any temporary
@@ -251,3 +279,13 @@ immediately; nothing else runs under it.
 
 `--user` reports omit the keys section: reading another user's `~/.ssh` and
 key-state records under a privilege drop is not implemented.
+
+They also show no environment variable of the target's. A process cannot read
+another process's environment, so each one reads `(not readable from here)`
+rather than `(unset)`, and nothing is concluded from any of them — a `--user`
+report will not tell you their `SSH_ASKPASS` is unwired, because it never saw
+it. To answer that, run as that user:
+
+```sh
+sudo -u <user> -H sshakku doctor
+```

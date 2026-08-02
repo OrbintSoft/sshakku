@@ -296,7 +296,7 @@ func TestBitwardenUnlock(t *testing.T) {
 				t.Fatalf("master password leaked into argv: %q", a)
 			}
 		}
-		wantEnv := bitwardenPasswordEnv + "=correct horse battery staple"
+		wantEnv := EnvBitwardenPassword + "=correct horse battery staple"
 		found := false
 		for _, e := range unlockCall.Env {
 			if e == wantEnv {

@@ -19,10 +19,11 @@ import (
 // touch argv or disk.
 const bitwardenBin = "bw"
 
-// bitwardenPasswordEnv carries the master password to `bw login`/`bw unlock`
+// EnvBitwardenPassword carries the master password to `bw login`/`bw unlock`
 // via --passwordenv, so it travels through the child's environment rather
-// than argv or a temp file.
-const bitwardenPasswordEnv = "SSHAKKU_BW_PASSWORD"
+// than argv or a temp file. Exported because a name that holds a master
+// password has to be known to whatever decides what may be printed.
+const EnvBitwardenPassword = "SSHAKKU_BW_PASSWORD"
 
 // bitwardenLoginItemType is Bitwarden's numeric item category for a Login
 // item (as opposed to a secure note, card, or identity) — the shape that
@@ -131,7 +132,7 @@ func (b *BitwardenBackend) Unlock() error {
 	if err != nil {
 		return err
 	}
-	passwordEnv := []string{bitwardenPasswordEnv + "=" + password}
+	passwordEnv := []string{EnvBitwardenPassword + "=" + password}
 
 	check, err := b.run(Cmd{Name: bitwardenBin, Args: []string{"login", "--check"}})
 	if err != nil {
@@ -153,7 +154,7 @@ func (b *BitwardenBackend) Unlock() error {
 
 		res, err := b.run(Cmd{
 			Name: bitwardenBin,
-			Args: []string{"login", b.Email, "--passwordenv", bitwardenPasswordEnv},
+			Args: []string{"login", b.Email, "--passwordenv", EnvBitwardenPassword},
 			Env:  passwordEnv,
 		})
 		if err != nil {
@@ -166,7 +167,7 @@ func (b *BitwardenBackend) Unlock() error {
 
 	res, err := b.run(Cmd{
 		Name: bitwardenBin,
-		Args: []string{"unlock", "--passwordenv", bitwardenPasswordEnv, "--raw"},
+		Args: []string{"unlock", "--passwordenv", EnvBitwardenPassword, "--raw"},
 		Env:  passwordEnv,
 	})
 	if err != nil {
