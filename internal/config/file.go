@@ -52,6 +52,11 @@ type File struct {
 	// would have sshakku save under one name and look under another.
 	ServicePrefix *string `toml:"service_prefix"`
 
+	// SecretContainer names the compartment SSHakku makes for itself in the
+	// store — a Secret Service collection, a KeePassXC group — and is
+	// config-file only for the same reason ServicePrefix is.
+	SecretContainer *string `toml:"secret_container"`
+
 	SecretBackend    *string `toml:"secret_backend"`
 	OnePasswordVault *string `toml:"onepassword_vault"`
 	BitwardenEmail   *string `toml:"bitwarden_email"`
@@ -95,6 +100,12 @@ type Settings struct {
 	// a lookup reads back and what `forget` deletes are all built from it, and
 	// leaving it empty for one of them to fill in is how they come to disagree.
 	ServicePrefix string
+
+	// SecretContainer is the compartment SSHakku keeps its entries in, where the
+	// store has room for one. Unlike ServicePrefix it is empty when the user has
+	// named none: there is no one default to put here, since the collection and
+	// the group are called different things, so each backend supplies its own.
+	SecretContainer string
 
 	// SecretBackend selects which SecretBackend implementation the caller
 	// should construct; one of the SecretBackend* constants.
@@ -258,6 +269,9 @@ func (f File) Merge(other File) File {
 
 	if other.ServicePrefix != nil {
 		merged.ServicePrefix = other.ServicePrefix
+	}
+	if other.SecretContainer != nil {
+		merged.SecretContainer = other.SecretContainer
 	}
 	if other.SecretBackend != nil {
 		merged.SecretBackend = other.SecretBackend

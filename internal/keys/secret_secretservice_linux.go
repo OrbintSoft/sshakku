@@ -42,6 +42,14 @@ type SecretServiceBackend struct {
 	Client SecretServiceClient
 	// User is the "username" attribute, constant for the login session.
 	User string
+	// Container is the collection to keep entries in, used as both its alias
+	// and its label. Empty selects the collection SSHakku makes for itself.
+	//
+	// Whatever it names is treated as SSHakku's own: List reports every item in
+	// it and forget --all deletes them, without reading whose entry is whose.
+	// It must therefore never be pointed at a collection SSHakku did not make —
+	// resolving one can adopt an existing collection rather than create it.
+	Container string
 
 	collection dbus.ObjectPath
 	// held is true between an explicit Unlock and its matching Lock: while

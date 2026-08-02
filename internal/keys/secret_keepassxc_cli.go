@@ -49,6 +49,10 @@ type KeePassXCCLIBackend struct {
 	Database string
 	// KeyFile is an optional key file the database also requires.
 	KeyFile string
+	// Group is the group in the database to keep entries in. Empty selects the
+	// group SSHakku makes for itself. Every entry in it is treated as
+	// SSHakku's, so it must not name a group holding anything else.
+	Group string
 	// Timeout bounds each call. The CLI waits on a person, so this is the
 	// interactive budget rather than the shorter command one.
 	Timeout time.Duration
