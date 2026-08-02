@@ -61,7 +61,7 @@ func (d deps) loadKeys(stderr io.Writer) int {
 	defer closeSecret()
 
 	loader := keys.Loader{
-		Keys:     keys.Enumerator{Dir: filepath.Join(env.Home, ".ssh")},
+		Keys:     settings.KeyEnumerator(env.Home),
 		Runner:   runner,
 		Secret:   secret,
 		Prompt:   prompter,

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/OrbintSoft/sshakku/internal/agent"
+	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/diagnose"
 	"github.com/OrbintSoft/sshakku/internal/paths"
 )
@@ -31,7 +32,7 @@ var _ TargetTokenSource = fakeTokenSource{}
 // returns report; tokenSource yields a fixed token; geteuid reports euid.
 func doctorDeps(report diagnose.Report, ts TargetTokenSource, euid int) deps {
 	d := depsWithEnsurer(fakeEnsurer{})
-	d.gather = func(paths.Env, paths.Layout) diagnose.Report { return report }
+	d.gather = func(paths.Env, paths.Layout, config.Settings) diagnose.Report { return report }
 	d.tokenSource = ts
 	d.geteuid = func() int { return euid }
 	return d
@@ -114,7 +115,7 @@ func TestDoctorReadOnly(t *testing.T) {
 func TestDoctorTestBackend(t *testing.T) {
 	tempRuntimeEnv(t)
 	d := depsReturning(newMemoryBackend())
-	d.gather = func(paths.Env, paths.Layout) diagnose.Report { return diagnose.Report{} }
+	d.gather = func(paths.Env, paths.Layout, config.Settings) diagnose.Report { return diagnose.Report{} }
 	d.tokenSource = fakeTokenSource{}
 	d.geteuid = func() int { return 1000 }
 	var out, errOut bytes.Buffer
@@ -223,7 +224,7 @@ func TestGatherReport(t *testing.T) {
 	tempRuntimeEnv(t)
 	env := paths.FromOS()
 	layout := paths.Resolve(env, paths.ProbeDir)
-	report := gatherReport(env, layout)
+	report := gatherReport(env, layout, config.Settings{})
 	if report.FixedSock != layout.AgentSock {
 		t.Errorf("report.FixedSock = %q, want %q", report.FixedSock, layout.AgentSock)
 	}

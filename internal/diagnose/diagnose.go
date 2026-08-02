@@ -204,7 +204,8 @@ type Report struct {
 	LogTail      []string
 	InspectErr   error // enumeration failed; the report is partial
 	Keys         []KeyView
-	KeysErr      error // key enumeration failed; Keys is empty
+	KeysDir      string // the directory Keys were read from, as the report names it
+	KeysErr      error  // key enumeration failed; Keys is empty
 	Host         HostChecks
 
 	Env           []EnvVar
@@ -264,6 +265,7 @@ func Gather(in Inputs, src AgentSource, prober agent.Prober, anc AncestrySource,
 	}
 	r.Findings = findings(in, r)
 	if keys != nil {
+		r.KeysDir = keys.Dir
 		r.Keys, r.KeysErr = gatherKeys(*keys)
 	}
 	return r
@@ -482,12 +484,12 @@ func Format(w io.Writer, r Report) {
 	}
 
 	if len(r.Keys) > 0 || r.KeysErr != nil {
-		p("\n~/.ssh keys (%d):\n", len(r.Keys))
+		p("\nkeys in %s (%d):\n", keysDirName(r.KeysDir), len(r.Keys))
 		for _, k := range r.Keys {
 			p("  %-28s %s\n", k.Name, keyStatus(k))
 		}
 		if r.KeysErr != nil {
-			p("  could not enumerate ~/.ssh: %v\n", r.KeysErr)
+			p("  could not enumerate %s: %v\n", keysDirName(r.KeysDir), r.KeysErr)
 		}
 	}
 
@@ -666,6 +668,16 @@ func humanBytes(n int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %ciB", float64(n)/float64(div), "KMGTPE"[exp])
+}
+
+// keysDirName is the directory the keys section speaks about. A caller that
+// gathered keys without saying where from leaves the report vague rather than
+// naming a directory nobody read.
+func keysDirName(dir string) string {
+	if dir == "" {
+		return "the key directory"
+	}
+	return dir
 }
 
 func orNone(s string) string {

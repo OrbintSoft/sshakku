@@ -234,7 +234,35 @@ func (s Settings) AutoLoads(keyname string) bool {
 // and what it reports are then the same set by construction, and a report of a
 // directory nobody read is the most misleading thing a diagnostic can say.
 func (s Settings) KeyEnumerator(home string) keys.Enumerator {
-	return keys.Enumerator{Dir: filepath.Join(home, ".ssh")}
+	if s.KeyDir == "" {
+		return keys.Enumerator{
+			Dir:      filepath.Join(home, keys.DefaultKeyDirName),
+			Patterns: s.KeyPatterns,
+		}
+	}
+	// A directory the user named must be there: it is the only way to tell a
+	// mistyped one from one that simply holds no keys, since both produce the
+	// same empty agent and the same silence.
+	return keys.Enumerator{
+		Dir:       resolveHomePath(home, s.KeyDir),
+		Patterns:  s.KeyPatterns,
+		MustExist: true,
+	}
+}
+
+// resolveHomePath reads a directory as a person writes one in a config file:
+// absolute where it starts at the root, and otherwise relative to home, whether
+// or not they spelled that "~/".
+func resolveHomePath(home, dir string) string {
+	switch {
+	case dir == "~":
+		return home
+	case strings.HasPrefix(dir, "~/"):
+		dir = strings.TrimPrefix(dir, "~/")
+	case filepath.IsAbs(dir):
+		return filepath.Clean(dir)
+	}
+	return filepath.Join(home, dir)
 }
 
 func containsKey(keys []string, keyname string) bool {
@@ -444,6 +472,13 @@ func Resolve(file File, lookup func(string) (string, bool)) (Settings, []error) 
 	}
 	s.SecretContainer = container
 
+	s.KeyDir = derefString(file.KeyDir)
+	patterns, err := resolveKeyPatterns(file.KeyPatterns)
+	if err != nil {
+		errs = append(errs, err)
+	}
+	s.KeyPatterns = patterns
+
 	backend, err := resolveSecretBackend(file.SecretBackend)
 	if err != nil {
 		errs = append(errs, err)
@@ -522,6 +557,31 @@ func resolveSecretContainer(fileVal *string) (string, error) {
 		return "", fmt.Errorf("invalid secret_container %q: that name belongs to your desktop's own wallet, whose contents are not SSHakku's to delete; using SSHakku's own", container)
 	}
 	return container, nil
+}
+
+// resolveKeyPatterns is config-file only (per File's doc comment). An absent
+// list leaves SSHakku's own naming rule in force, and so does a list it cannot
+// use: a pattern is refused when it can never match a file name — it is empty,
+// it holds a path separator, or it is malformed — and the whole list goes with
+// it. Keeping the readable half would enforce a rule the user did not write,
+// and obeying an empty list would leave them with no keys at all, which is the
+// failure the setting exists to remove.
+func resolveKeyPatterns(fileVal []string) ([]string, error) {
+	if fileVal == nil {
+		return nil, nil
+	}
+	if len(fileVal) == 0 {
+		return nil, errors.New("invalid key_patterns: the list is empty, using SSHakku's own naming rule")
+	}
+	for _, pattern := range fileVal {
+		switch _, err := filepath.Match(pattern, "name"); {
+		case pattern == "" || strings.Contains(pattern, "/"):
+			return nil, fmt.Errorf("invalid key_patterns entry %q: a pattern matches a file name, not a path, using SSHakku's own naming rule", pattern)
+		case err != nil:
+			return nil, fmt.Errorf("invalid key_patterns entry %q: %v, using SSHakku's own naming rule", pattern, err)
+		}
+	}
+	return slices.Clone(fileVal), nil
 }
 
 // resolveWalletStoreMode is config-file only (no environment override, per
