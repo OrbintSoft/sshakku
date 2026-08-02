@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// Enumerator lists the candidate private-key files in a directory (~/.ssh).
+// Enumerator lists the candidate private-key files in a directory.
 type Enumerator struct {
 	Dir string
 

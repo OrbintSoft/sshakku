@@ -20,8 +20,10 @@ situation. It changes nothing. The report covers:
 - **Processes** — every `ssh-agent` process found, each labelled *ours*,
   *legacy*, or *foreign*, with its reachability, owning user, socket, and the
   process chain that launched it.
-- **Keys** — every key file under `~/.ssh`, whether it is currently loaded in
-  the agent, and, for a loaded key, how much longer it has there.
+- **Keys** — every key file in the directory SSHakku reads (named in the
+  heading, so you can see which one it was told to read), whether each is
+  currently loaded in the agent, and, for a loaded key, how much longer it has
+  there.
 - **Wallet** — the secret backend that would be used, how it would be reached
   when that backend offers a choice, and whether each thing it needs is here.
 - **Environment variables** — every variable SSHakku reads, with the value this
@@ -85,10 +87,10 @@ tracks it itself: whenever `load-keys` adds a key, it records when and for how
 long (the `-t` lifetime `ssh-add` was given) in a small per-key file under the
 per-login runtime directory — the same tmpfs-backed location as the give-up
 sentinels, wiped on logout or reboot, holding no secret. `doctor` reads those
-records back to show, for each key under `~/.ssh`:
+records back to show, for each key it finds:
 
 ```text
-~/.ssh keys (2):
+keys in /home/you/.ssh (2):
   id_ed25519_github           loaded, expires in 7h12m30s
   id_rsa_old                  not loaded
 ```
@@ -278,8 +280,8 @@ process running under the target's own credentials (a kernel-mediated
 privilege drop, not an in-process one), then discards that identity
 immediately; nothing else runs under it.
 
-`--user` reports omit the keys section: reading another user's `~/.ssh` and
-key-state records under a privilege drop is not implemented.
+`--user` reports omit the keys section: reading another user's key directory
+and key-state records under a privilege drop is not implemented.
 
 They also show no environment variable of the target's. A process cannot read
 another process's environment, so each one reads `(not readable from here)`

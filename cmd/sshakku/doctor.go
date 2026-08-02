@@ -388,7 +388,7 @@ func (d deps) doctorCrossUser(stdout, stderr io.Writer, invoking paths.Env, targ
 		SecretEnv:     secretEnv,
 		EnvUnreadable: true,
 	}, agent.Inspector{}, agent.UIDGatedProber{UID: target.UID, Prober: agent.SocketProber{}}, newAncestrySource(), newCgroupSource(),
-		nil, // the keys section only covers the invoking user's own ~/.ssh (see gatherReport)
+		nil, // the keys section only covers the invoking user's own keys (see gatherReport)
 		newHostSource(targetEnv.Home),
 	))
 	return 0

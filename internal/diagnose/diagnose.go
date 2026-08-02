@@ -66,7 +66,7 @@ type KeyStateSource interface {
 	Load(key string) (keystate.Record, bool)
 }
 
-// KeySource bundles the collaborators needed to inspect ~/.ssh keys and their
+// KeySource bundles the collaborators needed to inspect the user's keys and their
 // agent/TTL state. A nil KeySource (the Gather parameter) skips the keys
 // section entirely; a nil Lister field does the same.
 type KeySource struct {
@@ -122,7 +122,7 @@ type AgentView struct {
 	Cgroup    string     // systemd unit the agent's cgroup names, or "" if none/unknown
 }
 
-// KeyView is one ~/.ssh key file as the report presents it.
+// KeyView is one key file as the report presents it.
 type KeyView struct {
 	Name        string // base filename, e.g. "id_ed25519"
 	Fingerprint string // "" when ssh-keygen could not read the file
@@ -217,7 +217,7 @@ type Report struct {
 // reading everything through src, prober, anc, and cg so it never touches the
 // real /proc or sockets in a test. A nil anc skips ancestry attribution; a nil
 // cg skips the cgroup fallback used when ancestry dead-ends at init. A nil
-// keys skips the ~/.ssh key/TTL section entirely. A nil host skips the
+// keys skips the key/TTL section entirely. A nil host skips the
 // environment-hardening section entirely (Report.Host stays its zero value,
 // which Format and findings both already treat as "nothing to say"). It
 // mutates nothing.
@@ -271,7 +271,7 @@ func Gather(in Inputs, src AgentSource, prober agent.Prober, anc AncestrySource,
 	return r
 }
 
-// gatherKeys enumerates ~/.ssh keys through ks.Lister, cross-references each
+// gatherKeys enumerates the user's keys through ks.Lister, cross-references each
 // one's fingerprint against the agent's loaded set, and — for a loaded key —
 // looks up how long sshakku recorded it as living there. A nil Fingerprint or
 // State collaborator degrades gracefully: fingerprints/loaded state or

@@ -12,7 +12,7 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/sessionlog"
 )
 
-// loadKeys adds the user's ~/.ssh keys to the agent: it skips keys already loaded
+// loadKeys adds the user's keys to the agent: it skips keys already loaded
 // and, for the rest, pulls each passphrase from the secret store (or prompts) and
 // hands it to ssh-add out of band. The login entrypoint calls it only in
 // interactive shells. SSH_ASKPASS points at the askpass helper installed beside
