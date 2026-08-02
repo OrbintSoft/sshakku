@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/OrbintSoft/sshakku/internal/agent"
 )
 
 // envState returns what out shows for the variable name: the text after the
@@ -53,6 +55,48 @@ func TestFormatShowsEveryVariableItWasGiven(t *testing.T) {
 		}
 		if got != want {
 			t.Errorf("%s is shown as %q, want %q", name, got, want)
+		}
+	}
+}
+
+// TestAnUnreadableEnvironmentIsNotReportedAsUnset verifies F31 for a report
+// about somebody else's session: their environment cannot be read from here,
+// and an unread variable must not be shown as one their shell did not set, nor
+// have a conclusion drawn from it. "Unset" is a fact about a shell somebody
+// looked at; this report looked at none.
+func TestAnUnreadableEnvironmentIsNotReportedAsUnset(t *testing.T) {
+	src := fakeSource{procs: []agent.AgentProc{{PID: 100, UID: 1000, Socket: fixed}}}
+	prober := fakeProber{up: map[string]bool{fixed: true}}
+
+	r := Gather(Inputs{
+		FixedSock:     fixed,
+		OurUID:        1000,
+		EnvUnreadable: true,
+		Env:           []EnvVar{{Name: "SSH_ASKPASS"}},
+		SecretEnv:     []SecretEnvVar{{Name: "SSHAKKU_HANDOFF_TOKEN"}},
+	}, src, prober, nil, nil, nil, nil)
+
+	if hasFinding(r, "SSH_AUTH_SOCK is unset") {
+		t.Errorf("the report claims SSH_AUTH_SOCK is unset for a shell it never read: %v", r.Findings)
+	}
+	if hasFinding(r, "SSH_ASKPASS is not wired") {
+		t.Errorf("the report claims the askpass is not wired for a shell it never read: %v", r.Findings)
+	}
+	if !hasFinding(r, "cannot be read from here") {
+		t.Errorf("findings = %v, want one saying the environment could not be read", r.Findings)
+	}
+
+	var buf bytes.Buffer
+	Format(&buf, r)
+	out := buf.String()
+	for _, name := range []string{"SSH_AUTH_SOCK", "SSH_ASKPASS", "SSHAKKU_HANDOFF_TOKEN"} {
+		got, ok := envState(out, name)
+		if !ok {
+			t.Errorf("report never names %s:\n%s", name, out)
+			continue
+		}
+		if got != "(not readable from here)" {
+			t.Errorf("%s is shown as %q, want it withheld rather than guessed at", name, got)
 		}
 	}
 }
