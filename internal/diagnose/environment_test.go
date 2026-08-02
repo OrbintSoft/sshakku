@@ -6,12 +6,15 @@ import (
 	"testing"
 )
 
-// lineWith returns the line of out that names v, so an assertion can check the
-// value sits on that line without pinning the column padding Format uses.
-func lineWith(out, v string) (string, bool) {
+// envState returns what out shows for the variable name: the text after the
+// name's colon, with the surrounding padding stripped. Exact rather than a
+// substring search, because "set" is a substring of "unset" and a report that
+// inverted the two would satisfy a looser assertion.
+func envState(out, name string) (string, bool) {
 	for _, line := range strings.Split(out, "\n") {
-		if strings.Contains(line, v) {
-			return line, true
+		_, rest, found := strings.Cut(line, name+":")
+		if found {
+			return strings.TrimSpace(rest), true
 		}
 	}
 	return "", false
@@ -40,16 +43,16 @@ func TestFormatShowsEveryVariableItWasGiven(t *testing.T) {
 	cases := map[string]string{
 		"SSH_ASKPASS":          "/usr/local/bin/sshakku-askpass",
 		"SSH_ASKPASS_REQUIRE":  "force",
-		"SSHAKKU_KEY_LIFETIME": "unset",
+		"SSHAKKU_KEY_LIFETIME": "(unset)",
 	}
 	for name, want := range cases {
-		line, ok := lineWith(out, name)
+		got, ok := envState(out, name)
 		if !ok {
 			t.Errorf("report never names %s:\n%s", name, out)
 			continue
 		}
-		if !strings.Contains(line, want) {
-			t.Errorf("%s is shown as %q, want it to carry %q", name, line, want)
+		if got != want {
+			t.Errorf("%s is shown as %q, want %q", name, got, want)
 		}
 	}
 }
@@ -71,17 +74,17 @@ func TestFormatSaysWhetherASecretIsSetAndNothingMore(t *testing.T) {
 	out := buf.String()
 
 	cases := map[string]string{
-		"SSHAKKU_HANDOFF_TOKEN": "set",
-		"SSHAKKU_BW_PASSWORD":   "unset",
+		"SSHAKKU_HANDOFF_TOKEN": "(set)",
+		"SSHAKKU_BW_PASSWORD":   "(unset)",
 	}
 	for name, want := range cases {
-		line, ok := lineWith(out, name)
+		got, ok := envState(out, name)
 		if !ok {
 			t.Errorf("report never names %s:\n%s", name, out)
 			continue
 		}
-		if !strings.Contains(line, want) {
-			t.Errorf("%s is shown as %q, want it reported %q", name, line, want)
+		if got != want {
+			t.Errorf("%s is reported %q, want %q", name, got, want)
 		}
 	}
 }

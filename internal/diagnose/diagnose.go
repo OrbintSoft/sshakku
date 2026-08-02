@@ -83,6 +83,12 @@ type Inputs struct {
 	// without prompting.
 	EnvAskpass        string // SSH_ASKPASS as this shell sees it
 	EnvAskpassRequire string // SSH_ASKPASS_REQUIRE as this shell sees it
+
+	// Env and SecretEnv are the variables SSHakku reads, as the report
+	// presents them; the caller collects them, since which variables those
+	// are belongs to the code that reads them.
+	Env       []EnvVar
+	SecretEnv []SecretEnvVar
 }
 
 // AgentView is one ssh-agent process as the report presents it.
@@ -180,6 +186,9 @@ type Report struct {
 	Keys         []KeyView
 	KeysErr      error // key enumeration failed; Keys is empty
 	Host         HostChecks
+
+	Env       []EnvVar
+	SecretEnv []SecretEnvVar
 }
 
 // Gather inspects the agent situation described by in and returns the report,
@@ -195,6 +204,8 @@ func Gather(in Inputs, src AgentSource, prober agent.Prober, anc AncestrySource,
 		FixedSock: in.FixedSock,
 		EnvSock:   in.EnvSock,
 		OurUID:    in.OurUID,
+		Env:       in.Env,
+		SecretEnv: in.SecretEnv,
 	}
 	if in.EnvSock != "" {
 		r.EnvReachable = prober.Reachable(in.EnvSock)
@@ -424,7 +435,7 @@ func Format(w io.Writer, r Report) {
 	p("sshakku doctor — ssh-agent diagnostics\n\n")
 	p("state: %s\n\n", r.State)
 	p("fixed socket:  %s\n", orNone(r.FixedSock))
-	p("SSH_AUTH_SOCK: %s%s\n", orUnset(r.EnvSock), envReachSuffix(r.EnvSock, r.EnvReachable))
+	p("SSH_AUTH_SOCK: %s%s\n", envValue(r.EnvSock), envReachSuffix(r.EnvSock, r.EnvReachable))
 	if r.RecordedPID != 0 {
 		p("recorded pid:  %d (agent.state)\n", r.RecordedPID)
 	}
@@ -465,6 +476,16 @@ func Format(w io.Writer, r Report) {
 				state = "missing"
 			}
 			p("  %-22s %s — %s\n", req.Name+":", state, req.Detail)
+		}
+	}
+
+	if len(r.Env) > 0 || len(r.SecretEnv) > 0 {
+		p("\nenvironment variables:\n")
+		for _, v := range r.Env {
+			p("  %-28s %s\n", v.Name+":", envValue(v.Value))
+		}
+		for _, s := range r.SecretEnv {
+			p("  %-28s %s\n", s.Name+":", secretEnvState(s.Set))
 		}
 	}
 
@@ -626,13 +647,6 @@ func humanBytes(n int64) string {
 func orNone(s string) string {
 	if s == "" {
 		return "(none)"
-	}
-	return s
-}
-
-func orUnset(s string) string {
-	if s == "" {
-		return "(unset)"
 	}
 	return s
 }

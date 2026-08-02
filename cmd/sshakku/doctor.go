@@ -391,6 +391,7 @@ func gatherReport(env paths.Env, layout paths.Layout) diagnose.Report {
 		Fingerprint: keys.RunnerFingerprinter{Runner: runner},
 		State:       keystate.Store{Dir: keystateDir(layout)},
 	}
+	shownEnv, secretEnv := environmentReport()
 	return diagnose.Gather(diagnose.Inputs{
 		FixedSock:         layout.AgentSock,
 		LegacyDir:         filepath.Join(env.Home, ".ssh", "agent"),
@@ -400,6 +401,8 @@ func gatherReport(env paths.Env, layout paths.Layout) diagnose.Report {
 		OurUID:            env.UID,
 		EnvAskpass:        os.Getenv("SSH_ASKPASS"),
 		EnvAskpassRequire: os.Getenv("SSH_ASKPASS_REQUIRE"),
+		Env:               shownEnv,
+		SecretEnv:         secretEnv,
 	}, agent.Inspector{}, agent.SocketProber{}, newAncestrySource(), newCgroupSource(), keySource,
 		newHostSource(env.Home))
 }
