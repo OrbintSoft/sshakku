@@ -185,7 +185,8 @@ typo never silently pins a route you did not name.
 
 ### What KeePassXC can and cannot do for you
 
-SSHakku's entries live in an **SSHakku** group in your database, one per key,
+SSHakku's entries live in an **SSHakku** group in your database (renameable —
+see [Naming the compartment](#naming-the-compartment-they-are-kept-in)), one per key,
 under a URL built from the same per-key name the other backends use
 (`sshakku://SSHakku-Key-id_ed25519`), which is also the entry's username.
 
@@ -209,7 +210,7 @@ there.
 
 The default (`secret_backend = "secret-service"`) stores passphrases in their
 own Secret Service collection, labelled and aliased
-`sshakku`, separate from the desktop's default wallet (`kdewallet` on KDE, the
+`sshakku` (renameable — see below), separate from the desktop's default wallet (`kdewallet` on KDE, the
 login keyring on GNOME). SSHakku talks to the Secret Service D-Bus API
 (`org.freedesktop.secrets`) directly — the same API KDE Wallet and GNOME
 Keyring both implement — rather than shelling out to `secret-tool`, so it can
@@ -274,6 +275,66 @@ under the new name, and `sshakku forget --all` will not remove the old ones — 
 deletes what SSHakku manages, and under the configuration you have just written
 those are no longer it. Remove them with your wallet's own tools if you want them
 gone.
+
+### Naming the compartment they are kept in
+
+Where the wallet has room for one, SSHakku makes itself a compartment and keeps
+its entries there and nowhere else: a Secret Service collection on Linux, a
+group in your KeePassXC database. Left alone, the collection is `sshakku` and
+the group is `SSHakku` — each keeps the name it has always had, so nothing you
+have already stored moves. `secret_container` names both at once.
+
+```toml
+# ~/.config/sshakku/config.toml
+secret_container = "my-own-compartment"
+```
+
+| `secret_backend` | what the name applies to |
+| --- | --- |
+| `"secret-service"` | the collection SSHakku creates, both its label and its alias |
+| `"keepassxc"`, `"cli"` route | the group SSHakku creates in the database |
+| `"keepassxc"`, `"native"` route | nothing — see below |
+| `"1password"` | nothing; the vault is named by `onepassword_vault` |
+| `"keychain"`, `"bitwarden"` | nothing; there is no compartment to name |
+
+On the KeePassXC `"native"` route the setting has no effect, and SSHakku will
+not pretend otherwise. KeePassXC files an entry into a group of its own
+choosing — the one it keeps for entries saved over that protocol — and the group
+name it is handed is not what it goes by. Use the `"cli"` route if the group
+matters to you, or move the entries in KeePassXC afterwards.
+
+On the macOS keychain and in a Bitwarden vault there is no compartment at all:
+the entries sit among everything else, and `service_prefix` above is what tells
+them apart. A 1Password vault keeps its own key, because a vault is not
+something SSHakku makes for you — it exists first, with your team's access rules
+on it.
+
+Like `service_prefix`, this is config-file only, for the same reason: it decides
+where your passphrases live, and a variable exported in one shell and not the
+next would put them somewhere the next shell does not look.
+
+An absent or empty value uses the default, and a value containing whitespace or
+a `/` is refused — a KeePassXC group name is a path, and a `/` in it would nest
+the group somewhere you did not ask for. So are the names your desktop uses for
+its own wallets: `default`, `login`, `session`, `kdewallet`, in any casing. Each
+refusal goes to the session log and SSHakku carries on with its own default.
+
+Those four are refused because SSHakku would not merely write into such a wallet
+— it would adopt it. It treats its compartment as entirely its own, since it is
+the one that made it; `sshakku forget --all` empties it without reading whose
+entry is whose. Pointed at your login keyring, that is every password your
+desktop keeps.
+
+Which is also the one thing to be careful about with a name of your own:
+**choose one nothing else has already taken.** If a collection or group by that
+name is already there, SSHakku will use it rather than make a second, and from
+then on it considers the contents its own. The list above is the names SSHakku
+knows to refuse, not every name a wallet somewhere might be using.
+
+Changing the setting moves nothing that is already stored. The old compartment
+stays where it is with its entries in it, outside SSHakku's view: each key
+prompts once more and is saved into the new one, and `sshakku forget --all` will
+not empty the old one. Move or remove it with your wallet's own tools.
 
 ## Choosing which keys' passphrases are stored
 

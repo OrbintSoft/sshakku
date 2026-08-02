@@ -14,6 +14,10 @@ type fakeSecretServiceClient struct {
 	collection      dbus.ObjectPath
 	collectionErr   error
 	collectionCalls int
+	// collectionAsked records the (alias, label) pair each resolution asked
+	// for, so a test can read which collection was addressed rather than
+	// which one the backend meant to address.
+	collectionAsked []ssCollectionCall
 
 	unlockErr error
 	unlocked  []dbus.ObjectPath
@@ -41,6 +45,11 @@ type fakeSecretServiceClient struct {
 	deletedItems  []dbus.ObjectPath
 }
 
+type ssCollectionCall struct {
+	alias string
+	label string
+}
+
 type ssCreateCall struct {
 	collection dbus.ObjectPath
 	label      string
@@ -49,8 +58,9 @@ type ssCreateCall struct {
 	replace    bool
 }
 
-func (f *fakeSecretServiceClient) Collection(string, string) (dbus.ObjectPath, error) {
+func (f *fakeSecretServiceClient) Collection(alias, label string) (dbus.ObjectPath, error) {
 	f.collectionCalls++
+	f.collectionAsked = append(f.collectionAsked, ssCollectionCall{alias: alias, label: label})
 	if f.collectionErr != nil {
 		return "", f.collectionErr
 	}

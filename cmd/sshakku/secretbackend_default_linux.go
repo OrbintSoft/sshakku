@@ -27,7 +27,7 @@ func newDefaultSecretBackend(user string, log keys.Logger, settings config.Setti
 	// without a real D-Bus Secret Service, so this cannot run in a unit test.
 	// The fallback above is unit-tested.
 	//coverage:ignore
-	return &keys.SecretServiceBackend{Client: client, User: user}, func() {
+	return &keys.SecretServiceBackend{Client: client, User: user, Container: settings.SecretContainer}, func() {
 		//coverage:ignore
 		_ = client.Close()
 	}

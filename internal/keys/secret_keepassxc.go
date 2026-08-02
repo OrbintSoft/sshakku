@@ -74,6 +74,11 @@ type KeePassXCBackend struct {
 	SocketPaths []string
 	// Associations persists the approval this client was granted.
 	Associations AssociationStore
+	// Group is the group name sent with a new entry; empty selects the one
+	// SSHakku names by default. KeePassXC decides the placement itself (see
+	// keepassxcGroup), so this changes what is sent and not where the entry
+	// lands.
+	Group string
 	// Timeout bounds each exchange KeePassXC answers on its own; zero selects
 	// the protocol's default.
 	Timeout time.Duration
@@ -81,6 +86,14 @@ type KeePassXCBackend struct {
 	// approval dialog KeePassXC raises the first time this client associates.
 	// Zero selects the protocol's default.
 	InteractiveTimeout time.Duration
+}
+
+// group is the group name to send: the configured one, else SSHakku's own.
+func (b KeePassXCBackend) group() string {
+	if b.Group != "" {
+		return b.Group
+	}
+	return keepassxcGroup
 }
 
 // entryURL is the URL a key's entry is stored under.
@@ -213,7 +226,7 @@ func (b KeePassXCBackend) Store(service, label, passphrase string) error {
 	// name travels as the username instead, which is also what Lookup matches
 	// on.
 	_ = label
-	return client.SetLogin(url, service, passphrase, uuid, keepassxcGroup, assoc)
+	return client.SetLogin(url, service, passphrase, uuid, b.group(), assoc)
 }
 
 // associate registers this client and remembers the result.

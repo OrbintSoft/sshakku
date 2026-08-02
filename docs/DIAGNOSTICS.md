@@ -240,7 +240,8 @@ With no name, it tests whichever backend `config.toml`'s `secret_backend`
 resolves to (see [`CONFIGURATION.md`](CONFIGURATION.md)). Naming one your
 system offers — the command lists them if you name one it does not — tests
 that backend instead, using the same account fields (`onepassword_vault`,
-`bitwarden_email`, `bitwarden_server`) already in `config.toml` regardless of
+`bitwarden_email`, `bitwarden_server`) and the same `secret_container`
+already in `config.toml` regardless of
 which backend is actually configured as the default — useful for checking a
 backend you're about to switch to before you switch. The probe entry is
 always deleted, even after an earlier step failed, so no test data is left
