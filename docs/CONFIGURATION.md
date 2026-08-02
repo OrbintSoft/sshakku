@@ -79,6 +79,23 @@ alone. A syntax error in one `config.d/` file discards only that file — every
 other file, and `config.toml`, still apply — logged to the session log the
 same way a problem in `config.toml` itself is.
 
+## Seeing what took effect
+
+With settings arriving from three places — the environment, `config.toml`, and
+each file under `config.d/` — what is in force is not necessarily what any one
+file says. `sshakku config` prints it: every setting, the value actually being
+used, and which of the three put it there, along with the files that were read
+in the order they were read. A value SSHakku refused — a malformed duration, a
+name it will not use — is shown there too, so a mistake can be found without
+going through the session log.
+
+`sshakku config --edit` opens `config.toml` in your editor, creating it from a
+commented template if you have none, and checks it when you close the editor:
+whether it still parses, and whether a `config.d/` file overrules a key you
+just set. It edits that one file — a drop-in is never opened for you.
+
+See [CLI.md](CLI.md#sshakku-config) for both.
+
 ## Choosing the secret backend
 
 Left alone, SSHakku uses the wallet your operating system provides itself, and
