@@ -237,6 +237,44 @@ Service default, these items are ordinary entries in the same keychain
 everything else uses, so they're visible in Keychain Access alongside your
 other passwords, not tucked away in a separate collection.
 
+### Naming SSHakku's entries
+
+Whatever the backend, an entry is named after the key whose passphrase it holds,
+behind a prefix that says who put it there: `SSHakku-Key-id_rsa` holds the
+passphrase for `~/.ssh/id_rsa`. `service_prefix` changes that prefix.
+
+```toml
+# ~/.config/sshakku/config.toml
+service_prefix = "SSHakku-Key"
+```
+
+Unlike most settings this one is config-file only, with no `SSHAKKU_*`
+environment override. The prefix decides where your passphrases live, and a
+variable exported in one shell but not in the next would have SSHakku save under
+one name and look under another — which, from where you are sitting, is
+indistinguishable from a wallet that has quietly emptied itself.
+
+An absent or empty value uses the default. A value containing whitespace or a
+`/` is refused, since some wallets read a `/` in an entry name as a folder
+separator; the refusal goes to the session log and SSHakku carries on with the
+default.
+
+Choose the name with some care where the wallet is shared with the rest of the
+system — the macOS login keychain, a Bitwarden vault. There the prefix is the
+only thing separating SSHakku's entries from every other program's, and it is
+what `sshakku forget --all` goes by when deciding what it may delete. A prefix
+generic enough that another program might have picked it too (`ssh`, `key`,
+`SSH-Key`) puts that program's secrets within reach of a command meant to touch
+nothing but SSHakku's own. The default names SSHakku itself, which is the point
+of it.
+
+Changing the setting renames nothing that is already stored. The old entries stay
+in the wallet, outside SSHakku's view: each key prompts once more and is saved
+under the new name, and `sshakku forget --all` will not remove the old ones — it
+deletes what SSHakku manages, and under the configuration you have just written
+those are no longer it. Remove them with your wallet's own tools if you want them
+gone.
+
 ## Choosing which keys' passphrases are stored
 
 By default every passphrase you type is stored in the wallet, so every key
