@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/keys"
 	"github.com/OrbintSoft/sshakku/internal/paths"
 )
@@ -29,7 +30,7 @@ func TestTamperedEnvVarsHandledSafely(t *testing.T) {
 		t.Setenv("SSH_AUTH_SOCK", bogus)
 
 		env := paths.FromOS()
-		report := gatherReport(env, paths.Resolve(env, paths.ProbeDir))
+		report := gatherReport(env, paths.Resolve(env, paths.ProbeDir), config.Settings{})
 
 		if report.EnvSock != bogus {
 			t.Errorf("report.EnvSock = %q, want the tampered value %q", report.EnvSock, bogus)
@@ -49,7 +50,7 @@ func TestTamperedEnvVarsHandledSafely(t *testing.T) {
 		t.Setenv("SSH_AUTH_SOCK", "")
 
 		env := paths.FromOS()
-		report := gatherReport(env, paths.Resolve(env, paths.ProbeDir))
+		report := gatherReport(env, paths.Resolve(env, paths.ProbeDir), config.Settings{})
 
 		if report.EnvSock != "" {
 			t.Errorf("report.EnvSock = %q, want empty", report.EnvSock)

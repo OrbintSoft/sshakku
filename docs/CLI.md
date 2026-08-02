@@ -15,7 +15,7 @@ malformed argument).
 | --- | --- | --- |
 | [`shell-init`](#sshakku-shell-init) | No | Keeps the agent healthy, prints the shell assignments the login hook evals. |
 | [`ensure-agent`](#sshakku-ensure-agent) | Rarely | Same agent lifecycle step alone, without the other assignments. |
-| [`load-keys`](#sshakku-load-keys) | Rarely | Adds every key under `~/.ssh` to the agent. |
+| [`load-keys`](#sshakku-load-keys) | Rarely | Adds every key in your key directory to the agent. |
 | [`askpass-env`](#sshakku-askpass-env) | No | Prints the exports that route ssh's passphrase prompts through the wallet-aware broker. |
 | [`doctor`](#sshakku-doctor) | Yes | Reports (and, with `--fix`, repairs) the ssh-agent situation. |
 | [`forget`](#sshakku-forget) | Yes | Deletes stored passphrases. |
@@ -53,8 +53,9 @@ the rest of `shell-init`'s output.
 
 ## `sshakku load-keys`
 
-Adds every key file under `~/.ssh` to the agent, skipping any key already
-loaded. Each passphrase comes from the configured secret backend; on a miss,
+Adds every key file in your key directory — `~/.ssh` unless you say otherwise,
+see [Choosing which files are your keys](CONFIGURATION.md#choosing-which-files-are-your-keys)
+— to the agent, skipping any key already loaded. Each passphrase comes from the configured secret backend; on a miss,
 it prompts (graphically when available, otherwise on the terminal) and
 stores the result for next time, subject to `wallet_store_mode` — see
 [Choosing which keys' passphrases are stored](CONFIGURATION.md#choosing-which-keys-passphrases-are-stored)
@@ -62,8 +63,8 @@ and [Choosing which keys are auto-loaded](CONFIGURATION.md#choosing-which-keys-a
 
 The login hook runs this only in interactive shells, since it may prompt and
 write to the terminal — never in a non-interactive one (a script, `scp`,
-`rsync`). Run it by hand to force a re-check of `~/.ssh` without opening a
-new shell.
+`rsync`). Run it by hand to force a re-check of that directory without opening
+a new shell.
 
 ## `sshakku askpass-env`
 

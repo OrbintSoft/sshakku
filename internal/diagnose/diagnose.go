@@ -66,10 +66,14 @@ type KeyStateSource interface {
 	Load(key string) (keystate.Record, bool)
 }
 
-// KeySource bundles the collaborators needed to inspect ~/.ssh keys and their
+// KeySource bundles the collaborators needed to inspect the user's keys and their
 // agent/TTL state. A nil KeySource (the Gather parameter) skips the keys
 // section entirely; a nil Lister field does the same.
 type KeySource struct {
+	// Dir is the directory Lister reads, for the report to name. The report
+	// is how a user checks which directory SSHakku was told to look in, so it
+	// must name that one and not the one it would otherwise have assumed.
+	Dir         string
 	Lister      KeyLister
 	Fingerprint KeyFingerprinter
 	State       KeyStateSource
@@ -118,7 +122,7 @@ type AgentView struct {
 	Cgroup    string     // systemd unit the agent's cgroup names, or "" if none/unknown
 }
 
-// KeyView is one ~/.ssh key file as the report presents it.
+// KeyView is one key file as the report presents it.
 type KeyView struct {
 	Name        string // base filename, e.g. "id_ed25519"
 	Fingerprint string // "" when ssh-keygen could not read the file
@@ -200,7 +204,8 @@ type Report struct {
 	LogTail      []string
 	InspectErr   error // enumeration failed; the report is partial
 	Keys         []KeyView
-	KeysErr      error // key enumeration failed; Keys is empty
+	KeysDir      string // the directory Keys were read from, as the report names it
+	KeysErr      error  // key enumeration failed; Keys is empty
 	Host         HostChecks
 
 	Env           []EnvVar
@@ -212,7 +217,7 @@ type Report struct {
 // reading everything through src, prober, anc, and cg so it never touches the
 // real /proc or sockets in a test. A nil anc skips ancestry attribution; a nil
 // cg skips the cgroup fallback used when ancestry dead-ends at init. A nil
-// keys skips the ~/.ssh key/TTL section entirely. A nil host skips the
+// keys skips the key/TTL section entirely. A nil host skips the
 // environment-hardening section entirely (Report.Host stays its zero value,
 // which Format and findings both already treat as "nothing to say"). It
 // mutates nothing.
@@ -260,12 +265,13 @@ func Gather(in Inputs, src AgentSource, prober agent.Prober, anc AncestrySource,
 	}
 	r.Findings = findings(in, r)
 	if keys != nil {
+		r.KeysDir = keys.Dir
 		r.Keys, r.KeysErr = gatherKeys(*keys)
 	}
 	return r
 }
 
-// gatherKeys enumerates ~/.ssh keys through ks.Lister, cross-references each
+// gatherKeys enumerates the user's keys through ks.Lister, cross-references each
 // one's fingerprint against the agent's loaded set, and — for a loaded key —
 // looks up how long sshakku recorded it as living there. A nil Fingerprint or
 // State collaborator degrades gracefully: fingerprints/loaded state or
@@ -478,12 +484,12 @@ func Format(w io.Writer, r Report) {
 	}
 
 	if len(r.Keys) > 0 || r.KeysErr != nil {
-		p("\n~/.ssh keys (%d):\n", len(r.Keys))
+		p("\nkeys in %s (%d):\n", keysDirName(r.KeysDir), len(r.Keys))
 		for _, k := range r.Keys {
 			p("  %-28s %s\n", k.Name, keyStatus(k))
 		}
 		if r.KeysErr != nil {
-			p("  could not enumerate ~/.ssh: %v\n", r.KeysErr)
+			p("  could not enumerate %s: %v\n", keysDirName(r.KeysDir), r.KeysErr)
 		}
 	}
 
@@ -662,6 +668,16 @@ func humanBytes(n int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %ciB", float64(n)/float64(div), "KMGTPE"[exp])
+}
+
+// keysDirName is the directory the keys section speaks about. A caller that
+// gathered keys without saying where from leaves the report vague rather than
+// naming a directory nobody read.
+func keysDirName(dir string) string {
+	if dir == "" {
+		return "the key directory"
+	}
+	return dir
 }
 
 func orNone(s string) string {

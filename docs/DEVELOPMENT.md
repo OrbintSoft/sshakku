@@ -18,7 +18,7 @@ composed by it. One line each:
 | `internal/diagnose` | Builds the read-only picture `sshakku doctor` reports: which agents are running, which is ours, whether it answers, whether the shell's `SSH_AUTH_SOCK` is wired up. Never starts, signals, or reaps anything. |
 | `internal/giveup` | Records, per key, that loading was abandoned after the bounded retries, so later shells skip it instead of re-prompting every time, until a TTL expires. |
 | `internal/keyring` | Wraps the Linux kernel keyring (`@u` user keyring), used on Linux for handing a passphrase from `load-keys` to the askpass re-entry without it touching argv or a file; Darwin uses a private Unix socket instead (`internal/keys/handoff_darwin.go`). |
-| `internal/keys` | Loads SSH keys into the agent: enumerates `~/.ssh`, skips keys already loaded, pulls each passphrase from the configured secret backend, and drives `ssh-add` out of band. The pluggable `SecretBackend`s (Secret Service, `secret-tool`, 1Password, Bitwarden) and the askpass broker live here. |
+| `internal/keys` | Loads SSH keys into the agent: enumerates the key directory, skips keys already loaded, pulls each passphrase from the configured secret backend, and drives `ssh-add` out of band. The pluggable `SecretBackend`s (Secret Service, `secret-tool`, 1Password, Bitwarden) and the askpass broker live here. |
 | `internal/keystate` | Records when a key was added to the agent and for how long, so `doctor` can report remaining lifetime without relying on the ssh-agent protocol (which has no such query). |
 | `internal/paths` | Computes and creates the per-user runtime layout: config under the XDG config dir, the session log under the XDG state dir, the agent socket in per-user tmpfs — always outside `~/.ssh`. |
 | `internal/secretservice` | A native client for the freedesktop Secret Service D-Bus API (`org.freedesktop.secrets`), used instead of shelling out to `secret-tool` so a dedicated collection can be created and locked/unlocked around a single lookup or store. |
@@ -50,7 +50,7 @@ login shell:
    passphrase is routed through it instead of prompting on the terminal
    directly.
 3. `sshakku load-keys` runs only in interactive shells (loading may prompt
-   and write to the terminal): it enumerates `~/.ssh`, skips keys already in
+   and write to the terminal): it enumerates the key directory, skips keys already in
    the agent, and calls `ssh-add` for the rest with itself set as the
    askpass helper.
 4. When `ssh-add` (or a later `ssh`) needs a passphrase, it execs the

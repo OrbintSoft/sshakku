@@ -197,8 +197,9 @@ func (d deps) doctor(stdout, stderr io.Writer, args []string) int {
 	// The wallet is described after the agent report is gathered, not inside
 	// it: which wallets exist and what each one needs is this package's
 	// knowledge, not the diagnose package's.
-	report := d.gather(env, layout)
-	report.Wallet = walletView(loadSettings(layout, "doctor", sessionlog.New(layout.LogFile)), realWalletProbe())
+	settings := loadSettings(layout, "doctor", sessionlog.New(layout.LogFile))
+	report := d.gather(env, layout, settings)
+	report.Wallet = walletView(settings, realWalletProbe())
 	report.Findings = append(report.Findings, diagnose.WalletFindings(report.Wallet)...)
 	diagnose.Format(stdout, report)
 
@@ -226,7 +227,7 @@ func (d deps) doctor(stdout, stderr io.Writer, args []string) int {
 	}
 
 	_, _ = io.WriteString(stdout, "\nafter:\n\n")
-	after := d.gather(env, layout)
+	after := d.gather(env, layout, settings)
 	diagnose.Format(stdout, after)
 	if after.EnvSock != liveSock {
 		_, _ = fmt.Fprintf(stdout,
@@ -387,7 +388,7 @@ func (d deps) doctorCrossUser(stdout, stderr io.Writer, invoking paths.Env, targ
 		SecretEnv:     secretEnv,
 		EnvUnreadable: true,
 	}, agent.Inspector{}, agent.UIDGatedProber{UID: target.UID, Prober: agent.SocketProber{}}, newAncestrySource(), newCgroupSource(),
-		nil, // the keys section only covers the invoking user's own ~/.ssh (see gatherReport)
+		nil, // the keys section only covers the invoking user's own keys (see gatherReport)
 		newHostSource(targetEnv.Home),
 	))
 	return 0
@@ -396,10 +397,14 @@ func (d deps) doctorCrossUser(stdout, stderr io.Writer, invoking paths.Env, targ
 // gatherReport builds the diagnostic report for the resolved layout, reading the
 // real procfs, sockets, and process tree. Both the read-only and --fix paths use
 // it so they present the situation identically.
-func gatherReport(env paths.Env, layout paths.Layout) diagnose.Report {
+func gatherReport(env paths.Env, layout paths.Layout, settings config.Settings) diagnose.Report {
 	runner := keys.ExecRunner{}
+	// One enumerator, read for the keys and named in the report: the set
+	// SSHakku acts on and the set it describes are then the same set.
+	enumerator := settings.KeyEnumerator(env.Home)
 	keySource := &diagnose.KeySource{
-		Lister:      keys.Enumerator{Dir: filepath.Join(env.Home, ".ssh")},
+		Dir:         enumerator.Dir,
+		Lister:      enumerator,
 		Fingerprint: keys.RunnerFingerprinter{Runner: runner},
 		State:       keystate.Store{Dir: keystateDir(layout)},
 	}

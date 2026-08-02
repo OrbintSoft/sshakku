@@ -200,7 +200,7 @@ func TestGatherNilKeySourceSkipsKeysSection(t *testing.T) {
 	}
 	var b strings.Builder
 	Format(&b, r)
-	if strings.Contains(b.String(), "~/.ssh keys") {
+	if strings.Contains(b.String(), "keys in") {
 		t.Fatalf("Format output must omit the keys section when Keys is empty, got:\n%s", b.String())
 	}
 }
