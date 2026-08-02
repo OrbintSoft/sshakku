@@ -45,6 +45,12 @@ type KeychainBackend struct {
 	// Note what it does not do: a call already inside the framework cannot be
 	// cancelled from Go, so what elapses here ends the waiting, not the call.
 	Timeout time.Duration
+
+	// ServicePrefix is the name sshakku's own items carry in the login
+	// keychain, and so is what List goes by when deciding which items are
+	// sshakku's to report. It must be the prefix the entries were written
+	// under; zero selects the default.
+	ServicePrefix string
 }
 
 // keychainSecret is what a lookup answers with, the two halves carried together
@@ -122,7 +128,7 @@ func (b *KeychainBackend) List() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return ownServices(services), nil
+	return ownServices(services, b.ServicePrefix), nil
 }
 
 var _ SecretBackend = (*KeychainBackend)(nil)

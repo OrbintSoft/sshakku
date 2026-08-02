@@ -136,8 +136,15 @@ func (b Broker) logf(level, format string, args ...any) {
 
 // servicePrefixOf returns the per-key secret-store service prefix for c.
 func servicePrefixOf(c Config) string {
-	if c.ServicePrefix != "" {
-		return c.ServicePrefix
+	return servicePrefixOrDefault(c.ServicePrefix)
+}
+
+// servicePrefixOrDefault resolves an unset prefix to the default. It is the one
+// place that decides what "unset" means, so a store that writes an entry and a
+// sweep that enumerates one cannot resolve it differently.
+func servicePrefixOrDefault(prefix string) string {
+	if prefix != "" {
+		return prefix
 	}
 	return defaultServicePrefix
 }

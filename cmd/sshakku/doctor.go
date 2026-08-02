@@ -236,10 +236,16 @@ func (d deps) doctor(stdout, stderr io.Writer, args []string) int {
 	return exitCode
 }
 
-// doctorProbeService is the throwaway entry testSecretBackend stores, looks
-// up, and deletes; distinguished from a real key's service id (which is
-// always keys.DefaultServicePrefix + "-" + a key filename) so it can never
-// collide with one.
+// doctorProbeService is the throwaway entry testSecretBackend stores, looks up,
+// and deletes. It is a fixed name rather than one built from the configured
+// service prefix, so that probing a backend cannot address, and then delete, the
+// entry of a key someone actually has: a probe named after the prefix would
+// collide with a key called "doctor-probe", and a stored passphrase is not
+// something a diagnostic may overwrite to find out whether the wallet works.
+//
+// The cost of the fixed name is that a probe left behind by a process killed
+// between the store and the delete is not named by the prefix, so `forget --all`
+// does not see it in a store where that prefix is what marks sshakku's entries.
 const doctorProbeService = "sshakku-doctor-probe"
 
 // testSecretBackend exercises name (or, when empty, settings.SecretBackend)

@@ -203,6 +203,30 @@ func TestKeychainBackendListLeavesOtherItemsAlone(t *testing.T) {
 	}
 }
 
+// TestKeychainBackendListGoesByTheBackendsOwnPrefix verifies F32 in the store
+// that makes it matter most: the login keychain holds everyone's passwords, so
+// the prefix is the whole of what marks an item as SSHakku's. Under a
+// configured prefix an item carrying the default one was written by something
+// else, and `forget --all` — which deletes exactly what List reports — must not
+// reach it.
+func TestKeychainBackendListGoesByTheBackendsOwnPrefix(t *testing.T) {
+	const mine = "wallet-of-mine"
+	c := &fakeKeychainClient{items: map[string]string{
+		mine + "-id_ed25519":             "x",
+		defaultServicePrefix + "-id_rsa": "y",
+		"Another App-credentials":        "z",
+	}}
+	b := &KeychainBackend{Client: c, Account: "alice", ServicePrefix: mine}
+	got, err := b.List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	want := []string{mine + "-id_ed25519"}
+	if len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("List = %v, want %v", got, want)
+	}
+}
+
 func TestKeychainBackendList(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		c := &fakeKeychainClient{items: map[string]string{defaultServicePrefix + "-b": "x", defaultServicePrefix + "-a": "y"}}

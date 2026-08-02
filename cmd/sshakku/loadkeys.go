@@ -71,10 +71,11 @@ func (d deps) loadKeys(stderr io.Writer) int {
 		Giveup:   giveupStore,
 		KeyState: keyStateStore,
 		Config: keys.Config{
-			MaxAttempts: settings.MaxAttempts,
-			WalletStore: settings.StoresWallet,
-			AutoLoad:    settings.AutoLoads,
-			KeyLifetime: settings.KeyLifetime,
+			MaxAttempts:   settings.MaxAttempts,
+			WalletStore:   settings.StoresWallet,
+			AutoLoad:      settings.AutoLoads,
+			KeyLifetime:   settings.KeyLifetime,
+			ServicePrefix: settings.ServicePrefix,
 		},
 	}
 	if err := loader.LoadKeys(); err != nil {

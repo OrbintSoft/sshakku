@@ -17,8 +17,14 @@ var jsonMarshal = json.Marshal
 var ErrListUnsupported = errors.New("secret backend does not support listing stored entries")
 
 // ownServices keeps only the entries sshakku itself stored, dropping anything
-// else the store holds. Every service string sshakku generates begins with the
-// key prefix, so that prefix is what tells its own entries from the rest.
+// else the store holds. Every service string sshakku generates begins with
+// prefix, so that prefix is what tells its own entries from the rest.
+//
+// prefix is an argument rather than a constant read here because the same
+// prefix decides what a store writes: were the two to disagree, everything
+// written would be someone else's to this function, and forgetting everything
+// would forget nothing. An empty prefix selects the default, so a caller that
+// never set one behaves as before.
 //
 // It is for the backends whose store is shared with other programs and whose
 // enumeration cannot be narrowed at the query — the macOS login keychain, which
@@ -27,10 +33,10 @@ var ErrListUnsupported = errors.New("secret backend does not support listing sto
 // already asks only for its own entries (a dedicated collection, a vault tag, a
 // database group) must not filter again: the query is where that guarantee
 // belongs, and a second filter downstream would hide its absence.
-func ownServices(names []string) []string {
+func ownServices(names []string, prefix string) []string {
 	own := make([]string, 0, len(names))
 	for _, name := range names {
-		if strings.HasPrefix(name, defaultServicePrefix+"-") {
+		if strings.HasPrefix(name, servicePrefixOrDefault(prefix)+"-") {
 			own = append(own, name)
 		}
 	}

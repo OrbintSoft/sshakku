@@ -18,8 +18,9 @@ const (
 )
 
 // DefaultServicePrefix is the secret-store service prefix used when no
-// per-config override is set (Config.ServicePrefix is always "" today; a
-// config-file override is future work).
+// per-config override is set. It is what an unset Config.ServicePrefix resolves
+// to, and nothing else may resolve one: a store that writes an entry and a
+// sweep that enumerates one must not each supply a default of their own.
 const DefaultServicePrefix = defaultServicePrefix
 
 // Logger records one level-tagged line. A nil Logger disables logging.

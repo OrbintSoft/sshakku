@@ -172,6 +172,10 @@ func TestResolveDefaults(t *testing.T) {
 		KeyLifetime: DefaultKeyLifetime, GiveupTTL: DefaultGiveupTTL,
 		CommandTimeout: keys.DefaultCommandTimeout, InteractiveTimeout: keys.DefaultInteractiveTimeout,
 		WalletStoreMode: WalletStoreModeAll, AutoLoadMode: AutoLoadModeAll, SecretBackend: platformDefaultSecretBackend,
+		// Resolved even with nothing configured: every path that builds an
+		// entry name reads it from here, so an empty one would leave each of
+		// them to supply a default of its own.
+		ServicePrefix: keys.DefaultServicePrefix,
 		// No route named means SSHakku chooses one per platform; only this
 		// value ever falls back.
 		KeePassXCRoute: KeePassXCRouteAuto,
@@ -206,6 +210,7 @@ func TestResolveFileWins(t *testing.T) {
 		WalletStoreMode:    WalletStoreModeAll,
 		AutoLoadMode:       AutoLoadModeAll,
 		SecretBackend:      platformDefaultSecretBackend,
+		ServicePrefix:      keys.DefaultServicePrefix,
 		KeePassXCRoute:     KeePassXCRouteAuto,
 	}
 	if !reflect.DeepEqual(s, want) {

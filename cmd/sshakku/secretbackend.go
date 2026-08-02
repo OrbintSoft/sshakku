@@ -27,11 +27,12 @@ func newSecretBackend(user string, log keys.Logger, settings config.Settings) (k
 		}, func() {}
 	case config.SecretBackendBitwarden:
 		return &keys.BitwardenBackend{
-			Runner:   keys.ExecRunner{Timeout: settings.CommandTimeout},
-			Prompter: newWalletPasswordPrompter(settings),
-			Email:    settings.BitwardenEmail,
-			Server:   settings.BitwardenServer,
-			Timeout:  settings.InteractiveTimeout,
+			Runner:        keys.ExecRunner{Timeout: settings.CommandTimeout},
+			Prompter:      newWalletPasswordPrompter(settings),
+			Email:         settings.BitwardenEmail,
+			Server:        settings.BitwardenServer,
+			Timeout:       settings.InteractiveTimeout,
+			ServicePrefix: settings.ServicePrefix,
 		}, func() {}
 	case config.SecretBackendKeePassXC:
 		return newKeePassXCBackend(runtime.GOOS, user, log, settings)

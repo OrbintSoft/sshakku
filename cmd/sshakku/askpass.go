@@ -38,7 +38,7 @@ func (d deps) askpassBroker(stdout io.Writer, args []string) int {
 		Secret: secret,
 		TTY:    d.tty,
 		Log:    log,
-		Config: keys.Config{WalletStore: settings.StoresWallet},
+		Config: keys.Config{WalletStore: settings.StoresWallet, ServicePrefix: settings.ServicePrefix},
 	}
 	reply, ok := broker.Answer(strings.Join(args, " "))
 	if !ok {
