@@ -279,3 +279,13 @@ immediately; nothing else runs under it.
 
 `--user` reports omit the keys section: reading another user's `~/.ssh` and
 key-state records under a privilege drop is not implemented.
+
+They also show no environment variable of the target's. A process cannot read
+another process's environment, so each one reads `(not readable from here)`
+rather than `(unset)`, and nothing is concluded from any of them — a `--user`
+report will not tell you their `SSH_ASKPASS` is unwired, because it never saw
+it. To answer that, run as that user:
+
+```sh
+sudo -u <user> -H sshakku doctor
+```

@@ -26,6 +26,14 @@ var askpassNotWiredMsg = "SSH_ASKPASS is not wired into this shell — once a ke
 	"agent, ssh will ask for its passphrase on the terminal instead of taking it from the wallet; " +
 	loginShellHint
 
+// envUnreadableMsg replaces every finding that would otherwise have been drawn
+// from an environment variable, when the session being reported on is not this
+// process's own. Those findings all read an empty string as a fact about the
+// other user's shell; this says plainly that nobody looked.
+const envUnreadableMsg = "this report describes another user's session, whose environment cannot be " +
+	"read from here — nothing is claimed about their SSH_AUTH_SOCK or their askpass wiring, " +
+	"and running sshakku doctor as that user is what would answer it"
+
 // logTailLines is how many trailing session-log lines the report shows.
 const logTailLines = 10
 
@@ -89,6 +97,14 @@ type Inputs struct {
 	// are belongs to the code that reads them.
 	Env       []EnvVar
 	SecretEnv []SecretEnvVar
+
+	// EnvUnreadable says the environment described here is not this process's
+	// own and could not be read — reporting on another user's session. The
+	// zero value is the ordinary case, a report about the shell it runs in.
+	// When it is set, every conclusion drawn from an environment variable is
+	// withheld rather than drawn from an empty string: not knowing what a
+	// shell exports is not evidence that it exports nothing.
+	EnvUnreadable bool
 }
 
 // AgentView is one ssh-agent process as the report presents it.
@@ -187,8 +203,9 @@ type Report struct {
 	KeysErr      error // key enumeration failed; Keys is empty
 	Host         HostChecks
 
-	Env       []EnvVar
-	SecretEnv []SecretEnvVar
+	Env           []EnvVar
+	SecretEnv     []SecretEnvVar
+	EnvUnreadable bool // the environment shown is not this process's own (see Inputs)
 }
 
 // Gather inspects the agent situation described by in and returns the report,
@@ -201,11 +218,12 @@ type Report struct {
 // mutates nothing.
 func Gather(in Inputs, src AgentSource, prober agent.Prober, anc AncestrySource, cg CgroupSource, keys *KeySource, host HostSource) Report {
 	r := Report{
-		FixedSock: in.FixedSock,
-		EnvSock:   in.EnvSock,
-		OurUID:    in.OurUID,
-		Env:       in.Env,
-		SecretEnv: in.SecretEnv,
+		FixedSock:     in.FixedSock,
+		EnvSock:       in.EnvSock,
+		OurUID:        in.OurUID,
+		Env:           in.Env,
+		SecretEnv:     in.SecretEnv,
+		EnvUnreadable: in.EnvUnreadable,
 	}
 	if in.EnvSock != "" {
 		r.EnvReachable = prober.Reachable(in.EnvSock)
@@ -372,6 +390,8 @@ func findings(in Inputs, r Report) []string {
 
 	var f []string
 	switch {
+	case in.EnvUnreadable:
+		f = append(f, envUnreadableMsg)
 	case in.EnvSock == "":
 		f = append(f, "SSH_AUTH_SOCK is unset — this shell cannot reach any agent; "+loginShellHint)
 	case !r.EnvReachable:
@@ -415,7 +435,7 @@ func findings(in Inputs, r Report) []string {
 	if r.InspectErr != nil {
 		f = append(f, fmt.Sprintf("could not enumerate processes: %v (report is partial)", r.InspectErr))
 	}
-	if in.EnvAskpass == "" || in.EnvAskpassRequire == "" {
+	if !in.EnvUnreadable && (in.EnvAskpass == "" || in.EnvAskpassRequire == "") {
 		f = append(f, askpassNotWiredMsg)
 	}
 	f = append(f, hostFindings(r.Host)...)
@@ -435,7 +455,7 @@ func Format(w io.Writer, r Report) {
 	p("sshakku doctor — ssh-agent diagnostics\n\n")
 	p("state: %s\n\n", r.State)
 	p("fixed socket:  %s\n", orNone(r.FixedSock))
-	p("SSH_AUTH_SOCK: %s%s\n", envValue(r.EnvSock), envReachSuffix(r.EnvSock, r.EnvReachable))
+	p("SSH_AUTH_SOCK: %s%s\n", envValue(r.EnvSock, r.EnvUnreadable), envReachSuffix(r.EnvSock, r.EnvReachable))
 	if r.RecordedPID != 0 {
 		p("recorded pid:  %d (agent.state)\n", r.RecordedPID)
 	}
@@ -482,10 +502,10 @@ func Format(w io.Writer, r Report) {
 	if len(r.Env) > 0 || len(r.SecretEnv) > 0 {
 		p("\nenvironment variables:\n")
 		for _, v := range r.Env {
-			p("  %-28s %s\n", v.Name+":", envValue(v.Value))
+			p("  %-28s %s\n", v.Name+":", envValue(v.Value, r.EnvUnreadable))
 		}
 		for _, s := range r.SecretEnv {
-			p("  %-28s %s\n", s.Name+":", secretEnvState(s.Set))
+			p("  %-28s %s\n", s.Name+":", secretEnvState(s.Set, r.EnvUnreadable))
 		}
 	}
 

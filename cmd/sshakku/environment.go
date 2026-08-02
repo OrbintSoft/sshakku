@@ -48,3 +48,20 @@ func environmentReport() ([]diagnose.EnvVar, []diagnose.SecretEnvVar) {
 	}
 	return shown, secrets
 }
+
+// environmentNames returns the same variables with nothing filled in, for a
+// report about a session whose environment this process cannot read. The names
+// are still worth showing — they say what the report would have covered — but
+// every value is withheld, which is what diagnose.Inputs.EnvUnreadable makes
+// the report say out loud instead of printing them as unset.
+func environmentNames() ([]diagnose.EnvVar, []diagnose.SecretEnvVar) {
+	shown := make([]diagnose.EnvVar, 0, len(shownEnvVars))
+	for _, name := range shownEnvVars {
+		shown = append(shown, diagnose.EnvVar{Name: name})
+	}
+	secrets := make([]diagnose.SecretEnvVar, 0, len(secretEnvVars))
+	for _, name := range secretEnvVars {
+		secrets = append(secrets, diagnose.SecretEnvVar{Name: name})
+	}
+	return shown, secrets
+}

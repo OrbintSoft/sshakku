@@ -361,19 +361,25 @@ func (d deps) doctorCrossUser(stdout, stderr io.Writer, invoking paths.Env, targ
 
 	_, _ = fmt.Fprintf(stdout,
 		"diagnosing uid %d (%s) — chosen via %s; invoked as uid %d (root)\n"+
-			"note: SSH_AUTH_SOCK and \"started by\" below describe %s's own session, not this shell's environment.\n\n",
+			"note: the agent and \"started by\" below describe %s's own session. Their environment "+
+			"is not readable from here, so no variable of theirs is shown and nothing is concluded "+
+			"from one.\n\n",
 		target.UID, target.Username, target.Source, invoking.UID, target.Username)
 
 	// UIDGatedProber: root can dial any socket regardless of ownership, but that
 	// isn't what "reachable" should mean for a report about target's session —
 	// it must reflect what target could reach, not what this elevated caller
 	// can bypass into.
+	shownEnv, secretEnv := environmentNames()
 	diagnose.Format(stdout, diagnose.Gather(diagnose.Inputs{
-		FixedSock: layout.AgentSock,
-		LegacyDir: filepath.Join(targetEnv.Home, ".ssh", "agent"),
-		StatePath: filepath.Join(filepath.Dir(layout.AgentSock), "agent.state"),
-		LogFile:   layout.LogFile,
-		OurUID:    target.UID,
+		FixedSock:     layout.AgentSock,
+		LegacyDir:     filepath.Join(targetEnv.Home, ".ssh", "agent"),
+		StatePath:     filepath.Join(filepath.Dir(layout.AgentSock), "agent.state"),
+		LogFile:       layout.LogFile,
+		OurUID:        target.UID,
+		Env:           shownEnv,
+		SecretEnv:     secretEnv,
+		EnvUnreadable: true,
 	}, agent.Inspector{}, agent.UIDGatedProber{UID: target.UID, Prober: agent.SocketProber{}}, newAncestrySource(), newCgroupSource(),
 		nil, // the keys section only covers the invoking user's own ~/.ssh (see gatherReport)
 		newHostSource(targetEnv.Home),

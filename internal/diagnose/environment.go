@@ -16,19 +16,31 @@ type SecretEnvVar struct {
 	Set  bool
 }
 
-// envValue renders a variable's value, or says there is none. The placeholder
-// is parenthesised like the report's others ((none)), marking a statement
-// about a value rather than a value itself.
-func envValue(value string) string {
-	if value == "" {
+// envNotReadable is what a variable shows as when the environment being
+// reported on is not this process's own — a report about another user's
+// session. It is not the same answer as "unset": that is a fact about a shell
+// somebody looked at, and this is the absence of one.
+// Parenthesised like the report's other placeholders ((none), (unset)), which
+// mark a statement about a value rather than a value itself.
+const envNotReadable = "(not readable from here)"
+
+// envValue renders a variable's value, or why there is none to show.
+func envValue(value string, unreadable bool) string {
+	switch {
+	case unreadable:
+		return envNotReadable
+	case value == "":
 		return "(unset)"
 	}
 	return value
 }
 
 // secretEnvState renders whether a secret is set, and never anything more.
-func secretEnvState(set bool) string {
-	if set {
+func secretEnvState(set, unreadable bool) string {
+	switch {
+	case unreadable:
+		return envNotReadable
+	case set:
 		return "(set)"
 	}
 	return "(unset)"
