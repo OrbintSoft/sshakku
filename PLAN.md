@@ -1304,3 +1304,32 @@ not rediscovered one at a time.
    platform differs.
 
 → features F5, F6, F13, F17, F21, F25, F26; open decision 23.
+
+### Phase 18 — An empty answer is a wrong answer ✅ Done
+
+Pressing Enter at the passphrase prompt handed an empty passphrase to the key
+adder. On Linux the out-of-band handoff is the kernel keyring, which refuses an
+empty payload (`add_key` → `EINVAL`), and the loader treats an adder error as
+fatal: the key was abandoned after one attempt, with a message naming an errno,
+and no give-up recorded — so the next shell asked all over again. F8 promises
+the opposite, and macOS already kept it, because a socket accepts an empty
+payload and so the failure lands on `ssh-add`, where it is counted.
+
+**Decided (2026-08-03).** The loader decides it, once, rather than either
+handoff: an empty answer opens no key — a key that has no passphrase is never
+asked about — so it costs an attempt and the user is asked again. Nothing about
+that keystroke is transport-specific, and leaving it to the transport is what
+made one keystroke mean two different things on the two platforms. Only the
+exactly-empty string is refused; a passphrase of spaces is the user's business.
+The stored-passphrase path needed no change: it already drops an empty or
+whitespace-only value.
+
+Found by reading a symptom nobody had explained — a report of
+`stash passphrase: invalid argument` — rather than from the code, and
+reproduced before it was diagnosed: the kernel refuses an empty `user` key, and
+`TestAddRefusesAnEmptyPayload` now pins that so the reasoning above cannot rot.
+The promise is covered on a real terminal on both platforms
+(`TestLoadKeysEmptyAnswerRealTerminal`), which is the only place the question
+can be asked: anywhere else an empty answer and no answer are the same bytes.
+
+→ feature F8; goals 1, 11.
