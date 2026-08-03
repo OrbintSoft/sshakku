@@ -40,7 +40,7 @@ commands:
   shell-init     drive the agent healthy and print shell assignments to eval
   ensure-agent   drive the agent to a healthy state and print agent_sock
   load-keys      add the user's ssh keys to the agent (interactive sessions)
-  askpass-env    print exports routing ssh's askpass through sshakku (GUI only)
+  askpass-env    print exports routing ssh's askpass through sshakku
   config         print the configuration in force and where each value came from;
                  --edit opens your own config.toml in $EDITOR
   doctor         report the ssh-agent situation; --fix applies the self-heal;

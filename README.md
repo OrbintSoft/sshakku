@@ -132,7 +132,7 @@ why.
 | Guide | Covers |
 | --- | --- |
 | [docs/CLI.md](docs/CLI.md) | Every subcommand and flag, with exit codes. |
-| [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Every setting: key lifetime, retries, which secret backend to use, which keys are stored/auto-loaded, and where passphrases live. |
+| [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Every setting: key lifetime, retries, which secret backend to use, which keys are stored/auto-loaded, and where passphrases live — and `sshakku config`, which prints what is in force. |
 | [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) | What must be installed to run SSHakku versus only to build it, including which pieces are backend- or feature-specific — for users and packagers. |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Architecture, code layout, and how to build, test, and lint SSHakku — for contributors. |
 | [docs/DIAGNOSTICS.md](docs/DIAGNOSTICS.md) | `sshakku doctor`: reading the report, `--fix`, `--user`, and `--test-backend`. |
