@@ -58,6 +58,23 @@ func TestKeyringRoundTrip(t *testing.T) {
 	}
 }
 
+// TestAddRefusesAnEmptyPayload pins the kernel behaviour the passphrase handoff
+// rests on: a "user" key must carry something, so a key stored with nothing in
+// it is refused rather than created empty. It runs against the real syscall,
+// since a seam could only report back whatever this test told it to say.
+func TestAddRefusesAnEmptyPayload(t *testing.T) {
+	if !Available() {
+		t.Skip("kernel user keyring isn't usable for a round trip in this environment (e.g. no session-keyring link — common in CI/containers without a PAM login)")
+	}
+
+	desc := fmt.Sprintf("sshakku-keyring-empty-%d", time.Now().UnixNano())
+	s, err := Add(desc, []byte(""))
+	if err == nil {
+		_ = Unlink(s)
+		t.Fatalf("Add(%q, empty) = (%d, nil), want an error: what callers do about an empty secret depends on this", desc, s)
+	}
+}
+
 func TestAddSeam(t *testing.T) {
 	t.Run("returns the serial on success", func(t *testing.T) {
 		saveKeyctlSeams(t)

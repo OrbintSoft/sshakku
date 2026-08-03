@@ -188,6 +188,48 @@ func TestLoadKeysRetriesThenGivesUp(t *testing.T) {
 	}
 }
 
+// TestLoadKeysEmptyAnswerIsAWrongAnswer verifies F8 for the answer people give
+// by accident: Enter on its own. An empty passphrase opens no key — a key
+// without one is never asked about — so it is a wrong passphrase like any
+// other, counted towards the bounded retries and asked again, and the user is
+// told once at the end rather than losing the key on the first press.
+//
+// It never reaches the key adder either. Where the handoff is the kernel
+// keyring, an empty payload is refused outright (see the keyring package), and
+// an error there abandons the key; where it is a socket it is accepted and only
+// ssh-add rejects it, so the same keystroke behaves differently on the two
+// systems for no reason a user could see.
+func TestLoadKeysEmptyAnswerIsAWrongAnswer(t *testing.T) {
+	r := newFakeRunner().on("ssh-add", agentEmpty()).on("ssh-keygen", keygen("SHA256:NEW"))
+	prompter := &fakePrompter{pass: ""}
+	adder := &fakeKeyAdder{}
+	log := &fakeLogger{}
+	notes := &fakeNotifier{}
+	l := Loader{
+		Keys:   fakeLister{paths: []string{"/ssh/id_rsa"}},
+		Runner: r, Secret: &fakeSecret{}, Prompt: prompter, Adder: adder, Log: log,
+		Notify: notes, Config: Config{MaxAttempts: 3},
+	}
+	if err := l.LoadKeys(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(prompter.calls) != 3 {
+		t.Errorf("asked %d times, want the configured 3", len(prompter.calls))
+	}
+	for _, c := range adder.calls {
+		if c.passphrase == "" {
+			t.Errorf("an empty passphrase reached the key adder: %+v", adder.calls)
+			break
+		}
+	}
+	if !log.contains("giving up") {
+		t.Errorf("expected a give-up log after the attempts ran out, got %v", log.lines)
+	}
+	if len(notes.msgs) != 1 {
+		t.Errorf("notices = %v, want the one give-up notice", notes.msgs)
+	}
+}
+
 func TestLoadKeysStaleStoredThenPromptStores(t *testing.T) {
 	r := newFakeRunner().on("ssh-add", agentEmpty()).on("ssh-keygen", keygen("SHA256:NEW"))
 	secret := &fakeSecret{lookupPass: "stale", lookupFound: true}
