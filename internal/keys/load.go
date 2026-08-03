@@ -276,6 +276,13 @@ func (l Loader) loadViaVaultThenPrompt(keyfile, keyname string, max int) (loaded
 			}
 			return false, false
 		}
+		if pass == "" {
+			// An empty answer opens no key — a key that has no passphrase is
+			// never asked about — so it costs an attempt here rather than being
+			// handed on to ssh-add.
+			l.logf("ERROR", "empty passphrase for %s (attempt %d/%d)", keyname, attempt, max)
+			continue
+		}
 		rc, err := l.Adder.AddWithAskpass(keyfile, pass)
 		if err != nil {
 			l.failAdd(keyname, err)
