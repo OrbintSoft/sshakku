@@ -1,8 +1,10 @@
 package config
 
 import (
-	"github.com/OrbintSoft/sshakku/internal/keys"
+	"fmt"
 	"path/filepath"
+
+	"github.com/OrbintSoft/sshakku/internal/keys"
 	"reflect"
 	"strings"
 	"testing"
@@ -104,8 +106,23 @@ func TestMergeExplicitEmptyListOverrides(t *testing.T) {
 	}
 }
 
-func TestLoadDirMergesInFilenameOrder(t *testing.T) {
-	f, errs := LoadDir(filepath.Join("testdata", "confd"))
+// dropIns reads a fixture configuration directory the way every command does,
+// returning what the files merge into and what could not be read — the two
+// things a caller of LoadSources goes on to do with it.
+func dropIns(t *testing.T, fixture string) (File, []error) {
+	t.Helper()
+	var errs []error
+	sources := LoadSources(filepath.Join("testdata", fixture))
+	for _, s := range sources {
+		if s.Err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", s.Path, s.Err))
+		}
+	}
+	return Merged(sources), errs
+}
+
+func TestDropInsMergeInFilenameOrder(t *testing.T) {
+	f, errs := dropIns(t, "confd")
 	if len(errs) != 0 {
 		t.Fatalf("unexpected errors: %v", errs)
 	}
@@ -117,8 +134,8 @@ func TestLoadDirMergesInFilenameOrder(t *testing.T) {
 	}
 }
 
-func TestLoadDirExplicitEmptyListOverrides(t *testing.T) {
-	f, errs := LoadDir(filepath.Join("testdata", "confd-emptylist"))
+func TestDropInExplicitEmptyListOverrides(t *testing.T) {
+	f, errs := dropIns(t, "confd-emptylist")
 	if len(errs) != 0 {
 		t.Fatalf("unexpected errors: %v", errs)
 	}
@@ -127,8 +144,8 @@ func TestLoadDirExplicitEmptyListOverrides(t *testing.T) {
 	}
 }
 
-func TestLoadDirSkipsMalformedFileButKeepsOthers(t *testing.T) {
-	f, errs := LoadDir(filepath.Join("testdata", "confd-malformed"))
+func TestMalformedDropInIsSkippedAndTheOthersKept(t *testing.T) {
+	f, errs := dropIns(t, "confd-malformed")
 	if len(errs) != 1 {
 		t.Fatalf("want exactly one error (the malformed file), got %v", errs)
 	}
@@ -143,8 +160,8 @@ func TestLoadDirSkipsMalformedFileButKeepsOthers(t *testing.T) {
 	}
 }
 
-func TestLoadDirUnknownKeyErrorsButKeepsRecognisedField(t *testing.T) {
-	f, errs := LoadDir(filepath.Join("testdata", "confd-unknown"))
+func TestUnknownKeyInADropInKeepsTheRecognisedFields(t *testing.T) {
+	f, errs := dropIns(t, "confd-unknown")
 	if len(errs) != 1 || !strings.Contains(errs[0].Error(), "bogus_key") {
 		t.Fatalf("want one error naming bogus_key, got %v", errs)
 	}
@@ -153,8 +170,8 @@ func TestLoadDirUnknownKeyErrorsButKeepsRecognisedField(t *testing.T) {
 	}
 }
 
-func TestLoadDirMissingIsZeroNoError(t *testing.T) {
-	f, errs := LoadDir(filepath.Join("testdata", "does-not-exist-dir"))
+func TestAConfigDirectoryThatIsNotThereIsNoError(t *testing.T) {
+	f, errs := dropIns(t, "does-not-exist-dir")
 	if len(errs) != 0 {
 		t.Fatalf("a missing dir must not error, got %v", errs)
 	}

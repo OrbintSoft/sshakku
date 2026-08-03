@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/keys"
@@ -18,21 +17,18 @@ import (
 // A missing file or dir is fine; a path, load, or parse problem — including
 // one isolated to a single config.d file — is logged under tag and the
 // affected setting falls back to its default.
+//
+// It reads through the same source list `sshakku config` reports from, so what
+// that command says is in force is what every other command acts on.
 func loadSettings(layout paths.Layout, tag string, log keys.Logger) config.Settings {
-	configPath := filepath.Join(layout.ConfigDir, "config.toml")
-	file, err := config.Load(configPath)
-	if err != nil {
-		_ = log.Log("ERROR", fmt.Sprintf("%s: config %s: %v", tag, configPath, err))
+	sources := config.LoadSources(layout.ConfigDir)
+	for _, source := range sources {
+		if source.Err != nil {
+			_ = log.Log("ERROR", fmt.Sprintf("%s: config %s: %v", tag, source.Path, source.Err))
+		}
 	}
 
-	confDDir := filepath.Join(layout.ConfigDir, "config.d")
-	dirFile, dirErrs := config.LoadDir(confDDir)
-	for _, e := range dirErrs {
-		_ = log.Log("ERROR", fmt.Sprintf("%s: config %s: %v", tag, confDDir, e))
-	}
-	file = file.Merge(dirFile)
-
-	settings, errs := config.Resolve(file, os.LookupEnv)
+	settings, errs := config.Resolve(config.Merged(sources), os.LookupEnv)
 	for _, e := range errs {
 		_ = log.Log("ERROR", e.Error())
 	}

@@ -23,6 +23,11 @@ const (
 // sweep that enumerates one must not each supply a default of their own.
 const DefaultServicePrefix = defaultServicePrefix
 
+// DefaultMaxAttempts is how many passphrase attempts a key gets when the
+// configuration asks for no particular number. The loader applies it; anything
+// that has to state what is in force reads it here rather than repeating the 3.
+const DefaultMaxAttempts = defaultMaxAttempts
+
 // Logger records one level-tagged line. A nil Logger disables logging.
 type Logger interface {
 	Log(level, message string) error

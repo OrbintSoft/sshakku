@@ -6,7 +6,6 @@ import (
 	"io/fs"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
 	"time"
 	"unicode"
@@ -357,34 +356,6 @@ func (f File) Merge(other File) File {
 	return merged
 }
 
-// LoadDir reads every *.toml file directly under dir, in lexicographic
-// filename order, merging each on top of the ones before it (Merge) so a
-// later file overrides a key an earlier one set. A dir with no matching
-// files — including one that doesn't exist — returns the zero File and no
-// error, the same "nothing configured" case Load gives for a missing single
-// file. A malformed or partially-unrecognised file contributes whatever Load
-// decoded from it (zero for a syntax error, the recognised fields for an
-// unrecognised-key file) and its error is collected, path-tagged, rather
-// than aborting the rest of the directory.
-func LoadDir(dir string) (File, []error) {
-	matches, err := filepath.Glob(filepath.Join(dir, "*.toml"))
-	if err != nil {
-		return File{}, []error{err}
-	}
-	sort.Strings(matches)
-
-	var merged File
-	var errs []error
-	for _, path := range matches {
-		f, err := Load(path)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("%s: %w", path, err))
-		}
-		merged = merged.Merge(f)
-	}
-	return merged, errs
-}
-
 // Load reads and decodes the TOML config at path. A missing file is not an
 // error: it returns the zero File so callers fall back to environment and
 // defaults. Unrecognised keys are reported as an error alongside the decoded
@@ -405,6 +376,29 @@ func Load(path string) (File, error) {
 	return f, nil
 }
 
+// SettingError is a value SSHakku would not use, tied to the setting it was
+// written for. The message is the underlying one unchanged, so a caller that
+// only logs it sees exactly what it saw before; a caller reporting settings one
+// by one can put the refusal beside the setting it belongs to instead of
+// leaving the reader to match them up by eye.
+type SettingError struct {
+	Key string // the config-file key the refused value was written for
+	Err error
+}
+
+func (e *SettingError) Error() string { return e.Err.Error() }
+
+func (e *SettingError) Unwrap() error { return e.Err }
+
+// refused appends err to errs as a refusal of key, and returns errs unchanged
+// when there was no error.
+func refused(errs []error, key string, err error) []error {
+	if err == nil {
+		return errs
+	}
+	return append(errs, &SettingError{Key: key, Err: err})
+}
+
 // Resolve merges the file with the environment over the built-in defaults,
 // applying the precedence environment variable > config file > default for each
 // setting. lookup is the os.LookupEnv signature; its second result distinguishes
@@ -417,27 +411,19 @@ func Resolve(file File, lookup func(string) (string, bool)) (Settings, []error) 
 	var s Settings
 
 	lifetime, err := KeyLifetime(coalesce(lookup, "SSHAKKU_KEY_LIFETIME", file.KeyLifetime))
-	if err != nil {
-		errs = append(errs, err)
-	}
+	errs = refused(errs, "key_lifetime", err)
 	s.KeyLifetime = lifetime
 
 	ttl, err := GiveupTTL(coalesce(lookup, "SSHAKKU_GIVEUP_TTL", file.GiveupTTL))
-	if err != nil {
-		errs = append(errs, err)
-	}
+	errs = refused(errs, "giveup_ttl", err)
 	s.GiveupTTL = ttl
 
 	cmdTimeout, err := CommandTimeout(coalesce(lookup, "SSHAKKU_COMMAND_TIMEOUT", file.CommandTimeout))
-	if err != nil {
-		errs = append(errs, err)
-	}
+	errs = refused(errs, "command_timeout", err)
 	s.CommandTimeout = cmdTimeout
 
 	interactive, err := InteractiveTimeout(coalesce(lookup, "SSHAKKU_INTERACTIVE_TIMEOUT", file.InteractiveTimeout))
-	if err != nil {
-		errs = append(errs, err)
-	}
+	errs = refused(errs, "interactive_timeout", err)
 	s.InteractiveTimeout = interactive
 
 	s.MaxAttempts = resolveMaxAttempts(lookup, file.MaxAttempts)
@@ -445,53 +431,39 @@ func Resolve(file File, lookup func(string) (string, bool)) (Settings, []error) 
 	s.Quiet = resolveBool(lookup, "SSHAKKU_QUIET", file.Quiet)
 
 	mode, err := resolveWalletStoreMode(file.WalletStoreMode)
-	if err != nil {
-		errs = append(errs, err)
-	}
+	errs = refused(errs, "wallet_store_mode", err)
 	s.WalletStoreMode = mode
 	s.WalletStoreInclude = file.WalletStoreInclude
 	s.WalletStoreExclude = file.WalletStoreExclude
 
 	autoLoadMode, err := resolveAutoLoadMode(file.AutoLoadMode)
-	if err != nil {
-		errs = append(errs, err)
-	}
+	errs = refused(errs, "auto_load_mode", err)
 	s.AutoLoadMode = autoLoadMode
 	s.AutoLoadInclude = file.AutoLoadInclude
 	s.AutoLoadExclude = file.AutoLoadExclude
 
 	prefix, err := resolveServicePrefix(file.ServicePrefix)
-	if err != nil {
-		errs = append(errs, err)
-	}
+	errs = refused(errs, "service_prefix", err)
 	s.ServicePrefix = prefix
 
 	container, err := resolveSecretContainer(file.SecretContainer)
-	if err != nil {
-		errs = append(errs, err)
-	}
+	errs = refused(errs, "secret_container", err)
 	s.SecretContainer = container
 
 	s.KeyDir = derefString(file.KeyDir)
 	patterns, err := resolveKeyPatterns(file.KeyPatterns)
-	if err != nil {
-		errs = append(errs, err)
-	}
+	errs = refused(errs, "key_patterns", err)
 	s.KeyPatterns = patterns
 
 	backend, err := resolveSecretBackend(file.SecretBackend)
-	if err != nil {
-		errs = append(errs, err)
-	}
+	errs = refused(errs, "secret_backend", err)
 	s.SecretBackend = backend
 	s.OnePasswordVault = derefString(file.OnePasswordVault)
 	s.BitwardenEmail = derefString(file.BitwardenEmail)
 	s.BitwardenServer = derefString(file.BitwardenServer)
 
 	route, err := resolveKeePassXCRoute(file.KeePassXCRoute)
-	if err != nil {
-		errs = append(errs, err)
-	}
+	errs = refused(errs, "keepassxc_route", err)
 	s.KeePassXCRoute = route
 	s.KeePassXCDatabase = derefString(file.KeePassXCDatabase)
 	s.KeePassXCKeyFile = derefString(file.KeePassXCKeyFile)

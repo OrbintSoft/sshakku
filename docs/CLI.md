@@ -2,8 +2,8 @@
 
 `sshakku` is a single binary with subcommands. Most of them are wired in
 automatically by the login hook (see [README.md](../README.md#how-it-works))
-and are not meant to be typed by hand — day to day, the two you'll actually
-run yourself are `doctor` and `forget`. This page documents every subcommand
+and are not meant to be typed by hand — day to day, the ones you'll actually
+run yourself are `config`, `doctor` and `forget`. This page documents every subcommand
 and flag for reference; `sshakku help` prints a short version of the same
 list.
 
@@ -17,6 +17,7 @@ malformed argument).
 | [`ensure-agent`](#sshakku-ensure-agent) | Rarely | Same agent lifecycle step alone, without the other assignments. |
 | [`load-keys`](#sshakku-load-keys) | Rarely | Adds every key in your key directory to the agent. |
 | [`askpass-env`](#sshakku-askpass-env) | No | Prints the exports that route ssh's passphrase prompts through the wallet-aware broker. |
+| [`config`](#sshakku-config) | Yes | Prints the configuration in force and where each value came from; with `--edit`, opens your `config.toml`. |
 | [`doctor`](#sshakku-doctor) | Yes | Reports (and, with `--fix`, repairs) the ssh-agent situation. |
 | [`forget`](#sshakku-forget) | Yes | Deletes stored passphrases. |
 | [`help`](#sshakku-help--h---help) | Yes | Prints the command list. |
@@ -88,6 +89,37 @@ Once these are exported, `ssh` itself execs the same `sshakku` binary as its
 `SSH_ASKPASS` helper whenever it needs a passphrase or confirmation — that
 invocation is ssh's doing, not a subcommand you run yourself, and it answers
 only the one prompt ssh passes it as an argument.
+
+## `sshakku config`
+
+```sh
+sshakku config
+sshakku config --edit
+```
+
+Plain `config` prints the configuration in force: every setting, its current
+value, and where that value came from — the built-in default, an environment
+variable, `config.toml`, or the file under `config.d/` that overruled the ones
+before it. It also names the files it read, in the order it read them, and
+repeats any value that was refused, which otherwise reaches only the session
+log. It reads and changes nothing.
+
+Values are printed as they stand. No setting holds a secret — a passphrase is
+never one of them — but some of them name you or your machine (an account
+email, a database path under your home), so read the output before pasting it
+into a bug report.
+
+- `--edit` — opens `config.toml` in `$EDITOR` (then `$VISUAL`, then `vi`),
+  creating it from a commented template if you have none. `$EDITOR` may carry
+  arguments (`code -w`), and they are passed on. That file only: `config.d/` is
+  never opened for you. When the editor exits, SSHakku re-reads the file and
+  tells you what you would otherwise meet at your next login — that it can no
+  longer be parsed, that a value in it was refused, or that a key set in it is
+  decided by a drop-in or by an exported variable instead.
+
+Exits `0` when the configuration was printed or the file was edited, `1` when
+the editor could not be run, the file could not be written, or what was saved
+can no longer be parsed, `2` on a usage error.
 
 ## `sshakku doctor`
 

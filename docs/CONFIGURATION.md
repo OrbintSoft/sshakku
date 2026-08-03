@@ -24,7 +24,8 @@ broker see them.
 
 Truthy means `1`, `true`, `yes`, or `on` (case-insensitive); in the config file a
 boolean key (`no_giveup`, `quiet`) is a TOML `true` or `false`. A malformed
-duration is ignored, logged to the session log, and the default is used.
+duration is ignored and the default is used; `sshakku config` shows the value
+that was refused, and the session log records it as it happens.
 
 Unlike the other durations, the two timeouts have no "wait forever" value: zero
 and negative are refused and the default is used instead. A program with no
@@ -53,7 +54,8 @@ Durations (`key_lifetime`, `giveup_ttl`, `command_timeout`,
 `max_attempts` is an integer, and `no_giveup` and `quiet` are booleans. A missing
 file is fine — SSHakku falls back to the environment and the defaults. A syntax
 error discards the whole file; an unrecognised key is ignored while the keys
-SSHakku understood stay in effect; either is logged to the session log. Because
+SSHakku understood stay in effect; `sshakku config` reports either, and the
+session log records them as they happen. Because
 the environment takes precedence, an exported variable overrides the file in
 either direction — for example `SSHAKKU_QUIET=0` re-enables the notice even when
 `quiet = true` in the file.
@@ -76,8 +78,26 @@ key_lifetime = "2h"
 
 Both `config.toml` and `config.d/` are optional and can be used together or
 alone. A syntax error in one `config.d/` file discards only that file — every
-other file, and `config.toml`, still apply — logged to the session log the
-same way a problem in `config.toml` itself is.
+other file, and `config.toml`, still apply — reported the same way a problem in
+`config.toml` itself is.
+
+## Seeing what took effect
+
+With settings arriving from three places — the environment, `config.toml`, and
+each file under `config.d/` — what is in force is not necessarily what any one
+file says. `sshakku config` prints it: every setting, the value actually being
+used, and which of the three put it there, along with the files that were read
+in the order they were read. A value SSHakku refused — a malformed duration, a
+name it will not use — is shown there too, so a mistake can be found without
+going through the session log.
+
+`sshakku config --edit` opens `config.toml` in your editor, creating it from a
+commented template if you have none, and checks it when you close the editor:
+whether it still parses, whether a value in it was refused, and whether a
+`config.d/` file or an exported variable decides a key it sets. It edits that
+one file — a drop-in is never opened for you.
+
+See [CLI.md](CLI.md#sshakku-config) for both.
 
 ## Choosing the secret backend
 
@@ -257,8 +277,8 @@ indistinguishable from a wallet that has quietly emptied itself.
 
 An absent or empty value uses the default. A value containing whitespace or a
 `/` is refused, since some wallets read a `/` in an entry name as a folder
-separator; the refusal goes to the session log and SSHakku carries on with the
-default.
+separator; the refusal is shown by `sshakku config`, recorded in the session
+log, and SSHakku carries on with the default.
 
 Choose the name with some care where the wallet is shared with the rest of the
 system — the macOS login keychain, a Bitwarden vault. There the prefix is the
@@ -317,7 +337,8 @@ An absent or empty value uses the default, and a value containing whitespace or
 a `/` is refused — a KeePassXC group name is a path, and a `/` in it would nest
 the group somewhere you did not ask for. So are the names your desktop uses for
 its own wallets: `default`, `login`, `session`, `kdewallet`, in any casing. Each
-refusal goes to the session log and SSHakku carries on with its own default.
+refusal is shown by `sshakku config`, recorded in the session log, and SSHakku
+carries on with its own default.
 
 Those four are refused because SSHakku would not merely write into such a wallet
 — it would adopt it. It treats its compartment as entirely its own, since it is
@@ -385,7 +406,8 @@ leave alone, not proof that a file matching your patterns is a key — point
 An account with no `~/.ssh` at all is normal: there are no keys, the shell
 opens, and nothing is said. A directory you asked for by name is different — a
 mistyped `key_dir` looks exactly like a directory with no keys in it, so
-SSHakku says so in the session log instead of loading nothing quietly. It does
+SSHakku says so — on the terminal and in the session log — instead of loading
+nothing quietly. It does
 not fall back to `~/.ssh`: you asked for a directory, and loading keys you did
 not ask for is the worse of the two answers.
 

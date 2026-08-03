@@ -162,7 +162,9 @@ the hook was not sourced (see [Login shell not picked
 up](#login-shell-not-picked-up)). The `SSHAKKU_*` entries are settings that
 override `config.toml` — worth checking whenever SSHakku behaves in a way the
 configuration file does not explain, since an override leaves no trace in the
-file it overrides.
+file it overrides. `sshakku config` answers the same question from the other
+end: it prints each setting with the value in force and what put it there,
+whether that was a variable, a file, or nothing at all.
 
 Two of them hold secrets — `SSHAKKU_HANDOFF_TOKEN` and `SSHAKKU_BW_PASSWORD` —
 and are shown only as `(set)` or `(unset)`. Their values are never printed, so the

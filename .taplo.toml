@@ -2,4 +2,4 @@
 # exercise the parser's error path and are checked by the config package's Go
 # tests), so they are excluded; the valid fixtures are linted and
 # format-checked like any config.
-exclude = ["**/testdata/malformed.toml", "**/testdata/confd-malformed/10-bad.toml"]
+exclude = ["**/testdata/malformed.toml", "**/testdata/confd-malformed/config.d/10-bad.toml"]

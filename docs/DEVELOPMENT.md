@@ -14,7 +14,7 @@ composed by it. One line each:
 | --- | --- |
 | `cmd/sshakku` | The single binary: subcommand dispatch, and the askpass re-entry path when invoked as `SSH_ASKPASS`. |
 | `internal/agent` | Tends the user's `ssh-agent`: probes a socket, starts one on the fixed socket, reaps dead agents/sockets, adopts one already running. Never reimplements `ssh-agent` itself. |
-| `internal/config` | Resolves settings: environment variable, then the TOML config file, then a built-in default, per setting. |
+| `internal/config` | Resolves settings: environment variable, then the TOML config file, then a built-in default, per setting. Reads `config.toml` and the `config.d/` drop-ins as an ordered list of sources, so what resolved a value can be reported alongside the value. |
 | `internal/diagnose` | Builds the read-only picture `sshakku doctor` reports: which agents are running, which is ours, whether it answers, whether the shell's `SSH_AUTH_SOCK` is wired up. Never starts, signals, or reaps anything. |
 | `internal/giveup` | Records, per key, that loading was abandoned after the bounded retries, so later shells skip it instead of re-prompting every time, until a TTL expires. |
 | `internal/keyring` | Wraps the Linux kernel keyring (`@u` user keyring), used on Linux for handing a passphrase from `load-keys` to the askpass re-entry without it touching argv or a file; Darwin uses a private Unix socket instead (`internal/keys/handoff_darwin.go`). |

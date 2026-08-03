@@ -1,0 +1,76 @@
+# SSHakku configuration.
+#
+# Every setting is optional: anything left out keeps the value SSHakku applies
+# on its own. To see what is in force — including which file or variable
+# decided it — run `sshakku config`.
+#
+# The lines below are examples of how each setting is written, not the values
+# currently in use. Uncomment the ones you want and change them.
+#
+# Settings can also be split across config.d/*.toml, which are read in filename
+# order after this file and override what it sets. `sshakku config --edit`
+# opens this file only.
+#
+# The settings in full: https://github.com/OrbintSoft/sshakku/blob/master/docs/CONFIGURATION.md
+
+# How long a key stays in the agent before it expires and has to be fetched
+# from the wallet again. "0" keeps it for as long as the agent lives.
+# key_lifetime = "2h"
+
+# How many times a wrong passphrase is retried before the key is left alone.
+# max_attempts = 3
+
+# How long SSHakku waits before retrying a key it gave up on, and whether it
+# gives up at all.
+# giveup_ttl = "1h"
+# no_giveup = false
+
+# Suppress the notice on the terminal when a key could not be loaded.
+# quiet = false
+
+# How long to wait for something that should answer on its own (a wallet, a
+# display check), and for something that is waiting for you (a dialog).
+# command_timeout = "10s"
+# interactive_timeout = "2m"
+
+# Which wallet holds your passphrases. `sshakku doctor` names the one in use
+# and says whether what it needs is there.
+# secret_backend = "keepassxc"
+
+# The name SSHakku's entries carry in that wallet, and the compartment it keeps
+# them in. Both are SSHakku's to delete, so pick names nothing else has taken.
+# service_prefix = "SSHakku-Key"
+# secret_container = "sshakku"
+
+# Which files are your keys: the directory to look in, and the names that are
+# keys in it. Patterns match a file name, never a path.
+# key_dir = ".ssh"
+# key_patterns = ["id_*", "work-*"]
+
+# Which keys' passphrases are saved in the wallet. The mode decides which list
+# is consulted: "all" (every key), "include", or "exclude".
+# wallet_store_mode = "exclude"
+# wallet_store_include = ["id_ed25519"]
+# wallet_store_exclude = ["id_throwaway"]
+
+# Which keys are loaded into the agent at login, the same three modes. A key
+# left out can still be added on demand when ssh asks for it.
+# auto_load_mode = "include"
+# auto_load_include = ["id_ed25519"]
+# auto_load_exclude = ["id_rarely_used"]
+
+# The 1Password vault to store in, when secret_backend is "1password".
+# onepassword_vault = "Private"
+
+# The Bitwarden account, and the server when it is not bitwarden.com, when
+# secret_backend is "bitwarden".
+# bitwarden_email = "you@example.org"
+# bitwarden_server = "https://vault.example.org"
+
+# How KeePassXC is reached, when secret_backend is "keepassxc": "auto" lets
+# SSHakku choose, anything else is used and nothing is tried in its place. The
+# database and key file are needed by the "cli" route, which opens the database
+# itself rather than talking to a running KeePassXC.
+# keepassxc_route = "native"
+# keepassxc_database = "~/Passwords.kdbx"
+# keepassxc_key_file = "~/Passwords.keyx"

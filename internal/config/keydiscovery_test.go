@@ -73,7 +73,7 @@ func TestResolveKeyDiscovery(t *testing.T) {
 // assertPatternsRefused checks that a list holding an unusable pattern is
 // refused whole, that SSHakku falls back to its own rule rather than to the
 // half of the list it could read, and that the report quotes the offending
-// pattern: a login shell writes this to the session log and nowhere else.
+// pattern: it is all a user is given to find the line they have to correct.
 func assertPatternsRefused(t *testing.T, patterns []string) {
 	t.Helper()
 	bad := patterns[len(patterns)-1]

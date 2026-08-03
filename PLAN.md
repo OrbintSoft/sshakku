@@ -1025,29 +1025,39 @@ scratch, since it has no Secret-Service-equivalent path there (open decision
 
 → goal 12; open decisions 22, 23.
 
-### Phase 12 — Configuration visibility & editing
+### Phase 12 — Configuration visibility & editing ✅ Done
 
 Make the effective configuration and the active secret backend legible from the
 CLI, so a user can see what sshakku is actually doing without reading source or
-guessing which `config.toml` key won. Small, self-contained UX work; detailed
-steps written when the phase starts.
+guessing which `config.toml` key won.
 
-- **`doctor` reports the active secret backend.** `sshakku doctor`'s standard
-  report names the backend currently resolved from `config.toml` (macOS
-  Keychain, 1Password `op`, Bitwarden `bw`, freedesktop Secret Service, ...),
-  not only whether `--test-backend` can exercise it — so the resolved choice is
-  visible at a glance alongside the rest of the diagnosis.
-- **`sshakku config --show`** prints the effective configuration: the resolved
-  settings actually in force (file values merged over defaults) and the path of
-  the `config.toml` it read, so the user can confirm what took effect rather
-  than inspecting the file by hand.
-- **`sshakku config --edit`** opens the `config.toml` in `$EDITOR` (falling back
-  to `$VISUAL`, then a sensible default), creating it from a commented template
-  if absent. An interactive, human-invoked operation.
+- **`doctor` reports the active secret backend. ✅ Done** with the wallet
+  section (F25) and the environment section (F31): the report names the wallet
+  in use and how it would be reached, not only whether `--test-backend` can
+  exercise it.
+- **`sshakku config` prints the effective configuration. ✅ Done (F35).** Every
+  setting with the value in force and *what decided it* — the built-in default,
+  an environment variable, `config.toml`, or the `config.d` drop-in that
+  overruled the rest — plus the files read in the order they were applied, and
+  any value SSHakku refused, which until then reached only the session log.
+- **`sshakku config --edit` ✅ Done (F36).** Opens `config.toml` in `$EDITOR`
+  (then `$VISUAL`, then `vi`), creating it from an embedded commented template
+  if absent, and on exit names what would otherwise have surfaced at the next
+  login: a file that no longer parses, a value that was refused, a key a
+  drop-in or a variable decides instead.
 
-Open: whether these are flags on a `config` subcommand (`config --show`) or
-verbs (`config show`/`config edit`); whether `--show` reports value provenance
-(default vs file) per key. Settle when the phase starts.
+**Decided (2026-08-03), closing the two open points above.** Flags, not verbs:
+plain `config` reports and `--edit` acts, the shape `doctor`/`doctor --fix`
+already has, and nothing else in this CLI has a verb pair. Provenance is
+reported per key and was the reason to build it at all — with `config.d` merged
+in filename order, "which value won" is not something a person can work out by
+reading their own files.
+
+Two decisions worth keeping visible: show merges everything a login shell
+merges while edit opens `config.toml` alone, so an edit can be a no-op and the
+overrule notice exists to say so; and `loadSettings` was rebuilt on the same
+ordered source list the report prints from, since a report that reads the
+configuration its own way describes something no other command acts on.
 
 → goals 8, 11, 15; open decisions 7, 12.
 
