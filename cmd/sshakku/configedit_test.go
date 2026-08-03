@@ -12,35 +12,24 @@ import (
 // configuration at all, `sshakku config --edit` puts a file there listing what
 // can be set, hands that file — and no other — to the editor, and what the
 // editor saves is what SSHakku reads afterwards.
-//
-// The editor is a real program, not a stand-in: `cp` saves a file over the one
-// it was given, which is what an editor does, and it can be told to do so
-// without a terminal.
 func TestConfigEditOpensTheUsersOwnFile(t *testing.T) {
-	tempRuntimeEnv(t)
-	saved := writeTemp(t, "saved.toml", "key_lifetime = \"3h\"\n")
-	handed := t.TempDir()
-	// Two editors in turn: the first keeps a copy of what it was handed, the
-	// second saves a file over it. What the user typed and what SSHakku then
-	// reads are separate claims, and one run cannot show both.
-	t.Setenv("EDITOR", "cp -t "+handed)
+	home := tempRuntimeEnv(t)
+	record := useEditor(t, "")
 
 	if out, errOut, code := runConfigEdit(t); code != 0 {
 		t.Fatalf("exit = %d (%s / %s), want 0", code, out, errOut)
 	}
 
 	t.Run("the editor was handed config.toml and nothing else", func(t *testing.T) {
-		entries, err := os.ReadDir(handed)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(entries) != 1 || entries[0].Name() != "config.toml" {
-			t.Errorf("the editor was handed %v, want config.toml alone", entries)
+		opened := strings.Fields(readFile(t, record))
+		want := filepath.Join(home, ".config", "sshakku", "config.toml")
+		if len(opened) != 1 || opened[0] != want {
+			t.Errorf("the editor was handed %v, want %s alone", opened, want)
 		}
 	})
 
 	t.Run("the file it was handed lists what can be set", func(t *testing.T) {
-		created := readFile(t, filepath.Join(handed, "config.toml"))
+		created := readFile(t, filepath.Join(home, ".config", "sshakku", "config.toml"))
 		for _, key := range []string{"key_lifetime", "secret_backend", "key_patterns"} {
 			if !strings.Contains(created, key) {
 				t.Errorf("the created file does not mention %s", key)
@@ -49,7 +38,7 @@ func TestConfigEditOpensTheUsersOwnFile(t *testing.T) {
 	})
 
 	t.Run("what the editor saves is what SSHakku reads", func(t *testing.T) {
-		t.Setenv("EDITOR", "cp "+saved)
+		useEditor(t, "key_lifetime = \"3h\"\n")
 		if _, errOut, code := runConfigEdit(t); code != 0 {
 			t.Fatalf("exit = %d (%s), want 0", code, errOut)
 		}
@@ -63,6 +52,23 @@ func TestConfigEditOpensTheUsersOwnFile(t *testing.T) {
 	})
 }
 
+// TestConfigEditPassesOnTheEditorsOwnArguments covers the shape $EDITOR really
+// has: people set it to a command line ("code -w", "emacs -nw"), and running
+// only its first word starts some editors in a mode their owner never uses.
+func TestConfigEditPassesOnTheEditorsOwnArguments(t *testing.T) {
+	tempRuntimeEnv(t)
+	record := useEditor(t, "")
+	t.Setenv("EDITOR", editorScript(t)+" --wait --new-window")
+
+	if _, errOut, code := runConfigEdit(t); code != 0 {
+		t.Fatalf("exit = %d (%s), want 0", code, errOut)
+	}
+	opened := strings.Fields(readFile(t, record))
+	if len(opened) != 3 || opened[0] != "--wait" || opened[1] != "--new-window" {
+		t.Errorf("the editor was run as %v, want its own arguments before the path", opened)
+	}
+}
+
 // TestConfigEditSaysWhatOverrulesIt verifies the half of F36 that cannot be
 // seen from the file being edited: a key config.toml sets that a drop-in
 // overrules is an edit with no effect, and the moment to say so is while the
@@ -70,8 +76,7 @@ func TestConfigEditOpensTheUsersOwnFile(t *testing.T) {
 func TestConfigEditSaysWhatOverrulesIt(t *testing.T) {
 	home := tempRuntimeEnv(t)
 	writeConfig(t, home, "config.d/50-work.toml", "key_lifetime = \"2h\"\n")
-	saved := writeTemp(t, "saved.toml", "key_lifetime = \"3h\"\n")
-	t.Setenv("EDITOR", "cp "+saved)
+	useEditor(t, "key_lifetime = \"3h\"\n")
 
 	out, errOut, code := runConfigEdit(t)
 	if code != 0 {
@@ -92,8 +97,7 @@ func TestConfigEditSaysWhatOverrulesIt(t *testing.T) {
 // the user is looking at.
 func TestConfigEditReportsAValueThatWillBeIgnored(t *testing.T) {
 	tempRuntimeEnv(t)
-	saved := writeTemp(t, "saved.toml", "key_lifetime = \"eight hours\"\n")
-	t.Setenv("EDITOR", "cp "+saved)
+	useEditor(t, "key_lifetime = \"eight hours\"\n")
 
 	out, errOut, code := runConfigEdit(t)
 	if code != 0 {
@@ -110,8 +114,7 @@ func TestConfigEditReportsAValueThatWillBeIgnored(t *testing.T) {
 // once, with a non-zero exit, it is a mistake the user can still fix.
 func TestConfigEditReportsAFileThatNoLongerParses(t *testing.T) {
 	tempRuntimeEnv(t)
-	saved := writeTemp(t, "broken.toml", "key_lifetime = \n")
-	t.Setenv("EDITOR", "cp "+saved)
+	useEditor(t, "key_lifetime = \n")
 
 	out, errOut, code := runConfigEdit(t)
 	if code != 1 {
@@ -142,9 +145,9 @@ func TestConfigEditWithNoEditorToRun(t *testing.T) {
 // that has none.
 func TestConfigEditFallsBackToVisual(t *testing.T) {
 	home := tempRuntimeEnv(t)
-	saved := writeTemp(t, "saved.toml", "max_attempts = 7\n")
+	useEditor(t, "max_attempts = 7\n")
 	t.Setenv("EDITOR", "")
-	t.Setenv("VISUAL", "cp "+saved)
+	t.Setenv("VISUAL", editorScript(t))
 
 	if _, errOut, code := runConfigEdit(t); code != 0 {
 		t.Fatalf("exit = %d (%s), want 0", code, errOut)
@@ -154,6 +157,42 @@ func TestConfigEditFallsBackToVisual(t *testing.T) {
 	}
 }
 
+// useEditor points $EDITOR at the stand-in under testdata: a real program,
+// exec'd by SSHakku like any editor, which records what it was asked to open
+// and saves body over it (empty body leaves the file untouched). It returns the
+// path of the record.
+//
+// It is a script rather than a stock utility because those differ between the
+// systems this suite runs on — BSD `cp` has no `-t` — and an editor is the one
+// thing here that has to behave the same on both.
+func useEditor(t *testing.T, body string) string {
+	t.Helper()
+	dir := t.TempDir()
+	record := filepath.Join(dir, "opened")
+	t.Setenv("EDITOR", editorScript(t))
+	t.Setenv("SSHAKKU_TEST_EDITOR_RECORD", record)
+	t.Setenv("SSHAKKU_TEST_EDITOR_BODY", "")
+	if body != "" {
+		saved := filepath.Join(dir, "saved.toml")
+		if err := os.WriteFile(saved, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("SSHAKKU_TEST_EDITOR_BODY", saved)
+	}
+	return record
+}
+
+// editorScript is the absolute path of the stand-in editor, which SSHakku runs
+// from the user's own working directory rather than this package's.
+func editorScript(t *testing.T) string {
+	t.Helper()
+	path, err := filepath.Abs(filepath.Join("testdata", "editor.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
 // runConfigEdit runs `sshakku config --edit` against the environment the test
 // set up, returning stdout, stderr and the exit code.
 func runConfigEdit(t *testing.T) (string, string, int) {
@@ -161,16 +200,6 @@ func runConfigEdit(t *testing.T) (string, string, int) {
 	var stdout, stderr bytes.Buffer
 	code := deps{}.run(&stdout, &stderr, []string{"config", "--edit"})
 	return stdout.String(), stderr.String(), code
-}
-
-// writeTemp writes a file an editor will save over the config with.
-func writeTemp(t *testing.T, name, body string) string {
-	t.Helper()
-	path := filepath.Join(t.TempDir(), name)
-	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	return path
 }
 
 func readFile(t *testing.T, path string) string {
