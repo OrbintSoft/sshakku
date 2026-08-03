@@ -30,6 +30,13 @@ const DefaultKeyDirName = ".ssh"
 // told otherwise, and the rule that applies when no patterns are given.
 var defaultKeyPatterns = []string{"id_*"}
 
+// DefaultKeyPatterns returns the naming rule that applies when no patterns are
+// given, for a caller that has to state it rather than apply it — a report of
+// what is in force cannot show "nothing" where a rule is at work.
+func DefaultKeyPatterns() []string {
+	return slices.Clone(defaultKeyPatterns)
+}
+
 // notKeys are the files OpenSSH keeps in that directory for its own use. They
 // are never private keys, so they are skipped however wide the patterns are:
 // "every key in here" is what a user means by "*", and being asked for a

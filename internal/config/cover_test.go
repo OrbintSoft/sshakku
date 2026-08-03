@@ -53,16 +53,23 @@ func TestMergeOtherWinsForEveryField(t *testing.T) {
 	}
 }
 
-// TestLoadDirGlobError covers LoadDir's early return when the directory glob
-// itself is malformed: an unclosed character class makes filepath.Glob report a
-// syntax error, which LoadDir surfaces instead of scanning files.
-func TestLoadDirGlobError(t *testing.T) {
-	f, errs := LoadDir("[")
-	if len(errs) != 1 {
-		t.Fatalf("errs = %v, want a single glob error", errs)
+// TestDropInDirThatCannotBeRead covers the drop-in directory that is there and
+// still unreadable — here a plain file where the directory should be, which is
+// what somebody who meant to write one file ends up with. It is not the absent
+// directory every account has, so it is reported rather than passed over in
+// silence, against the directory itself: no single file can be blamed for it.
+func TestDropInDirThatCannotBeRead(t *testing.T) {
+	dir := configDir(t, map[string]string{"config.d": "key_lifetime = \"1h\"\n"})
+
+	sources := LoadSources(dir)
+	if len(sources) != 1 {
+		t.Fatalf("sources = %v, want the unreadable directory reported", sourcePaths(sources))
 	}
-	if !reflect.DeepEqual(f, File{}) {
-		t.Errorf("File = %+v, want the zero File on a glob error", f)
+	if sources[0].Err == nil {
+		t.Errorf("%s came back without an error", sources[0].Path)
+	}
+	if !reflect.DeepEqual(Merged(sources), File{}) {
+		t.Error("a directory that could not be read must contribute no settings")
 	}
 }
 

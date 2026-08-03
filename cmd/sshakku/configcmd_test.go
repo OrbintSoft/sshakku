@@ -68,7 +68,7 @@ func TestConfigReportsWhatIsInForce(t *testing.T) {
 		if first < 0 || work < 0 || broken < 0 {
 			t.Fatalf("not every file is named in the report:\n%s", out)
 		}
-		if !(first < work && work < broken) {
+		if first >= work || work >= broken {
 			t.Errorf("files are not named in reading order:\n%s", out)
 		}
 	})
@@ -110,6 +110,55 @@ func TestConfigWithNothingConfiguredStillAnswers(t *testing.T) {
 	}
 	if !strings.Contains(strings.ToLower(out), "no configuration") {
 		t.Errorf("the report does not say no file was read:\n%s", out)
+	}
+}
+
+// TestConfigSpellsOutWhatZeroMeans covers the value a report cannot print
+// literally without misleading (F35): `key_lifetime = 0` disables expiry, and
+// "0s" on its own reads as "expires immediately" just as easily.
+func TestConfigSpellsOutWhatZeroMeans(t *testing.T) {
+	home := tempRuntimeEnv(t)
+	writeConfig(t, home, "config.toml", "key_lifetime = \"0\"\n")
+
+	out, _, code := runConfig(t)
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+	if line := settingLine(t, out, "key_lifetime"); !strings.Contains(line, "no expiry") {
+		t.Errorf("%q does not say what a zero lifetime does", line)
+	}
+}
+
+// TestConfigRefusesArgumentsItDoesNotKnow keeps a mistyped flag from being read
+// as a request to print: a user who typed something is owed an answer about
+// what they typed, not a report they did not ask for.
+func TestConfigRefusesArgumentsItDoesNotKnow(t *testing.T) {
+	tempRuntimeEnv(t)
+
+	var stdout, stderr bytes.Buffer
+	if code := (deps{}).run(&stdout, &stderr, []string{"config", "--sohw"}); code != 2 {
+		t.Errorf("exit = %d, want 2 for an argument config does not know", code)
+	}
+	if !strings.Contains(stderr.String(), "--sohw") {
+		t.Errorf("stderr %q does not name what was typed", stderr.String())
+	}
+	if stdout.Len() != 0 {
+		t.Errorf("stdout = %q, want nothing printed for a usage error", stdout.String())
+	}
+}
+
+// TestConfigReportsAFailedWrite covers the report that could not be delivered:
+// a command whose whole output failed must not exit 0, or a caller redirecting
+// it to a full disk is told everything went well.
+func TestConfigReportsAFailedWrite(t *testing.T) {
+	tempRuntimeEnv(t)
+
+	var stderr bytes.Buffer
+	if code := (deps{}).config(errWriter{}, &stderr, nil); code != 1 {
+		t.Errorf("exit = %d, want 1 when the report could not be written", code)
+	}
+	if stderr.Len() == 0 {
+		t.Error("nothing was said about the failed write")
 	}
 }
 

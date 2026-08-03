@@ -41,6 +41,7 @@ commands:
   ensure-agent   drive the agent to a healthy state and print agent_sock
   load-keys      add the user's ssh keys to the agent (interactive sessions)
   askpass-env    print exports routing ssh's askpass through sshakku (GUI only)
+  config         print the configuration in force and where each value came from
   doctor         report the ssh-agent situation; --fix applies the self-heal;
                  --user <name|uid> reports on another user's session (root only,
                  read-only; auto-detected from SUDO_UID under sudo);
@@ -162,6 +163,8 @@ func (d deps) run(stdout, stderr io.Writer, args []string) int {
 		return d.loadKeys(stderr)
 	case "askpass-env":
 		return d.askpassEnv(stdout, stderr)
+	case "config":
+		return d.config(stdout, stderr, args[1:])
 	case "doctor":
 		return d.doctor(stdout, stderr, args[1:])
 	case "forget":
