@@ -169,6 +169,56 @@ func TestLoadKeysWrongPassphraseRealTerminal(t *testing.T) {
 	assertKeyInAgent(t, env.keyfile, false)
 }
 
+// TestLoadKeysEmptyAnswerRealTerminal answers the live prompt with nothing at
+// all — Enter on its own, the answer a person gives by accident — and expects
+// F8 to hold exactly as it does for a wrong passphrase: asked MaxAttempts
+// times, told once on the terminal, the key marked as abandoned so later shells
+// stay quiet, nothing written to the vault, and the key left out of the agent.
+//
+// It takes a real terminal to ask this. A prompt read from anything else cannot
+// distinguish "the user pressed Enter" from "there was nothing to read", and
+// what the loader then does with that empty answer used to depend on which
+// platform's handoff it was carried through.
+func TestLoadKeysEmptyAnswerRealTerminal(t *testing.T) {
+	if os.Getenv(envTTYHelper) == "1" {
+		runTTYPromptHelper()
+	}
+	requireRealSSHBinaries(t)
+	requireUsableHandoff(t)
+
+	env := setupTTYPromptTest(t, "sshakku-live-terminal-test-passphrase")
+
+	master, slave := openPTY(t)
+	child := startTTYPromptHelper(t, env, slave)
+
+	var seen string
+	for attempt := 1; attempt <= defaultMaxAttempts; attempt++ {
+		seen += readUntil(t, master, ttyPromptLine)
+		if _, err := master.WriteString("\n"); err != nil {
+			t.Fatalf("press Enter (attempt %d): %v", attempt, err)
+		}
+	}
+	seen += drain(t, master)
+
+	if err := child.Wait(); err != nil {
+		t.Fatalf("helper: %v\nterminal output:\n%q", err, seen)
+	}
+	if got := strings.Count(seen, ttyPromptLine); got != defaultMaxAttempts {
+		t.Errorf("the user was asked %d times, want %d; output:\n%q", got, defaultMaxAttempts, seen)
+	}
+	if want := fmt.Sprintf("sshakku: could not load key id_test after %d attempts", defaultMaxAttempts); !strings.Contains(seen, want) {
+		t.Errorf("the user was never told the key could not be loaded (want %q); output:\n%q", want, seen)
+	}
+	if want := vaultStoresMarker + "0"; !strings.Contains(seen, want) {
+		t.Errorf("an empty passphrase reached the vault (want %q); output:\n%q", want, seen)
+	}
+	if _, err := os.Stat(filepath.Join(env.giveupDir, "id_test")); err != nil {
+		t.Errorf("no give-up recorded after the attempts ran out, so every later shell would prompt again: %v", err)
+	}
+
+	assertKeyInAgent(t, env.keyfile, false)
+}
+
 // ttyPromptEnv is the staged world a live-terminal prompt test runs against.
 type ttyPromptEnv struct {
 	keyfile   string
