@@ -24,6 +24,54 @@ func TestNoGraphicalPrompterWithNoDisplayServer(t *testing.T) {
 	}
 }
 
+// TestGraphicalPromptOnADesktopWithoutKDE verifies F29: sitting at the machine,
+// the prompt is a dialog. Most graphical sessions are not KDE ones, and a user
+// who has never installed KDE's tooling still has a screen to put a dialog on —
+// so being asked on the terminal here is the promise not being kept, not a
+// milder form of keeping it. The terminal a login shell is asked on may be
+// behind the window the user is actually looking at, or scrolled past.
+//
+// The session and the installed dialog are supplied as what they are — things
+// read from outside the process — rather than stubbed: a compositor advertises
+// itself the way a compositor does, and pinentry is on PATH the way installing
+// it would put it there, with nothing else beside it. What decides which
+// prompter comes back, and what it does when asked, is the real code.
+func TestGraphicalPromptOnADesktopWithoutKDE(t *testing.T) {
+	const typed = "the-one-typed-into-the-dialog"
+
+	dir := t.TempDir()
+	installFakeBin(t, dir, "pinentry", "testdata/pinentry.sh")
+	t.Setenv("PATH", dir)
+	t.Setenv("WAYLAND_DISPLAY", "wayland-0")
+	t.Setenv("SSHAKKU_TEST_PINENTRY_PIN", typed)
+
+	p := newGraphicalPrompter(config.Settings{})
+	if p == nil {
+		t.Fatal("newGraphicalPrompter = nil on a graphical session that is not KDE, so the passphrase would be asked for on the terminal instead of in a dialog")
+	}
+	pass, err := p.Prompt("id_test")
+	if err != nil {
+		t.Fatalf("Prompt = %v, want the passphrase typed into the dialog", err)
+	}
+	if pass != typed {
+		t.Errorf("Prompt = %q, want %q", pass, typed)
+	}
+}
+
+// installFakeBin puts one of this package's testdata scripts into dir under the
+// name a program is looked up by, so a test can compose a PATH holding exactly
+// the programs the scenario says are installed.
+func installFakeBin(t *testing.T, dir, name, script string) {
+	t.Helper()
+	body, err := os.ReadFile(script)
+	if err != nil {
+		t.Fatalf("reading %s: %v", script, err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, name), body, 0o755); err != nil {
+		t.Fatalf("installing %s: %v", name, err)
+	}
+}
+
 // TestGraphicalPrompterWithASessionAndKDialog covers the opposite answer, which
 // no machine running this suite had ever produced: a hosted runner has no
 // display server, so the branch that hands the dialog back had never been taken
