@@ -91,8 +91,9 @@ going through the session log.
 
 `sshakku config --edit` opens `config.toml` in your editor, creating it from a
 commented template if you have none, and checks it when you close the editor:
-whether it still parses, and whether a `config.d/` file overrules a key you
-just set. It edits that one file — a drop-in is never opened for you.
+whether it still parses, whether a value in it was refused, and whether a
+`config.d/` file or an exported variable decides a key it sets. It edits that
+one file — a drop-in is never opened for you.
 
 See [CLI.md](CLI.md#sshakku-config) for both.
 

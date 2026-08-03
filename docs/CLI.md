@@ -110,15 +110,16 @@ email, a database path under your home), so read the output before pasting it
 into a bug report.
 
 - `--edit` — opens `config.toml` in `$EDITOR` (then `$VISUAL`, then `vi`),
-  creating it from a commented template if you have none. That file only:
-  `config.d/` is never opened for you. When the editor exits, SSHakku re-reads
-  the file and tells you if it can no longer be parsed, or if a key you set in
-  it is overruled by a drop-in — either of which you would otherwise meet at
-  your next login.
+  creating it from a commented template if you have none. `$EDITOR` may carry
+  arguments (`code -w`), and they are passed on. That file only: `config.d/` is
+  never opened for you. When the editor exits, SSHakku re-reads the file and
+  tells you what you would otherwise meet at your next login — that it can no
+  longer be parsed, that a value in it was refused, or that a key set in it is
+  decided by a drop-in or by an exported variable instead.
 
-Exits `0` when the configuration was printed or the editor exited cleanly, `1`
-when the editor could not be run or the file could not be written, `2` on a
-usage error.
+Exits `0` when the configuration was printed or the file was edited, `1` when
+the editor could not be run, the file could not be written, or what was saved
+can no longer be parsed, `2` on a usage error.
 
 ## `sshakku doctor`
 

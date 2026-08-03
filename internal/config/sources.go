@@ -1,6 +1,7 @@
 package config
 
 import (
+	_ "embed"
 	"errors"
 	"io/fs"
 	"os"
@@ -8,8 +9,23 @@ import (
 	"strings"
 )
 
-// mainFileName is the single config file, read before any drop-in.
-const mainFileName = "config.toml"
+// MainFileName is the single config file, read before any drop-in, and the one
+// a user edits as their own.
+const MainFileName = "config.toml"
+
+//go:embed template.toml
+var templateTOML string
+
+// Template is the configuration file SSHakku writes for a user who has none:
+// every setting commented out, with what it does. It is a starting point to
+// edit, not a statement of what is in force — nothing reads it back.
+func Template() string { return templateTOML }
+
+// MainFile returns the path of the config file under a configuration
+// directory, which is where a user's own settings belong.
+func MainFile(configDir string) string {
+	return filepath.Join(configDir, MainFileName)
+}
 
 // dropInDirName holds the drop-ins that apply on top of it, in filename order.
 const dropInDirName = "config.d"
@@ -35,7 +51,7 @@ type Source struct {
 // what a user needs to be told about.
 func LoadSources(configDir string) []Source {
 	var sources []Source
-	if s, ok := fileSource(filepath.Join(configDir, mainFileName)); ok {
+	if s, ok := fileSource(MainFile(configDir)); ok {
 		sources = append(sources, s)
 	}
 	return append(sources, dropInSources(filepath.Join(configDir, dropInDirName))...)

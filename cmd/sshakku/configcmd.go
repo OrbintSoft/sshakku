@@ -14,12 +14,15 @@ import (
 // config reports the configuration in force: every setting, its value, and what
 // put that value there. It reads and changes nothing.
 func (d deps) config(stdout, stderr io.Writer, args []string) int {
-	if len(args) > 0 {
+	dir := paths.Resolve(paths.FromOS(), paths.ProbeDir).ConfigDir
+	switch {
+	case len(args) == 1 && args[0] == "--edit":
+		return d.configEdit(stdout, stderr, dir)
+	case len(args) > 0:
 		_, _ = fmt.Fprintf(stderr, "sshakku: config: unknown argument %q\n\n%s", args[0], usage)
 		return 2
 	}
 
-	dir := paths.Resolve(paths.FromOS(), paths.ProbeDir).ConfigDir
 	sources := config.LoadSources(dir)
 	report := configReport(dir, sources, config.Explain(sources, os.LookupEnv))
 	if _, err := io.WriteString(stdout, report); err != nil {

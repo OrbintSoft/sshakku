@@ -74,6 +74,43 @@ func Explain(sources []Source, lookup func(string) (string, bool)) []Setting {
 	return report
 }
 
+// Overrule is a setting one file states and something else decides: the value
+// written there is not the one in force, and that file is the one place where
+// nothing can say so.
+type Overrule struct {
+	Key string
+	By  Origin
+}
+
+// Overruled reports the settings the file at path states that something later
+// overrules — a file applied after it, or an exported variable. Editing a
+// value somebody else decides is an edit with no effect, which is worth
+// hearing while the person who made it is still there.
+func Overruled(sources []Source, path string, lookup func(string) (string, bool)) []Overrule {
+	var overruled []Overrule
+	for _, desc := range settingTable {
+		if !states(sources, path, desc) {
+			continue
+		}
+		from := desc.statedBy(sources, lookup)
+		if from.Kind == OriginFile && from.Name == path {
+			continue
+		}
+		overruled = append(overruled, Overrule{Key: desc.key, By: from})
+	}
+	return overruled
+}
+
+// states reports whether the source at path sets the setting at all.
+func states(sources []Source, path string, desc settingDesc) bool {
+	for _, s := range sources {
+		if s.Path == path {
+			return desc.set(s.File)
+		}
+	}
+	return false
+}
+
 // refusalOf returns the error reported against key, if any.
 func refusalOf(errs []error, key string) error {
 	for _, err := range errs {
