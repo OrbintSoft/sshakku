@@ -1434,3 +1434,55 @@ here covers is a person closing a real dialog on macOS, which is the same gap th
 graphical-prompt rows already record.
 
 → features F8, F21, F29, F35, F37, F38; open decision 24.
+
+### Phase 22 — The session nobody had tested in ✅ Done
+
+Every claim SSHakku makes about a graphical session had only ever been observed
+in an X11 one: every image in `test/containers/` starts `Xvfb`, and the Wayland
+column of the session table in `docs/TEST-MATRIX.md` was three ❌. Wayland is
+what most Linux desktops log into.
+
+`wayland.Dockerfile` is that session — sway on wlroots' headless backend, so no
+DRM device, no seat and no privileges, with no Xwayland and no X server of any
+kind. Windows are read back with `swaymsg`, which answers with the client's own
+name, and typed into with `wtype`, which speaks Wayland's virtual-keyboard
+protocol; `xdotool` needs an X server and `ydotool` needs `/dev/uinput` and a
+privileged container. The seat carries no keyboard until wtype makes one, so the
+first keystroke of each invocation is dropped and a leading `Shift_L` absorbs it.
+
+**The defect it found.** `pinentry-gnome3` answers `GETINFO flavor` with
+`gnome3:curses`, so SSHakku takes it for a dialog, and then fails `GETPIN` with
+`Inappropriate ioctl for device` wherever the Gcr prompter it wants is not
+running. The chosen dialog was paired with the terminal alone, so one that could
+not draw carried the question past every dialog that could — on a desktop with
+zenity installed and working, and with no controlling terminal to fall back to,
+the user was asked **nowhere at all**. F37 now says what happens when the dialog
+nobody named cannot draw, and the dialogs a desktop has are asked in turn with
+the terminal last. A dialog the user did name is unchanged: that one or the
+terminal, never a substitute.
+
+The fix uncovered a second, smaller one: the log said `asking on the terminal
+instead` when the question had gone to another dialog. It names where the
+question actually went now, which needed the terminal and a fallback pair to be
+able to say what they are called.
+
+**Verified by running it** (rule 25): `test/containers/wayland-prompt-scenario.sh`
+drives the real binary in that session and asserts what a user meets. It was
+observed failing against the tree before the fix — 0 windows with nothing
+configured — and is wired into `desktop-stack.yml`.
+
+**Rule 12, new file type.** The image carries a sway configuration
+(`wayland-sway.config`). No linter or validator for that format exists — sway
+checks its own configuration with `sway --validate`, which needs a compositor
+build rather than a lint tool, and the file is exercised on every run of the
+image anyway, since a session that will not start fails the job. **Decision: no
+`lint-sway` target.**
+
+**What this does not close.** The three wallet cells in the session table stay
+❌: each of those daemons has a one-time dialog of its own that the existing
+images answer with `xdotool`, and answering them with `wtype` is separate work.
+The container's kernel keyring also refuses the passphrase handoff, so the run
+shows where the user is asked and that the answer reaches the product, not the
+key arriving in the agent.
+
+→ features F12, F29, F37; open decisions 20, 24.
