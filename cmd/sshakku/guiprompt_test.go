@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/keys"
 )
 
@@ -32,9 +31,9 @@ func TestADialogThatCannotDrawIsFollowedByOneThatCan(t *testing.T) {
 	log := &recordingLogger{}
 
 	p := chooseDialog([]dialog{
-		{config.GUIPrompterPinentry, cannotDraw},
-		{config.GUIPrompterKDialog, notInstalled},
-		{config.GUIPrompterZenity, canDraw},
+		{"pinentry", cannotDraw},
+		{"kdialog", notInstalled},
+		{"zenity", canDraw},
 	}, "", terminal, log)
 	if p == nil {
 		t.Fatal("chooseDialog = nil with two dialogs installed, want the one the user can be asked in")
@@ -67,9 +66,9 @@ func TestANamedDialogThatCannotDrawGoesToTheTerminal(t *testing.T) {
 	terminal := &fakeDialog{name: "the terminal", installed: true, answer: onTheTerminal}
 
 	p := chooseDialog([]dialog{
-		{config.GUIPrompterPinentry, cannotDraw},
-		{config.GUIPrompterZenity, canDraw},
-	}, config.GUIPrompterPinentry, terminal, nil)
+		{"pinentry", cannotDraw},
+		{"zenity", canDraw},
+	}, "pinentry", terminal, nil)
 	if p == nil {
 		t.Fatal("chooseDialog = nil with the named dialog installed, want it asked in")
 	}
@@ -91,7 +90,7 @@ func TestANamedDialogThatCannotDrawGoesToTheTerminal(t *testing.T) {
 func TestADialogThisPlatformHasNotGotAsksOnTheTerminal(t *testing.T) {
 	here := &fakeDialog{name: "zenity", installed: true, answer: "the-one-nobody-asked-for"}
 
-	if p := chooseDialog([]dialog{{config.GUIPrompterZenity, here}}, config.GUIPrompterKDialog, &fakeDialog{}, nil); p != nil {
+	if p := chooseDialog([]dialog{{"zenity", here}}, "kdialog", &fakeDialog{}, nil); p != nil {
 		t.Errorf("chooseDialog = %T for a dialog this platform has no entry for, want the terminal", p)
 	}
 }
@@ -107,8 +106,8 @@ func TestClosingTheFirstDialogDoesNotRaiseTheNext(t *testing.T) {
 	terminal := &fakeDialog{name: "the terminal", installed: true, answer: "the-one-typed-on-the-terminal"}
 
 	p := chooseDialog([]dialog{
-		{config.GUIPrompterPinentry, closed},
-		{config.GUIPrompterZenity, next},
+		{"pinentry", closed},
+		{"zenity", next},
 	}, "", terminal, nil)
 
 	if _, err := p.Prompt("id_a"); !errors.Is(err, keys.ErrPromptCanceled) {
@@ -117,6 +116,15 @@ func TestClosingTheFirstDialogDoesNotRaiseTheNext(t *testing.T) {
 	if next.asked != 0 || terminal.asked != 0 {
 		t.Errorf("after the dialog was closed, zenity was asked %d time(s) and the terminal %d, want none of either", next.asked, terminal.asked)
 	}
+}
+
+// recordingLogger keeps what was written, so a test can read the line a user
+// would find in the session log.
+type recordingLogger struct{ lines []string }
+
+func (r *recordingLogger) Log(level, message string) error {
+	r.lines = append(r.lines, level+" "+message)
+	return nil
 }
 
 // fakeDialog is one entry of a dialog table: a program that is installed or
