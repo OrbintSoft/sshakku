@@ -567,10 +567,33 @@ system is refused, `sshakku config` reports the refusal, and `"auto"` applies.
 
 Where there is no screen at all — logged in over SSH, or booted into single-user
 mode — you are asked on the terminal whatever this setting says, since a dialog
-would have nowhere to appear. A dialog you dismiss is not the same as one that
-could not be shown: dismissing is an answer, and SSHakku gives up on that key
-rather than asking again somewhere else.
+would have nowhere to appear. A dialog you close without answering is not the
+same as one that could not be shown: closing it is an answer, and you are not
+then asked the same thing somewhere else.
 
 This is a config-file key only, like the wallet settings: it decides how you are
 spoken to, and a variable exported in one shell but not the next would ask two
 different ways for no reason you could see.
+
+## Closing the prompt without answering
+
+Closing the dialog costs you nothing: no passphrase is stored, and no key is
+given up. The next login shell asks again from the first key, and `ssh` asks the
+moment you use one of those keys. Pressing Ctrl-D at a terminal prompt is the
+same gesture, and neither is reported to you as a failure.
+
+What it means for the keys that come after it is yours to choose:
+
+```toml
+on_dismiss = "skip"   # "stop" (default), "skip", or "retry"
+```
+
+`"stop"` asks about no further key for the rest of that login, so shutting one
+window you did not ask for does not leave you with one more of them per key.
+`"skip"` turns down that key alone and goes on asking about the others, which is
+what you want if you unlock some of your keys and not others. `"retry"` treats
+closing the prompt as a wrong answer: the same key is asked about again until
+`max_attempts` runs out, and it then ends the way any key that never opened
+ends — you are told once, and it is left alone until the retry window passes.
+
+This is a config-file key only, for the same reason as the dialog it answers.
