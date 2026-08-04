@@ -136,6 +136,12 @@ func (p PinentryPrompter) Available() bool {
 // Name is what to call this prompter in a message.
 func (p PinentryPrompter) Name() string { return p.bin() }
 
+// WhyUnavailable covers both reasons there is no dialog here, since a user told
+// only the first would go and install what they already have.
+func (p PinentryPrompter) WhyUnavailable() string {
+	return "is not installed, or is a build that draws on a terminal rather than on a screen"
+}
+
 // bin is the program to run, defaulted.
 func (p PinentryPrompter) bin() string {
 	if p.Bin != "" {

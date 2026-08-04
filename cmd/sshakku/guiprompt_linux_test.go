@@ -5,6 +5,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
@@ -157,6 +158,42 @@ func TestGraphicalPrompterHonoursTheConfiguration(t *testing.T) {
 			t.Errorf("newGraphicalPrompter = %T with only kdialog installed and pinentry named, want the terminal: a dialog the user did not choose is not a fallback", p)
 		}
 	})
+}
+
+// TestANamedPinentryThatCannotDrawIsNotReportedMissing verifies the half of F37
+// that is a sentence: naming a dialog that cannot ask here sends the user to the
+// terminal and tells them which one failed. What is written down has to be true
+// of the machine it was written on — telling someone that pinentry is not
+// installed sends them to install what they already have, and leaves the reason
+// they were not asked in a window exactly as hidden as it was before.
+func TestANamedPinentryThatCannotDrawIsNotReportedMissing(t *testing.T) {
+	dir := t.TempDir()
+	installFakeBin(t, dir, "pinentry", fakePinentry)
+	t.Setenv("PATH", dir)
+	t.Setenv("WAYLAND_DISPLAY", "wayland-0")
+	t.Setenv("SSHAKKU_TEST_PINENTRY_FLAVOR", "curses")
+
+	log := &recordingLogger{}
+	if p := newGraphicalPrompter(config.Settings{GUIPrompter: config.GUIPrompterPinentry}, log); p != nil {
+		t.Errorf("newGraphicalPrompter = %T with a console pinentry named, want the terminal", p)
+	}
+
+	said := strings.Join(log.lines, "\n")
+	if !strings.Contains(said, config.GUIPrompterPinentry) {
+		t.Errorf("the log says %q, want it to name the dialog that could not ask", said)
+	}
+	if !strings.Contains(said, "screen") {
+		t.Errorf("the log says %q, want it to allow for the case it is in: a pinentry that is installed and simply cannot draw where the user is looking", said)
+	}
+}
+
+// recordingLogger keeps what was written, so a test can read the line a user
+// would find in the session log.
+type recordingLogger struct{ lines []string }
+
+func (r *recordingLogger) Log(level, message string) error {
+	r.lines = append(r.lines, level+" "+message)
+	return nil
 }
 
 // installFakeBin puts one of this package's testdata scripts into dir under the
