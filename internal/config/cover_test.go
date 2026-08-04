@@ -225,6 +225,43 @@ func TestTimeoutsWrittenInAFileAreTheOnesInForce(t *testing.T) {
 	}
 }
 
+// TestOnDismissWrittenInAFileIsTheOneInForce verifies the configurable half of
+// F38, the whole way a login shell goes: what closing a passphrase prompt means
+// has no environment variable, so a file is the only place it can be said, and a
+// value that does not survive being read from one is a setting nobody can set.
+// An answer nobody recognises leaves the user asked less rather than more, and
+// is reported instead of applied.
+func TestOnDismissWrittenInAFileIsTheOneInForce(t *testing.T) {
+	noEnv := func(string) (string, bool) { return "", false }
+
+	dir := configDir(t, map[string]string{"config.d/50-work.toml": "on_dismiss = \"retry\"\n"})
+	settings, errs := Resolve(Merged(LoadSources(dir)), noEnv)
+	if len(errs) != 0 {
+		t.Fatalf("Resolve reported %v, want the written value accepted", errs)
+	}
+	if settings.OnDismiss != keys.OnDismissRetry {
+		t.Errorf("on_dismiss = %q, want the %q written in the drop-in", settings.OnDismiss, keys.OnDismissRetry)
+	}
+
+	// F35: the report is what ends the doubt about which value is in force, so
+	// it has to name the file that wrote this one.
+	for _, s := range Explain(LoadSources(dir), noEnv) {
+		if s.Key == "on_dismiss" && (s.Value != keys.OnDismissRetry || s.From.Kind != OriginFile) {
+			t.Errorf("the report says on_dismiss is %q from kind %d, want %q from the file that wrote it",
+				s.Value, s.From.Kind, keys.OnDismissRetry)
+		}
+	}
+
+	refused := configDir(t, map[string]string{"config.toml": "on_dismiss = \"whenever\"\n"})
+	settings, errs = Resolve(Merged(LoadSources(refused)), noEnv)
+	if settings.OnDismiss != keys.OnDismissStop {
+		t.Errorf("on_dismiss = %q for a value nothing answers to, want %q", settings.OnDismiss, keys.OnDismissStop)
+	}
+	if len(errs) != 1 || !strings.Contains(errs[0].Error(), "whenever") {
+		t.Errorf("errors = %v, want one naming the value that was refused", errs)
+	}
+}
+
 // TestMergeOtherWinsForEveryField sets every field in both base and other to a
 // distinct value, so merging must yield exactly other: it proves other's value
 // overrides base's for each key rather than base surviving because other left it

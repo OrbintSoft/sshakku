@@ -82,6 +82,11 @@ type File struct {
 	// user is spoken to, and a variable exported in one shell and not the next
 	// would ask two different ways for no reason the user could see.
 	GUIPrompter *string `toml:"gui_prompter"`
+
+	// OnDismiss is what closing a passphrase prompt without answering means for
+	// the keys that come after it. Config-file only for the same reason as the
+	// dialog it answers: it decides how the user is spoken to.
+	OnDismiss *string `toml:"on_dismiss"`
 }
 
 // Settings is the configuration resolved from environment, file, and defaults.
@@ -156,6 +161,10 @@ type Settings struct {
 	// dialog outright, and any other value names one and only that one — a
 	// prompter that cannot run is never swapped for a different dialog.
 	GUIPrompter string
+
+	// OnDismiss is what a dismissed passphrase prompt means for the keys still
+	// to come; one of the keys.OnDismiss* values, and never empty.
+	OnDismiss string
 }
 
 // Wallet-store policy modes for Settings.WalletStoreMode.
@@ -365,6 +374,9 @@ func (f File) Merge(other File) File {
 	if other.GUIPrompter != nil {
 		merged.GUIPrompter = other.GUIPrompter
 	}
+	if other.OnDismiss != nil {
+		merged.OnDismiss = other.OnDismiss
+	}
 	if other.SecretBackend != nil {
 		merged.SecretBackend = other.SecretBackend
 	}
@@ -505,6 +517,10 @@ func Resolve(file File, lookup func(string) (string, bool)) (Settings, []error) 
 	prompter, err := resolveGUIPrompter(file.GUIPrompter)
 	errs = refused(errs, "gui_prompter", err)
 	s.GUIPrompter = prompter
+
+	dismiss, err := resolveOnDismiss(file.OnDismiss)
+	errs = refused(errs, "on_dismiss", err)
+	s.OnDismiss = dismiss
 
 	return s, errs
 }
@@ -699,6 +715,24 @@ func resolveGUIPrompterFrom(fileVal *string, available []string) (string, error)
 		}
 	}
 	return GUIPrompterAuto, fmt.Errorf("gui_prompter %q is not a dialog this system has, using %q", *fileVal, GUIPrompterAuto)
+}
+
+// resolveOnDismiss picks what closing a passphrase prompt without answering
+// means for the keys that come after it. An absent or empty value ends the
+// asking, since a window nobody asked for should take one gesture to be rid of,
+// not one per key. An unrecognised value is a mistake in the configuration
+// rather than a behaviour waiting to exist, so it is reported and the default
+// applies — which asks less rather than more.
+func resolveOnDismiss(fileVal *string) (string, error) {
+	if fileVal == nil || *fileVal == "" {
+		return keys.OnDismissStop, nil
+	}
+	switch *fileVal {
+	case keys.OnDismissStop, keys.OnDismissSkip, keys.OnDismissRetry:
+		return *fileVal, nil
+	default:
+		return keys.OnDismissStop, fmt.Errorf("invalid on_dismiss %q, using %q", *fileVal, keys.OnDismissStop)
+	}
 }
 
 // resolveKeePassXCRoute is config-file only, like the backend choice it

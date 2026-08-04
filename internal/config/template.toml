@@ -79,3 +79,10 @@
 # session has, "none" always asks on the terminal, and naming one uses that one
 # and no other. Where there is no screen the terminal asks whatever this says.
 # gui_prompter = "none"
+
+# What closing a passphrase prompt without answering means: "stop" asks about no
+# further key for the rest of this login, "skip" turns down that key alone, and
+# "retry" treats it as a wrong answer and asks again until max_attempts runs out.
+# Whichever applies, nothing is stored and no key is given up: the next login
+# shell asks again from the first key.
+# on_dismiss = "skip"

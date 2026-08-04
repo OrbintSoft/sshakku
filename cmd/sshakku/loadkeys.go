@@ -76,6 +76,7 @@ func (d deps) loadKeys(stderr io.Writer) int {
 			AutoLoad:      settings.AutoLoads,
 			KeyLifetime:   settings.KeyLifetime,
 			ServicePrefix: settings.ServicePrefix,
+			OnDismiss:     settings.OnDismiss,
 		},
 	}
 	if err := loader.LoadKeys(); err != nil {

@@ -197,6 +197,7 @@ func TestResolveDefaults(t *testing.T) {
 		// value ever falls back.
 		KeePassXCRoute: KeePassXCRouteAuto,
 		GUIPrompter:    GUIPrompterAuto,
+		OnDismiss:      keys.OnDismissStop,
 	}
 	if !reflect.DeepEqual(s, want) {
 		t.Errorf("Resolve(empty) = %+v, want %+v", s, want)
@@ -231,6 +232,7 @@ func TestResolveFileWins(t *testing.T) {
 		ServicePrefix:      keys.DefaultServicePrefix,
 		KeePassXCRoute:     KeePassXCRouteAuto,
 		GUIPrompter:        GUIPrompterAuto,
+		OnDismiss:          keys.OnDismissStop,
 	}
 	if !reflect.DeepEqual(s, want) {
 		t.Errorf("Resolve(file) = %+v, want %+v", s, want)

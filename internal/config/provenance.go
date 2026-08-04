@@ -304,6 +304,11 @@ var settingTable = []settingDesc{
 		set:   func(f File) bool { return f.GUIPrompter != nil },
 		value: func(s Settings) string { return s.GUIPrompter },
 	},
+	{
+		key:   "on_dismiss",
+		set:   func(f File) bool { return f.OnDismiss != nil },
+		value: func(s Settings) string { return s.OnDismiss },
+	},
 }
 
 // duration renders a resolved duration, spelling out what zero means for the
