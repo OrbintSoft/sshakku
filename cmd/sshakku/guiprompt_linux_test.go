@@ -63,6 +63,26 @@ func TestGraphicalPromptOnADesktopWithoutKDE(t *testing.T) {
 	}
 }
 
+// TestGraphicalPromptWithOnlyZenity verifies F29 on the desktops that have
+// neither GnuPG's dialog nor KDE's: a GTK session where zenity is what is
+// installed still has a screen, and being asked on the terminal there is the
+// promise not being kept.
+func TestGraphicalPromptWithOnlyZenity(t *testing.T) {
+	dir := t.TempDir()
+	installFakeBin(t, dir, "zenity", fakePinentry)
+	t.Setenv("PATH", dir)
+	t.Setenv("WAYLAND_DISPLAY", "wayland-0")
+
+	p := newGraphicalPrompter(config.Settings{}, nil)
+	fallback, ok := p.(keys.FallbackPrompter)
+	if !ok {
+		t.Fatalf("newGraphicalPrompter = %T with only zenity installed, want a dialog paired with the terminal", p)
+	}
+	if _, ok := fallback.Primary.(keys.ZenityPrompter); !ok {
+		t.Errorf("the dialog asked in is %T, want zenity", fallback.Primary)
+	}
+}
+
 // TestGraphicalPrompterHonoursTheConfiguration verifies F37: which dialog asks
 // is the user's to choose, and choosing one is never a way to lose the prompt.
 //

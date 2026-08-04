@@ -11,6 +11,8 @@ const (
 	GUIPrompterPinentry = "pinentry"
 	// GUIPrompterKDialog is KDE's dialog.
 	GUIPrompterKDialog = "kdialog"
+	// GUIPrompterZenity is GNOME's dialog.
+	GUIPrompterZenity = "zenity"
 )
 
 // platformGUIPrompters are the values gui_prompter accepts on this system. A
@@ -20,4 +22,5 @@ var platformGUIPrompters = []string{
 	GUIPrompterNone,
 	GUIPrompterPinentry,
 	GUIPrompterKDialog,
+	GUIPrompterZenity,
 }

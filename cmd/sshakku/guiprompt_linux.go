@@ -20,7 +20,8 @@ type dialog struct {
 // table of what a desktop may have, not a judgement about which desktop is in
 // use: pinentry comes with GnuPG and draws with whichever toolkit the
 // distribution chose for it, so it fits a session SSHakku would otherwise have
-// no way to recognise; kdialog belongs to one desktop, so it is asked for after.
+// no way to recognise; kdialog and zenity each belong to one desktop, so they
+// are asked for after it.
 //
 // Nothing here decides anything on its own — see newGraphicalPrompter.
 func linuxDialogs(settings config.Settings) []dialog {
@@ -28,6 +29,7 @@ func linuxDialogs(settings config.Settings) []dialog {
 	return []dialog{
 		{config.GUIPrompterPinentry, keys.PinentryPrompter{Timeout: settings.InteractiveTimeout}},
 		{config.GUIPrompterKDialog, keys.KDialogPrompter{Runner: runner, Timeout: settings.InteractiveTimeout}},
+		{config.GUIPrompterZenity, keys.ZenityPrompter{Runner: runner, Timeout: settings.InteractiveTimeout}},
 	}
 }
 
