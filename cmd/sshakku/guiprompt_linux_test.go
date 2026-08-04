@@ -83,6 +83,35 @@ func TestGraphicalPromptWithOnlyZenity(t *testing.T) {
 	}
 }
 
+// TestGraphicalPromptWhereTheOnlyPinentryIsAConsoleOne verifies F29 on a session
+// that has a screen and a dialog to put on it, but whose pinentry is one of
+// GnuPG's console builds. Which build a machine has is the distribution's
+// choice, not the user's, and a user who has one that draws on a terminal has
+// not thereby asked to be prompted on a terminal: the screen is still there and
+// zenity is still installed, so a dialog is still what the promise says they
+// meet.
+//
+// The console pinentry is staged as what it is — a program that says which
+// builds it can draw with when asked, the way pinentry answers that question —
+// rather than by telling the code which prompter to skip.
+func TestGraphicalPromptWhereTheOnlyPinentryIsAConsoleOne(t *testing.T) {
+	dir := t.TempDir()
+	installFakeBin(t, dir, "pinentry", fakePinentry)
+	installFakeBin(t, dir, "zenity", fakePinentry)
+	t.Setenv("PATH", dir)
+	t.Setenv("WAYLAND_DISPLAY", "wayland-0")
+	t.Setenv("SSHAKKU_TEST_PINENTRY_FLAVOR", "curses")
+
+	p := newGraphicalPrompter(config.Settings{}, nil)
+	fallback, ok := p.(keys.FallbackPrompter)
+	if !ok {
+		t.Fatalf("newGraphicalPrompter = %T on a session with a screen and zenity installed, want a dialog paired with the terminal", p)
+	}
+	if _, ok := fallback.Primary.(keys.ZenityPrompter); !ok {
+		t.Errorf("the dialog asked in is %T, want zenity: a pinentry that draws on a terminal is not a dialog, and taking the prompt away from one that is leaves nothing on the screen at all", fallback.Primary)
+	}
+}
+
 // TestGraphicalPrompterHonoursTheConfiguration verifies F37: which dialog asks
 // is the user's to choose, and choosing one is never a way to lose the prompt.
 //

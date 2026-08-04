@@ -16,6 +16,9 @@
 #                                 send at any point and which answer nothing
 #   SSHAKKU_TEST_PINENTRY_HANG    non-empty: never answer GETPIN, the way a
 #                                 dialog nobody is sitting in front of does not
+#   SSHAKKU_TEST_PINENTRY_FLAVOR  what GETINFO flavor answers with: the builds
+#                                 this pinentry can draw with, most capable
+#                                 first. Defaults to one that draws on a screen
 set -eu
 
 echo "OK Pleased to meet you"
@@ -38,6 +41,10 @@ while IFS= read -r line; do
 			printf 'D %s\n' "${SSHAKKU_TEST_PINENTRY_PIN:-a-real-passphrase}"
 			echo "OK"
 		fi
+		;;
+	"GETINFO flavor"*)
+		printf 'D %s\n' "${SSHAKKU_TEST_PINENTRY_FLAVOR:-gtk2:curses}"
+		echo "OK"
 		;;
 	BYE*)
 		echo "OK closing connection"
