@@ -3,54 +3,102 @@ package config
 import (
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/OrbintSoft/sshakku/internal/keys"
 )
+
+// TestTimeoutsWrittenInAFileAreTheOnesInForce verifies F21's second half: how
+// long SSHakku waits is configurable, separately for something expected to
+// answer on its own and something waiting on a person. Neither has an
+// environment variable, so a file is the only place either can be said — a
+// value that does not survive being read from one is a setting that cannot be
+// set at all.
+//
+// It goes the whole way a login shell goes, from files on disk to resolved
+// settings. Every other test of these two builds the File by hand and calls
+// Resolve, which is how a value that never survived the merge went unnoticed.
+func TestTimeoutsWrittenInAFileAreTheOnesInForce(t *testing.T) {
+	dir := configDir(t, map[string]string{
+		"config.toml":           "command_timeout = \"45s\"\n",
+		"config.d/50-work.toml": "interactive_timeout = \"9m\"\n",
+	})
+
+	settings, errs := Resolve(Merged(LoadSources(dir)), func(string) (string, bool) { return "", false })
+	if len(errs) != 0 {
+		t.Fatalf("Resolve reported %v, want the written values accepted", errs)
+	}
+	if settings.CommandTimeout != 45*time.Second {
+		t.Errorf("command_timeout = %v, want the 45s written in config.toml", settings.CommandTimeout)
+	}
+	if settings.InteractiveTimeout != 9*time.Minute {
+		t.Errorf("interactive_timeout = %v, want the 9m written in the drop-in", settings.InteractiveTimeout)
+	}
+
+	// F35: the report exists to end this exact doubt, so a value it shows
+	// against a file has to be the value that file put in force. Naming the
+	// file beside a number the user never wrote is worse than saying nothing.
+	for _, s := range Explain(LoadSources(dir), func(string) (string, bool) { return "", false }) {
+		if s.Key != "command_timeout" {
+			continue
+		}
+		if s.Value != "45s" || s.From.Kind != OriginFile {
+			t.Errorf("the report says command_timeout is %q from kind %d, want 45s from the file that wrote it", s.Value, s.From.Kind)
+		}
+	}
+}
 
 // TestMergeOtherWinsForEveryField sets every field in both base and other to a
 // distinct value, so merging must yield exactly other: it proves other's value
 // overrides base's for each key rather than base surviving because other left it
 // unset. reflect.DeepEqual across the whole struct exercises every field's
 // override branch in one go.
+//
+// The two files are filled by reflection rather than by hand, and a field this
+// helper cannot fill fails the test. A file written out field by field silently
+// stops covering the ones added after it, which is what happened here: the
+// settings for the key directory, the container, the service prefix and the
+// dialog were all merged by code no test had ever run.
 func TestMergeOtherWinsForEveryField(t *testing.T) {
-	base := File{
-		KeyLifetime:        ptr("1h"),
-		MaxAttempts:        ptr(1),
-		GiveupTTL:          ptr("1h"),
-		NoGiveup:           ptr(false),
-		Quiet:              ptr(false),
-		WalletStoreMode:    ptr("all"),
-		WalletStoreInclude: []string{"base_in"},
-		WalletStoreExclude: []string{"base_ex"},
-		AutoLoadMode:       ptr("all"),
-		AutoLoadInclude:    []string{"base_al_in"},
-		AutoLoadExclude:    []string{"base_al_ex"},
-		SecretBackend:      ptr("secretservice"),
-		OnePasswordVault:   ptr("base_vault"),
-		BitwardenEmail:     ptr("base@example.com"),
-		BitwardenServer:    ptr("base.example.com"),
-	}
-	other := File{
-		KeyLifetime:        ptr("2h"),
-		MaxAttempts:        ptr(2),
-		GiveupTTL:          ptr("2h"),
-		NoGiveup:           ptr(true),
-		Quiet:              ptr(true),
-		WalletStoreMode:    ptr("include"),
-		WalletStoreInclude: []string{"other_in"},
-		WalletStoreExclude: []string{"other_ex"},
-		AutoLoadMode:       ptr("exclude"),
-		AutoLoadInclude:    []string{"other_al_in"},
-		AutoLoadExclude:    []string{"other_al_ex"},
-		SecretBackend:      ptr("onepassword"),
-		OnePasswordVault:   ptr("other_vault"),
-		BitwardenEmail:     ptr("other@example.com"),
-		BitwardenServer:    ptr("other.example.com"),
-	}
+	base := filledFile(t, "base")
+	other := filledFile(t, "other")
+
 	got := base.Merge(other)
-	if !reflect.DeepEqual(got, other) {
-		t.Errorf("Merge = %+v, want every field overridden by other %+v", got, other)
+
+	gotV, wantV := reflect.ValueOf(got), reflect.ValueOf(other)
+	for i := range gotV.NumField() {
+		name := gotV.Type().Field(i).Name
+		if !reflect.DeepEqual(gotV.Field(i).Interface(), wantV.Field(i).Interface()) {
+			t.Errorf("%s did not survive the merge: the value written in the later file is not the one in force, and nothing reports that it was dropped", name)
+		}
 	}
+}
+
+// filledFile returns a File with every field set to a value made from mark, so
+// that no two files built this way share one. Whatever kinds of field File
+// grows, this has to keep filling them: one it cannot fill would leave that
+// field's merge unexercised while the test still passed.
+func filledFile(t *testing.T, mark string) File {
+	t.Helper()
+
+	var f File
+	v := reflect.ValueOf(&f).Elem()
+	for i := range v.NumField() {
+		field, name := v.Field(i), v.Type().Field(i).Name
+		switch field.Interface().(type) {
+		case *string:
+			field.Set(reflect.ValueOf(ptr(mark + "_" + name)))
+		case *int:
+			field.Set(reflect.ValueOf(ptr(len(mark) + i)))
+		case *bool:
+			field.Set(reflect.ValueOf(ptr(mark == "other")))
+		case []string:
+			field.Set(reflect.ValueOf([]string{mark + "_" + name}))
+		default:
+			t.Fatalf("%s is a %s, which this test does not know how to fill: a field it cannot fill is one whose merge nothing here covers", name, field.Type())
+		}
+	}
+	return f
 }
 
 // TestDropInDirThatCannotBeRead covers the drop-in directory that is there and
