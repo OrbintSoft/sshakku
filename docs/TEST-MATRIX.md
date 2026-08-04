@@ -59,25 +59,33 @@ container session around it differs.
 
 | Session | X11 | Wayland | No display |
 | --- | --- | --- | --- |
-| KDE (`ksecretd`/`kwalletd6`) | ✅ `kde.Dockerfile` | ❌ | — |
+| KDE (`ksecretd`/`kwalletd6`) | ❌ | ✅ `kde.Dockerfile`, `SSHAKKU_SESSION_SCRIPT=kde-wayland-session.sh` | ✅ `kde.Dockerfile` |
 | GNOME (`gnome-keyring-daemon`, desktop session) | ✅ `gnome-keyring.Dockerfile` | ❌ | — |
 | GNOME Keyring, headless-daemonized (no session/display at all) | — | — | ❌ |
 | KeePassXC (standalone, any desktop) | ✅ `keepassxc.Dockerfile` | ❌ | — |
 
-KDE/GNOME/KeePassXC's own daemons all need some display (real or virtual)
-to run, hence the `—`s. XFCE has no native provider of its own -- it would
-only ever host GNOME Keyring or KeePassXC, both already rows above -- so it
-isn't listed separately unless a KeePassXC-under-XFCE test is actually
-worth adding later.
+KDE is the one wallet here that needs no display of any kind: PAM opens the
+wallet as part of the login, so ksecretd is never asked to draw anything and
+the round trip runs in a session that has no screen at all. Its two ✅s are the
+same image and the same test, differing only in whether a compositor is started
+around them. Its X11 cell is ❌ and not a `—` because such a session plainly can
+exist — nothing here has ever built one, which is exactly what a ❌ says.
 
-There is a Wayland session to run in now — `wayland.Dockerfile`, sway on
-wlroots' headless backend, with no X server and no Xwayland — and the
-passphrase-prompt rows further down are driven in it. The wallet cells above
-are still ❌ because a wallet needs more than a session: each of these
-daemons has a dialog of its own to answer once (creating a collection,
-unlocking a database), and every one of those is currently answered with
-`xdotool`, which needs an X server. Answering them with `wtype` is what
-those three cells are waiting on, not a missing compositor.
+GNOME Keyring's and KeePassXC's own daemons do need a display, hence their
+`—`s. XFCE has no native provider of its own -- it would only ever host GNOME
+Keyring or KeePassXC, both already rows above -- so it isn't listed separately
+unless a KeePassXC-under-XFCE test is actually worth adding later.
+
+There is a Wayland session to run in now — sway on wlroots' headless backend,
+with no X server and no Xwayland, shared by `wayland.Dockerfile` and any other
+image that starts it — and the passphrase-prompt rows further down are driven
+in it. The two remaining ❌s in the Wayland column need more than a session:
+each of those daemons has a dialog of its own to answer once (creating a
+collection, unlocking a database), and every one of those is currently answered
+by clicking a screen coordinate with `xdotool`, which needs an X server and has
+no Wayland counterpart — the virtual-keyboard protocol `wtype` speaks has no
+pointer in it. Answering them from the keyboard instead is what those two cells
+are waiting on, not a missing compositor.
 
 ## Backend round trips
 
