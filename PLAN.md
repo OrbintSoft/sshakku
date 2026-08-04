@@ -1343,3 +1343,34 @@ The promise is covered on a real terminal on both platforms
 can be asked: anywhere else an empty answer and no answer are the same bytes.
 
 → feature F8; goals 1, 11.
+
+### Phase 19 — A pinentry that cannot draw is not a dialog ✅ Done
+
+The prompter chain asked whether `pinentry` was on PATH, not what it was. GnuPG
+builds several and the distribution picks which one `pinentry` runs; the curses
+and tty builds draw on a terminal. Since pinentry is tried first, a graphical
+session that had one of those lost the dialog to it — and lost it to a prompt
+that appeared nowhere, because a login shell has no terminal for it either. A
+box with kdialog or zenity installed was worse off than before Phase 13.
+
+**Decided (2026-08-04).** pinentry is asked what it can draw with (`GETINFO
+flavor`) rather than guessed at from its name. The answer is a chain, most
+capable first — a GTK build says `gtk2:curses`, meaning it draws with GTK and
+falls back to the console where there is no display — so the first element
+settles it. Only `curses` and `tty` disqualify a build: an answer nobody
+recognises, or none at all, still counts as a dialog, since passing over one
+that works is the worse mistake and one that fails when asked already reaches
+the terminal with its name in the log. Asking waits on no person, so it takes
+`command_timeout` rather than the interactive budget.
+
+Naming such a pinentry is still that one or the terminal, never another dialog
+(F37) — but the log said it was "not installed" on a machine where it was.
+Which reasons a prompter can be unavailable for is now the prompter's own answer:
+kdialog and zenity are either there or not and keep the sentence they had.
+
+Reproduced before it was diagnosed, in an image with a screen, zenity, and
+`pinentry-curses` as the only pinentry: no dialog at any point, and the key
+never loaded. The same image now shows zenity's window and takes what is typed
+into it.
+
+→ features F29, F37; goals 11, 15.
