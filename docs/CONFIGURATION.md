@@ -533,3 +533,36 @@ the terminal (unless `SSHAKKU_QUIET`). It then skips the key in every new shell 
 you open. A later successful load clears the give-up state. The state is per-login
 and lives in tmpfs, so logging out or rebooting clears it; `SSHAKKU_NO_GIVEUP`
 disables it entirely.
+
+## Choosing the dialog you are asked in
+
+Where your session has a screen, SSHakku asks for a passphrase in a dialog
+rather than on a terminal you may not be looking at. Which dialog is normally
+not something you have to say: it uses the first one your desktop has, trying
+`pinentry` (which comes with GnuPG and is drawn with whichever toolkit your
+distribution built it for), then KDE's `kdialog`, then GNOME's `zenity`.
+
+`gui_prompter` decides instead:
+
+```toml
+gui_prompter = "zenity"   # "auto" (default), "pinentry", "kdialog", "zenity", or "none"
+```
+
+`"none"` means you are always asked on the terminal, even sitting at the screen.
+Naming one uses that one and no other — if it is not installed you are asked on
+the terminal, and the session log names it, rather than being handed a dialog
+you did not choose.
+
+On macOS the choice is between `"auto"` (the system's own dialog, drawn through
+`osascript`), `"osascript"`, and `"none"`. A name belonging to another operating
+system is refused, `sshakku config` reports the refusal, and `"auto"` applies.
+
+Where there is no screen at all — logged in over SSH, or booted into single-user
+mode — you are asked on the terminal whatever this setting says, since a dialog
+would have nowhere to appear. A dialog you dismiss is not the same as one that
+could not be shown: dismissing is an answer, and SSHakku gives up on that key
+rather than asking again somewhere else.
+
+This is a config-file key only, like the wallet settings: it decides how you are
+spoken to, and a variable exported in one shell but not the next would ask two
+different ways for no reason you could see.
