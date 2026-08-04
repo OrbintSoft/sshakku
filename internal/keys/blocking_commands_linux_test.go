@@ -6,7 +6,7 @@ import "time"
 
 // platformBlockingTools names the programs only a Linux system runs.
 func platformBlockingTools() []string {
-	return []string{secretToolBin, kdialogBin, "xset"}
+	return []string{secretToolBin, kdialogBin, zenityBin, pinentryBin, "xset"}
 }
 
 // platformBlockingCases adds the programs only a Linux system reaches: the
@@ -26,6 +26,12 @@ func platformBlockingCases(brief time.Duration) []blockingCase {
 		}},
 		{"graphical passphrase prompt (zenity)", func() {
 			_, _ = ZenityPrompter{Runner: ExecRunner{}, Timeout: brief}.Prompt("id_test")
+		}},
+		{"graphical passphrase prompt (pinentry)", func() {
+			_, _ = PinentryPrompter{Timeout: brief}.Prompt("id_test")
+		}},
+		{"which pinentry is installed", func() {
+			PinentryPrompter{ProbeTimeout: brief}.Available()
 		}},
 		{"secret-tool Lookup", func() {
 			_, _, _ = SecretToolBackend{Runner: ExecRunner{}, User: "u", Timeout: brief}.Lookup(defaultServicePrefix + "-id_test")

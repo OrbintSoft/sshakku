@@ -27,7 +27,7 @@ type dialog struct {
 func linuxDialogs(settings config.Settings) []dialog {
 	runner := keys.ExecRunner{Timeout: settings.CommandTimeout}
 	return []dialog{
-		{config.GUIPrompterPinentry, keys.PinentryPrompter{Timeout: settings.InteractiveTimeout}},
+		{config.GUIPrompterPinentry, keys.PinentryPrompter{Timeout: settings.InteractiveTimeout, ProbeTimeout: settings.CommandTimeout}},
 		{config.GUIPrompterKDialog, keys.KDialogPrompter{Runner: runner, Timeout: settings.InteractiveTimeout}},
 		{config.GUIPrompterZenity, keys.ZenityPrompter{Runner: runner, Timeout: settings.InteractiveTimeout}},
 	}
