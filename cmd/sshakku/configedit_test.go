@@ -157,6 +157,74 @@ func TestConfigEditFallsBackToVisual(t *testing.T) {
 	}
 }
 
+// TestConfigEditWithNoEditorNamedAtAll covers the last resort: a user who has
+// set neither variable still gets an editor rather than an error about a
+// variable they have never heard of. Asserted on the choice rather than by
+// running it — vi on this machine would open on the test's own terminal and
+// wait for someone to close it.
+func TestConfigEditWithNoEditorNamedAtAll(t *testing.T) {
+	t.Setenv("EDITOR", "")
+	t.Setenv("VISUAL", "")
+
+	got := editorCommand()
+	if len(got) != 1 || got[0] != fallbackEditor {
+		t.Errorf("editorCommand() = %v, want the fallback %q alone", got, fallbackEditor)
+	}
+}
+
+// TestConfigEditCannotMakeTheDirectoryToEditIn covers what happens when there
+// is nowhere to put the file: the user is told which path could not be made,
+// rather than an editor opening on nothing and their work going somewhere they
+// will never find it again.
+func TestConfigEditCannotMakeTheDirectoryToEditIn(t *testing.T) {
+	home := tempRuntimeEnv(t)
+	// A regular file where the configuration directory's parent belongs: no
+	// directory can be made underneath it, whoever is running.
+	if err := os.WriteFile(filepath.Join(home, ".config"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	useEditor(t, "")
+
+	_, errOut, code := runConfigEdit(t)
+	if code != 1 {
+		t.Fatalf("exit = %d, want 1 when the directory could not be made", code)
+	}
+	// The directory is what could not be made, and naming the file inside it
+	// instead would send the user looking at the wrong thing.
+	if !strings.Contains(errOut, filepath.Join(home, ".config", "sshakku")) {
+		t.Errorf("stderr %q does not name the directory that could not be made", errOut)
+	}
+	if strings.Contains(errOut, "config.toml") {
+		t.Errorf("stderr %q blames the file, but it is the directory under it that could not be made", errOut)
+	}
+}
+
+// TestConfigEditCannotWriteTheFileToEdit covers the other half of the same
+// promise: the directory is there but the file cannot be written, and the user
+// is told so instead of being handed an editor on a file that does not exist.
+func TestConfigEditCannotWriteTheFileToEdit(t *testing.T) {
+	home := tempRuntimeEnv(t)
+	dir := filepath.Join(home, ".config", "sshakku")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// config.toml is a symlink to a path in a directory that is not there: it
+	// is not a file that exists, and it cannot be created either — a failure
+	// that does not depend on who is running the test, unlike a permission.
+	if err := os.Symlink(filepath.Join(dir, "gone", "config.toml"), filepath.Join(dir, "config.toml")); err != nil {
+		t.Fatal(err)
+	}
+	useEditor(t, "")
+
+	_, errOut, code := runConfigEdit(t)
+	if code != 1 {
+		t.Fatalf("exit = %d, want 1 when the file could not be created", code)
+	}
+	if !strings.Contains(errOut, "config.toml") {
+		t.Errorf("stderr %q does not name the file it could not create", errOut)
+	}
+}
+
 // useEditor points $EDITOR at the stand-in under testdata: a real program,
 // exec'd by SSHakku like any editor, which records what it was asked to open
 // and saves body over it (empty body leaves the file untouched). It returns the

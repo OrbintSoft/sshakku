@@ -53,6 +53,31 @@ func TestEnumeratorMissingDir(t *testing.T) {
 	}
 }
 
+// TestDefaultKeyPatternsIsTheRuleAndCannotBeChanged covers the naming rule a
+// caller has to state rather than apply — F34's report shows what is in force,
+// and "nothing" is not what is in force when no patterns are configured. It is
+// handed out by value: a caller that edits what it was given must not change
+// what the next one is told, or the report and the enumerator come to disagree
+// about a rule neither of them was configured with.
+func TestDefaultKeyPatternsIsTheRuleAndCannotBeChanged(t *testing.T) {
+	got := DefaultKeyPatterns()
+	if len(got) == 0 {
+		t.Fatal("DefaultKeyPatterns() = empty, want the rule that applies when nobody names one")
+	}
+
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "id_rsa"))
+	keys, err := Enumerator{Dir: dir, Patterns: got}.Keys()
+	if err != nil || len(keys) != 1 {
+		t.Fatalf("keys = %v (%v), want the rule to match what the enumerator matches with no patterns at all", keys, err)
+	}
+
+	got[0] = "changed"
+	if again := DefaultKeyPatterns(); again[0] == "changed" {
+		t.Errorf("DefaultKeyPatterns() = %v after a caller edited what it was given, want the rule unchanged", again)
+	}
+}
+
 func writeFile(t *testing.T, path string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte("x"), 0o600); err != nil {

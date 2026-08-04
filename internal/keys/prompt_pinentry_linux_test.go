@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"errors"
 	"io"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -212,3 +213,33 @@ func TestPinentryConversationEndsWhenItCannotBeWrittenTo(t *testing.T) {
 type closedPipe struct{}
 
 func (closedPipe) Write([]byte) (int, error) { return 0, io.ErrClosedPipe }
+
+// TestPinentryConversationWithNoPipesToTalkOver covers what happens when the
+// conversation cannot be opened at all: the caller is told, and no dialog is
+// left running with nobody reading it. Neither failure can be produced from
+// outside — exec.Cmd refuses these pipes only for a command that is already
+// wired up or already started — so the pipes are taken through a seam the way
+// the terminal is elsewhere in this package.
+func TestPinentryConversationWithNoPipesToTalkOver(t *testing.T) {
+	saved := func(t *testing.T) {
+		t.Helper()
+		in, out := stdinPipe, stdoutPipe
+		t.Cleanup(func() { stdinPipe, stdoutPipe = in, out })
+	}
+
+	t.Run("nothing to write to", func(t *testing.T) {
+		saved(t)
+		stdinPipe = func(*exec.Cmd) (io.WriteCloser, error) { return nil, errors.New("stdin already set") }
+		if _, err := (PinentryPrompter{Bin: fakePinentry}).Prompt("id_rsa"); err == nil {
+			t.Fatal("Prompt returned no error, want the one that stopped the conversation being opened")
+		}
+	})
+
+	t.Run("nothing to read from", func(t *testing.T) {
+		saved(t)
+		stdoutPipe = func(*exec.Cmd) (io.ReadCloser, error) { return nil, errors.New("stdout already set") }
+		if _, err := (PinentryPrompter{Bin: fakePinentry}).Prompt("id_rsa"); err == nil {
+			t.Fatal("Prompt returned no error, want the one that stopped the conversation being opened")
+		}
+	})
+}

@@ -1399,3 +1399,38 @@ the suite, so the next setting added without a merge clause cannot disappear
 the same way.
 
 → features F21, F35; open decision 24.
+
+### Phase 21 — Closing the prompt is an answer ✅ Done
+
+Closing a passphrase dialog without answering was user-visible behaviour with no
+feature id: it existed as an error value in the code and a sentence in a commit
+message, so no test could be derived from it and nothing had to keep agreeing
+with it. F38 states it now, and two things it says were not true.
+
+A dismissed dialog abandoned that key and went on to the next, so a login with
+three keys still meant three windows after the first was shut — the gesture that
+means "not now" everywhere else bought nothing. And it was logged at ERROR, which
+`doctor` tails back to the user, so a deliberate choice was shown to them as
+something the product got wrong.
+
+**Decided (2026-08-04)**: configurable, because both readings are defensible and
+neither is discoverable from the other. `on_dismiss` is config-file only like the
+dialog it answers: `"stop"` (the default) asks about no further key that login,
+`"skip"` turns down that key alone, `"retry"` treats the dismissal as a wrong
+answer and ends at the ordinary give-up. Whichever applies, nothing is stored and
+no key is given up — the next login shell asks again from the first key.
+
+Ctrl-D at a terminal prompt is the same gesture, decided at the same time. It
+reached the loader as an ordinary read failure, so a person who pressed a key on
+purpose was told `could not load key id_test: EOF`. `ReadTTYLine` now answers the
+refusal, so every question SSHakku asks on a terminal inherits it — but only for
+input that ended, never for a read that failed, since a terminal letting the user
+down is not the user declining.
+
+**Verified by running it** (rule 25): the real binary in a disposable image with
+a display server and three keys, five rounds, plus the live-terminal half on a
+real pseudo-terminal. See the two F38 rows in `docs/TEST-MATRIX.md`. What no run
+here covers is a person closing a real dialog on macOS, which is the same gap the
+graphical-prompt rows already record.
+
+→ features F8, F21, F29, F35, F37, F38; open decision 24.

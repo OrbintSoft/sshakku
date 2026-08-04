@@ -292,11 +292,106 @@ func TestLoadKeysPromptCanceled(t *testing.T) {
 	if len(adder.calls) != 0 {
 		t.Fatalf("a canceled prompt must not add, got %d", len(adder.calls))
 	}
-	if !log.contains("canceled") {
-		t.Fatalf("expected a canceled log, got %v", log.lines)
+	if !log.contains("dismissed") {
+		t.Fatalf("expected a dismissed log, got %v", log.lines)
+	}
+	// F38: turning the question down is an answer, so nothing in the session
+	// log reads as something having gone wrong with the product.
+	for _, line := range log.lines {
+		if strings.HasPrefix(line, "ERROR") {
+			t.Fatalf("a dismissed prompt must never log at ERROR, got %v", log.lines)
+		}
 	}
 	if len(notifier.msgs) != 0 {
-		t.Fatalf("a canceled prompt must not notify, got %v", notifier.msgs)
+		t.Fatalf("a dismissed prompt must not notify, got %v", notifier.msgs)
+	}
+}
+
+// TestLoadKeysDismissedDialogEndsTheAsking verifies F38: closing a passphrase
+// dialog without answering ends the asking for the rest of that login, so
+// shutting one window a user never asked for does not leave them with one more
+// of them per key. Nothing is added, nobody is told of a failure, and no key is
+// given up — the next login shell asks again from the first key.
+func TestLoadKeysDismissedDialogEndsTheAsking(t *testing.T) {
+	r := newFakeRunner().on("ssh-add", agentEmpty()).on("ssh-keygen", keygen("SHA256:NEW"))
+	prompter := &fakePrompter{err: ErrPromptCanceled}
+	adder := &fakeKeyAdder{}
+	notifier := &fakeNotifier{}
+	give := newFakeGiveup()
+	l := Loader{
+		Keys:   fakeLister{paths: []string{"/ssh/id_one", "/ssh/id_two", "/ssh/id_three"}},
+		Runner: r, Secret: &fakeSecret{}, Prompt: prompter, Adder: adder, Log: &fakeLogger{},
+		Notify: notifier, Giveup: give, Config: Config{},
+	}
+	if err := l.LoadKeys(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(prompter.calls) != 1 || prompter.calls[0] != "id_one" {
+		t.Fatalf("asked for %v, want id_one alone: a dismissed dialog ends the asking", prompter.calls)
+	}
+	if len(adder.calls) != 0 {
+		t.Fatalf("a dismissed dialog must not add, got %d", len(adder.calls))
+	}
+	if len(notifier.msgs) != 0 {
+		t.Fatalf("a dismissed dialog is not a failure and must not notify, got %v", notifier.msgs)
+	}
+	if len(give.recorded) != 0 {
+		t.Fatalf("a dismissed dialog must give up on no key, got %v", give.recorded)
+	}
+}
+
+// TestLoadKeysDismissedDialogSkipsOnlyThatKey verifies the "skip" half of F38:
+// a user who would rather turn down one key and still be asked about the others
+// says so, and is asked about every one of them.
+func TestLoadKeysDismissedDialogSkipsOnlyThatKey(t *testing.T) {
+	r := newFakeRunner().on("ssh-add", agentEmpty()).on("ssh-keygen", keygen("SHA256:NEW"))
+	prompter := &fakePrompter{err: ErrPromptCanceled}
+	notifier := &fakeNotifier{}
+	give := newFakeGiveup()
+	l := Loader{
+		Keys:   fakeLister{paths: []string{"/ssh/id_one", "/ssh/id_two", "/ssh/id_three"}},
+		Runner: r, Secret: &fakeSecret{}, Prompt: prompter, Adder: &fakeKeyAdder{}, Log: &fakeLogger{},
+		Notify: notifier, Giveup: give, Config: Config{OnDismiss: OnDismissSkip},
+	}
+	if err := l.LoadKeys(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(prompter.calls) != 3 {
+		t.Fatalf("asked for %v, want all three: skip turns down one key, not the rest", prompter.calls)
+	}
+	if len(give.recorded) != 0 {
+		t.Fatalf("a dismissed dialog must give up on no key, got %v", give.recorded)
+	}
+	if len(notifier.msgs) != 0 {
+		t.Fatalf("a dismissed dialog is not a failure and must not notify, got %v", notifier.msgs)
+	}
+}
+
+// TestLoadKeysDismissedDialogCountsAsAWrongAnswer verifies the "retry" half of
+// F38: the dismissal is treated as a wrong answer, so the same key is asked
+// about until the attempts run out and it then ends the way F8 says a key that
+// never opened ends — told once, and left alone.
+func TestLoadKeysDismissedDialogCountsAsAWrongAnswer(t *testing.T) {
+	r := newFakeRunner().on("ssh-add", agentEmpty()).on("ssh-keygen", keygen("SHA256:NEW"))
+	prompter := &fakePrompter{err: ErrPromptCanceled}
+	notifier := &fakeNotifier{}
+	give := newFakeGiveup()
+	l := Loader{
+		Keys:   fakeLister{paths: []string{"/ssh/id_rsa"}},
+		Runner: r, Secret: &fakeSecret{}, Prompt: prompter, Adder: &fakeKeyAdder{}, Log: &fakeLogger{},
+		Notify: notifier, Giveup: give, Config: Config{MaxAttempts: 3, OnDismiss: OnDismissRetry},
+	}
+	if err := l.LoadKeys(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(prompter.calls) != 3 {
+		t.Fatalf("asked %d times, want 3: a dismissal counts as a wrong answer", len(prompter.calls))
+	}
+	if len(give.recorded) != 1 || give.recorded[0] != "id_rsa" {
+		t.Fatalf("recorded = %v, want id_rsa given up once the attempts ran out", give.recorded)
+	}
+	if len(notifier.msgs) != 1 || !strings.Contains(notifier.msgs[0], "could not load key id_rsa") {
+		t.Fatalf("expected one give-up notice, got %v", notifier.msgs)
 	}
 }
 

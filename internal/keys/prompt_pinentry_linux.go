@@ -23,6 +23,15 @@ const pinentryBin = "pinentry"
 // ask, but not where someone sitting at a screen is looking.
 var consoleFlavors = map[string]bool{"curses": true, "tty": true}
 
+// Seams over the pipes a conversation runs on. Production takes the ones
+// exec.Cmd makes; a test points them at a failure, which nothing else can —
+// exec.Cmd refuses these only for a command whose streams are already set or
+// that has already been started, and the one here is neither.
+var (
+	stdinPipe  = func(cmd *exec.Cmd) (io.WriteCloser, error) { return cmd.StdinPipe() }
+	stdoutPipe = func(cmd *exec.Cmd) (io.ReadCloser, error) { return cmd.StdoutPipe() }
+)
+
 // The Assuan error codes a dismissed dialog reports. Only the low 16 bits of an
 // error number are the code itself; the rest names the component that raised it.
 const (
@@ -79,11 +88,11 @@ func (p PinentryPrompter) converse(timeout time.Duration, ask func(*assuanConv) 
 	// and the read would outlast the budget by however long that child lives.
 	cmd.WaitDelay = commandWaitDelay
 	boundToProcessGroup(cmd)
-	stdin, err := cmd.StdinPipe()
+	stdin, err := stdinPipe(cmd)
 	if err != nil {
 		return "", err
 	}
-	stdout, err := cmd.StdoutPipe()
+	stdout, err := stdoutPipe(cmd)
 	if err != nil {
 		return "", err
 	}
