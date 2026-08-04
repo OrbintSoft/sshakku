@@ -47,6 +47,18 @@ jobs:
       - name: Run make test in ${{ matrix.name }}
         run: docker run --init --rm -v "${{ github.workspace }}":/src:ro sshakku-test-desktop-stack-${{ matrix.name }} make test
 
+      # The same wallet reached from a login with a screen and no X server. The
+      # image and the test are the ones the step above already ran: what is
+      # being varied is the session around them, so a difference in the result
+      # could only come from the session.
+      - name: Run the KDE round trip in a Wayland session
+        if: matrix.name == 'kde'
+        run: >
+          docker run --init --rm -v "${{ github.workspace }}":/src:ro
+          -e SSHAKKU_SESSION_SCRIPT=kde-wayland-session.sh
+          sshakku-test-desktop-stack-kde
+          go test ./internal/keys -run TestSecretServiceBackendRealDaemon -count=1 -v
+
       # Where a user is asked for a passphrase on a Wayland desktop, driven
       # through the real binary in a session with a screen and no controlling
       # terminal. The image's own dialogs are what make it worth running: its

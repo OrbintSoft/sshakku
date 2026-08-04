@@ -1,7 +1,11 @@
 #!/bin/bash
 # Container entrypoint, run as root: creates the disposable test account and
-# PAM service ksecretd's non-interactive unlock needs, then hands off to
-# kde-session.sh (as that account) to actually drive the test command.
+# PAM service ksecretd's non-interactive unlock needs, then hands off to a
+# session script (as that account) to actually drive the test command.
+#
+# Which session script decides what the wallet is reached from: a login with no
+# display at all by default, or one with a screen and no X server when
+# SSHAKKU_SESSION_SCRIPT names that one instead.
 set -euo pipefail
 
 readonly TEST_USER="sshakku-kde-test"
@@ -11,6 +15,7 @@ readonly PAM_SERVICE="sshakku-kde-desktop-stack"
 readonly RUNTIME_DIR="/run/user/${TEST_UID}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly SCRIPT_DIR
+readonly SESSION_SCRIPT="${SSHAKKU_SESSION_SCRIPT:-kde-session.sh}"
 
 # ksecretd (a Qt app) and the D-Bus session bus both refuse to start without
 # a valid, non-empty machine ID.
@@ -43,4 +48,4 @@ exec runuser -u "${TEST_USER}" -- env -i \
 	SSHAKKU_TEST_ALLOW_REAL_SECRETSERVICE="1" \
 	SSHAKKU_TEST_KDE_PASSWORD="${TEST_PASSWORD}" \
 	SSHAKKU_TEST_KDE_PAM_SERVICE="${PAM_SERVICE}" \
-	"${SCRIPT_DIR}/kde-session.sh" "$@"
+	"${SCRIPT_DIR}/${SESSION_SCRIPT}" "$@"
