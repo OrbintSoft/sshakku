@@ -147,6 +147,57 @@ func TestConfigRefusesArgumentsItDoesNotKnow(t *testing.T) {
 	}
 }
 
+// TestConfigNamesAFileItCouldNotRead covers the half of F35 about the files
+// rather than the settings: one that no longer parses is listed with its own
+// error beside its name, so a user with a directory full of drop-ins is not
+// left to work out which of them was skipped — while every file that still
+// reads goes on applying.
+func TestConfigNamesAFileItCouldNotRead(t *testing.T) {
+	home := tempRuntimeEnv(t)
+	writeConfig(t, home, "config.toml", "key_lifetime = \"3h\"\n")
+	writeConfig(t, home, "config.d/70-stray.toml", "key_lifetime = \n")
+
+	out, _, code := runConfig(t)
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0: a file that cannot be read is reported, not fatal", code)
+	}
+
+	listed := ""
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "70-stray.toml") {
+			listed = line
+			break
+		}
+	}
+	if listed == "" {
+		t.Fatalf("the file that could not be read is not named at all:\n%s", out)
+	}
+	if !strings.Contains(listed, "(") {
+		t.Errorf("%q names the file without saying what was wrong with it", listed)
+	}
+	if line := settingLine(t, out, "key_lifetime"); !strings.Contains(line, "3h") {
+		t.Errorf("%q: the readable file stopped applying because another one could not be read", line)
+	}
+}
+
+// TestConfigRelativeKeepsAPathItCannotShorten covers the fallback in the naming
+// of files: the report names the directory once and each file relative to it,
+// but a path that is not inside that directory is printed whole — a relative
+// path climbing out of it says less than the path it came from.
+func TestConfigRelativeKeepsAPathItCannotShorten(t *testing.T) {
+	dir := filepath.Join("home", "someone", ".config", "sshakku")
+
+	inside := filepath.Join(dir, "config.d", "50-work.toml")
+	if got, want := configRelative(dir, inside), filepath.Join("config.d", "50-work.toml"); got != want {
+		t.Errorf("configRelative(inside) = %q, want %q", got, want)
+	}
+
+	outside := filepath.Join("etc", "sshakku", "config.toml")
+	if got := configRelative(dir, outside); got != outside {
+		t.Errorf("configRelative(outside) = %q, want the path itself, %q", got, outside)
+	}
+}
+
 // TestConfigReportsAFailedWrite covers the report that could not be delivered:
 // a command whose whole output failed must not exit 0, or a caller redirecting
 // it to a full disk is told everything went well.
