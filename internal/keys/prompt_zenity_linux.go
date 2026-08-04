@@ -7,12 +7,12 @@ import (
 	"time"
 )
 
-// kdialogBin is KDE's dialog tool.
-const kdialogBin = "kdialog"
+// zenityBin is GNOME's dialog tool, the one a GTK desktop is likely to have.
+const zenityBin = "zenity"
 
-// KDialogPrompter prompts via `kdialog --password`. The entered text is returned
+// ZenityPrompter prompts via `zenity --password`. The entered text is returned
 // on stdout; a canceled or closed dialog exits non-zero.
-type KDialogPrompter struct {
+type ZenityPrompter struct {
 	Runner Runner
 	// Timeout bounds the dialog. It is a person's budget, not a machine's, but
 	// still finite: a dialog nobody answers must not strand the shell that
@@ -24,14 +24,16 @@ type KDialogPrompter struct {
 }
 
 // Prompt shows the password dialog for keyname.
-func (p KDialogPrompter) Prompt(keyname string) (string, error) {
+func (p ZenityPrompter) Prompt(keyname string) (string, error) {
 	timeout := p.Timeout
 	if timeout <= 0 {
 		timeout = DefaultInteractiveTimeout
 	}
 	res, err := p.Runner.Run(Cmd{
-		Name:    kdialogBin,
-		Args:    []string{"--password", "Enter passphrase for " + keyname},
+		Name: zenityBin,
+		// zenity has no argument for the text above the field, so the key being
+		// asked about goes in the title, which is the only place it can be read.
+		Args:    []string{"--password", "--title", "Enter passphrase for " + keyname},
 		Timeout: timeout,
 	})
 	if err != nil {
@@ -44,16 +46,16 @@ func (p KDialogPrompter) Prompt(keyname string) (string, error) {
 }
 
 // Name is what to call this prompter in a message.
-func (p KDialogPrompter) Name() string { return kdialogBin }
+func (p ZenityPrompter) Name() string { return zenityBin }
 
-// Available reports whether kdialog is on PATH.
-func (p KDialogPrompter) Available() bool {
+// Available reports whether zenity is on PATH.
+func (p ZenityPrompter) Available() bool {
 	look := p.lookPath
 	if look == nil {
 		look = execLookPath
 	}
-	_, err := look(kdialogBin)
+	_, err := look(zenityBin)
 	return err == nil
 }
 
-var _ Prompter = KDialogPrompter{}
+var _ Prompter = ZenityPrompter{}

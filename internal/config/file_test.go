@@ -196,6 +196,7 @@ func TestResolveDefaults(t *testing.T) {
 		// No route named means SSHakku chooses one per platform; only this
 		// value ever falls back.
 		KeePassXCRoute: KeePassXCRouteAuto,
+		GUIPrompter:    GUIPrompterAuto,
 	}
 	if !reflect.DeepEqual(s, want) {
 		t.Errorf("Resolve(empty) = %+v, want %+v", s, want)
@@ -229,6 +230,7 @@ func TestResolveFileWins(t *testing.T) {
 		SecretBackend:      platformDefaultSecretBackend,
 		ServicePrefix:      keys.DefaultServicePrefix,
 		KeePassXCRoute:     KeePassXCRouteAuto,
+		GUIPrompter:        GUIPrompterAuto,
 	}
 	if !reflect.DeepEqual(s, want) {
 		t.Errorf("Resolve(file) = %+v, want %+v", s, want)
@@ -606,5 +608,40 @@ func TestResolveMalformedEnvDurationReportsAndDefaults(t *testing.T) {
 	}
 	if s.KeyLifetime != DefaultKeyLifetime {
 		t.Errorf("KeyLifetime = %v, want the default on a malformed value", s.KeyLifetime)
+	}
+}
+
+// TestResolveGUIPrompterFrom covers the rule both platforms share, against each
+// platform's table: the tables differ, what is done with them does not, so both
+// answers stay checkable from either machine.
+func TestResolveGUIPrompterFrom(t *testing.T) {
+	linux := []string{GUIPrompterAuto, GUIPrompterNone, "pinentry", "kdialog"}
+	darwin := []string{GUIPrompterAuto, GUIPrompterNone, "osascript"}
+
+	cases := []struct {
+		name      string
+		val       *string
+		available []string
+		want      string
+		wantErr   bool
+	}{
+		{"unset means auto", nil, linux, GUIPrompterAuto, false},
+		{"empty means auto", ptr(""), linux, GUIPrompterAuto, false},
+		{"a dialog this system has", ptr("kdialog"), linux, "kdialog", false},
+		{"refusing a dialog", ptr(GUIPrompterNone), linux, GUIPrompterNone, false},
+		{"the other system's dialog", ptr("osascript"), linux, GUIPrompterAuto, true},
+		{"and the other way round", ptr("kdialog"), darwin, GUIPrompterAuto, true},
+		{"a typo", ptr("pinetry"), linux, GUIPrompterAuto, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, err := resolveGUIPrompterFrom(c.val, c.available)
+			if got != c.want {
+				t.Errorf("resolveGUIPrompterFrom = %q, want %q", got, c.want)
+			}
+			if (err != nil) != c.wantErr {
+				t.Errorf("error = %v, want error: %v", err, c.wantErr)
+			}
+		})
 	}
 }

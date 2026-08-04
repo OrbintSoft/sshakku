@@ -10,18 +10,14 @@ type GUIEnv struct {
 	Display        string // $DISPLAY
 }
 
-// GUIAvailable reports whether a graphical passphrase prompt can be shown: a
-// usable graphical session AND an installed prompter. When it is false the loader
-// falls back to letting ssh-add prompt on the terminal.
-func GUIAvailable(env GUIEnv, r Runner, p Prompter) bool {
-	return hasGraphicalSession(env, r) && p.Available()
-}
-
-// hasGraphicalSession reports whether a display server is reachable: a Wayland
+// HasGraphicalSession reports whether a display server is reachable: a Wayland
 // compositor advertised by WAYLAND_DISPLAY, or an X server that answers `xset q`.
 // Checking xset (rather than DISPLAY alone) rejects a stale DISPLAY pointing at a
 // dead server; a missing xset binary is treated as no X session.
-func hasGraphicalSession(env GUIEnv, r Runner) bool {
+//
+// It answers only whether there is a screen. Whether anything is installed to
+// draw a dialog on it is a separate question, asked of the dialogs themselves.
+func HasGraphicalSession(env GUIEnv, r Runner) bool {
 	if env.WaylandDisplay != "" {
 		return true
 	}

@@ -274,7 +274,7 @@ print-paths:
 # the former belong to shellcheck; the rest are linted by the tool for their own
 # format (config files by taplo, via lint-toml).
 BATS_FIXTURES = $(filter-out %.toml,$(wildcard test/bats/fixtures/*))
-SH_SCRIPTS = $(wildcard *.sh) $(wildcard .githooks/*) $(wildcard .github/scripts/*.sh) $(wildcard test/*.sh) $(wildcard test/containers/*.sh) $(wildcard test/bats/*.bats) $(wildcard test/bats/*.bash) $(wildcard cmd/*/testdata/*.sh) $(BATS_FIXTURES)
+SH_SCRIPTS = $(wildcard *.sh) $(wildcard .githooks/*) $(wildcard .github/scripts/*.sh) $(wildcard test/*.sh) $(wildcard test/containers/*.sh) $(wildcard test/fakes/*.sh) $(wildcard test/bats/*.bats) $(wildcard test/bats/*.bash) $(wildcard cmd/*/testdata/*.sh) $(BATS_FIXTURES)
 ZSH_SCRIPTS = $(wildcard *.zsh)
 DOCKERFILES = $(wildcard test/containers/*.Dockerfile)
 

@@ -1061,7 +1061,7 @@ configuration its own way describes something no other command acts on.
 
 → goals 8, 11, 15; open decisions 7, 12.
 
-### Phase 13 — Cross-platform GUI passphrase prompt
+### Phase 13 — Cross-platform GUI passphrase prompt ✅ Done
 
 Today the only graphical passphrase prompter is `KDialogPrompter` (kdialog,
 KDE). On GNOME without kdialog, and on macOS always, the key-passphrase prompt
@@ -1096,7 +1096,17 @@ phase starts.
   licences do not affect EUPL compatibility or relicensing; recorded as
   runtime-invoked tools.
 
-→ goals 11, 15; open decision 7.
+**Done (2026-08-04).** The chain is pinentry → kdialog → zenity → terminal, not
+pinentry → terminal: dropping straight to the terminal where kdialog is
+installed and pinentry is not would have taken the dialog away from the one
+desktop that already had it. `gui_prompter` accepts what each platform can
+actually draw with, per-platform tables read by a platform-neutral rule, and a
+name that cannot mean anything there is refused like any other bad value.
+Verified with the real binary in a disposable image with a screen and no KDE
+tooling, against the previous build for comparison: no dialog appeared there at
+any point, a dialog titled SSHakku appears now.
+
+→ feature F29, F37; goals 11, 15; open decision 7.
 
 ### Phase 14 — Un-gate the askpass broker ✅ Done
 

@@ -76,6 +76,12 @@ type File struct {
 	KeePassXCRoute    *string `toml:"keepassxc_route"`
 	KeePassXCDatabase *string `toml:"keepassxc_database"`
 	KeePassXCKeyFile  *string `toml:"keepassxc_key_file"`
+
+	// GUIPrompter names the dialog a passphrase is asked for in. It is
+	// config-file only for the reason the wallet choice is: it decides how the
+	// user is spoken to, and a variable exported in one shell and not the next
+	// would ask two different ways for no reason the user could see.
+	GUIPrompter *string `toml:"gui_prompter"`
 }
 
 // Settings is the configuration resolved from environment, file, and defaults.
@@ -144,6 +150,12 @@ type Settings struct {
 	// already opened it.
 	KeePassXCDatabase string
 	KeePassXCKeyFile  string
+
+	// GUIPrompter is the dialog to ask in; one of the GUIPrompter* constants.
+	// "auto" lets SSHakku use whichever the session has, "none" refuses a
+	// dialog outright, and any other value names one and only that one — a
+	// prompter that cannot run is never swapped for a different dialog.
+	GUIPrompter string
 }
 
 // Wallet-store policy modes for Settings.WalletStoreMode.
@@ -191,6 +203,18 @@ const (
 	KeePassXCRouteNative = "native"
 	// KeePassXCRouteCLI runs keepassxc-cli against the database file.
 	KeePassXCRouteCLI = "cli"
+)
+
+// Prompter choices for Settings.GUIPrompter that mean the same thing on every
+// system, because they name no program at all. The dialogs themselves are
+// declared beside the platform that can have them, in prompters_linux.go and
+// prompters_darwin.go, along with the list of what can be chosen here.
+const (
+	// GUIPrompterAuto uses whichever dialog the session turns out to have.
+	GUIPrompterAuto = "auto"
+	// GUIPrompterNone refuses a dialog: the passphrase is asked for on the
+	// terminal even where there is a screen to show one on.
+	GUIPrompterNone = "none"
 )
 
 // StoresWallet reports whether keyname's passphrase should be persisted to the
@@ -331,6 +355,9 @@ func (f File) Merge(other File) File {
 	if other.KeyPatterns != nil {
 		merged.KeyPatterns = other.KeyPatterns
 	}
+	if other.GUIPrompter != nil {
+		merged.GUIPrompter = other.GUIPrompter
+	}
 	if other.SecretBackend != nil {
 		merged.SecretBackend = other.SecretBackend
 	}
@@ -467,6 +494,10 @@ func Resolve(file File, lookup func(string) (string, bool)) (Settings, []error) 
 	s.KeePassXCRoute = route
 	s.KeePassXCDatabase = derefString(file.KeePassXCDatabase)
 	s.KeePassXCKeyFile = derefString(file.KeePassXCKeyFile)
+
+	prompter, err := resolveGUIPrompter(file.GUIPrompter)
+	errs = refused(errs, "gui_prompter", err)
+	s.GUIPrompter = prompter
 
 	return s, errs
 }
@@ -636,6 +667,31 @@ func resolveSecretBackendFrom(fileVal *string, available []string, fallback stri
 		}
 	}
 	return fallback, fmt.Errorf("secret_backend %q is not a wallet this system has, using %q", *fileVal, fallback)
+}
+
+// resolveGUIPrompter picks the dialog to ask in.
+func resolveGUIPrompter(fileVal *string) (string, error) {
+	return resolveGUIPrompterFrom(fileVal, platformGUIPrompters)
+}
+
+// resolveGUIPrompterFrom is the choice itself, with the dialogs this system can
+// have taken as an argument so every platform's answer can be checked from any
+// of them — the table is per-platform, the rule is not.
+//
+// An absent or empty value means "auto". A name no dialog here answers to is a
+// mistake in the configuration rather than a dialog waiting to be installed —
+// naming macOS's on Linux can never come true — so it is reported and "auto"
+// applies, which leaves the user asked rather than unasked.
+func resolveGUIPrompterFrom(fileVal *string, available []string) (string, error) {
+	if fileVal == nil || *fileVal == "" {
+		return GUIPrompterAuto, nil
+	}
+	for _, name := range available {
+		if *fileVal == name {
+			return *fileVal, nil
+		}
+	}
+	return GUIPrompterAuto, fmt.Errorf("gui_prompter %q is not a dialog this system has, using %q", *fileVal, GUIPrompterAuto)
 }
 
 // resolveKeePassXCRoute is config-file only, like the backend choice it

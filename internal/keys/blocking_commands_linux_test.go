@@ -19,10 +19,13 @@ func platformBlockingTools() []string {
 func platformBlockingCases(brief time.Duration) []blockingCase {
 	return []blockingCase{
 		{"GUI detection (xset)", func() {
-			GUIAvailable(GUIEnv{Display: ":0"}, ExecRunner{}, KDialogPrompter{})
+			HasGraphicalSession(GUIEnv{Display: ":0"}, ExecRunner{})
 		}},
 		{"graphical passphrase prompt (kdialog)", func() {
 			_, _ = KDialogPrompter{Runner: ExecRunner{}, Timeout: brief}.Prompt("id_test")
+		}},
+		{"graphical passphrase prompt (zenity)", func() {
+			_, _ = ZenityPrompter{Runner: ExecRunner{}, Timeout: brief}.Prompt("id_test")
 		}},
 		{"secret-tool Lookup", func() {
 			_, _, _ = SecretToolBackend{Runner: ExecRunner{}, User: "u", Timeout: brief}.Lookup(defaultServicePrefix + "-id_test")
