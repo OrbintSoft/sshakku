@@ -300,6 +300,39 @@ func TestLoadKeysPromptCanceled(t *testing.T) {
 	}
 }
 
+// TestLoadKeysDismissedDialogEndsTheAsking verifies F38: closing a passphrase
+// dialog without answering ends the asking for the rest of that login, so
+// shutting one window a user never asked for does not leave them with one more
+// of them per key. Nothing is added, nobody is told of a failure, and no key is
+// given up — the next login shell asks again from the first key.
+func TestLoadKeysDismissedDialogEndsTheAsking(t *testing.T) {
+	r := newFakeRunner().on("ssh-add", agentEmpty()).on("ssh-keygen", keygen("SHA256:NEW"))
+	prompter := &fakePrompter{err: ErrPromptCanceled}
+	adder := &fakeKeyAdder{}
+	notifier := &fakeNotifier{}
+	give := newFakeGiveup()
+	l := Loader{
+		Keys:   fakeLister{paths: []string{"/ssh/id_one", "/ssh/id_two", "/ssh/id_three"}},
+		Runner: r, Secret: &fakeSecret{}, Prompt: prompter, Adder: adder, Log: &fakeLogger{},
+		Notify: notifier, Giveup: give, Config: Config{},
+	}
+	if err := l.LoadKeys(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(prompter.calls) != 1 || prompter.calls[0] != "id_one" {
+		t.Fatalf("asked for %v, want id_one alone: a dismissed dialog ends the asking", prompter.calls)
+	}
+	if len(adder.calls) != 0 {
+		t.Fatalf("a dismissed dialog must not add, got %d", len(adder.calls))
+	}
+	if len(notifier.msgs) != 0 {
+		t.Fatalf("a dismissed dialog is not a failure and must not notify, got %v", notifier.msgs)
+	}
+	if len(give.recorded) != 0 {
+		t.Fatalf("a dismissed dialog must give up on no key, got %v", give.recorded)
+	}
+}
+
 // TestLoadKeysNoGUIStillUsesVault confirms the proactive loader consults the
 // secret backend regardless of any graphical prompter being available — a
 // headless interactive session with a CLI-only backend (op, bw) must still
