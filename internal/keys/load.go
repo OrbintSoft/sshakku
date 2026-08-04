@@ -98,7 +98,25 @@ type Config struct {
 	// (mirroring ExecKeyAdder.KeyLifetime, which actually enforces it); the
 	// Loader only needs it to record what it asked for in KeyState.
 	KeyLifetime time.Duration
+	// OnDismiss is what closing a passphrase prompt without answering means
+	// for the keys that come after it: one of the OnDismiss* values, with ""
+	// meaning OnDismissStop.
+	OnDismiss string
 }
+
+// What closing a passphrase prompt without answering means, for Config.OnDismiss.
+// Whichever applies, the dismissal itself stores nothing and gives up on no key:
+// the next login shell asks again from the first key.
+const (
+	// OnDismissStop asks about no further key for the rest of the session, so
+	// shutting one window does not leave the user with one more per key.
+	OnDismissStop = "stop"
+	// OnDismissSkip turns down that key alone and goes on asking about the rest.
+	OnDismissSkip = "skip"
+	// OnDismissRetry treats the dismissal as a wrong answer: the same key is
+	// asked about again until the attempts run out.
+	OnDismissRetry = "retry"
+)
 
 // Loader loads the user's keys into the agent, skipping any already present and
 // pulling passphrases from the secret store (or prompting) when needed.
@@ -152,7 +170,9 @@ func (l Loader) LoadKeys() error {
 	}
 
 	for _, keyfile := range keyfiles {
-		l.loadOne(keyfile, loaded)
+		if l.loadOne(keyfile, loaded) {
+			break
+		}
 	}
 	return nil
 }
@@ -189,13 +209,14 @@ func (s *sessionBackend) Store(service, label, passphrase string) error {
 	return s.SecretBackend.Store(service, label, passphrase)
 }
 
-// loadOne loads a single key unless its fingerprint is already in the agent.
-func (l Loader) loadOne(keyfile string, loaded map[string]bool) {
+// loadOne loads a single key unless its fingerprint is already in the agent. It
+// reports whether the user's answer ends the asking for the keys still to come.
+func (l Loader) loadOne(keyfile string, loaded map[string]bool) (askingEnded bool) {
 	keyname := filepath.Base(keyfile)
 
 	if !autoLoads(l.Config, keyname) {
 		l.logf("INFO", "auto-load policy excludes %s, skipping", keyname)
-		return
+		return false
 	}
 
 	fp, err := FileFingerprint(l.Runner, keyfile)
@@ -206,56 +227,70 @@ func (l Loader) loadOne(keyfile string, loaded map[string]bool) {
 	}
 	if fp != "" && loaded[fp] {
 		l.logf("INFO", "%s already added to agent", keyname)
-		return
+		return false
 	}
 	if l.givenUp(keyname) {
 		l.logf("INFO", "%s given up earlier, skipping until the retry window", keyname)
-		return
+		return false
 	}
-	l.addWithRetries(keyfile, keyname)
+	return l.addWithRetries(keyfile, keyname)
 }
+
+// keyOutcome is what came of trying to load one key.
+type keyOutcome int
+
+const (
+	// keyAbandoned: nothing more to try for this key, and nothing to record
+	// against it — a dismissed prompt, no terminal to ask on, or a hard error.
+	keyAbandoned keyOutcome = iota
+	keyLoaded
+	// attemptsExhausted: the user was asked as often as they allowed and the
+	// key never opened.
+	attemptsExhausted
+	// askingEnded: the user dismissed the prompt, and wants no more of them.
+	askingEnded
+)
 
 // addWithRetries loads keyfile, retrying on a wrong passphrase up to MaxAttempts
 // times. On success it clears any give-up record; when the attempts are
-// exhausted it gives up persistently and notifies the user. A canceled prompt,
-// no terminal to prompt on, or a hard error abandons the key without recording
-// a give-up.
-func (l Loader) addWithRetries(keyfile, keyname string) {
+// exhausted it gives up persistently and notifies the user. It reports whether
+// the asking is over for the rest of the session.
+func (l Loader) addWithRetries(keyfile, keyname string) bool {
 	max := l.Config.MaxAttempts
 	if max < 1 {
 		max = defaultMaxAttempts
 	}
 
-	loaded, exhausted := l.loadViaVaultThenPrompt(keyfile, keyname, max)
-
-	switch {
-	case loaded:
+	switch l.loadViaVaultThenPrompt(keyfile, keyname, max) {
+	case keyLoaded:
 		l.clearGiveup(keyname)
 		l.saveKeyState(keyname)
-	case exhausted:
+	case attemptsExhausted:
 		l.logf("ERROR", "giving up on %s after %d attempts", keyname, max)
 		l.notify("could not load key %s after %d attempts", keyname, max)
 		l.recordGiveup(keyname)
+	case askingEnded:
+		return true
 	}
+	return false
 }
 
 // loadViaVaultThenPrompt tries a stored passphrase once (a silent success on the
 // happy path), then prompts the user up to max times, storing the first prompted
 // passphrase that works. A stored passphrase that ssh-add rejects is treated as
-// stale and dropped in favour of prompting. It reports whether the key loaded and
-// whether the retry attempts were exhausted.
-func (l Loader) loadViaVaultThenPrompt(keyfile, keyname string, max int) (loaded, exhausted bool) {
+// stale and dropped in favour of prompting.
+func (l Loader) loadViaVaultThenPrompt(keyfile, keyname string, max int) keyOutcome {
 	service := l.servicePrefix() + "-" + keyname
 
 	if pass, ok := l.storedPassphrase(service, keyname); ok {
 		rc, err := l.Adder.AddWithAskpass(keyfile, pass)
 		if err != nil {
 			l.failAdd(keyname, err)
-			return false, false
+			return keyAbandoned
 		}
 		if rc == 0 {
 			l.logf("INFO", "added %s to agent", keyname)
-			return true, false
+			return keyLoaded
 		}
 		l.logf("INFO", "stored passphrase for %s is stale, prompting", keyname)
 	}
@@ -265,7 +300,20 @@ func (l Loader) loadViaVaultThenPrompt(keyfile, keyname string, max int) (loaded
 		if err != nil {
 			switch {
 			case errors.Is(err, ErrPromptCanceled):
-				l.logf("ERROR", "passphrase prompt canceled for %s", keyname)
+				// Turning the question down is an answer, not a fault: it is
+				// logged the way the other expected outcomes are, and what it
+				// means for the keys still to come is the user's to configure.
+				switch l.Config.OnDismiss {
+				case OnDismissRetry:
+					l.logf("INFO", "passphrase prompt dismissed for %s (attempt %d/%d)", keyname, attempt, max)
+					continue
+				case OnDismissSkip:
+					l.logf("INFO", "passphrase prompt dismissed for %s", keyname)
+					return keyAbandoned
+				default:
+					l.logf("INFO", "passphrase prompt dismissed for %s, asking about no further key this session", keyname)
+					return askingEnded
+				}
 			case errors.Is(err, ErrNoTerminal):
 				// No GUI and no controlling terminal are both normal, expected
 				// deployments — not surfaced to the user, and not logged as an
@@ -274,7 +322,7 @@ func (l Loader) loadViaVaultThenPrompt(keyfile, keyname string, max int) (loaded
 			default:
 				l.failPrompt(keyname, err)
 			}
-			return false, false
+			return keyAbandoned
 		}
 		if pass == "" {
 			// An empty answer opens no key — a key that has no passphrase is
@@ -286,16 +334,16 @@ func (l Loader) loadViaVaultThenPrompt(keyfile, keyname string, max int) (loaded
 		rc, err := l.Adder.AddWithAskpass(keyfile, pass)
 		if err != nil {
 			l.failAdd(keyname, err)
-			return false, false
+			return keyAbandoned
 		}
 		if rc == 0 {
 			l.logf("INFO", "added %s to agent", keyname)
 			l.storePassphrase(service, keyname, pass)
-			return true, false
+			return keyLoaded
 		}
 		l.logf("ERROR", "failed to add %s (attempt %d/%d)", keyname, attempt, max)
 	}
-	return false, true
+	return attemptsExhausted
 }
 
 // storedPassphrase returns the stored passphrase for service and whether a
