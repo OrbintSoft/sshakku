@@ -1343,3 +1343,59 @@ The promise is covered on a real terminal on both platforms
 can be asked: anywhere else an empty answer and no answer are the same bytes.
 
 → feature F8; goals 1, 11.
+
+### Phase 19 — A pinentry that cannot draw is not a dialog ✅ Done
+
+The prompter chain asked whether `pinentry` was on PATH, not what it was. GnuPG
+builds several and the distribution picks which one `pinentry` runs; the curses
+and tty builds draw on a terminal. Since pinentry is tried first, a graphical
+session that had one of those lost the dialog to it — and lost it to a prompt
+that appeared nowhere, because a login shell has no terminal for it either. A
+box with kdialog or zenity installed was worse off than before Phase 13.
+
+**Decided (2026-08-04).** pinentry is asked what it can draw with (`GETINFO
+flavor`) rather than guessed at from its name. The answer is a chain, most
+capable first — a GTK build says `gtk2:curses`, meaning it draws with GTK and
+falls back to the console where there is no display — so the first element
+settles it. Only `curses` and `tty` disqualify a build: an answer nobody
+recognises, or none at all, still counts as a dialog, since passing over one
+that works is the worse mistake and one that fails when asked already reaches
+the terminal with its name in the log. Asking waits on no person, so it takes
+`command_timeout` rather than the interactive budget.
+
+Naming such a pinentry is still that one or the terminal, never another dialog
+(F37) — but the log said it was "not installed" on a machine where it was.
+Which reasons a prompter can be unavailable for is now the prompter's own answer:
+kdialog and zenity are either there or not and keep the sentence they had.
+
+Reproduced before it was diagnosed, in an image with a screen, zenity, and
+`pinentry-curses` as the only pinentry: no dialog at any point, and the key
+never loaded. The same image now shows zenity's window and takes what is typed
+into it.
+
+→ features F29, F37; goals 11, 15.
+
+### Phase 20 — The wait budgets nobody could set ✅ Done
+
+`command_timeout` and `interactive_timeout` never survived being read from a
+file. `Merge` had no clause for either, and `Merged` folds every source onto an
+empty `File`, so a value written in `config.toml` was dropped exactly like one
+written in a drop-in. Both are config-file only, by the same reasoning as the
+wallet settings — which left no way at all to change how long SSHakku waits,
+against what F21 promises.
+
+`sshakku config` made it worse rather than catching it: the report reads which
+file *states* a setting from the sources and the value in force from the
+resolved settings, so it printed the built-in default beside the name of the
+user's own file, with no refusal. The one command meant to end that doubt
+confirmed a setting that was not in force.
+
+**Found (2026-08-04)** while closing coverage gaps, not from a report. Every
+test of these two built the `File` in memory and called `Resolve`, skipping the
+merge; the "every field" merge test listed its fields by hand and had stopped
+naming the ones added after it was written. Rewritten to fill the struct by
+reflection, it failed on its first run — and a field it cannot fill now fails
+the suite, so the next setting added without a merge clause cannot disappear
+the same way.
+
+→ features F21, F35; open decision 24.

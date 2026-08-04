@@ -542,6 +542,12 @@ not something you have to say: it uses the first one your desktop has, trying
 `pinentry` (which comes with GnuPG and is drawn with whichever toolkit your
 distribution built it for), then KDE's `kdialog`, then GNOME's `zenity`.
 
+GnuPG has builds of `pinentry` that draw on a terminal rather than on a screen —
+`pinentry-curses` and `pinentry-tty` — and on some systems one of those is what
+`pinentry` runs. Where you have a screen, SSHakku passes over such a build and
+uses a dialog you do have instead, so having the console one installed does not
+cost you the window.
+
 `gui_prompter` decides instead:
 
 ```toml
@@ -549,9 +555,11 @@ gui_prompter = "zenity"   # "auto" (default), "pinentry", "kdialog", "zenity", o
 ```
 
 `"none"` means you are always asked on the terminal, even sitting at the screen.
-Naming one uses that one and no other — if it is not installed you are asked on
-the terminal, and the session log names it, rather than being handed a dialog
-you did not choose.
+Naming one uses that one and no other — if it cannot ask you are asked on the
+terminal, and the session log names it and says why, rather than being handed a
+dialog you did not choose. Naming `pinentry` where the installed build draws on
+a terminal is one of those cases: it is the one you named, so nothing else is
+substituted for it.
 
 On macOS the choice is between `"auto"` (the system's own dialog, drawn through
 `osascript`), `"osascript"`, and `"none"`. A name belonging to another operating

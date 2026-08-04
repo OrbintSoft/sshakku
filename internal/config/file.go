@@ -343,6 +343,13 @@ func (f File) Merge(other File) File {
 		merged.AutoLoadExclude = other.AutoLoadExclude
 	}
 
+	if other.CommandTimeout != nil {
+		merged.CommandTimeout = other.CommandTimeout
+	}
+	if other.InteractiveTimeout != nil {
+		merged.InteractiveTimeout = other.InteractiveTimeout
+	}
+
 	if other.ServicePrefix != nil {
 		merged.ServicePrefix = other.ServicePrefix
 	}

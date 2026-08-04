@@ -5,6 +5,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
@@ -83,6 +84,35 @@ func TestGraphicalPromptWithOnlyZenity(t *testing.T) {
 	}
 }
 
+// TestGraphicalPromptWhereTheOnlyPinentryIsAConsoleOne verifies F29 on a session
+// that has a screen and a dialog to put on it, but whose pinentry is one of
+// GnuPG's console builds. Which build a machine has is the distribution's
+// choice, not the user's, and a user who has one that draws on a terminal has
+// not thereby asked to be prompted on a terminal: the screen is still there and
+// zenity is still installed, so a dialog is still what the promise says they
+// meet.
+//
+// The console pinentry is staged as what it is — a program that says which
+// builds it can draw with when asked, the way pinentry answers that question —
+// rather than by telling the code which prompter to skip.
+func TestGraphicalPromptWhereTheOnlyPinentryIsAConsoleOne(t *testing.T) {
+	dir := t.TempDir()
+	installFakeBin(t, dir, "pinentry", fakePinentry)
+	installFakeBin(t, dir, "zenity", fakePinentry)
+	t.Setenv("PATH", dir)
+	t.Setenv("WAYLAND_DISPLAY", "wayland-0")
+	t.Setenv("SSHAKKU_TEST_PINENTRY_FLAVOR", "curses")
+
+	p := newGraphicalPrompter(config.Settings{}, nil)
+	fallback, ok := p.(keys.FallbackPrompter)
+	if !ok {
+		t.Fatalf("newGraphicalPrompter = %T on a session with a screen and zenity installed, want a dialog paired with the terminal", p)
+	}
+	if _, ok := fallback.Primary.(keys.ZenityPrompter); !ok {
+		t.Errorf("the dialog asked in is %T, want zenity: a pinentry that draws on a terminal is not a dialog, and taking the prompt away from one that is leaves nothing on the screen at all", fallback.Primary)
+	}
+}
+
 // TestGraphicalPrompterHonoursTheConfiguration verifies F37: which dialog asks
 // is the user's to choose, and choosing one is never a way to lose the prompt.
 //
@@ -128,6 +158,55 @@ func TestGraphicalPrompterHonoursTheConfiguration(t *testing.T) {
 			t.Errorf("newGraphicalPrompter = %T with only kdialog installed and pinentry named, want the terminal: a dialog the user did not choose is not a fallback", p)
 		}
 	})
+}
+
+// TestGraphicalSessionWithNoDialogInstalledAsksOnTheTerminal covers the other
+// way F29 can be kept: a screen is not enough on its own, and a session that has
+// none of the three dialogs installed has to be asked on the terminal rather
+// than left with a question that appears nowhere.
+func TestGraphicalSessionWithNoDialogInstalledAsksOnTheTerminal(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("WAYLAND_DISPLAY", "wayland-0")
+
+	if p := newGraphicalPrompter(config.Settings{}, nil); p != nil {
+		t.Errorf("newGraphicalPrompter = %T on a screen with no dialog installed at all, want the terminal", p)
+	}
+}
+
+// TestANamedPinentryThatCannotDrawIsNotReportedMissing verifies the half of F37
+// that is a sentence: naming a dialog that cannot ask here sends the user to the
+// terminal and tells them which one failed. What is written down has to be true
+// of the machine it was written on — telling someone that pinentry is not
+// installed sends them to install what they already have, and leaves the reason
+// they were not asked in a window exactly as hidden as it was before.
+func TestANamedPinentryThatCannotDrawIsNotReportedMissing(t *testing.T) {
+	dir := t.TempDir()
+	installFakeBin(t, dir, "pinentry", fakePinentry)
+	t.Setenv("PATH", dir)
+	t.Setenv("WAYLAND_DISPLAY", "wayland-0")
+	t.Setenv("SSHAKKU_TEST_PINENTRY_FLAVOR", "curses")
+
+	log := &recordingLogger{}
+	if p := newGraphicalPrompter(config.Settings{GUIPrompter: config.GUIPrompterPinentry}, log); p != nil {
+		t.Errorf("newGraphicalPrompter = %T with a console pinentry named, want the terminal", p)
+	}
+
+	said := strings.Join(log.lines, "\n")
+	if !strings.Contains(said, config.GUIPrompterPinentry) {
+		t.Errorf("the log says %q, want it to name the dialog that could not ask", said)
+	}
+	if !strings.Contains(said, "screen") {
+		t.Errorf("the log says %q, want it to allow for the case it is in: a pinentry that is installed and simply cannot draw where the user is looking", said)
+	}
+}
+
+// recordingLogger keeps what was written, so a test can read the line a user
+// would find in the session log.
+type recordingLogger struct{ lines []string }
+
+func (r *recordingLogger) Log(level, message string) error {
+	r.lines = append(r.lines, level+" "+message)
+	return nil
 }
 
 // installFakeBin puts one of this package's testdata scripts into dir under the

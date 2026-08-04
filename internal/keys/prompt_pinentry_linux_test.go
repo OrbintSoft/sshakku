@@ -3,7 +3,9 @@
 package keys
 
 import (
+	"bufio"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -83,18 +85,75 @@ func TestPinentryPrompt(t *testing.T) {
 	})
 }
 
+// TestPinentryAvailable covers what "there is a pinentry to ask in" has to mean
+// for the chain that reads it: not that a program by that name exists, but that
+// what it runs can put a dialog on the screen the user is sitting at.
 func TestPinentryAvailable(t *testing.T) {
-	t.Run("installed", func(t *testing.T) {
-		p := PinentryPrompter{lookPath: func(string) (string, error) { return "/usr/bin/pinentry", nil }}
-		if !p.Available() {
-			t.Error("Available = false with pinentry on PATH")
-		}
-	})
+	installed := func(string) (string, error) { return "/usr/bin/pinentry", nil }
 
 	t.Run("not installed", func(t *testing.T) {
 		p := PinentryPrompter{lookPath: func(string) (string, error) { return "", errors.New("not found") }}
 		if p.Available() {
 			t.Error("Available = true with no pinentry on PATH")
+		}
+	})
+
+	t.Run("a build that draws on a screen", func(t *testing.T) {
+		t.Setenv("SSHAKKU_TEST_PINENTRY_FLAVOR", "gtk2:curses")
+
+		p := PinentryPrompter{Bin: fakePinentry, lookPath: installed}
+		if !p.Available() {
+			t.Error("Available = false for a pinentry that draws with GTK: the console it also falls back to is not what it leads with")
+		}
+	})
+
+	t.Run("a build that draws on a terminal is not a dialog", func(t *testing.T) {
+		for _, flavor := range []string{"curses", "tty"} {
+			t.Setenv("SSHAKKU_TEST_PINENTRY_FLAVOR", flavor)
+
+			p := PinentryPrompter{Bin: fakePinentry, lookPath: installed}
+			if p.Available() {
+				t.Errorf("Available = true for the %s build: it would take the prompt from a dialog that can be drawn and then have nowhere to draw it", flavor)
+			}
+		}
+	})
+
+	t.Run("an answer nobody here understands counts as a dialog", func(t *testing.T) {
+		t.Setenv("SSHAKKU_TEST_PINENTRY_FLAVOR", "a-toolkit-nobody-has-written-yet")
+
+		p := PinentryPrompter{Bin: fakePinentry, lookPath: installed}
+		if !p.Available() {
+			t.Error("Available = false for a build this code has never heard of: passing over a dialog that works is the worse mistake")
+		}
+	})
+
+	t.Run("a pinentry that cannot be asked counts as a dialog", func(t *testing.T) {
+		p := PinentryPrompter{Bin: "/nonexistent/pinentry", lookPath: installed}
+		if !p.Available() {
+			t.Error("Available = false because the question could not be put: too old to answer it is not the same as unable to draw")
+		}
+	})
+
+	t.Run("names the program a message would send the user to look for", func(t *testing.T) {
+		if got := PrompterName(PinentryPrompter{}); got != pinentryBin {
+			t.Errorf("PrompterName = %q, want %q", got, pinentryBin)
+		}
+	})
+
+	t.Run("says both of the things it may be", func(t *testing.T) {
+		why := PrompterUnavailable(PinentryPrompter{})
+		if !strings.Contains(why, "not installed") || !strings.Contains(why, "terminal") {
+			t.Errorf("the reason given is %q, want both: a user told only the first would go and install what they already have", why)
+		}
+	})
+
+	t.Run("a pinentry that never answers does not strand the caller", func(t *testing.T) {
+		t.Setenv("SSHAKKU_TEST_PINENTRY_HANG", "1")
+
+		start := time.Now()
+		PinentryPrompter{Bin: fakePinentry, lookPath: installed, ProbeTimeout: 300 * time.Millisecond}.Available()
+		if elapsed := time.Since(start); elapsed > 5*time.Second {
+			t.Errorf("Available took %v: asking pinentry about itself waits on no person and must be bounded like any other command", elapsed)
 		}
 	})
 }
@@ -123,4 +182,33 @@ func TestAssuanErrorDescribesWhatFailed(t *testing.T) {
 			t.Error("assuanError = nil for an unparseable line, want an error")
 		}
 	})
+
+	t.Run("a number with nothing said about it still says which number", func(t *testing.T) {
+		err := assuanError("83886254")
+		if err == nil || !strings.Contains(err.Error(), "83886254") {
+			t.Errorf("assuanError = %v, want the code kept: it is all there is to go on", err)
+		}
+	})
 }
+
+// TestPinentryConversationEndsWhenItCannotBeWrittenTo covers a pinentry that
+// goes away mid-conversation. What is being asked of it is a passphrase, so
+// failing to say so has to end as an error the caller can fall back from,
+// rather than as an empty answer that would look like one the user gave.
+func TestPinentryConversationEndsWhenItCannotBeWrittenTo(t *testing.T) {
+	conv := &assuanConv{w: closedPipe{}, r: bufio.NewReader(strings.NewReader("OK Pleased to meet you\n"))}
+
+	pass, err := conv.getpin("id_rsa")
+	if err == nil {
+		t.Fatal("getpin = nil error writing to a pinentry that is gone, want an error")
+	}
+	if pass != "" {
+		t.Errorf("getpin = %q, want no passphrase at all", pass)
+	}
+}
+
+// closedPipe is the write end of a pipe whose reader has gone, as a pinentry
+// that has exited leaves behind.
+type closedPipe struct{}
+
+func (closedPipe) Write([]byte) (int, error) { return 0, io.ErrClosedPipe }

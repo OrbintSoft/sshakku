@@ -19,6 +19,10 @@ import (
 // it appears on, without SSHakku having to recognise the desktop.
 const pinentryBin = "pinentry"
 
+// consoleFlavors are the builds of pinentry that draw on a terminal: they can
+// ask, but not where someone sitting at a screen is looking.
+var consoleFlavors = map[string]bool{"curses": true, "tty": true}
+
 // The Assuan error codes a dismissed dialog reports. Only the low 16 bits of an
 // error number are the code itself; the rest names the component that raised it.
 const (
@@ -39,6 +43,10 @@ type PinentryPrompter struct {
 	// still finite: a dialog nobody answers must not strand the shell that
 	// raised it. Zero selects DefaultInteractiveTimeout.
 	Timeout time.Duration
+	// ProbeTimeout bounds asking pinentry about itself. Nobody is being waited
+	// on there, so it is an ordinary command's budget rather than a person's.
+	// Zero selects DefaultCommandTimeout.
+	ProbeTimeout time.Duration
 	// lookPath resolves a binary on PATH; nil uses the os/exec default. Injectable
 	// for tests.
 	lookPath func(string) (string, error)
@@ -56,6 +64,12 @@ func (p PinentryPrompter) Prompt(keyname string) (string, error) {
 	if timeout <= 0 {
 		timeout = DefaultInteractiveTimeout
 	}
+	return p.converse(timeout, func(c *assuanConv) (string, error) { return c.getpin(keyname) })
+}
+
+// converse runs one pinentry, hands the conversation with it to ask, and closes
+// the dialog and reaps the process however that ends.
+func (p PinentryPrompter) converse(timeout time.Duration, ask func(*assuanConv) (string, error)) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -83,21 +97,50 @@ func (p PinentryPrompter) Prompt(keyname string) (string, error) {
 		_ = cmd.Wait()
 	}()
 
-	return (&assuanConv{w: stdin, r: bufio.NewReader(stdout)}).getpin(keyname)
+	return ask(&assuanConv{w: stdin, r: bufio.NewReader(stdout)})
 }
 
-// Available reports whether pinentry is on PATH.
+// Available reports whether pinentry is installed and can put a dialog on a
+// screen. Being installed is not enough: GnuPG has builds that draw on a
+// terminal, and one of those chosen here would take the prompt away from a
+// dialog that can be drawn and then have nowhere to draw it.
+//
+// pinentry is asked which builds it draws with rather than guessed at from its
+// name. The answer is a chain, most capable first — a GTK build answers
+// "gtk2:curses", meaning it draws with GTK and falls back to the console where
+// there is no display — so what settles it is the first of them.
+//
+// An answer nobody understands, or none at all, counts as a dialog: passing over
+// one that works is the worse mistake, and one that fails when it is finally
+// asked already reaches the terminal with its name in the log.
 func (p PinentryPrompter) Available() bool {
 	look := p.lookPath
 	if look == nil {
 		look = execLookPath
 	}
-	_, err := look(p.bin())
-	return err == nil
+	if _, err := look(p.bin()); err != nil {
+		return false
+	}
+	timeout := p.ProbeTimeout
+	if timeout <= 0 {
+		timeout = DefaultCommandTimeout
+	}
+	flavor, err := p.converse(timeout, (*assuanConv).flavor)
+	if err != nil {
+		return true
+	}
+	drawsWith, _, _ := strings.Cut(flavor, ":")
+	return !consoleFlavors[strings.TrimSpace(drawsWith)]
 }
 
 // Name is what to call this prompter in a message.
 func (p PinentryPrompter) Name() string { return p.bin() }
+
+// WhyUnavailable covers both reasons there is no dialog here, since a user told
+// only the first would go and install what they already have.
+func (p PinentryPrompter) WhyUnavailable() string {
+	return "is not installed, or is a build that draws on a terminal rather than on a screen"
+}
 
 // bin is the program to run, defaulted.
 func (p PinentryPrompter) bin() string {
@@ -136,6 +179,20 @@ func (c *assuanConv) getpin(keyname string) (string, error) {
 	// say goodbye is still killed and reaped by the caller.
 	_, _ = c.send("BYE")
 	return pass, nil
+}
+
+// flavor asks pinentry which builds it can draw with, most capable first.
+func (c *assuanConv) flavor() (string, error) {
+	if _, err := c.reply(); err != nil {
+		return "", fmt.Errorf("pinentry greeting: %w", err)
+	}
+	drawsWith, err := c.send("GETINFO flavor")
+	if err != nil {
+		return "", err
+	}
+	// Best effort, as in getpin: the answer is already in hand.
+	_, _ = c.send("BYE")
+	return drawsWith, nil
 }
 
 // send writes one request and returns what it was answered with.

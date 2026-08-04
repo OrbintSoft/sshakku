@@ -27,7 +27,7 @@ type dialog struct {
 func linuxDialogs(settings config.Settings) []dialog {
 	runner := keys.ExecRunner{Timeout: settings.CommandTimeout}
 	return []dialog{
-		{config.GUIPrompterPinentry, keys.PinentryPrompter{Timeout: settings.InteractiveTimeout}},
+		{config.GUIPrompterPinentry, keys.PinentryPrompter{Timeout: settings.InteractiveTimeout, ProbeTimeout: settings.CommandTimeout}},
 		{config.GUIPrompterKDialog, keys.KDialogPrompter{Runner: runner, Timeout: settings.InteractiveTimeout}},
 		{config.GUIPrompterZenity, keys.ZenityPrompter{Runner: runner, Timeout: settings.InteractiveTimeout}},
 	}
@@ -41,7 +41,9 @@ func linuxDialogs(settings config.Settings) []dialog {
 // must allow one: "none" means the terminal wherever it is written. There must
 // be a display server — a Wayland compositor, or an X server that answers —
 // because an installed dialog with no session has nowhere to draw. And a dialog
-// must be installed, because a session with none cannot be asked in.
+// must be there to ask in — which is more than being installed, since one of
+// pinentry's builds draws on a terminal and would take the question somewhere
+// nobody is looking.
 //
 // Which one is then a choice the user may have made. Unmade ("auto"), the first
 // one installed is used; made, that one is used or none is — a dialog the user
@@ -71,9 +73,9 @@ func newGraphicalPrompter(settings config.Settings, log keys.Logger) keys.Prompt
 			return keys.FallbackPrompter{Primary: d.prompter, Fallback: keys.TTYPrompter{}, Log: log}
 		}
 		if named {
-			// Saying which one is missing is the difference between a dialog
-			// the user can go and install and a prompt that simply never came.
-			logGUI(log, "gui_prompter names %s, which is not installed; asking on the terminal", d.name)
+			// Saying which one could not ask, and why, is the difference between
+			// something the user can act on and a prompt that simply never came.
+			logGUI(log, "gui_prompter names %s, which %s; asking on the terminal", d.name, keys.PrompterUnavailable(d.prompter))
 			return nil
 		}
 	}
