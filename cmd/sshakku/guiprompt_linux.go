@@ -3,41 +3,56 @@
 package main
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/keys"
 )
 
-// linuxPrompters is the order a graphical session is offered a dialog in. It is
-// a table of what a desktop may have, not a judgement about which desktop is in
+// dialog pairs a prompter with the name gui_prompter chooses it by.
+type dialog struct {
+	name     string
+	prompter keys.Prompter
+}
+
+// linuxDialogs is the order a graphical session is offered a dialog in. It is a
+// table of what a desktop may have, not a judgement about which desktop is in
 // use: pinentry comes with GnuPG and draws with whichever toolkit the
 // distribution chose for it, so it fits a session SSHakku would otherwise have
-// no way to recognise; kdialog and zenity are asked for after it because they
-// belong to one desktop each.
+// no way to recognise; kdialog belongs to one desktop, so it is asked for after.
 //
-// Nothing here decides anything on its own — the first one installed is the one
-// used, and a session with none of them is asked on the terminal.
-func linuxPrompters(settings config.Settings) []keys.Prompter {
+// Nothing here decides anything on its own — see newGraphicalPrompter.
+func linuxDialogs(settings config.Settings) []dialog {
 	runner := keys.ExecRunner{Timeout: settings.CommandTimeout}
-	return []keys.Prompter{
-		keys.PinentryPrompter{Timeout: settings.InteractiveTimeout},
-		keys.KDialogPrompter{Runner: runner, Timeout: settings.InteractiveTimeout},
+	return []dialog{
+		{config.GUIPrompterPinentry, keys.PinentryPrompter{Timeout: settings.InteractiveTimeout}},
+		{config.GUIPrompterKDialog, keys.KDialogPrompter{Runner: runner, Timeout: settings.InteractiveTimeout}},
 	}
 }
 
 // newGraphicalPrompter returns the dialog this platform can raise a passphrase
-// prompt with, or nil when none can be shown here.
+// prompt with, or nil when none can be shown here — in which case the caller
+// asks on the terminal.
 //
-// On Linux that means a reachable display server — a Wayland compositor, or an X
-// server that answers — and one of the dialogs installed to draw on it. Both
-// have to hold: a session with no dialog installed cannot be asked in, and an
-// installed dialog with no session has nowhere to draw.
+// Three things have to hold before there is a dialog at all. The configuration
+// must allow one: "none" means the terminal wherever it is written. There must
+// be a display server — a Wayland compositor, or an X server that answers —
+// because an installed dialog with no session has nowhere to draw. And a dialog
+// must be installed, because a session with none cannot be asked in.
 //
-// The dialog that is found is still paired with the terminal: being installed is
-// not the same as being able to run, and a dialog that fails when it is finally
+// Which one is then a choice the user may have made. Unmade ("auto"), the first
+// one installed is used; made, that one is used or none is — a dialog the user
+// did not name is not a substitute for the one they did, and the terminal can
+// still ask.
+//
+// Whichever is found is paired with the terminal, since being installed is not
+// the same as being able to run, and a dialog that fails when it is finally
 // asked must not take the question down with it.
 func newGraphicalPrompter(settings config.Settings, log keys.Logger) keys.Prompter {
+	if settings.GUIPrompter == config.GUIPrompterNone {
+		return nil
+	}
 	guiEnv := keys.GUIEnv{
 		WaylandDisplay: os.Getenv("WAYLAND_DISPLAY"),
 		Display:        os.Getenv("DISPLAY"),
@@ -45,10 +60,28 @@ func newGraphicalPrompter(settings config.Settings, log keys.Logger) keys.Prompt
 	if !keys.HasGraphicalSession(guiEnv, keys.ExecRunner{}) {
 		return nil
 	}
-	for _, p := range linuxPrompters(settings) {
-		if p.Available() {
-			return keys.FallbackPrompter{Primary: p, Fallback: keys.TTYPrompter{}, Log: log}
+	named := settings.GUIPrompter != "" && settings.GUIPrompter != config.GUIPrompterAuto
+	for _, d := range linuxDialogs(settings) {
+		if named && d.name != settings.GUIPrompter {
+			continue
+		}
+		if d.prompter.Available() {
+			return keys.FallbackPrompter{Primary: d.prompter, Fallback: keys.TTYPrompter{}, Log: log}
+		}
+		if named {
+			// Saying which one is missing is the difference between a dialog
+			// the user can go and install and a prompt that simply never came.
+			logGUI(log, "gui_prompter names %s, which is not installed; asking on the terminal", d.name)
+			return nil
 		}
 	}
 	return nil
+}
+
+// logGUI records why there is no dialog, when there is something to say.
+func logGUI(log keys.Logger, format string, args ...any) {
+	if log == nil {
+		return
+	}
+	_ = log.Log("ERROR", fmt.Sprintf(format, args...))
 }

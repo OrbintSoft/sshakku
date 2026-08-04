@@ -74,3 +74,8 @@
 # keepassxc_route = "native"
 # keepassxc_database = "~/Passwords.kdbx"
 # keepassxc_key_file = "~/Passwords.keyx"
+
+# The dialog a passphrase is asked for in: "auto" uses whichever one this
+# session has, "none" always asks on the terminal, and naming one uses that one
+# and no other. Where there is no screen the terminal asks whatever this says.
+# gui_prompter = "none"

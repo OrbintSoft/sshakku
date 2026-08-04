@@ -299,6 +299,11 @@ var settingTable = []settingDesc{
 		set:   func(f File) bool { return f.KeePassXCKeyFile != nil },
 		value: func(s Settings) string { return orElse(s.KeePassXCKeyFile, "(unset)") },
 	},
+	{
+		key:   "gui_prompter",
+		set:   func(f File) bool { return f.GUIPrompter != nil },
+		value: func(s Settings) string { return s.GUIPrompter },
+	},
 }
 
 // duration renders a resolved duration, spelling out what zero means for the

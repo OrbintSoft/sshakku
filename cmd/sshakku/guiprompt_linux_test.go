@@ -63,6 +63,53 @@ func TestGraphicalPromptOnADesktopWithoutKDE(t *testing.T) {
 	}
 }
 
+// TestGraphicalPrompterHonoursTheConfiguration verifies F37: which dialog asks
+// is the user's to choose, and choosing one is never a way to lose the prompt.
+//
+// Each case stages a session that could show a dialog and the programs that are
+// installed in it, then states what the configuration says. What is asserted is
+// what the user would meet: a dialog, a named dialog, or the terminal.
+func TestGraphicalPrompterHonoursTheConfiguration(t *testing.T) {
+	install := func(t *testing.T, names ...string) {
+		t.Helper()
+		dir := t.TempDir()
+		for _, name := range names {
+			installFakeBin(t, dir, name, fakePinentry)
+		}
+		t.Setenv("PATH", dir)
+		t.Setenv("WAYLAND_DISPLAY", "wayland-0")
+	}
+
+	t.Run("none asks on the terminal even with a screen and a dialog installed", func(t *testing.T) {
+		install(t, "pinentry", "kdialog")
+
+		if p := newGraphicalPrompter(config.Settings{GUIPrompter: config.GUIPrompterNone}, nil); p != nil {
+			t.Errorf("newGraphicalPrompter = %T with gui_prompter = %q, want no dialog at all", p, config.GUIPrompterNone)
+		}
+	})
+
+	t.Run("a named dialog is the one asked in", func(t *testing.T) {
+		install(t, "pinentry", "kdialog")
+
+		p := newGraphicalPrompter(config.Settings{GUIPrompter: config.GUIPrompterKDialog}, nil)
+		fallback, ok := p.(keys.FallbackPrompter)
+		if !ok {
+			t.Fatalf("newGraphicalPrompter = %T, want a dialog paired with the terminal", p)
+		}
+		if _, ok := fallback.Primary.(keys.KDialogPrompter); !ok {
+			t.Errorf("the dialog asked in is %T, want kdialog: naming one must not get another", fallback.Primary)
+		}
+	})
+
+	t.Run("a named dialog that is not installed goes to the terminal, not to another", func(t *testing.T) {
+		install(t, "kdialog")
+
+		if p := newGraphicalPrompter(config.Settings{GUIPrompter: config.GUIPrompterPinentry}, nil); p != nil {
+			t.Errorf("newGraphicalPrompter = %T with only kdialog installed and pinentry named, want the terminal: a dialog the user did not choose is not a fallback", p)
+		}
+	})
+}
+
 // installFakeBin puts one of this package's testdata scripts into dir under the
 // name a program is looked up by, so a test can compose a PATH holding exactly
 // the programs the scenario says are installed.

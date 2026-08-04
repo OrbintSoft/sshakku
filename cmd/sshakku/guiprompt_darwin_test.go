@@ -72,3 +72,18 @@ func TestNoGraphicalPrompterWithNothingToDrawWith(t *testing.T) {
 		t.Errorf("newGraphicalPrompter = %T with no osascript on PATH, want nil", p)
 	}
 }
+
+// TestNoGraphicalPrompterWhenTheUserRefusedOne verifies F37 on macOS: refusing
+// a dialog is the user's to write, and it holds where a dialog could perfectly
+// well have been shown — a session with a screen and osascript installed.
+func TestNoGraphicalPrompterWhenTheUserRefusedOne(t *testing.T) {
+	dir := t.TempDir()
+	fakeTool(t, dir, "launchctl", "Aqua")
+	fakeTool(t, dir, "osascript", "")
+	t.Setenv("PATH", dir)
+
+	settings := config.Settings{GUIPrompter: config.GUIPrompterNone}
+	if p := newGraphicalPrompter(settings, nil); p != nil {
+		t.Errorf("newGraphicalPrompter = %T with gui_prompter = %q, want no dialog at all", p, config.GUIPrompterNone)
+	}
+}
