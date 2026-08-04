@@ -219,6 +219,49 @@ func TestLoadKeysEmptyAnswerRealTerminal(t *testing.T) {
 	assertKeyInAgent(t, env.keyfile, false)
 }
 
+// TestLoadKeysDismissedOnRealTerminalIsNotAFailure verifies the terminal half of
+// F38: closing the input at a passphrase prompt is the same gesture as closing
+// the dialog, and neither is a fault. Only a real terminal can show it — Ctrl-D
+// is not a character the program reads but something the line discipline turns
+// into end-of-input, which is exactly the state the loader has to read as an
+// answer.
+//
+// The user is asked once, told of no failure, and no key is given up, so the
+// next login shell asks again from the start.
+func TestLoadKeysDismissedOnRealTerminalIsNotAFailure(t *testing.T) {
+	if os.Getenv(envTTYHelper) == "1" {
+		runTTYPromptHelper()
+	}
+	requireRealSSHBinaries(t)
+	requireUsableHandoff(t)
+
+	env := setupTTYPromptTest(t, "sshakku-live-terminal-test-passphrase")
+
+	master, slave := openPTY(t)
+	child := startTTYPromptHelper(t, env, slave)
+
+	seen := readUntil(t, master, ttyPromptLine)
+	if _, err := master.Write([]byte{0x04}); err != nil {
+		t.Fatalf("press Ctrl-D: %v", err)
+	}
+	seen += drain(t, master)
+
+	if err := child.Wait(); err != nil {
+		t.Fatalf("helper: %v\nterminal output:\n%q", err, seen)
+	}
+	if got := strings.Count(seen, ttyPromptLine); got != 1 {
+		t.Errorf("the user was asked %d times, want once: turning the question down is an answer; output:\n%q", got, seen)
+	}
+	if strings.Contains(seen, "could not load key") {
+		t.Errorf("refusing to answer was reported to the user as a failure; output:\n%q", seen)
+	}
+	if _, err := os.Stat(filepath.Join(env.giveupDir, "id_test")); err == nil {
+		t.Error("a key was given up, so a later shell would stay quiet about a key the user never gave up on")
+	}
+
+	assertKeyInAgent(t, env.keyfile, false)
+}
+
 // ttyPromptEnv is the staged world a live-terminal prompt test runs against.
 type ttyPromptEnv struct {
 	keyfile   string
