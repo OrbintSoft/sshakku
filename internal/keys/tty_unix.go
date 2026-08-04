@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -32,7 +33,8 @@ var (
 // with echo disabled. It opens /dev/tty directly rather than reading stdin, so
 // it works even when the caller has been detached from its original stdin;
 // with no controlling terminal at all the open fails immediately — it never
-// blocks waiting for one to appear — reported as ErrNoTerminal.
+// blocks waiting for one to appear — reported as ErrNoTerminal. A user who
+// closes the input instead of answering gets ErrPromptCanceled.
 func ReadTTYLine(prompt string, secret bool) (string, error) {
 	f, err := openTTY()
 	if err != nil {
@@ -62,6 +64,12 @@ func ReadTTYLine(prompt string, secret bool) (string, error) {
 		// output does not run onto the prompt line.
 		_, _ = fmt.Fprintln(f)
 	}
+	if errors.Is(readErr, io.EOF) && line == "" {
+		// Closing the input instead of answering — Ctrl-D — is how a question is
+		// turned down on a terminal, the same gesture as closing a dialog. It is
+		// the user's decision, not a failure to read from the terminal.
+		return "", ErrPromptCanceled
+	}
 	if readErr != nil && line == "" {
 		return "", readErr
 	}
@@ -89,6 +97,8 @@ func disableEcho(f *os.File) (func(), error) {
 // needs no external binary, so Available always reports true; a missing
 // controlling terminal surfaces as ErrNoTerminal from Prompt instead, which
 // the loader treats as "could not prompt this round" rather than an error.
+// Closing the input at the prompt is the terminal's way of dismissing the
+// question and is reported as such.
 type TTYPrompter struct{}
 
 // Prompt asks for keyname's passphrase on /dev/tty, with echo disabled.
