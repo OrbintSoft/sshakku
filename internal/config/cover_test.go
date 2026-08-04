@@ -1,12 +1,189 @@
 package config
 
 import (
+	"errors"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/OrbintSoft/sshakku/internal/keys"
 )
+
+// TestOverruledNamesWhatDecidesInstead verifies the part of F36 a person only
+// finds out about by being told: editing a key that something later decides is
+// an edit with no effect, and the file being edited is the one place that
+// cannot say so.
+func TestOverruledNamesWhatDecidesInstead(t *testing.T) {
+	const mine = "/etc/sshakku/config.toml"
+	const dropIn = "/etc/sshakku/config.d/50-work.toml"
+	sources := []Source{
+		{Path: mine, File: File{KeyLifetime: ptr("1h"), MaxAttempts: ptr(5), Quiet: ptr(true)}},
+		{Path: dropIn, File: File{KeyLifetime: ptr("2h")}},
+	}
+	env := map[string]string{"SSHAKKU_MAX_ATTEMPTS": "9"}
+	lookup := func(name string) (string, bool) { v, ok := env[name]; return v, ok }
+
+	got := map[string]Origin{}
+	for _, o := range Overruled(sources, mine, lookup) {
+		got[o.Key] = o.By
+	}
+
+	if by, ok := got["key_lifetime"]; !ok || by.Kind != OriginFile || by.Name != dropIn {
+		t.Errorf("key_lifetime overruled by %+v (present: %t), want the drop-in applied after it", by, ok)
+	}
+	if by, ok := got["max_attempts"]; !ok || by.Kind != OriginEnv {
+		t.Errorf("max_attempts overruled by %+v (present: %t), want the exported variable", by, ok)
+	}
+	if by, ok := got["quiet"]; ok {
+		t.Errorf("quiet reported as overruled by %+v, want nothing: this file is what decides it", by)
+	}
+	if by, ok := got["giveup_ttl"]; ok {
+		t.Errorf("giveup_ttl reported as overruled by %+v, want nothing: this file does not set it at all", by)
+	}
+
+	// The file being edited need not be among the ones SSHakku read: somebody
+	// with no config.toml of their own is given one to write, and nothing in a
+	// file that does not exist yet can be overruled.
+	if o := Overruled(sources, "/etc/sshakku/nowhere.toml", lookup); len(o) != 0 {
+		t.Errorf("Overruled = %+v for a file that was never read, want nothing", o)
+	}
+}
+
+// TestTheReportShowsWhatWasWrittenWhereSomethingWasWritten is the other half of
+// F35 from the empty machine below: where a value has been configured, the
+// report has to show that value rather than the built-in one it replaced.
+func TestTheReportShowsWhatWasWrittenWhereSomethingWasWritten(t *testing.T) {
+	file := File{
+		KeyLifetime: ptr("3h"),
+		MaxAttempts: ptr(7),
+		KeyDir:      ptr("/srv/keys"),
+		KeyPatterns: []string{"work-*", "id_*"},
+	}
+	settings, errs := Resolve(file, func(string) (string, bool) { return "", false })
+	if len(errs) != 0 {
+		t.Fatalf("Resolve reported %v, want the written values accepted", errs)
+	}
+
+	want := map[string]string{
+		"key_lifetime": "3h0m0s",
+		"max_attempts": "7",
+		"key_dir":      "/srv/keys",
+		"key_patterns": "work-*, id_*",
+	}
+	for _, desc := range settingTable {
+		if expected, ok := want[desc.key]; ok {
+			if got := desc.value(settings); got != expected {
+				t.Errorf("%s reads %q, want %q: the report shows the built-in value where the user wrote one", desc.key, got, expected)
+			}
+		}
+	}
+
+	// A duration of zero is a setting in its own right — no expiry, no
+	// give-up window — and "0s" alone reads as "immediately" just as easily
+	// as "never", which are opposite instructions to the person reading it.
+	zero, _ := Resolve(File{KeyLifetime: ptr("0s")}, func(string) (string, bool) { return "", false })
+	for _, desc := range settingTable {
+		if desc.key != "key_lifetime" {
+			continue
+		}
+		if got := desc.value(zero); !strings.Contains(got, "no expiry") {
+			t.Errorf("key_lifetime of zero reads %q, want what the zero means spelled out", got)
+		}
+	}
+}
+
+// TestEverySettingRendersAValueOnAMachineWithNoConfiguration covers F35 where
+// it is easiest to break: the report is read as a statement of what is in
+// force, so a line showing nothing where a built-in value is at work reads as
+// "off" or "none". The account that has written no configuration at all is the
+// one most likely to be reading the report to find out what SSHakku does, and
+// several settings answer that with something other than their own zero — a
+// lifetime of zero means no expiry, an empty list of patterns means the
+// built-in ones.
+func TestEverySettingRendersAValueOnAMachineWithNoConfiguration(t *testing.T) {
+	settings, errs := Resolve(File{}, func(string) (string, bool) { return "", false })
+	if len(errs) != 0 {
+		t.Fatalf("resolving an empty configuration reported %v, want none", errs)
+	}
+
+	for _, desc := range settingTable {
+		if got := desc.value(settings); got == "" {
+			t.Errorf("%s renders nothing where nobody has configured anything, want the value in force spelled out", desc.key)
+		}
+	}
+}
+
+// TestKeyDirWrittenAsHome covers the shorthand a person writes in a config file
+// for the directory they live in (F34). It is a path SSHakku resolves itself:
+// nothing expands a tilde in a file the way a shell does on a command line.
+func TestKeyDirWrittenAsHome(t *testing.T) {
+	const home = "/home/someone"
+	for written, want := range map[string]string{
+		"~":              home,
+		"~/keys":         home + "/keys",
+		"keys":           home + "/keys",
+		"/absolute/keys": "/absolute/keys",
+	} {
+		if got := (Settings{KeyDir: written}.KeyEnumerator(home).Dir); got != want {
+			t.Errorf("key_dir %q reaches %q, want %q", written, got, want)
+		}
+	}
+}
+
+// TestSettingErrorCarriesTheErrorItRefused covers a refusal being recognisable
+// by what it wraps rather than by the text it prints, since that is how the
+// report tells one refusal from another.
+func TestSettingErrorCarriesTheErrorItRefused(t *testing.T) {
+	inner := errors.New("not a duration")
+	var err error = &SettingError{Key: "key_lifetime", Err: inner}
+
+	if !errors.Is(err, inner) {
+		t.Errorf("errors.Is = false for the error the refusal was made of")
+	}
+	if err.Error() != inner.Error() {
+		t.Errorf("Error = %q, want what was actually wrong: %q", err.Error(), inner.Error())
+	}
+}
+
+// TestTemplateIsAConfigurationSSHakkuWouldAccept covers what `--edit` puts in
+// front of somebody who has no configuration yet (F36). It is offered as a
+// starting point, so a template SSHakku would refuse to read is worse than
+// none: the first thing the user does with it is save it.
+func TestTemplateIsAConfigurationSSHakkuWouldAccept(t *testing.T) {
+	dir := configDir(t, map[string]string{"config.toml": Template()})
+
+	sources := LoadSources(dir)
+	if len(sources) != 1 {
+		t.Fatalf("the template was read as %d sources, want one file", len(sources))
+	}
+	if sources[0].Err != nil {
+		t.Fatalf("reading the template back: %v", sources[0].Err)
+	}
+	if _, errs := Resolve(Merged(sources), func(string) (string, bool) { return "", false }); len(errs) != 0 {
+		t.Errorf("the template resolves with %v, want a file that is offered to be saved to be one SSHakku accepts", errs)
+	}
+}
+
+// TestOnlyTOMLFilesDirectlyInTheDirectoryAreRead covers what a configuration
+// directory is allowed to contain besides configuration: editors leave backups
+// there, and people keep notes and subdirectories. Reading one of those as
+// settings would be a configuration nobody wrote.
+func TestOnlyTOMLFilesDirectlyInTheDirectoryAreRead(t *testing.T) {
+	dir := configDir(t, map[string]string{
+		"config.d/50-work.toml":       "key_lifetime = \"2h\"\n",
+		"config.d/50-work.toml.bak":   "key_lifetime = \"99h\"\n",
+		"config.d/notes.txt":          "not configuration at all\n",
+		"config.d/nested/deeper.toml": "key_lifetime = \"77h\"\n",
+	})
+
+	got := sourcePaths(LoadSources(dir))
+	want := []string{filepath.Join(dir, "config.d", "50-work.toml")}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("sources = %v, want only the .toml file directly in the directory: %v", got, want)
+	}
+}
 
 // TestTimeoutsWrittenInAFileAreTheOnesInForce verifies F21's second half: how
 // long SSHakku waits is configurable, separately for something expected to
