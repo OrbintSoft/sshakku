@@ -35,6 +35,8 @@ jobs:
             dockerfile: test/containers/keepassxc.Dockerfile
           - name: vaultwarden
             dockerfile: test/containers/vaultwarden.Dockerfile
+          - name: wayland
+            dockerfile: test/containers/wayland.Dockerfile
     steps:
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -44,6 +46,18 @@ jobs:
 
       - name: Run make test in ${{ matrix.name }}
         run: docker run --init --rm -v "${{ github.workspace }}":/src:ro sshakku-test-desktop-stack-${{ matrix.name }} make test
+
+      # Where a user is asked for a passphrase on a Wayland desktop, driven
+      # through the real binary in a session with a screen and no controlling
+      # terminal. The image's own dialogs are what make it worth running: its
+      # pinentry announces a toolkit and then cannot draw, which is the case a
+      # list of installed programs cannot see coming.
+      - name: Run the Wayland passphrase-prompt scenario
+        if: matrix.name == 'wayland'
+        run: >
+          docker run --init --rm -v "${{ github.workspace }}":/src:ro
+          sshakku-test-desktop-stack-wayland
+          test/containers/wayland-prompt-scenario.sh
 
       # The CLI route works on a database file with no KeePassXC running, so it
       # needs none of the image's X/D-Bus session — only keepassxc-cli, which

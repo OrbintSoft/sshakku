@@ -2,6 +2,7 @@ package keys
 
 import (
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -59,6 +60,27 @@ func TestFallbackPrompter(t *testing.T) {
 		}
 	})
 
+	t.Run("the log says where the question actually went", func(t *testing.T) {
+		dialog := &namedFake{name: "pinentry", err: errors.New("no window server here")}
+		// What a session with more than one dialog really hands over to: the
+		// rest of the chain, which is asked by asking the dialog at its head.
+		other := FallbackPrompter{
+			Primary:  &namedFake{name: "zenity", answer: "typed in the other dialog"},
+			Fallback: &namedFake{name: "the terminal"},
+		}
+		log := &fakeLogger{}
+
+		if _, err := (FallbackPrompter{Primary: dialog, Fallback: other, Log: log}).Prompt("id_rsa"); err != nil {
+			t.Fatalf("Prompt = %v, want the other dialog's answer", err)
+		}
+		// Someone reading the log is trying to find out where they were asked,
+		// or why they were not: a line that names a terminal the question never
+		// reached sends them looking at the wrong thing.
+		if !log.contains("zenity") {
+			t.Errorf("log = %v, want it to name what was asked instead", log.lines)
+		}
+	})
+
 	t.Run("available while either half can ask", func(t *testing.T) {
 		cases := []struct {
 			primary, fallback, want bool
@@ -83,6 +105,12 @@ func TestFallbackPrompter(t *testing.T) {
 func TestPrompterName(t *testing.T) {
 	if got := PrompterName(&namedFake{name: "pinentry"}); got != "pinentry" {
 		t.Errorf("PrompterName = %q, want %q", got, "pinentry")
+	}
+	// The terminal is not a program anyone could go and install, so a message
+	// that hands the question to it has to name the place rather than a binary
+	// the reader would then fail to find.
+	if got := PrompterName(TTYPrompter{}); !strings.Contains(got, "terminal") {
+		t.Errorf("PrompterName(TTYPrompter{}) = %q, want the place the user was asked", got)
 	}
 	if got := PrompterName(&fakePrompter{}); got == "" {
 		t.Error("PrompterName = \"\" for a prompter that does not say what it is, want something a message can use")

@@ -8,7 +8,8 @@ import (
 // FallbackPrompter asks Primary, and asks Fallback instead when Primary could
 // not ask at all — a dialog that will not start, a conversation that breaks
 // halfway. Being unable to ask must never cost the user the question: the answer
-// is still wanted, and there is a terminal to ask it on.
+// is still wanted, and somewhere else can ask for it. Fallback is whatever comes
+// after Primary, which may be another dialog and is a terminal in the end.
 //
 // A dismissed dialog is not that case. Cancelling is an answer, and it is
 // propagated as one: asking again somewhere else would be overruling a decision
@@ -29,10 +30,15 @@ func (p FallbackPrompter) Prompt(keyname string) (string, error) {
 		return pass, err
 	}
 	if p.Log != nil {
-		_ = p.Log.Log("ERROR", fmt.Sprintf("%s could not ask for %s (%v), asking on the terminal instead", PrompterName(p.Primary), keyname, err))
+		_ = p.Log.Log("ERROR", fmt.Sprintf("%s could not ask for %s (%v), asking %s instead", PrompterName(p.Primary), keyname, err, PrompterName(p.Fallback)))
 	}
 	return p.Fallback.Prompt(keyname)
 }
+
+// Name is what to call this pair in a message. Asking it is asking Primary
+// first, so that is the name someone reading about it would look for; the
+// halves behind it are named in their own turn, if they are ever reached.
+func (p FallbackPrompter) Name() string { return PrompterName(p.Primary) }
 
 // Available reports whether either half can ask.
 func (p FallbackPrompter) Available() bool {

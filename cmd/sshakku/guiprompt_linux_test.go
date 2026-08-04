@@ -200,15 +200,6 @@ func TestANamedPinentryThatCannotDrawIsNotReportedMissing(t *testing.T) {
 	}
 }
 
-// recordingLogger keeps what was written, so a test can read the line a user
-// would find in the session log.
-type recordingLogger struct{ lines []string }
-
-func (r *recordingLogger) Log(level, message string) error {
-	r.lines = append(r.lines, level+" "+message)
-	return nil
-}
-
 // installFakeBin puts one of this package's testdata scripts into dir under the
 // name a program is looked up by, so a test can compose a PATH holding exactly
 // the programs the scenario says are installed.
