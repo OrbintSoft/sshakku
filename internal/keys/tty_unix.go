@@ -110,4 +110,9 @@ func (TTYPrompter) Prompt(keyname string) (string, error) {
 // controlling terminal, whose absence is reported by Prompt instead.
 func (TTYPrompter) Available() bool { return true }
 
+// Name is what to call this prompter in a message. It is not a program the user
+// could go and install, so it is named the way they would recognise it: the
+// place they were asked.
+func (TTYPrompter) Name() string { return "the terminal" }
+
 var _ Prompter = TTYPrompter{}
