@@ -95,6 +95,33 @@ func TestADialogThisPlatformHasNotGotAsksOnTheTerminal(t *testing.T) {
 	}
 }
 
+// TestANamedDialogThatIsNotInstalledIsSaidSo verifies the sentence F37 makes
+// about a dialog the user chose and does not have: they are asked on the
+// terminal, and told which one could not ask. Being asked somewhere they were
+// not expecting, with nothing said about why, leaves them to guess at a setting
+// that looks like it is being ignored.
+func TestANamedDialogThatIsNotInstalledIsSaidSo(t *testing.T) {
+	t.Run("the log names the one that could not ask", func(t *testing.T) {
+		log := &recordingLogger{}
+
+		p := chooseDialog([]dialog{{"pinentry", &fakeDialog{name: "pinentry"}}}, "pinentry", &fakeDialog{}, log)
+		if p != nil {
+			t.Errorf("chooseDialog = %T for a dialog that is not installed, want the terminal", p)
+		}
+		if said := strings.Join(log.lines, "\n"); !strings.Contains(said, "pinentry") {
+			t.Errorf("the log says %q, want the dialog the user named in it", said)
+		}
+	})
+
+	t.Run("with nowhere to write it, the answer is the same", func(t *testing.T) {
+		// A caller that keeps no log still gets a prompt: what is written down
+		// is a courtesy, and losing it must not cost the user the question.
+		if p := chooseDialog([]dialog{{"pinentry", &fakeDialog{name: "pinentry"}}}, "pinentry", &fakeDialog{}, nil); p != nil {
+			t.Errorf("chooseDialog = %T with no log to write to, want the terminal", p)
+		}
+	})
+}
+
 // TestClosingTheFirstDialogDoesNotRaiseTheNext verifies F38 where F37 now
 // reaches: closing a dialog without answering is an answer, so a chain of
 // dialogs must not turn one closed window into the next one. A user who shuts
