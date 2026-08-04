@@ -3,7 +3,9 @@
 package keys
 
 import (
+	"bufio"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -132,6 +134,19 @@ func TestPinentryAvailable(t *testing.T) {
 		}
 	})
 
+	t.Run("names the program a message would send the user to look for", func(t *testing.T) {
+		if got := PrompterName(PinentryPrompter{}); got != pinentryBin {
+			t.Errorf("PrompterName = %q, want %q", got, pinentryBin)
+		}
+	})
+
+	t.Run("says both of the things it may be", func(t *testing.T) {
+		why := PrompterUnavailable(PinentryPrompter{})
+		if !strings.Contains(why, "not installed") || !strings.Contains(why, "terminal") {
+			t.Errorf("the reason given is %q, want both: a user told only the first would go and install what they already have", why)
+		}
+	})
+
 	t.Run("a pinentry that never answers does not strand the caller", func(t *testing.T) {
 		t.Setenv("SSHAKKU_TEST_PINENTRY_HANG", "1")
 
@@ -167,4 +182,33 @@ func TestAssuanErrorDescribesWhatFailed(t *testing.T) {
 			t.Error("assuanError = nil for an unparseable line, want an error")
 		}
 	})
+
+	t.Run("a number with nothing said about it still says which number", func(t *testing.T) {
+		err := assuanError("83886254")
+		if err == nil || !strings.Contains(err.Error(), "83886254") {
+			t.Errorf("assuanError = %v, want the code kept: it is all there is to go on", err)
+		}
+	})
 }
+
+// TestPinentryConversationEndsWhenItCannotBeWrittenTo covers a pinentry that
+// goes away mid-conversation. What is being asked of it is a passphrase, so
+// failing to say so has to end as an error the caller can fall back from,
+// rather than as an empty answer that would look like one the user gave.
+func TestPinentryConversationEndsWhenItCannotBeWrittenTo(t *testing.T) {
+	conv := &assuanConv{w: closedPipe{}, r: bufio.NewReader(strings.NewReader("OK Pleased to meet you\n"))}
+
+	pass, err := conv.getpin("id_rsa")
+	if err == nil {
+		t.Fatal("getpin = nil error writing to a pinentry that is gone, want an error")
+	}
+	if pass != "" {
+		t.Errorf("getpin = %q, want no passphrase at all", pass)
+	}
+}
+
+// closedPipe is the write end of a pipe whose reader has gone, as a pinentry
+// that has exited leaves behind.
+type closedPipe struct{}
+
+func (closedPipe) Write([]byte) (int, error) { return 0, io.ErrClosedPipe }

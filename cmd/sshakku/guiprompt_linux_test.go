@@ -160,6 +160,19 @@ func TestGraphicalPrompterHonoursTheConfiguration(t *testing.T) {
 	})
 }
 
+// TestGraphicalSessionWithNoDialogInstalledAsksOnTheTerminal covers the other
+// way F29 can be kept: a screen is not enough on its own, and a session that has
+// none of the three dialogs installed has to be asked on the terminal rather
+// than left with a question that appears nowhere.
+func TestGraphicalSessionWithNoDialogInstalledAsksOnTheTerminal(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("WAYLAND_DISPLAY", "wayland-0")
+
+	if p := newGraphicalPrompter(config.Settings{}, nil); p != nil {
+		t.Errorf("newGraphicalPrompter = %T on a screen with no dialog installed at all, want the terminal", p)
+	}
+}
+
 // TestANamedPinentryThatCannotDrawIsNotReportedMissing verifies the half of F37
 // that is a sentence: naming a dialog that cannot ask here sends the user to the
 // terminal and tells them which one failed. What is written down has to be true
