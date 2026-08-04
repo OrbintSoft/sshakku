@@ -83,6 +83,19 @@ func TestANamedDialogThatCannotDrawGoesToTheTerminal(t *testing.T) {
 	}
 }
 
+// TestADialogThisPlatformHasNotGotAsksOnTheTerminal covers a name that is valid
+// somewhere and has no dialog behind it here — a configuration written on one
+// machine and carried to another, or to another operating system. The terminal
+// asks, and no dialog this platform does have is quietly substituted for the
+// one that was written down.
+func TestADialogThisPlatformHasNotGotAsksOnTheTerminal(t *testing.T) {
+	here := &fakeDialog{name: "zenity", installed: true, answer: "the-one-nobody-asked-for"}
+
+	if p := chooseDialog([]dialog{{config.GUIPrompterZenity, here}}, config.GUIPrompterKDialog, &fakeDialog{}, nil); p != nil {
+		t.Errorf("chooseDialog = %T for a dialog this platform has no entry for, want the terminal", p)
+	}
+}
+
 // TestClosingTheFirstDialogDoesNotRaiseTheNext verifies F38 where F37 now
 // reaches: closing a dialog without answering is an answer, so a chain of
 // dialogs must not turn one closed window into the next one. A user who shuts

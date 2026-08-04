@@ -2,6 +2,7 @@ package keys
 
 import (
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -104,6 +105,12 @@ func TestFallbackPrompter(t *testing.T) {
 func TestPrompterName(t *testing.T) {
 	if got := PrompterName(&namedFake{name: "pinentry"}); got != "pinentry" {
 		t.Errorf("PrompterName = %q, want %q", got, "pinentry")
+	}
+	// The terminal is not a program anyone could go and install, so a message
+	// that hands the question to it has to name the place rather than a binary
+	// the reader would then fail to find.
+	if got := PrompterName(TTYPrompter{}); !strings.Contains(got, "terminal") {
+		t.Errorf("PrompterName(TTYPrompter{}) = %q, want the place the user was asked", got)
 	}
 	if got := PrompterName(&fakePrompter{}); got == "" {
 		t.Error("PrompterName = \"\" for a prompter that does not say what it is, want something a message can use")
