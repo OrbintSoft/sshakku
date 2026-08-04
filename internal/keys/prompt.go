@@ -16,3 +16,18 @@ type Prompter interface {
 	// can fall back to a terminal prompt when no graphical prompter exists.
 	Available() bool
 }
+
+// namedPrompter is implemented by prompters that can say what they are, so a
+// message about one names the program the user would go and look for.
+type namedPrompter interface {
+	Name() string
+}
+
+// PrompterName is what to call p in a message. A prompter that does not say is
+// described by what it is rather than left unnamed.
+func PrompterName(p Prompter) string {
+	if n, ok := p.(namedPrompter); ok {
+		return n.Name()
+	}
+	return "the passphrase dialog"
+}

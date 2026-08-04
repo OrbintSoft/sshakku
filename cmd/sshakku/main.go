@@ -97,7 +97,7 @@ type deps struct {
 	// both branches run regardless of what the test host has, and platform-bound
 	// in production (newGraphicalPrompter): what counts as a usable graphical
 	// session, and what draws the dialog, are each platform's own answers.
-	graphicalPrompter func(config.Settings) keys.Prompter
+	graphicalPrompter func(config.Settings, keys.Logger) keys.Prompter
 	// fetchHandoff redeems a one-shot passphrase-handoff token (keys.FetchHandoff).
 	// Injected so askpass's handoff path is testable without a live kernel
 	// keyring, which many containers and CI runners lack.

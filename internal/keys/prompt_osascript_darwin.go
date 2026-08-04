@@ -96,6 +96,9 @@ func (p OsascriptPrompter) Prompt(keyname string) (string, error) {
 	return strings.TrimRight(string(res.Stdout), "\n"), nil
 }
 
+// Name is what to call this prompter in a message.
+func (p OsascriptPrompter) Name() string { return osascriptBin }
+
 // Available reports whether osascript is on PATH.
 func (p OsascriptPrompter) Available() bool {
 	look := p.lookPath

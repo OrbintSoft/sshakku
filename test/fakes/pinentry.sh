@@ -1,8 +1,8 @@
 #!/bin/sh
 # A stand-in for pinentry, for the graphical passphrase-prompt tests: a real
-# program found on PATH that speaks the same line protocol over stdin and
-# stdout, so what the test exercises is SSHakku's half of the conversation
-# rather than a mock standing in for it.
+# program that speaks the same line protocol over stdin and stdout, so what the
+# tests exercise is SSHakku's half of the conversation rather than a mock
+# standing in for it.
 #
 # It is driven by the environment rather than by arguments, because the caller
 # under test chooses the arguments:
@@ -11,6 +11,11 @@
 #                                 passphrase
 #   SSHAKKU_TEST_PINENTRY_CANCEL  non-empty: GETPIN answers the way a dismissed
 #                                 dialog does, with an error and no passphrase
+#   SSHAKKU_TEST_PINENTRY_NOISE   non-empty: precede the answer with a status
+#                                 line and a comment, which a real pinentry may
+#                                 send at any point and which answer nothing
+#   SSHAKKU_TEST_PINENTRY_HANG    non-empty: never answer GETPIN, the way a
+#                                 dialog nobody is sitting in front of does not
 set -eu
 
 echo "OK Pleased to meet you"
@@ -18,6 +23,15 @@ echo "OK Pleased to meet you"
 while IFS= read -r line; do
 	case "$line" in
 	GETPIN*)
+		if [ -n "${SSHAKKU_TEST_PINENTRY_NOISE:-}" ]; then
+			echo "S PIN_REPEATED"
+			echo "# a comment nobody asked for"
+		fi
+		if [ -n "${SSHAKKU_TEST_PINENTRY_HANG:-}" ]; then
+			while :; do
+				sleep 60
+			done
+		fi
 		if [ -n "${SSHAKKU_TEST_PINENTRY_CANCEL:-}" ]; then
 			echo "ERR 83886179 Operation cancelled"
 		else

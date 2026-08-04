@@ -43,6 +43,9 @@ func (p KDialogPrompter) Prompt(keyname string) (string, error) {
 	return strings.TrimRight(string(res.Stdout), "\n"), nil
 }
 
+// Name is what to call this prompter in a message.
+func (p KDialogPrompter) Name() string { return kdialogBin }
+
 // Available reports whether kdialog is on PATH.
 func (p KDialogPrompter) Available() bool {
 	look := p.lookPath

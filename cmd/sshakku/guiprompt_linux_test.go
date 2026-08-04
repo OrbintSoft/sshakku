@@ -19,10 +19,15 @@ func TestNoGraphicalPrompterWithNoDisplayServer(t *testing.T) {
 	t.Setenv("WAYLAND_DISPLAY", "")
 	t.Setenv("DISPLAY", "")
 
-	if p := newGraphicalPrompter(config.Settings{}); p != nil {
+	if p := newGraphicalPrompter(config.Settings{}, nil); p != nil {
 		t.Errorf("newGraphicalPrompter = %T with no display server, want nil", p)
 	}
 }
+
+// fakePinentry is a program that speaks pinentry's line protocol for real, so a
+// test can put "pinentry is installed" on PATH without needing the machine
+// running the suite to have one.
+const fakePinentry = "../../test/fakes/pinentry.sh"
 
 // TestGraphicalPromptOnADesktopWithoutKDE verifies F29: sitting at the machine,
 // the prompt is a dialog. Most graphical sessions are not KDE ones, and a user
@@ -40,12 +45,12 @@ func TestGraphicalPromptOnADesktopWithoutKDE(t *testing.T) {
 	const typed = "the-one-typed-into-the-dialog"
 
 	dir := t.TempDir()
-	installFakeBin(t, dir, "pinentry", "testdata/pinentry.sh")
+	installFakeBin(t, dir, "pinentry", fakePinentry)
 	t.Setenv("PATH", dir)
 	t.Setenv("WAYLAND_DISPLAY", "wayland-0")
 	t.Setenv("SSHAKKU_TEST_PINENTRY_PIN", typed)
 
-	p := newGraphicalPrompter(config.Settings{})
+	p := newGraphicalPrompter(config.Settings{}, nil)
 	if p == nil {
 		t.Fatal("newGraphicalPrompter = nil on a graphical session that is not KDE, so the passphrase would be asked for on the terminal instead of in a dialog")
 	}
@@ -89,11 +94,15 @@ func TestGraphicalPrompterWithASessionAndKDialog(t *testing.T) {
 	t.Setenv("PATH", dir)
 	t.Setenv("WAYLAND_DISPLAY", "wayland-0")
 
-	p := newGraphicalPrompter(config.Settings{})
+	p := newGraphicalPrompter(config.Settings{}, nil)
 	if p == nil {
 		t.Fatal("newGraphicalPrompter = nil with a compositor advertised and kdialog installed")
 	}
-	if _, ok := p.(keys.KDialogPrompter); !ok {
-		t.Errorf("newGraphicalPrompter = %T, want the kdialog prompter", p)
+	fallback, ok := p.(keys.FallbackPrompter)
+	if !ok {
+		t.Fatalf("newGraphicalPrompter = %T, want a dialog paired with the terminal", p)
+	}
+	if _, ok := fallback.Primary.(keys.KDialogPrompter); !ok {
+		t.Errorf("the dialog asked first is %T, want kdialog: a KDE session must not lose the dialog it already had", fallback.Primary)
 	}
 }

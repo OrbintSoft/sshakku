@@ -36,7 +36,7 @@ func TestGraphicalPrompterInAGraphicalSession(t *testing.T) {
 	fakeTool(t, dir, "osascript", "")
 	t.Setenv("PATH", dir)
 
-	if p := newGraphicalPrompter(config.Settings{}); p == nil {
+	if p := newGraphicalPrompter(config.Settings{}, nil); p == nil {
 		t.Error("newGraphicalPrompter = nil in an Aqua session, want the dialog")
 	}
 }
@@ -53,7 +53,7 @@ func TestNoGraphicalPrompterOutsideAGraphicalSession(t *testing.T) {
 			fakeTool(t, dir, "osascript", "")
 			t.Setenv("PATH", dir)
 
-			if p := newGraphicalPrompter(config.Settings{}); p != nil {
+			if p := newGraphicalPrompter(config.Settings{}, nil); p != nil {
 				t.Errorf("newGraphicalPrompter = %T in a %s session, want nil", p, manager)
 			}
 		})
@@ -68,7 +68,7 @@ func TestNoGraphicalPrompterWithNothingToDrawWith(t *testing.T) {
 	fakeTool(t, dir, "launchctl", "Aqua")
 	t.Setenv("PATH", dir)
 
-	if p := newGraphicalPrompter(config.Settings{}); p != nil {
+	if p := newGraphicalPrompter(config.Settings{}, nil); p != nil {
 		t.Errorf("newGraphicalPrompter = %T with no osascript on PATH, want nil", p)
 	}
 }

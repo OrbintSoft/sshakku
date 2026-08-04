@@ -19,7 +19,7 @@ func platformBlockingTools() []string {
 func platformBlockingCases(brief time.Duration) []blockingCase {
 	return []blockingCase{
 		{"GUI detection (xset)", func() {
-			GUIAvailable(GUIEnv{Display: ":0"}, ExecRunner{}, KDialogPrompter{})
+			HasGraphicalSession(GUIEnv{Display: ":0"}, ExecRunner{})
 		}},
 		{"graphical passphrase prompt (kdialog)", func() {
 			_, _ = KDialogPrompter{Runner: ExecRunner{}, Timeout: brief}.Prompt("id_test")

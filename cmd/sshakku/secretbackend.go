@@ -28,7 +28,7 @@ func newSecretBackend(user string, log keys.Logger, settings config.Settings) (k
 	case config.SecretBackendBitwarden:
 		return &keys.BitwardenBackend{
 			Runner:        keys.ExecRunner{Timeout: settings.CommandTimeout},
-			Prompter:      newWalletPasswordPrompter(settings),
+			Prompter:      newWalletPasswordPrompter(settings, log),
 			Email:         settings.BitwardenEmail,
 			Server:        settings.BitwardenServer,
 			Timeout:       settings.InteractiveTimeout,
@@ -66,6 +66,6 @@ func (p walletPasswordPrompter) Prompt(keyname string) (string, error) {
 
 func (walletPasswordPrompter) Available() bool { return true }
 
-func newWalletPasswordPrompter(settings config.Settings) keys.Prompter {
-	return walletPasswordPrompter{graphical: newGraphicalPrompter(settings)}
+func newWalletPasswordPrompter(settings config.Settings, log keys.Logger) keys.Prompter {
+	return walletPasswordPrompter{graphical: newGraphicalPrompter(settings, log)}
 }
