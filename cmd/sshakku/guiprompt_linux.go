@@ -3,18 +3,11 @@
 package main
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/keys"
 )
-
-// dialog pairs a prompter with the name gui_prompter chooses it by.
-type dialog struct {
-	name     string
-	prompter keys.Prompter
-}
 
 // linuxDialogs is the order a graphical session is offered a dialog in. It is a
 // table of what a desktop may have, not a judgement about which desktop is in
@@ -23,7 +16,7 @@ type dialog struct {
 // no way to recognise; kdialog and zenity each belong to one desktop, so they
 // are asked for after it.
 //
-// Nothing here decides anything on its own — see newGraphicalPrompter.
+// Nothing here decides anything on its own — see chooseDialog.
 func linuxDialogs(settings config.Settings) []dialog {
 	runner := keys.ExecRunner{Timeout: settings.CommandTimeout}
 	return []dialog{
@@ -44,15 +37,6 @@ func linuxDialogs(settings config.Settings) []dialog {
 // must be there to ask in — which is more than being installed, since one of
 // pinentry's builds draws on a terminal and would take the question somewhere
 // nobody is looking.
-//
-// Which one is then a choice the user may have made. Unmade ("auto"), the first
-// one installed is used; made, that one is used or none is — a dialog the user
-// did not name is not a substitute for the one they did, and the terminal can
-// still ask.
-//
-// Whichever is found is paired with the terminal, since being installed is not
-// the same as being able to run, and a dialog that fails when it is finally
-// asked must not take the question down with it.
 func newGraphicalPrompter(settings config.Settings, log keys.Logger) keys.Prompter {
 	if settings.GUIPrompter == config.GUIPrompterNone {
 		return nil
@@ -64,28 +48,5 @@ func newGraphicalPrompter(settings config.Settings, log keys.Logger) keys.Prompt
 	if !keys.HasGraphicalSession(guiEnv, keys.ExecRunner{}) {
 		return nil
 	}
-	named := settings.GUIPrompter != "" && settings.GUIPrompter != config.GUIPrompterAuto
-	for _, d := range linuxDialogs(settings) {
-		if named && d.name != settings.GUIPrompter {
-			continue
-		}
-		if d.prompter.Available() {
-			return keys.FallbackPrompter{Primary: d.prompter, Fallback: keys.TTYPrompter{}, Log: log}
-		}
-		if named {
-			// Saying which one could not ask, and why, is the difference between
-			// something the user can act on and a prompt that simply never came.
-			logGUI(log, "gui_prompter names %s, which %s; asking on the terminal", d.name, keys.PrompterUnavailable(d.prompter))
-			return nil
-		}
-	}
-	return nil
-}
-
-// logGUI records why there is no dialog, when there is something to say.
-func logGUI(log keys.Logger, format string, args ...any) {
-	if log == nil {
-		return
-	}
-	_ = log.Log("ERROR", fmt.Sprintf(format, args...))
+	return chooseDialog(linuxDialogs(settings), settings.GUIPrompter, keys.TTYPrompter{}, log)
 }
