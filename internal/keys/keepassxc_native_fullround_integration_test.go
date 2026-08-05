@@ -164,6 +164,12 @@ func setupNativeFullRound(t *testing.T, passphrase string) nativeFullRoundEnv {
 	if out, err := exec.Command("go", "build", "-o", binary, "github.com/OrbintSoft/sshakku/cmd/sshakku").CombinedOutput(); err != nil {
 		t.Fatalf("build sshakku: %v: %s", err, out)
 	}
+	// ssh is handed the helper beside the binary, not the binary itself, so a
+	// build with nothing next to it is a layout no install produces: the key
+	// would never open, however right the passphrase is.
+	if err := os.Symlink(binary, filepath.Join(root, "sshakku-askpass")); err != nil {
+		t.Fatalf("link the askpass helper beside sshakku: %v", err)
+	}
 
 	configDir := filepath.Join(root, "config", "sshakku")
 	if err := os.MkdirAll(configDir, 0o700); err != nil {
