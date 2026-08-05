@@ -138,6 +138,31 @@ load helpers
 	[[ "$output" == *"$fingerprint"* ]]
 }
 
+@test "F5: a vault-seeded passphrase loads silently from a long home directory too" {
+	# 90 characters: long for a home directory, and nothing any file system
+	# objects to — a single name may be 255 on both platforms this runs on.
+	# Nothing in what SSHakku promises is conditional on how a user's home is
+	# named, so this is the same scenario as the test above it, moved.
+	#
+	# Moved before the environment is checked, so that a machine which cannot
+	# run the rest of this test still runs the move: a home relocated wrongly
+	# would otherwise only ever be found on the platform where the scenario
+	# does complete.
+	long_home 90
+	require_keyring
+
+	new_test_key id_test "test-passphrase"
+	seed_vault id_test "test-passphrase"
+	fingerprint=$(key_fingerprint id_test)
+
+	eval "$("$SSHAKKU_BIN" shell-init)"
+	run no_tty_bounded 10 "$SSHAKKU_BIN" load-keys
+	[ "$status" -eq 0 ]
+
+	run ssh-add -l
+	[[ "$output" == *"$fingerprint"* ]]
+}
+
 @test "a reachable but empty agent is adopted, not killed and replaced" {
 	eval "$("$SSHAKKU_BIN" shell-init)"
 	bootstrap_pid=$(doctor_recorded_pid)
