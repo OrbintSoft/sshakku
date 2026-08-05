@@ -158,9 +158,19 @@ load helpers
 	eval "$("$SSHAKKU_BIN" shell-init)"
 	run no_tty_bounded 10 "$SSHAKKU_BIN" load-keys
 	[ "$status" -eq 0 ]
+	load_said="$output"
 
 	run ssh-add -l
-	[[ "$output" == *"$fingerprint"* ]]
+	if [[ "$output" != *"$fingerprint"* ]]; then
+		# A key that did not load has more than one way of not loading, and the
+		# listing says only that it isn't there. What the run itself said, and
+		# what the session log recorded, name the step that gave up.
+		echo "load-keys said: ${load_said:-(nothing)}" >&2
+		echo "ssh-add -l said: $output" >&2
+		echo "session log:" >&2
+		cat "$log_file" >&2 2>/dev/null || echo "(no session log at $log_file)" >&2
+		return 1
+	fi
 }
 
 @test "a reachable but empty agent is adopted, not killed and replaced" {
