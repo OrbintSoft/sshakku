@@ -30,6 +30,15 @@ chmod 1777 /tmp/.X11-unix
 
 useradd -m -u "${TEST_UID}" -s /bin/bash "${TEST_USER}"
 
+# A session whose dialogs are answered by clicking needs a pointer, and making
+# one is root's work: the device node, and the seat daemon the compositor opens
+# it through. Only the run that asked for it gets one.
+if [ -n "${SSHAKKU_TEST_UINPUT_POINTER:-}" ]; then
+	# shellcheck source=test/containers/wayland-pointer.sh
+	source "${SCRIPT_DIR}/wayland-pointer.sh"
+	start_uinput_pointer "${TEST_USER}"
+fi
+
 mkdir -p "${RUNTIME_DIR}"
 chown "${TEST_USER}:${TEST_USER}" "${RUNTIME_DIR}"
 chmod 700 "${RUNTIME_DIR}"

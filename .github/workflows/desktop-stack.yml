@@ -47,6 +47,30 @@ jobs:
       - name: Run make test in ${{ matrix.name }}
         run: docker run --init --rm -v "${{ github.workspace }}":/src:ro sshakku-test-desktop-stack-${{ matrix.name }} make test
 
+      # The same wallet, and the same one-time dialog, reached from a login with
+      # a screen and no X server. The dialog is clicked through the compositor's
+      # own cursor there, which is why this session needs a pointer device and
+      # the step above does not.
+      - name: Run the GNOME Keyring round trip in a Wayland session
+        if: matrix.name == 'gnome-keyring'
+        run: >
+          test/containers/run-wayland-wallet.sh
+          sshakku-test-desktop-stack-gnome-keyring
+          gnome-keyring-wayland-session.sh
+          go test ./internal/keys -run TestSecretServiceBackendRealDaemon -count=1 -v
+
+      # The same wallet reached from a login with a screen and no X server. The
+      # image and the test are the ones the step above already ran: what is
+      # being varied is the session around them, so a difference in the result
+      # could only come from the session.
+      - name: Run the KDE round trip in a Wayland session
+        if: matrix.name == 'kde'
+        run: >
+          docker run --init --rm -v "${{ github.workspace }}":/src:ro
+          -e SSHAKKU_SESSION_SCRIPT=kde-wayland-session.sh
+          sshakku-test-desktop-stack-kde
+          go test ./internal/keys -run TestSecretServiceBackendRealDaemon -count=1 -v
+
       # Where a user is asked for a passphrase on a Wayland desktop, driven
       # through the real binary in a session with a screen and no controlling
       # terminal. The image's own dialogs are what make it worth running: its
@@ -58,6 +82,17 @@ jobs:
           docker run --init --rm -v "${{ github.workspace }}":/src:ro
           sshakku-test-desktop-stack-wayland
           test/containers/wayland-prompt-scenario.sh
+
+      # The same wallet under a Wayland login, where the app's own database
+      # wizard is answered through the compositor's cursor rather than an X
+      # server's.
+      - name: Run the KeePassXC round trip in a Wayland session
+        if: matrix.name == 'keepassxc'
+        run: >
+          test/containers/run-wayland-wallet.sh
+          sshakku-test-desktop-stack-keepassxc
+          keepassxc-wayland-session.sh
+          go test ./internal/keys -run TestSecretServiceBackendRealDaemon -count=1 -v
 
       # The CLI route works on a database file with no KeePassXC running, so it
       # needs none of the image's X/D-Bus session — only keepassxc-cli, which

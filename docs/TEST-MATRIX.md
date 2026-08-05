@@ -59,25 +59,46 @@ container session around it differs.
 
 | Session | X11 | Wayland | No display |
 | --- | --- | --- | --- |
-| KDE (`ksecretd`/`kwalletd6`) | ✅ `kde.Dockerfile` | ❌ | — |
-| GNOME (`gnome-keyring-daemon`, desktop session) | ✅ `gnome-keyring.Dockerfile` | ❌ | — |
+| KDE (`ksecretd`/`kwalletd6`) | ❌ | ✅ `kde.Dockerfile`, `SSHAKKU_SESSION_SCRIPT=kde-wayland-session.sh` | ✅ `kde.Dockerfile` |
+| GNOME (`gnome-keyring-daemon`, desktop session) | ✅ `gnome-keyring.Dockerfile` | ✅ `gnome-keyring.Dockerfile`, `SSHAKKU_SESSION_SCRIPT=gnome-keyring-wayland-session.sh` | — |
 | GNOME Keyring, headless-daemonized (no session/display at all) | — | — | ❌ |
-| KeePassXC (standalone, any desktop) | ✅ `keepassxc.Dockerfile` | ❌ | — |
+| KeePassXC (standalone, any desktop) | ✅ `keepassxc.Dockerfile` | ✅ `keepassxc.Dockerfile`, `SSHAKKU_SESSION_SCRIPT=keepassxc-wayland-session.sh` | — |
 
-KDE/GNOME/KeePassXC's own daemons all need some display (real or virtual)
-to run, hence the `—`s. XFCE has no native provider of its own -- it would
-only ever host GNOME Keyring or KeePassXC, both already rows above -- so it
-isn't listed separately unless a KeePassXC-under-XFCE test is actually
-worth adding later.
+KDE is the one wallet here that needs no display of any kind: PAM opens the
+wallet as part of the login, so ksecretd is never asked to draw anything and
+the round trip runs in a session that has no screen at all. Its two ✅s are the
+same image and the same test, differing only in whether a compositor is started
+around them. Its X11 cell is ❌ and not a `—` because such a session plainly can
+exist — nothing here has ever built one, which is exactly what a ❌ says.
 
-There is a Wayland session to run in now — `wayland.Dockerfile`, sway on
-wlroots' headless backend, with no X server and no Xwayland — and the
-passphrase-prompt rows further down are driven in it. The wallet cells above
-are still ❌ because a wallet needs more than a session: each of these
-daemons has a dialog of its own to answer once (creating a collection,
-unlocking a database), and every one of those is currently answered with
-`xdotool`, which needs an X server. Answering them with `wtype` is what
-those three cells are waiting on, not a missing compositor.
+GNOME Keyring's and KeePassXC's own daemons do need a display, hence their
+`—`s. XFCE has no native provider of its own -- it would only ever host GNOME
+Keyring or KeePassXC, both already rows above -- so it isn't listed separately
+unless a KeePassXC-under-XFCE test is actually worth adding later.
+
+There is a Wayland session to run in now — sway on wlroots' headless backend,
+with no X server and no Xwayland, shared by `wayland.Dockerfile` and any other
+image that starts it — and the passphrase-prompt rows further down are driven
+in it as well.
+
+GNOME Keyring's cell was the one that had something to teach. Its collection is
+created through a dialog, and that dialog cannot be answered from the keyboard
+at all: `libgcr-ui` grabs the seat before it accepts input, and a seat with no
+input device has nothing to grant, so the window draws, keeps focus, and ignores
+every key — while zenity, the same toolkit in the same session, takes what is
+typed into it happily. The session is therefore given a pointer device that
+never sends an event, purely so the seat has one, and the dialog is clicked
+through the compositor's own cursor at the same two points the X11 script
+clicks. The container stays unprivileged and mounts no `/dev/input`: it makes
+the single node it uses and can open nothing else, so the machine running the
+test keeps its own keyboard to itself.
+
+KeePassXC is answered the same way, and its session is where the Wayland side
+pays off rather than costs: the compositor names every window, so each thing the
+app asks is recognised by what it says it is — "Create a new KeePassXC
+database…", "Save database as" — instead of by whether the last click landed
+within the sleep the script allowed. Its buttons are pressed by position, but
+relative to the window that owns them.
 
 ## Backend round trips
 

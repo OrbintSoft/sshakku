@@ -1486,3 +1486,62 @@ shows where the user is asked and that the answer reaches the product, not the
 key arriving in the agent.
 
 → features F12, F29, F37; open decisions 20, 24.
+
+### Phase 23 — The wallets nobody had opened on Wayland ✅ Done
+
+The three wallet cells Phase 22 left ❌. Each wallet is now reached from a
+Wayland login as well as the one it already had, and the obstacle was different
+in every case — none of them the `xdotool`-to-`wtype` port the previous note
+predicted.
+
+- **KDE** needed nothing but the session: PAM opens the wallet at login, so
+  ksecretd draws no dialog at all. The same image starts a compositor or not,
+  chosen by `SSHAKKU_SESSION_SCRIPT`, and the round trip is the one that was
+  already there.
+- **GNOME Keyring** cannot be answered from the keyboard in such a session:
+  `libgcr-ui` grabs the seat before it accepts input, and a seat with no input
+  device has nothing to grant, so the collection dialog draws, holds focus and
+  ignores every key — while zenity, the same toolkit in the same session, takes
+  what is typed into it. The session is therefore given a **pointer device that
+  never sends an event**, purely so the seat has one, and the dialog is clicked
+  through the compositor's own cursor.
+- **KeePassXC** would not start: it links Qt5 and the image carried the Qt6
+  wayland package, so Qt fell back to X11, found no display, and quit before
+  drawing. With `qt5-qtwayland` and the `XDG_SESSION_TYPE` a real Wayland login
+  declares, its wizard is answered by **what each window says it is** — the
+  compositor names them — rather than by whether a click landed inside an
+  allotted sleep. That is the one place where driving a GUI on Wayland is
+  steadier than on X11.
+
+**What the container is not given**, and why it matters: no privileged mode and
+no `/dev/input` mount. It is granted `/dev/uinput`, the input major and
+`CAP_MKNOD`, so it makes the one node it uses and can open nothing else. An
+earlier attempt did mount `/dev/input`, and the compositor inside the container
+opened every real device on the host — the developer's keyboard included.
+
+**Found on the way, and fixed here:** `TestKeePassXCNativeFullRound` had been
+failing on master on both platforms. The test built the binary into a temporary
+directory and put no `sshakku-askpass` link beside it — a layout no install
+produces — so `ssh-add` was pointed at a path that does not exist and the key
+could never open, however right the passphrase was. Nothing had said so because
+the integration suite runs only on demand.
+
+**A matrix defect, also fixed here.** `kde.Dockerfile` starts no display server
+and says so in its own header, yet its ✅ sat in the X11 column and its
+no-display cell was a `—` justified by "these daemons all need some display" —
+false for KDE, and exactly the kind of `—` rule 19 forbids.
+
+**Rule 12, new file types.** The KeePassXC session carries a second sway
+configuration that includes the shared one; the same "no validator that is not a
+compositor" decision as Phase 22 applies, and the file is exercised on every run.
+**Decision: still no `lint-sway` target.** The uinput pointer tool is Go behind a
+`//go:build ignore` tag: outside the module and the coverage it reports, still
+covered by the `gofmt` sweep `make lint-go` runs, and compiled on its own by the
+images that need it — so no new linter and no new language.
+
+**Verified by running it** (rule 25): each wallet's round trip driven against its
+real daemon in its Wayland session, from rebuilt images, through the same runner
+script CI uses. The GNOME and KDE steps have since passed on a hosted runner,
+which is also what settled whether one grants `/dev/uinput`.
+
+→ features F4, F5, F6, F9; open decisions 20, 24.

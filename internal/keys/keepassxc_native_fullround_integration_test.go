@@ -164,13 +164,26 @@ func setupNativeFullRound(t *testing.T, passphrase string) nativeFullRoundEnv {
 	if out, err := exec.Command("go", "build", "-o", binary, "github.com/OrbintSoft/sshakku/cmd/sshakku").CombinedOutput(); err != nil {
 		t.Fatalf("build sshakku: %v: %s", err, out)
 	}
+	// ssh is handed the helper beside the binary, not the binary itself, so a
+	// build with nothing next to it is a layout no install produces: the key
+	// would never open, however right the passphrase is.
+	if err := os.Symlink(binary, filepath.Join(root, "sshakku-askpass")); err != nil {
+		t.Fatalf("link the askpass helper beside sshakku: %v", err)
+	}
 
 	configDir := filepath.Join(root, "config", "sshakku")
 	if err := os.MkdirAll(configDir, 0o700); err != nil {
 		t.Fatalf("make the config dir: %v", err)
 	}
+	// The terminal is where this scenario watches: F5 and F6 are checked with a
+	// real one attached, so that a regression which starts asking has somewhere
+	// to ask. On a machine with a window server the product would rightly raise
+	// a dialog instead (F29), and a dialog nobody is sitting in front of is a
+	// question that never comes back — so this session says it has no dialog,
+	// the same thing a user writes when they want to be asked where they are.
 	config := "secret_backend = \"keepassxc\"\n" +
 		"keepassxc_route = \"native\"\n" +
+		"gui_prompter = \"none\"\n" +
 		"key_lifetime = \"" + nativeKeyLifetime.String() + "\"\n"
 	if err := os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(config), 0o600); err != nil {
 		t.Fatalf("write config.toml: %v", err)

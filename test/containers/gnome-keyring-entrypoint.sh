@@ -1,7 +1,12 @@
 #!/bin/bash
 # Container entrypoint, run as root: creates the disposable test account and
-# its runtime dir, then hands off to gnome-keyring-session.sh (as that
-# account) to actually drive the test command.
+# its runtime dir, then hands off to a session script (as that account) to
+# actually drive the test command.
+#
+# Which session script decides what the wallet is reached from: an X server by
+# default, or a Wayland compositor when SSHAKKU_SESSION_SCRIPT names that one
+# instead. Each brings up its own screen and answers the collection-creation
+# dialog the way that screen allows.
 set -euo pipefail
 
 readonly TEST_USER="sshakku-gnome-test"
@@ -9,6 +14,7 @@ readonly TEST_UID="1000"
 readonly RUNTIME_DIR="/run/user/${TEST_UID}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly SCRIPT_DIR
+readonly SESSION_SCRIPT="${SSHAKKU_SESSION_SCRIPT:-gnome-keyring-session.sh}"
 
 # The D-Bus session bus refuses to start without a valid, non-empty machine
 # ID.
@@ -32,6 +38,15 @@ fi
 
 useradd -m -u "${TEST_UID}" -s /bin/bash "${TEST_USER}"
 
+# A session whose dialogs are answered by clicking needs a pointer, and making
+# one is root's work: the device node, and the seat daemon the compositor opens
+# it through. Only the run that asked for it gets one.
+if [ -n "${SSHAKKU_TEST_UINPUT_POINTER:-}" ]; then
+	# shellcheck source=test/containers/wayland-pointer.sh
+	source "${SCRIPT_DIR}/wayland-pointer.sh"
+	start_uinput_pointer "${TEST_USER}"
+fi
+
 mkdir -p "${RUNTIME_DIR}"
 chown "${TEST_USER}:${TEST_USER}" "${RUNTIME_DIR}"
 chmod 700 "${RUNTIME_DIR}"
@@ -43,4 +58,4 @@ exec runuser -u "${TEST_USER}" -- env -i \
 	DBUS_SESSION_BUS_ADDRESS="unix:path=${RUNTIME_DIR}/bus" \
 	SSHAKKU_TEST_ALLOW_REAL_SECRETSERVICE="1" \
 	SSHAKKU_DISABLE_SECRETS_ACTIVATION="${SSHAKKU_DISABLE_SECRETS_ACTIVATION:-}" \
-	"${SCRIPT_DIR}/gnome-keyring-session.sh" "$@"
+	"${SCRIPT_DIR}/${SESSION_SCRIPT}" "$@"

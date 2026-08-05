@@ -29,7 +29,7 @@ RUN apt-get update \
 ENV PATH="/usr/local/go/bin:${PATH}"
 
 COPY test/containers/wayland-entrypoint.sh test/containers/wayland-session.sh /opt/sshakku-wayland/
-COPY test/containers/wayland-sway.config /opt/sshakku-wayland/
+COPY test/containers/wayland-compositor.sh test/containers/wayland-sway.config /opt/sshakku-wayland/
 RUN chmod +x /opt/sshakku-wayland/wayland-entrypoint.sh /opt/sshakku-wayland/wayland-session.sh
 
 WORKDIR /src
