@@ -218,6 +218,52 @@ func TestProbeDir(t *testing.T) {
 	}
 }
 
+// TestPrivateDir covers the question asked of a directory somebody else named:
+// is it ours alone? Everything that would let another user in — a mode that
+// grants them anything, a symlink pointing who knows where, something that is
+// not a directory at all — has to answer no, since what goes in such a
+// directory is a passphrase waiting to be collected.
+func TestPrivateDir(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if !PrivateDir(dir) {
+		t.Error("PrivateDir(0700 dir of ours) = false, want true")
+	}
+
+	for _, mode := range []os.FileMode{0o770, 0o707, 0o750, 0o705, 0o777} {
+		if err := os.Chmod(dir, mode); err != nil {
+			t.Fatal(err)
+		}
+		if PrivateDir(dir) {
+			t.Errorf("PrivateDir(%o dir) = true, want false", mode)
+		}
+	}
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	file := filepath.Join(dir, "f")
+	if err := os.WriteFile(file, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if PrivateDir(file) {
+		t.Error("PrivateDir(file) = true, want false (not a directory)")
+	}
+	if PrivateDir(filepath.Join(dir, "missing")) {
+		t.Error("PrivateDir(missing) = true, want false")
+	}
+
+	link := filepath.Join(t.TempDir(), "link")
+	if err := os.Symlink(dir, link); err != nil {
+		t.Fatal(err)
+	}
+	if PrivateDir(link) {
+		t.Error("PrivateDir(symlink to a private dir) = true, want false")
+	}
+}
+
 // TestEnsureDirErrors covers ensureDir's failure branches: a parent that is a
 // plain file makes MkdirAll fail, and an injected chmod that fails makes the
 // permission step fail even though the directory was created.

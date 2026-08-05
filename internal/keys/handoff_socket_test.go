@@ -6,12 +6,17 @@ import (
 	"time"
 )
 
+// addrLimit is the address length these tests hold themselves to: the stricter
+// of the two systems this runs on, so a socket path that fits here fits
+// everywhere. The production values live with the platform that imposes them.
+const addrLimit = 103
+
 // shortDir returns a fresh temp dir under /tmp — not t.TempDir()'s nested,
 // test-name-derived path, and not os.MkdirTemp("", ...)'s default either: on
 // Darwin that resolves under $TMPDIR, itself a long per-boot randomized path
-// (/var/folders/.../T/), which combined with this package's own
-// cache-dir/socket-name suffix still overflows AF_UNIX's sun_path limit (108
-// bytes on Linux, 104 on Darwin). /tmp is short on both.
+// (/var/folders/.../T/), and a test that spends its budget on the directory
+// leading up to the socket has nothing left to say about the socket. /tmp is
+// short on both.
 func shortDir(t *testing.T) string {
 	t.Helper()
 	dir, err := os.MkdirTemp("/tmp", "sshakku")
@@ -23,10 +28,7 @@ func shortDir(t *testing.T) string {
 }
 
 func TestSocketHandoffRoundTrip(t *testing.T) {
-	t.Setenv("HOME", shortDir(t))
-	t.Setenv("XDG_CACHE_HOME", "")
-
-	token, err := socketHandoffStash("s3cr3t", 5*time.Second)
+	token, err := socketHandoffStash("s3cr3t", 5*time.Second, shortDir(t), addrLimit)
 	if err != nil {
 		t.Fatalf("socketHandoffStash: %v", err)
 	}
@@ -49,10 +51,7 @@ func TestSocketHandoffRoundTrip(t *testing.T) {
 }
 
 func TestSocketHandoffOneShot(t *testing.T) {
-	t.Setenv("HOME", shortDir(t))
-	t.Setenv("XDG_CACHE_HOME", "")
-
-	token, err := socketHandoffStash("s3cr3t", 5*time.Second)
+	token, err := socketHandoffStash("s3cr3t", 5*time.Second, shortDir(t), addrLimit)
 	if err != nil {
 		t.Fatalf("socketHandoffStash: %v", err)
 	}
@@ -77,10 +76,7 @@ func TestSocketHandoffOneShot(t *testing.T) {
 }
 
 func TestSocketHandoffExpiresUnclaimed(t *testing.T) {
-	t.Setenv("HOME", shortDir(t))
-	t.Setenv("XDG_CACHE_HOME", "")
-
-	token, err := socketHandoffStash("s3cr3t", 100*time.Millisecond)
+	token, err := socketHandoffStash("s3cr3t", 100*time.Millisecond, shortDir(t), addrLimit)
 	if err != nil {
 		t.Fatalf("socketHandoffStash: %v", err)
 	}

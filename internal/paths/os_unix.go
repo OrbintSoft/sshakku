@@ -61,6 +61,24 @@ func ProbeDirAs(uid int) func(path string, requireOwner bool) bool {
 	}
 }
 
+// PrivateDir reports whether path is a directory this user has to themselves:
+// it exists, is not a symlink, belongs to us, and grants nothing to group or
+// other. It is the question to ask of a directory that was not chosen by us —
+// one named by an environment variable, say — before anything of ours is put
+// inside it, since a directory somebody else can write to is a directory
+// somebody else can wait in.
+func PrivateDir(path string) bool {
+	fi, err := os.Lstat(path)
+	if err != nil || !fi.IsDir() {
+		return false
+	}
+	if fi.Mode().Perm()&0o077 != 0 {
+		return false
+	}
+	st, ok := fi.Sys().(*syscall.Stat_t)
+	return ok && int(st.Uid) == os.Getuid()
+}
+
 // Ensure creates the layout's directories (0700, leaf only) and the log file
 // (0600). Intermediate parents (e.g. ~/.config) are created with the process
 // umask but never re-permissioned — only our own leaf dirs are forced to 0700.
