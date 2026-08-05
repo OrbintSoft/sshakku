@@ -62,7 +62,7 @@ container session around it differs.
 | KDE (`ksecretd`/`kwalletd6`) | ❌ | ✅ `kde.Dockerfile`, `SSHAKKU_SESSION_SCRIPT=kde-wayland-session.sh` | ✅ `kde.Dockerfile` |
 | GNOME (`gnome-keyring-daemon`, desktop session) | ✅ `gnome-keyring.Dockerfile` | ✅ `gnome-keyring.Dockerfile`, `SSHAKKU_SESSION_SCRIPT=gnome-keyring-wayland-session.sh` | — |
 | GNOME Keyring, headless-daemonized (no session/display at all) | — | — | ❌ |
-| KeePassXC (standalone, any desktop) | ✅ `keepassxc.Dockerfile` | ❌ | — |
+| KeePassXC (standalone, any desktop) | ✅ `keepassxc.Dockerfile` | ✅ `keepassxc.Dockerfile`, `SSHAKKU_SESSION_SCRIPT=keepassxc-wayland-session.sh` | — |
 
 KDE is the one wallet here that needs no display of any kind: PAM opens the
 wallet as part of the login, so ksecretd is never asked to draw anything and
@@ -93,9 +93,12 @@ clicks. The container stays unprivileged and mounts no `/dev/input`: it makes
 the single node it uses and can open nothing else, so the machine running the
 test keeps its own keyboard to itself.
 
-KeePassXC's ❌ is what remains. Its database is opened through a multi-page
-wizard rather than one dialog, and answering that is separate work — not a
-missing compositor, and no longer a missing way to click either.
+KeePassXC is answered the same way, and its session is where the Wayland side
+pays off rather than costs: the compositor names every window, so each thing the
+app asks is recognised by what it says it is — "Create a new KeePassXC
+database…", "Save database as" — instead of by whether the last click landed
+within the sleep the script allowed. Its buttons are pressed by position, but
+relative to the window that owns them.
 
 ## Backend round trips
 
