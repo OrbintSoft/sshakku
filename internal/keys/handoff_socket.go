@@ -64,8 +64,12 @@ func socketHandoffDir(base string) (string, error) {
 // the socket — whether that connection arrived, or ttl elapsed first (e.g.
 // ssh-add never invoked the askpass helper), so a stash is never left
 // dangling. The returned path is the handoff token socketHandoffFetch dials.
-func socketHandoffStash(passphrase string, ttl time.Duration, base string, maxAddr int) (string, error) {
-	dir, err := socketHandoffDir(base)
+func socketHandoffStash(passphrase string, ttl time.Duration, base func() (string, error), maxAddr int) (string, error) {
+	root, err := base()
+	if err != nil {
+		return "", err
+	}
+	dir, err := socketHandoffDir(root)
 	if err != nil {
 		return "", err
 	}

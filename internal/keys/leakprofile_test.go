@@ -43,14 +43,14 @@ func TestSocketHandoffNoGoroutineLeak(t *testing.T) {
 
 	// Unclaimed stash: the server must time out and exit, never blocking on
 	// Accept for a connection that never comes.
-	unclaimed, err := socketHandoffStash("s3cr3t", 100*time.Millisecond, base, addrLimit)
+	unclaimed, err := socketHandoffStash("s3cr3t", 100*time.Millisecond, fixedBase(base), addrLimit)
 	if err != nil {
 		t.Fatalf("socketHandoffStash (unclaimed): %v", err)
 	}
 	waitGone(t, unclaimed)
 
 	// Claimed stash: the server must exit right after serving the one fetch.
-	claimed, err := socketHandoffStash("s3cr3t", 5*time.Second, base, addrLimit)
+	claimed, err := socketHandoffStash("s3cr3t", 5*time.Second, fixedBase(base), addrLimit)
 	if err != nil {
 		t.Fatalf("socketHandoffStash (claimed): %v", err)
 	}

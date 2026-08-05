@@ -49,7 +49,7 @@ func TestSocketHandoffFetchDialError(t *testing.T) {
 func TestSocketHandoffFetchReadError(t *testing.T) {
 	saveHandoffSocketSeams(t)
 
-	token, err := socketHandoffStash("s3cr3t", 5*time.Second, shortDir(t), addrLimit)
+	token, err := socketHandoffStash("s3cr3t", 5*time.Second, fixedBase(shortDir(t)), addrLimit)
 	if err != nil {
 		t.Fatalf("socketHandoffStash: %v", err)
 	}
@@ -100,7 +100,7 @@ func TestSocketHandoffDirIsPrivate(t *testing.T) {
 // would refuse: what comes back has to name the length and the limit, since
 // the kernel's own answer ("invalid argument") names neither.
 func TestSocketHandoffAddressTooLong(t *testing.T) {
-	_, err := socketHandoffStash("s", time.Second, shortDir(t), 20)
+	_, err := socketHandoffStash("s", time.Second, fixedBase(shortDir(t)), 20)
 	if err == nil {
 		t.Fatal("socketHandoffStash returned nil error, want the address-too-long failure")
 	}
@@ -151,12 +151,20 @@ func TestChooseSocketBase(t *testing.T) {
 }
 
 func TestSocketHandoffStashErrors(t *testing.T) {
+	t.Run("the base cannot be resolved at all", func(t *testing.T) {
+		if _, err := socketHandoffStash("s", time.Second, func() (string, error) {
+			return "", errors.New("no base")
+		}, addrLimit); err == nil {
+			t.Fatal("socketHandoffStash returned nil error, want the failure from resolving a base")
+		}
+	})
+
 	t.Run("the directory cannot be made", func(t *testing.T) {
 		file := filepath.Join(t.TempDir(), "not-a-dir")
 		if err := os.WriteFile(file, nil, 0o600); err != nil {
 			t.Fatalf("write file: %v", err)
 		}
-		if _, err := socketHandoffStash("s", time.Second, file, addrLimit); err == nil {
+		if _, err := socketHandoffStash("s", time.Second, fixedBase(file), addrLimit); err == nil {
 			t.Fatal("socketHandoffStash returned nil error, want the dir failure")
 		}
 	})
@@ -164,7 +172,7 @@ func TestSocketHandoffStashErrors(t *testing.T) {
 	t.Run("token RNG fails", func(t *testing.T) {
 		saveHandoffSocketSeams(t)
 		randRead = func([]byte) (int, error) { return 0, errors.New("rng boom") }
-		if _, err := socketHandoffStash("s", time.Second, shortDir(t), addrLimit); err == nil {
+		if _, err := socketHandoffStash("s", time.Second, fixedBase(shortDir(t)), addrLimit); err == nil {
 			t.Fatal("socketHandoffStash returned nil error, want the RNG failure")
 		}
 	})
@@ -172,7 +180,7 @@ func TestSocketHandoffStashErrors(t *testing.T) {
 	t.Run("listen fails", func(t *testing.T) {
 		saveHandoffSocketSeams(t)
 		netListen = func(string, string) (net.Listener, error) { return nil, errors.New("listen boom") }
-		if _, err := socketHandoffStash("s", time.Second, shortDir(t), addrLimit); err == nil {
+		if _, err := socketHandoffStash("s", time.Second, fixedBase(shortDir(t)), addrLimit); err == nil {
 			t.Fatal("socketHandoffStash returned nil error, want the listen failure")
 		}
 	})
@@ -180,7 +188,7 @@ func TestSocketHandoffStashErrors(t *testing.T) {
 	t.Run("chmod fails and the socket is cleaned up", func(t *testing.T) {
 		saveHandoffSocketSeams(t)
 		chmodSock = func(string, os.FileMode) error { return errors.New("chmod boom") }
-		if _, err := socketHandoffStash("s", time.Second, shortDir(t), addrLimit); err == nil {
+		if _, err := socketHandoffStash("s", time.Second, fixedBase(shortDir(t)), addrLimit); err == nil {
 			t.Fatal("socketHandoffStash returned nil error, want the chmod failure")
 		}
 	})

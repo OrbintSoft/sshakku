@@ -25,11 +25,9 @@ const maxSocketAddr = 103
 // directory of any length: the path a home yields is the home's own plus some
 // forty-odd bytes.
 func stashPassphrase(passphrase string, ttl time.Duration) (string, error) {
-	base, err := chooseSocketBase(os.Getenv("TMPDIR"), paths.PrivateDir, os.UserCacheDir)
-	if err != nil {
-		return "", err
-	}
-	return socketHandoffStash(passphrase, ttl, base, maxSocketAddr)
+	return socketHandoffStash(passphrase, ttl, func() (string, error) {
+		return chooseSocketBase(os.Getenv("TMPDIR"), paths.PrivateDir, os.UserCacheDir)
+	}, maxSocketAddr)
 }
 
 func fetchPassphrase(token string) (string, error) {

@@ -27,8 +27,14 @@ func shortDir(t *testing.T) string {
 	return dir
 }
 
+// fixedBase answers with one directory, for the tests whose subject is what
+// happens once the base is known rather than how one is chosen.
+func fixedBase(dir string) func() (string, error) {
+	return func() (string, error) { return dir, nil }
+}
+
 func TestSocketHandoffRoundTrip(t *testing.T) {
-	token, err := socketHandoffStash("s3cr3t", 5*time.Second, shortDir(t), addrLimit)
+	token, err := socketHandoffStash("s3cr3t", 5*time.Second, fixedBase(shortDir(t)), addrLimit)
 	if err != nil {
 		t.Fatalf("socketHandoffStash: %v", err)
 	}
@@ -51,7 +57,7 @@ func TestSocketHandoffRoundTrip(t *testing.T) {
 }
 
 func TestSocketHandoffOneShot(t *testing.T) {
-	token, err := socketHandoffStash("s3cr3t", 5*time.Second, shortDir(t), addrLimit)
+	token, err := socketHandoffStash("s3cr3t", 5*time.Second, fixedBase(shortDir(t)), addrLimit)
 	if err != nil {
 		t.Fatalf("socketHandoffStash: %v", err)
 	}
@@ -76,7 +82,7 @@ func TestSocketHandoffOneShot(t *testing.T) {
 }
 
 func TestSocketHandoffExpiresUnclaimed(t *testing.T) {
-	token, err := socketHandoffStash("s3cr3t", 100*time.Millisecond, shortDir(t), addrLimit)
+	token, err := socketHandoffStash("s3cr3t", 100*time.Millisecond, fixedBase(shortDir(t)), addrLimit)
 	if err != nil {
 		t.Fatalf("socketHandoffStash: %v", err)
 	}
