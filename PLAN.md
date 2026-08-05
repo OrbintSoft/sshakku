@@ -1568,3 +1568,40 @@ script CI uses. The GNOME and KDE steps have since passed on a hosted runner,
 which is also what settled whether one grants `/dev/uinput`.
 
 → features F4, F5, F6, F9; open decisions 20, 24.
+
+### Phase 24 — The X11 session, and the screen the daemon never saw ✅ Done
+
+The last ❌ in the KDE row of `docs/TEST-MATRIX.md`: the session most KDE users
+are actually sitting in had never been built. `kde-x11-session.sh` puts an Xvfb
+display around the same PAM unlock the other two sessions use, and the round
+trip is the one already there — same image, same test, so the session stays the
+only variable.
+
+**Building it is what showed the other two were not what they claimed.** The
+X11 round trip passed on the first run, and the daemon's own
+`/proc/<pid>/maps` said why it should not have: ksecretd had mapped
+`libqoffscreen.so`, with no `DISPLAY` in its environment. The Wayland session,
+already ✅, was the same — `libqoffscreen.so`, no `WAYLAND_DISPLAY`. `kde.env`
+is installed as `/etc/environment` and `kde-pam.conf` has PAM read it into the
+session, so `QT_QPA_PLATFORM=offscreen` reached the daemon in every login; each
+session script's `unset` had only ever reached the client side. Both "a login
+with a screen" cells were varying SSHakku's view of the session while the
+daemon stayed exactly where the no-display cell has it.
+
+Dropping that one line is the fix: the platform each session needs is already
+in the process environment the daemon inherits — the entrypoint's `offscreen`
+where there is no display, and nothing at all where there is one, so Qt chooses
+as it does on a real desktop. The daemon now maps `libqoffscreen.so`,
+`libqwayland.so` and `libqxcb.so` in the three sessions respectively.
+
+**The pairing that proves it** (rule 23), both halves run: with the X server
+removed from the session script, the X11 login fails — ksecretd never registers
+`org.freedesktop.secrets` and the session times out — and with the old
+`QT_QPA_PLATFORM` pin restored, that same displayless session passes. The X
+server was decorative before the fix and load-bearing after it.
+
+**Verified by running it** (rule 25): all three sessions driven against the real
+ksecretd from rebuilt images, each one's platform read out of the daemon's own
+address space rather than inferred from the session it was started in.
+
+→ features F4, F5, F9; open decisions 20, 24.

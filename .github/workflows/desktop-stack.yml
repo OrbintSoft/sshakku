@@ -71,6 +71,19 @@ jobs:
           sshakku-test-desktop-stack-kde
           go test ./internal/keys -run TestSecretServiceBackendRealDaemon -count=1 -v
 
+      # The same wallet again, from the session most KDE users are actually
+      # sitting in: an X server rather than a compositor. Same image, same test,
+      # so the session is once more the only variable — and it is one the daemon
+      # itself is subject to, since it draws on whichever display its login
+      # provides.
+      - name: Run the KDE round trip in an X11 session
+        if: matrix.name == 'kde'
+        run: >
+          docker run --init --rm -v "${{ github.workspace }}":/src:ro
+          -e SSHAKKU_SESSION_SCRIPT=kde-x11-session.sh
+          sshakku-test-desktop-stack-kde
+          go test ./internal/keys -run TestSecretServiceBackendRealDaemon -count=1 -v
+
       # Where a user is asked for a passphrase on a Wayland desktop, driven
       # through the real binary in a session with a screen and no controlling
       # terminal. The image's own dialogs are what make it worth running: its
