@@ -60,7 +60,7 @@ container session around it differs.
 | Session | X11 | Wayland | No display |
 | --- | --- | --- | --- |
 | KDE (`ksecretd`/`kwalletd6`) | ❌ | ✅ `kde.Dockerfile`, `SSHAKKU_SESSION_SCRIPT=kde-wayland-session.sh` | ✅ `kde.Dockerfile` |
-| GNOME (`gnome-keyring-daemon`, desktop session) | ✅ `gnome-keyring.Dockerfile` | ❌ | — |
+| GNOME (`gnome-keyring-daemon`, desktop session) | ✅ `gnome-keyring.Dockerfile` | ✅ `gnome-keyring.Dockerfile`, `SSHAKKU_SESSION_SCRIPT=gnome-keyring-wayland-session.sh` | — |
 | GNOME Keyring, headless-daemonized (no session/display at all) | — | — | ❌ |
 | KeePassXC (standalone, any desktop) | ✅ `keepassxc.Dockerfile` | ❌ | — |
 
@@ -79,13 +79,23 @@ unless a KeePassXC-under-XFCE test is actually worth adding later.
 There is a Wayland session to run in now — sway on wlroots' headless backend,
 with no X server and no Xwayland, shared by `wayland.Dockerfile` and any other
 image that starts it — and the passphrase-prompt rows further down are driven
-in it. The two remaining ❌s in the Wayland column need more than a session:
-each of those daemons has a dialog of its own to answer once (creating a
-collection, unlocking a database), and every one of those is currently answered
-by clicking a screen coordinate with `xdotool`, which needs an X server and has
-no Wayland counterpart — the virtual-keyboard protocol `wtype` speaks has no
-pointer in it. Answering them from the keyboard instead is what those two cells
-are waiting on, not a missing compositor.
+in it as well.
+
+GNOME Keyring's cell was the one that had something to teach. Its collection is
+created through a dialog, and that dialog cannot be answered from the keyboard
+at all: `libgcr-ui` grabs the seat before it accepts input, and a seat with no
+input device has nothing to grant, so the window draws, keeps focus, and ignores
+every key — while zenity, the same toolkit in the same session, takes what is
+typed into it happily. The session is therefore given a pointer device that
+never sends an event, purely so the seat has one, and the dialog is clicked
+through the compositor's own cursor at the same two points the X11 script
+clicks. The container stays unprivileged and mounts no `/dev/input`: it makes
+the single node it uses and can open nothing else, so the machine running the
+test keeps its own keyboard to itself.
+
+KeePassXC's ❌ is what remains. Its database is opened through a multi-page
+wizard rather than one dialog, and answering that is separate work — not a
+missing compositor, and no longer a missing way to click either.
 
 ## Backend round trips
 
