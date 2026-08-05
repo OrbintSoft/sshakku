@@ -4,8 +4,8 @@
 # session script (as that account) to actually drive the test command.
 #
 # Which session script decides what the wallet is reached from: a login with no
-# display at all by default, or one with a screen and no X server when
-# SSHAKKU_SESSION_SCRIPT names that one instead.
+# display at all by default, or one with a screen — a Wayland compositor or an
+# X server — when SSHAKKU_SESSION_SCRIPT names that one instead.
 set -euo pipefail
 
 readonly TEST_USER="sshakku-kde-test"
@@ -39,6 +39,10 @@ install -m 644 "${SCRIPT_DIR}/kde-pam.conf" "/etc/pam.d/${PAM_SERVICE}"
 install -m 644 -o "${TEST_USER}" -g "${TEST_USER}" -D \
 	"${SCRIPT_DIR}/kde-kwalletrc" "/home/${TEST_USER}/.config/kwalletrc"
 
+# QT_QPA_PLATFORM below is the platform of a login with no display, and it is
+# handed over here rather than written into /etc/environment because everything
+# in that file reaches the daemon PAM starts, whatever session it was started
+# from: a session that has a screen unsets this and lets Qt pick for itself.
 exec runuser -u "${TEST_USER}" -- env -i \
 	HOME="/home/${TEST_USER}" \
 	PATH="/usr/local/go/bin:${PATH}" \
