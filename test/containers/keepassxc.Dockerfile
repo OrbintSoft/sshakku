@@ -16,8 +16,10 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 RUN dnf install -y --setopt=install_weak_deps=False \
         keepassxc dbus-daemon xorg-x11-server-Xvfb xdotool util-linux procps-ng \
+        sway seatd qt5-qtwayland wtype jq \
         ca-certificates gcc make glibc-devel openssh-clients keyutils \
     && dnf clean all \
+    && setcap -r /usr/sbin/sway \
     && GO_VERSION=$(curl -fsSL 'https://go.dev/VERSION?m=text' | head -n1) \
     && curl -fsSL "https://go.dev/dl/${GO_VERSION}.linux-amd64.tar.gz" | tar -C /usr/local -xz
 
@@ -26,9 +28,18 @@ ENV PATH="/usr/local/go/bin:${PATH}"
 COPY test/containers/keepassxc-entrypoint.sh test/containers/keepassxc-session.sh test/containers/keepassxc-create-collection.sh \
     test/containers/keepassxc-native-session.sh test/containers/keepassxc-browser.ini test/containers/keyring-session.sh \
     /opt/sshakku-desktop-stack/
+COPY test/containers/keepassxc-wayland-session.sh test/containers/keepassxc-wayland-create-collection.sh \
+    test/containers/keepassxc-sway.config test/containers/wayland-compositor.sh test/containers/wayland-pointer.sh \
+    test/containers/wayland-sway.config /opt/sshakku-desktop-stack/
 RUN chmod +x /opt/sshakku-desktop-stack/keepassxc-entrypoint.sh /opt/sshakku-desktop-stack/keepassxc-session.sh \
     /opt/sshakku-desktop-stack/keepassxc-create-collection.sh /opt/sshakku-desktop-stack/keepassxc-native-session.sh \
-    /opt/sshakku-desktop-stack/keyring-session.sh
+    /opt/sshakku-desktop-stack/keyring-session.sh /opt/sshakku-desktop-stack/keepassxc-wayland-session.sh \
+    /opt/sshakku-desktop-stack/keepassxc-wayland-create-collection.sh
+
+# The pointer tool is a program of this environment, not of SSHakku: it carries
+# a build tag that keeps it out of the module and is compiled on its own here.
+COPY test/containers/uinput_pointer_linux.go /opt/sshakku-desktop-stack/
+RUN go build -o /usr/local/bin/uinput-pointer /opt/sshakku-desktop-stack/uinput_pointer_linux.go
 
 WORKDIR /src
 

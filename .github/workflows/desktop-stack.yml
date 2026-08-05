@@ -83,6 +83,17 @@ jobs:
           sshakku-test-desktop-stack-wayland
           test/containers/wayland-prompt-scenario.sh
 
+      # The same wallet under a Wayland login, where the app's own database
+      # wizard is answered through the compositor's cursor rather than an X
+      # server's.
+      - name: Run the KeePassXC round trip in a Wayland session
+        if: matrix.name == 'keepassxc'
+        run: >
+          test/containers/run-wayland-wallet.sh
+          sshakku-test-desktop-stack-keepassxc
+          keepassxc-wayland-session.sh
+          go test ./internal/keys -run TestSecretServiceBackendRealDaemon -count=1 -v
+
       # The CLI route works on a database file with no KeePassXC running, so it
       # needs none of the image's X/D-Bus session — only keepassxc-cli, which
       # the same image already carries. The entrypoint is bypassed for that
