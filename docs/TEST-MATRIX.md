@@ -59,17 +59,27 @@ container session around it differs.
 
 | Session | X11 | Wayland | No display |
 | --- | --- | --- | --- |
-| KDE (`ksecretd`/`kwalletd6`) | ❌ | ✅ `kde.Dockerfile`, `SSHAKKU_SESSION_SCRIPT=kde-wayland-session.sh` | ✅ `kde.Dockerfile` |
+| KDE (`ksecretd`/`kwalletd6`) | ✅ `kde.Dockerfile`, `SSHAKKU_SESSION_SCRIPT=kde-x11-session.sh` (F4, F5, F9) | ✅ `kde.Dockerfile`, `SSHAKKU_SESSION_SCRIPT=kde-wayland-session.sh` (F4, F5, F9) | ✅ `kde.Dockerfile` (F4, F5, F9) |
 | GNOME (`gnome-keyring-daemon`, desktop session) | ✅ `gnome-keyring.Dockerfile` | ✅ `gnome-keyring.Dockerfile`, `SSHAKKU_SESSION_SCRIPT=gnome-keyring-wayland-session.sh` | — |
 | GNOME Keyring, headless-daemonized (no session/display at all) | — | — | ❌ |
 | KeePassXC (standalone, any desktop) | ✅ `keepassxc.Dockerfile` | ✅ `keepassxc.Dockerfile`, `SSHAKKU_SESSION_SCRIPT=keepassxc-wayland-session.sh` | — |
 
 KDE is the one wallet here that needs no display of any kind: PAM opens the
 wallet as part of the login, so ksecretd is never asked to draw anything and
-the round trip runs in a session that has no screen at all. Its two ✅s are the
-same image and the same test, differing only in whether a compositor is started
-around them. Its X11 cell is ❌ and not a `—` because such a session plainly can
-exist — nothing here has ever built one, which is exactly what a ❌ says.
+the round trip runs in a session that has no screen at all. Its three ✅s are
+the same image and the same test, differing only in the login built around
+them — no display, a compositor, or an X server.
+
+What makes those three genuinely different runs is that the daemon is subject
+to the session too, not only SSHakku: ksecretd draws on whichever display its
+login provides, and the Qt platform plugin it maps says which one it took
+(`libqoffscreen.so`, `libqwayland.so`, `libqxcb.so` respectively). Until the
+X11 session was built they were not different runs at all — `kde.env`, which
+PAM reads into the daemon's environment, pinned every one of them to the
+offscreen platform, so the daemon never saw the screen its session had. The
+control that shows this now holds: with the X server taken away, the X11
+session fails because ksecretd never registers on the bus; with the pin put
+back, that same displayless session passes.
 
 GNOME Keyring's and KeePassXC's own daemons do need a display, hence their
 `—`s. XFCE has no native provider of its own -- it would only ever host GNOME
