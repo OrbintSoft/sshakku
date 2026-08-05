@@ -33,12 +33,16 @@ compositor_exactly_one() {
 
 # Starts the compositor and exports WAYLAND_DISPLAY and SWAYSOCK. What a client
 # then sees is a Wayland login without Xwayland: a screen, and no DISPLAY.
+#
+# A caller that has arranged an input device exports WLR_BACKENDS=libinput,headless
+# and the libseat backend to reach it; the default is a session with no input
+# hardware at all, which is all a dialog that can be typed into needs.
 start_wayland_compositor() {
-	# WLR_BACKENDS=headless is what makes this a session with no hardware behind
+	# The headless backend is what makes this a session with no hardware behind
 	# it: wlroots renders to memory instead of opening a DRM device, so no seat,
 	# no /dev/dri and no privileges are needed. Without it sway would look for a
 	# graphics card, find none, and exit.
-	WLR_BACKENDS=headless sway --config "${SWAY_CONFIG}" &
+	WLR_BACKENDS="${WLR_BACKENDS:-headless}" sway --config "${SWAY_CONFIG}" &
 
 	compositor_wait_for "the Wayland display socket" compositor_exactly_one "${DISPLAY_SOCKET}"
 	WAYLAND_DISPLAY="$(basename "$(compgen -G "${DISPLAY_SOCKET}")")"
