@@ -173,6 +173,36 @@ load helpers
 	fi
 }
 
+@test "F1: a shell finds a working agent from a long home with no runtime directory" {
+	# The runtime directory a desktop Linux logs you into is not something
+	# every machine has: macOS has none at all, and neither does a container,
+	# a chroot, or a system without logind. What is left is the home, and F1
+	# promises a working agent on every one of them.
+	long_home 90
+	unset XDG_RUNTIME_DIR
+
+	new_test_key id_test "test-passphrase"
+
+	init_err="$TEST_ROOT/shell-init.err"
+	eval "$("$SSHAKKU_BIN" shell-init 2>"$init_err")"
+	if [ -z "${agent_sock:-}" ]; then
+		echo "shell-init named no agent socket. It said:" >&2
+		cat "$init_err" >&2
+		return 1
+	fi
+
+	# What F1 asks of the socket is that the agent answers on it: with no keys
+	# added yet that is "no identities" rather than a listing, and either way
+	# it is an answer. A socket nothing is listening on is not.
+	SSH_AUTH_SOCK="$agent_sock" run ssh-add -l
+	if [ "$status" -ne 0 ] && [ "$status" -ne 1 ]; then
+		echo "ssh-add -l on the socket the hook named said: $output" >&2
+		echo "shell-init said:" >&2
+		cat "$init_err" >&2
+		return 1
+	fi
+}
+
 @test "a reachable but empty agent is adopted, not killed and replaced" {
 	eval "$("$SSHAKKU_BIN" shell-init)"
 	bootstrap_pid=$(doctor_recorded_pid)
