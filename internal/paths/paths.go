@@ -19,7 +19,12 @@ type Env struct {
 	StateHome  string // $XDG_STATE_HOME (may be empty)
 	RuntimeDir string // $XDG_RUNTIME_DIR (may be empty)
 	CacheHome  string // $XDG_CACHE_HOME (may be empty)
-	UID        int
+	// TempDir is the per-user temporary directory this session was given, and
+	// only if it is private to this user — a shared one is left out here
+	// rather than rejected later, so nothing downstream has to know the
+	// difference. Empty when there is none to use.
+	TempDir string
+	UID     int
 }
 
 // Layout is the set of resolved paths.
@@ -79,7 +84,16 @@ func (l Layout) WithSocketToken(token string) Layout {
 
 // resolveRuntimeDir picks the per-user tmpfs base, independent of the desktop or
 // display server: XDG_RUNTIME_DIR, then its canonical /run/user/$UID (only if we
-// own it), then a private dir under $HOME when no logind tmpfs exists.
+// own it), then the session's own private temporary directory, and last a
+// private dir under $HOME.
+//
+// The temporary directory comes before the home because the agent socket's
+// address is bound by the kernel to barely a hundred bytes, while a home
+// directory has no such limit and contributes its whole length: on a system
+// with neither of the first two — macOS, a container, anything without logind
+// — a home of ordinary depth still fits, and a long one leaves the session
+// with no agent at all. It is also where that system's own ssh-agent puts its
+// socket when nobody tells it otherwise.
 func resolveRuntimeDir(env Env, probe func(string, bool) bool) string {
 	if env.RuntimeDir != "" && probe(env.RuntimeDir, false) {
 		return filepath.Join(env.RuntimeDir, app)
@@ -87,6 +101,9 @@ func resolveRuntimeDir(env Env, probe func(string, bool) bool) string {
 	runUser := filepath.Join("/run/user", strconv.Itoa(env.UID))
 	if probe(runUser, true) {
 		return filepath.Join(runUser, app)
+	}
+	if env.TempDir != "" {
+		return filepath.Join(env.TempDir, app)
 	}
 	cacheHome := env.CacheHome
 	if cacheHome == "" {

@@ -176,12 +176,45 @@ func TestFromEnvHomeFallback(t *testing.T) {
 		return ""
 	}
 	homeDir := func() (string, error) { return "/fallback/home", nil }
-	env := fromEnv(getenv, homeDir, func() int { return 4242 })
+	env := fromEnv(getenv, homeDir, func() int { return 4242 }, func(string) bool { return true })
 	if env.Home != "/fallback/home" {
 		t.Errorf("Home = %q, want /fallback/home (from the homeDir fallback)", env.Home)
 	}
 	if env.UID != 4242 {
 		t.Errorf("UID = %d, want 4242", env.UID)
+	}
+}
+
+// TestFromEnvTempDir covers the one input that is inspected rather than merely
+// read: a temporary directory this user does not have to themselves is not
+// carried forward at all, so nothing downstream can put a socket in it by
+// mistake.
+func TestFromEnvTempDir(t *testing.T) {
+	getenv := func(key string) string {
+		if key == "TMPDIR" {
+			return "/the/tmp"
+		}
+		return ""
+	}
+	homeDir := func() (string, error) { return "/home/alice", nil }
+	uid := func() int { return 1000 }
+
+	env := fromEnv(getenv, homeDir, uid, func(string) bool { return true })
+	if env.TempDir != "/the/tmp" {
+		t.Errorf("TempDir = %q, want /the/tmp (a private one is kept)", env.TempDir)
+	}
+
+	env = fromEnv(getenv, homeDir, uid, func(string) bool { return false })
+	if env.TempDir != "" {
+		t.Errorf("TempDir = %q, want empty (a shared one is dropped)", env.TempDir)
+	}
+
+	env = fromEnv(func(string) string { return "" }, homeDir, uid, func(string) bool {
+		t.Error("a temporary directory that was never named got inspected")
+		return true
+	})
+	if env.TempDir != "" {
+		t.Errorf("TempDir = %q, want empty (none was named)", env.TempDir)
 	}
 }
 
@@ -215,6 +248,52 @@ func TestProbeDir(t *testing.T) {
 	// Without requireOwner the same probe ignores ownership.
 	if !ProbeDirAs(os.Getuid()+99999)(dir, false) {
 		t.Error("ProbeDirAs(other uid)(dir, false) = false, want true")
+	}
+}
+
+// TestPrivateDir covers the question asked of a directory somebody else named:
+// is it ours alone? Everything that would let another user in — a mode that
+// grants them anything, a symlink pointing who knows where, something that is
+// not a directory at all — has to answer no, since what goes in such a
+// directory is a passphrase waiting to be collected.
+func TestPrivateDir(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if !PrivateDir(dir) {
+		t.Error("PrivateDir(0700 dir of ours) = false, want true")
+	}
+
+	for _, mode := range []os.FileMode{0o770, 0o707, 0o750, 0o705, 0o777} {
+		if err := os.Chmod(dir, mode); err != nil {
+			t.Fatal(err)
+		}
+		if PrivateDir(dir) {
+			t.Errorf("PrivateDir(%o dir) = true, want false", mode)
+		}
+	}
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	file := filepath.Join(dir, "f")
+	if err := os.WriteFile(file, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if PrivateDir(file) {
+		t.Error("PrivateDir(file) = true, want false (not a directory)")
+	}
+	if PrivateDir(filepath.Join(dir, "missing")) {
+		t.Error("PrivateDir(missing) = true, want false")
+	}
+
+	link := filepath.Join(t.TempDir(), "link")
+	if err := os.Symlink(dir, link); err != nil {
+		t.Fatal(err)
+	}
+	if PrivateDir(link) {
+		t.Error("PrivateDir(symlink to a private dir) = true, want false")
 	}
 }
 

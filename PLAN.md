@@ -1147,28 +1147,51 @@ user re-prompted on every release.
 
 → feature F4; open decision: how releases are signed and notarised.
 
-### Phase 16 — Long home paths on macOS
+### Phase 16 — The home too long for a socket ✅ Done
 
-The out-of-band passphrase handoff binds a unix socket under
-`$HOME/Library/Caches/sshakku/`, and BSD limits a socket address to 104 bytes —
-a limit on the address, not on the file system. The socket path is roughly
-`$HOME` plus fifty characters, so a home much beyond about sixty characters
-leaves no room and `bind` fails with `invalid argument`, which says nothing
-about length. sshakku then reports that it could not load the key and the shell
-carries on, so the failure is visible but its cause is not.
+A socket address is capped at 104 bytes on Darwin and 108 on Linux — a limit on
+the address, not on the file system, so it surfaces as `bind` answering
+`invalid argument` and naming no length at all. Two of SSHakku's sockets were
+built from the user's home, which has no such limit and contributes its whole
+length. Both were measured, reproduced and closed here; the second was not
+known to exist when the phase was written.
 
-An ordinary `/Users/<name>` home is far inside the limit, which is why this has
-never been hit in normal use; it takes an unusually deep or long home directory.
-Found while making the shell suite run on macOS, where bats' own nested
-temporary directories reach that length on their own.
+- **The passphrase handoff** (Darwin only — Linux hands the passphrase over
+  through the kernel keyring, which has no address). Under the cache
+  directory, the path was the home plus 47 bytes, so a home past 56 characters
+  had no room. The key did not load, and what the user was told was the
+  kernel's `invalid argument`.
+- **The agent socket** (both platforms). The runtime layout falls back to
+  `$HOME/.cache/sshakku` when there is neither `XDG_RUNTIME_DIR` nor an owned
+  `/run/user/$UID` — which is every macOS login, and any Linux session without
+  logind. That path is the home plus 26 bytes, so a home past 81 characters
+  left the session with **no agent at all**: F1 rather than F5, and the shell
+  was told only `start ssh-agent: exit status 1`.
 
-- Confirm the limit is what it appears to be, and how much room a real home
-  leaves.
-- If it is worth supporting, give the socket a short base of its own rather than
-  deriving it from `$HOME`, and keep the error legible when the address is still
-  too long.
+Both now prefer the private per-user temporary directory the session already
+has, which is short, is what that system's own `ssh-agent` uses when nobody
+tells it otherwise, and is only taken when it really is private: it must exist,
+not be a symlink, belong to this user and grant nothing to anyone else, so a
+shared directory named through the environment — `/tmp`, which is `/private/tmp`
+under another name on macOS — is never written in (threat model T1, invariant
+3). Anything else falls back to the cache directory as before. The handoff
+directory is additionally forced to `0700` rather than left to the umask.
 
-→ feature F5, F6; not urgent — no observed user report, only a reachable case.
+Where an address still does not fit, the error now names the length and the
+limit; and an agent that refuses to start reports what `ssh-agent` itself said
+rather than an exit status alone.
+
+**Left open, deliberately:** a session with neither a runtime directory nor a
+private temporary one — a container with `TMPDIR` unset, say — and a home past
+81 characters still cannot bind an agent socket. The only shorter place left is
+`/tmp`, which T1 forbids outright; changing that is a threat-model decision, not
+an implementation one. Such a session is now told why.
+
+Which directory to use and how long an address may be are passed in as values
+rather than decided behind a build tag, so the choice, the length guard and the
+privacy check are all exercised on Linux even where Darwin is what runs them.
+
+→ features F1, F5, F6; open decision 24.
 
 ### Phase 17 — Finish macOS support
 

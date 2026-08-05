@@ -39,19 +39,18 @@ func TestSocketHandoffNoGoroutineLeak(t *testing.T) {
 		t.Skip("goroutineleak profile unavailable; rebuild with GOEXPERIMENT=goroutineleakprofile (make test-leakprofile)")
 	}
 
-	t.Setenv("HOME", shortDir(t))
-	t.Setenv("XDG_CACHE_HOME", "")
+	base := shortDir(t)
 
 	// Unclaimed stash: the server must time out and exit, never blocking on
 	// Accept for a connection that never comes.
-	unclaimed, err := socketHandoffStash("s3cr3t", 100*time.Millisecond)
+	unclaimed, err := socketHandoffStash("s3cr3t", 100*time.Millisecond, fixedBase(base), addrLimit)
 	if err != nil {
 		t.Fatalf("socketHandoffStash (unclaimed): %v", err)
 	}
 	waitGone(t, unclaimed)
 
 	// Claimed stash: the server must exit right after serving the one fetch.
-	claimed, err := socketHandoffStash("s3cr3t", 5*time.Second)
+	claimed, err := socketHandoffStash("s3cr3t", 5*time.Second, fixedBase(base), addrLimit)
 	if err != nil {
 		t.Fatalf("socketHandoffStash (claimed): %v", err)
 	}

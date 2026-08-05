@@ -138,6 +138,76 @@ load helpers
 	[[ "$output" == *"$fingerprint"* ]]
 }
 
+@test "F5: a vault-seeded passphrase loads silently from a long home directory too" {
+	# 90 characters: long for a home directory, and nothing any file system
+	# objects to — a single name may be 255 on both platforms this runs on.
+	# Nothing in what SSHakku promises is conditional on how a user's home is
+	# named, so this is the same scenario as the test above it, moved.
+	#
+	# Moved before the environment is checked, so that a machine which cannot
+	# run the rest of this test still runs the move: a home relocated wrongly
+	# would otherwise only ever be found on the platform where the scenario
+	# does complete.
+	long_home 90
+	require_keyring
+
+	new_test_key id_test "test-passphrase"
+	seed_vault id_test "test-passphrase"
+	fingerprint=$(key_fingerprint id_test)
+
+	eval "$("$SSHAKKU_BIN" shell-init)"
+	run no_tty_bounded 10 "$SSHAKKU_BIN" load-keys
+	[ "$status" -eq 0 ]
+	load_said="$output"
+
+	run ssh-add -l
+	if [[ "$output" != *"$fingerprint"* ]]; then
+		# A key that did not load has more than one way of not loading, and the
+		# listing says only that it isn't there. What the run itself said, and
+		# what the session log recorded, name the step that gave up.
+		echo "load-keys said: ${load_said:-(nothing)}" >&2
+		echo "ssh-add -l said: $output" >&2
+		echo "session log:" >&2
+		cat "$log_file" >&2 2>/dev/null || echo "(no session log at $log_file)" >&2
+		return 1
+	fi
+}
+
+@test "F1: a shell finds a working agent from a long home with no runtime directory" {
+	# The runtime directory a desktop Linux logs you into is not something
+	# every machine has: macOS has none, and neither does a container or a
+	# system without logind. What such a session does have is a temporary
+	# directory of its own, which is what this stands up — and F1 promises a
+	# working agent there as much as anywhere else.
+	long_home 90
+	unset XDG_RUNTIME_DIR
+	TMPDIR="$TEST_ROOT/tmp"
+	mkdir -p "$TMPDIR"
+	chmod 700 "$TMPDIR"
+	export TMPDIR
+
+	new_test_key id_test "test-passphrase"
+
+	init_err="$TEST_ROOT/shell-init.err"
+	eval "$("$SSHAKKU_BIN" shell-init 2>"$init_err")"
+	if [ -z "${agent_sock:-}" ]; then
+		echo "shell-init named no agent socket. It said:" >&2
+		cat "$init_err" >&2
+		return 1
+	fi
+
+	# What F1 asks of the socket is that the agent answers on it: with no keys
+	# added yet that is "no identities" rather than a listing, and either way
+	# it is an answer. A socket nothing is listening on is not.
+	SSH_AUTH_SOCK="$agent_sock" run ssh-add -l
+	if [ "$status" -ne 0 ] && [ "$status" -ne 1 ]; then
+		echo "ssh-add -l on the socket the hook named said: $output" >&2
+		echo "shell-init said:" >&2
+		cat "$init_err" >&2
+		return 1
+	fi
+}
+
 @test "a reachable but empty agent is adopted, not killed and replaced" {
 	eval "$("$SSHAKKU_BIN" shell-init)"
 	bootstrap_pid=$(doctor_recorded_pid)

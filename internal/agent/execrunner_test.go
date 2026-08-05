@@ -2,6 +2,8 @@ package agent
 
 import (
 	"errors"
+	"os/exec"
+	"strings"
 	"testing"
 )
 
@@ -55,6 +57,32 @@ func TestExecRunnerStart(t *testing.T) {
 		}
 		if _, err := (ExecRunner{}).Start("/run/agent.sock"); err == nil {
 			t.Fatal("want an error when ssh-agent cannot be executed")
+		}
+	})
+
+	// An agent that refuses to start says why on its stderr, and an exit
+	// status on its own says nothing anybody can act on. What the agent said
+	// has to reach whoever is reading.
+	t.Run("reports what the agent itself said", func(t *testing.T) {
+		execOutput = func(string, ...string) ([]byte, error) {
+			return exec.Command("sh", "-c", "echo 'bind: Invalid argument' >&2; exit 1").Output()
+		}
+		_, err := (ExecRunner{}).Start("/run/agent.sock")
+		if err == nil {
+			t.Fatal("want an error when ssh-agent exits non-zero")
+		}
+		if !strings.Contains(err.Error(), "bind: Invalid argument") {
+			t.Errorf("error = %q, want it to carry what ssh-agent said", err)
+		}
+	})
+
+	// Nothing to add is not an excuse to lose the exit status.
+	t.Run("an exit with nothing said is still reported", func(t *testing.T) {
+		execOutput = func(string, ...string) ([]byte, error) {
+			return exec.Command("sh", "-c", "exit 3").Output()
+		}
+		if _, err := (ExecRunner{}).Start("/run/agent.sock"); err == nil {
+			t.Fatal("want an error when ssh-agent exits non-zero in silence")
 		}
 	})
 }

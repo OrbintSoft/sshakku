@@ -292,6 +292,34 @@ require_keyring() {
 	keyctl unlink "$id" @u >/dev/null 2>&1 || true
 }
 
+# long_home gives the running test a home directory at least $1 characters
+# long, and repoints at it everything that is derived from $HOME. Call it
+# before anything has been written into the home — a key, a wallet entry, a
+# configuration file — so that the length is the only thing that differs from
+# the same scenario run anywhere else.
+#
+# The home is *moved* rather than merely pointed elsewhere, because on darwin
+# the keychain a lookup resolves is named by preferences under $HOME: a home
+# left behind takes the wallet with it, and what failed would be the lookup,
+# for want of a keychain, rather than anything to do with the length of a path.
+#
+# The runtime directory deliberately stays where it was. On a real system it
+# lives outside the home (/run/user/<uid>, /var/folders/…), so a test that
+# lengthened it too would be asking a question no machine asks.
+long_home() {
+	local want="$1" pad name
+	pad=$((want - ${#TEST_ROOT} - 1))
+	# A root already past the wanted length still gets a component of its own,
+	# so the caller always gets a home this function chose.
+	[ "$pad" -lt 8 ] && pad=8
+	name=$(printf "%${pad}s" '' | tr ' ' 'h')
+
+	mv "$HOME" "$TEST_ROOT/$name"
+	export HOME="$TEST_ROOT/$name"
+	export XDG_CONFIG_HOME="$HOME/.config"
+	export XDG_STATE_HOME="$HOME/.local/state"
+}
+
 # seed_vault stores passphrase for keyname's default service, as if a prior
 # session had already typed it once, bypassing any prompt. It writes whatever
 # store sshakku itself will read on this platform: the stub secret-tool's
