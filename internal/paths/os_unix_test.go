@@ -176,12 +176,45 @@ func TestFromEnvHomeFallback(t *testing.T) {
 		return ""
 	}
 	homeDir := func() (string, error) { return "/fallback/home", nil }
-	env := fromEnv(getenv, homeDir, func() int { return 4242 })
+	env := fromEnv(getenv, homeDir, func() int { return 4242 }, func(string) bool { return true })
 	if env.Home != "/fallback/home" {
 		t.Errorf("Home = %q, want /fallback/home (from the homeDir fallback)", env.Home)
 	}
 	if env.UID != 4242 {
 		t.Errorf("UID = %d, want 4242", env.UID)
+	}
+}
+
+// TestFromEnvTempDir covers the one input that is inspected rather than merely
+// read: a temporary directory this user does not have to themselves is not
+// carried forward at all, so nothing downstream can put a socket in it by
+// mistake.
+func TestFromEnvTempDir(t *testing.T) {
+	getenv := func(key string) string {
+		if key == "TMPDIR" {
+			return "/the/tmp"
+		}
+		return ""
+	}
+	homeDir := func() (string, error) { return "/home/alice", nil }
+	uid := func() int { return 1000 }
+
+	env := fromEnv(getenv, homeDir, uid, func(string) bool { return true })
+	if env.TempDir != "/the/tmp" {
+		t.Errorf("TempDir = %q, want /the/tmp (a private one is kept)", env.TempDir)
+	}
+
+	env = fromEnv(getenv, homeDir, uid, func(string) bool { return false })
+	if env.TempDir != "" {
+		t.Errorf("TempDir = %q, want empty (a shared one is dropped)", env.TempDir)
+	}
+
+	env = fromEnv(func(string) string { return "" }, homeDir, uid, func(string) bool {
+		t.Error("a temporary directory that was never named got inspected")
+		return true
+	})
+	if env.TempDir != "" {
+		t.Errorf("TempDir = %q, want empty (none was named)", env.TempDir)
 	}
 }
 

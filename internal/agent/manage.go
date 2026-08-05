@@ -171,9 +171,23 @@ func (r ExecRunner) Start(socket string) (int, error) {
 	}
 	out, err := execOutput(bin, "-a", socket)
 	if err != nil {
-		return 0, fmt.Errorf("start ssh-agent: %w", err)
+		return 0, fmt.Errorf("start ssh-agent: %w", withAgentComplaint(err))
 	}
 	return parseAgentPID(out)
+}
+
+// withAgentComplaint appends what ssh-agent itself said to an exit status,
+// which on its own names nothing a reader can act on. The reasons an agent
+// refuses to start — a socket path the kernel will not accept, a directory
+// that is not there, one it may not write in — are all on its stderr.
+func withAgentComplaint(err error) error {
+	var exit *exec.ExitError
+	if errors.As(err, &exit) {
+		if said := strings.TrimSpace(string(exit.Stderr)); said != "" {
+			return fmt.Errorf("%w: %s", err, said)
+		}
+	}
+	return err
 }
 
 // parseAgentPID extracts the pid from ssh-agent's `SSH_AGENT_PID=<pid>;` line.

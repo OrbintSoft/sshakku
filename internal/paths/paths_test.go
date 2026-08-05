@@ -38,6 +38,22 @@ func TestResolveRuntimeDir(t *testing.T) {
 			wantBase: filepath.Join(home, ".cache", "sshakku"),
 		},
 		{
+			// Where there is no logind directory the private temporary one is
+			// taken before the home: a socket address is bounded and a home
+			// directory is not, so a home deep enough leaves a session with no
+			// agent it can reach at all.
+			name:     "the private temporary directory comes before the home",
+			env:      Env{Home: home, TempDir: "/tmp/private", UID: 1000},
+			probe:    func(string, bool) bool { return false },
+			wantBase: "/tmp/private/sshakku",
+		},
+		{
+			name:     "a logind directory still wins over the temporary one",
+			env:      Env{Home: home, RuntimeDir: "/run/user/1000", TempDir: "/tmp/private", UID: 1000},
+			probe:    func(p string, _ bool) bool { return p == "/run/user/1000" },
+			wantBase: "/run/user/1000/sshakku",
+		},
+		{
 			name:     "XDG_CACHE_HOME honoured in cache fallback",
 			env:      Env{Home: home, CacheHome: "/cache", UID: 1000},
 			probe:    func(string, bool) bool { return false },

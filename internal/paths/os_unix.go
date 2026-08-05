@@ -11,18 +11,28 @@ import (
 
 // FromOS reads the path inputs from the process environment.
 func FromOS() Env {
-	return fromEnv(os.Getenv, os.UserHomeDir, os.Getuid)
+	return fromEnv(os.Getenv, os.UserHomeDir, os.Getuid, PrivateDir)
 }
 
 // fromEnv is FromOS with its environment lookups injected, so the HOME fallback
 // (which os.UserHomeDir also derives from $HOME, hence unreachable through the
 // real os functions) can be exercised in tests.
-func fromEnv(getenv func(string) string, homeDir func() (string, error), getuid func() int) Env {
+//
+// private answers whether a directory is this user's alone. It is asked here,
+// at the boundary that reads the environment, so that what Resolve receives is
+// already a directory we are willing to use — the environment names a
+// temporary directory, and a shared one (a bare /tmp) is somewhere anybody can
+// wait for a socket that is the loaded key's front door.
+func fromEnv(getenv func(string) string, homeDir func() (string, error), getuid func() int, private func(string) bool) Env {
 	home := getenv("HOME")
 	if home == "" {
 		if h, err := homeDir(); err == nil {
 			home = h
 		}
+	}
+	tempDir := getenv("TMPDIR")
+	if tempDir != "" && !private(tempDir) {
+		tempDir = ""
 	}
 	return Env{
 		Home:       home,
@@ -30,6 +40,7 @@ func fromEnv(getenv func(string) string, homeDir func() (string, error), getuid 
 		StateHome:  getenv("XDG_STATE_HOME"),
 		RuntimeDir: getenv("XDG_RUNTIME_DIR"),
 		CacheHome:  getenv("XDG_CACHE_HOME"),
+		TempDir:    tempDir,
 		UID:        getuid(),
 	}
 }

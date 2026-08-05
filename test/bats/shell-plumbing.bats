@@ -175,11 +175,16 @@ load helpers
 
 @test "F1: a shell finds a working agent from a long home with no runtime directory" {
 	# The runtime directory a desktop Linux logs you into is not something
-	# every machine has: macOS has none at all, and neither does a container,
-	# a chroot, or a system without logind. What is left is the home, and F1
-	# promises a working agent on every one of them.
+	# every machine has: macOS has none, and neither does a container or a
+	# system without logind. What such a session does have is a temporary
+	# directory of its own, which is what this stands up — and F1 promises a
+	# working agent there as much as anywhere else.
 	long_home 90
 	unset XDG_RUNTIME_DIR
+	TMPDIR="$TEST_ROOT/tmp"
+	mkdir -p "$TMPDIR"
+	chmod 700 "$TMPDIR"
+	export TMPDIR
 
 	new_test_key id_test "test-passphrase"
 
