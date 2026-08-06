@@ -1605,3 +1605,62 @@ ksecretd from rebuilt images, each one's platform read out of the daemon's own
 address space rather than inferred from the session it was started in.
 
 → features F4, F5, F9; open decisions 20, 24.
+
+### Phase 25 — The machine with no screen, and the promise nobody had made ✅ Done
+
+The last ❌ in the session/display table of `docs/TEST-MATRIX.md`: GNOME Keyring
+daemonized with no session and no display at all — the machine its user reaches
+over SSH. `gnome-keyring-headless-session.sh` starts the same daemon with the
+login keyring unlocked from standard input, which is the one unlock
+gnome-keyring offers with nothing to draw on, and checks the daemon's own
+`/proc/<pid>/environ` for a display rather than trusting what the script
+exported.
+
+**The run found a line the catalogue had never drawn.** Creating the
+compartment is the one Secret Service operation gnome-keyring always answers
+with a prompt, and the prompter needs a screen: without one the round trip
+fails at `prompt … dismissed`. Using a compartment that already exists needs no
+screen at all — established with two logins sharing one home, the compartment
+made in a login that had a screen and then used in one that had none.
+
+**The analysis before touching the catalogue.** The session/display dimension,
+and this very ❌, had been in the matrix since 2026-07-24, five days before the
+feature catalogue was written — so the gap was not a promise written badly but
+one never made. The catalogue did address the display, though only where a user
+meets it, the prompt (F29 names the SSH login outright); that a *wallet* might
+need a screen was never stated, because an installed, answering wallet was taken
+for a usable one. That held for everything then tested: KDE needs no screen
+because PAM opens its wallet, GNOME and KeePassXC were only ever driven in
+sessions that had one. Of the three ways out — make it work headless (closed
+from outside: `CreateCollection` always prompts, and the only keyring
+gnome-keyring opens without one is `login`, which F33 refuses for good reason),
+declare it unsupported (throws away behaviour that works), or state what
+happens — the third. It is stated for the class rather than this cell: any
+wallet that needs a screen is subject to it.
+
+**F39 and F40, added first** (rule 21). F39: a wallet that can only be opened
+where there is a screen is used wherever there is one, and where there is none
+the keys still load — asked for each time, saved never, so the asking comes back
+at every login and every expiry; what such a wallet needs a screen for is being
+set up, not being used. F40 covers the second gap the same analysis found, which
+F29 and F21 do not: a session with nobody to ask at all — no screen and no
+terminal either, which is what an `scp` or a scheduled job runs in — is never
+held up.
+
+**Red before green** (rule 23), both pairings run. The scenario
+(`gnome-keyring-headless-scenario.sh`, driving the real binary through a real
+login: `make install-user` wires the account's own profile, `bash -li` on a
+pseudo-terminal, `keyring-session.sh` for the handoff) was made to fail by
+running it in the X11 session of the same image, where the wallet *can* be set
+up: the two assertions belonging to F39 and F40 go red there, because the key is
+reloaded from the wallet in silence and nothing is ever left alone for want of
+somebody to ask. The round trip was made to fail by taking away the compartment:
+the same headless run without it stops at `prompt … dismissed`.
+
+**Verified by running it** (rule 25): six assertions green in the headless
+session, the round trip green against a compartment made elsewhere, and the
+non-interactive half — a login shell, a `setsid ssh-add` and a `setsid sshakku
+load-keys`, none with a terminal — coming back in under a second rather than
+waiting.
+
+→ features F4, F5, F9, F39, F40; open decisions 20, 24.
