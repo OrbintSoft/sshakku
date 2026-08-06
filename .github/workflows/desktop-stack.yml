@@ -59,6 +59,33 @@ jobs:
           gnome-keyring-wayland-session.sh
           go test ./internal/keys -run TestSecretServiceBackendRealDaemon -count=1 -v
 
+      # The same wallet again, on a machine with no screen of any kind — the one
+      # its user reaches over SSH. Making the compartment takes a dialog, so it
+      # is made in a login that has a screen and this login only uses what is
+      # already there; the two share the account's home and nothing else.
+      - name: Run the GNOME Keyring round trip with no session at all
+        if: matrix.name == 'gnome-keyring'
+        run: >
+          test/containers/run-headless-wallet.sh
+          sshakku-test-desktop-stack-gnome-keyring
+          go test ./internal/keys -run TestSecretServiceBackendRealDaemon -count=1 -v
+
+      # What that same machine does for a user whose compartment has never been
+      # made: the keys still load, the asking comes back every time because
+      # nothing can be saved, and a session with nobody to ask is not held up.
+      # The passphrase crosses the kernel keyring here, which needs seccomp left
+      # alone and a session keyring that possesses the keys it adds — see
+      # keyring-session.sh.
+      - name: Run the headless GNOME Keyring login scenario
+        if: matrix.name == 'gnome-keyring'
+        run: >
+          docker run --init --rm --security-opt seccomp=unconfined
+          -v "${{ github.workspace }}":/src:ro
+          -e SSHAKKU_SESSION_SCRIPT=gnome-keyring-headless-session.sh
+          sshakku-test-desktop-stack-gnome-keyring
+          keyctl session - test/containers/keyring-session.sh
+          test/containers/gnome-keyring-headless-scenario.sh
+
       # The same wallet reached from a login with a screen and no X server. The
       # image and the test are the ones the step above already ran: what is
       # being varied is the session around them, so a difference in the result

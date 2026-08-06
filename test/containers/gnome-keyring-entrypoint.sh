@@ -4,9 +4,10 @@
 # actually drive the test command.
 #
 # Which session script decides what the wallet is reached from: an X server by
-# default, or a Wayland compositor when SSHAKKU_SESSION_SCRIPT names that one
-# instead. Each brings up its own screen and answers the collection-creation
-# dialog the way that screen allows.
+# default, or a Wayland compositor or no screen at all when
+# SSHAKKU_SESSION_SCRIPT names one of those instead. The two that have a screen
+# answer the collection-creation dialog the way that screen allows; the one
+# without has nothing to answer it with.
 set -euo pipefail
 
 readonly TEST_USER="sshakku-gnome-test"
