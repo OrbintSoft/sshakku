@@ -1664,3 +1664,55 @@ load-keys`, none with a terminal — coming back in under a second rather than
 waiting.
 
 → features F4, F5, F9, F39, F40; open decisions 20, 24.
+
+### Phase 26 — The doctor that reassured you about a wallet that could hold nothing ✅ Done
+
+Found while verifying Phase 25: on a machine with no screen, where no passphrase
+can ever be saved, `sshakku doctor` reported `session bus: found` and nothing
+else. Reproduced before any theory was built on it, and a second case came out of
+the same run: a session bus with **nothing** owning `org.freedesktop.secrets`,
+and nothing that could be started, produced the identical report. A wallet that
+was not there at all was reported satisfied — the commoner of the two, since it
+is any desktop whose keyring is not running.
+
+**The analysis, before anything was changed.** F25 promises the doctor tells you
+when something the wallet needs is not there, and constrains it to find out
+*without touching a stored passphrase*. The implementation had turned that into a
+larger rule of its own — never talk to the wallet at all — and only the session
+bus survives it. Listing collections touches no passphrase, so the code was
+under-delivering a promise that was written correctly: a defect to fix, not a
+feature to rewrite. F25 stands unchanged.
+
+**F41, added first** (rule 21). The three conditions the plain report must meet
+were true only by accident while it talked to nobody, and become behaviour the
+moment it does: the report always comes, even incomplete; it never waits without
+end; it changes nothing. Nothing in the catalogue promised any of them, so
+nothing could test them. F41 also fixes the three levels: the plain report looks,
+`--test-backend` talks to prove, `--fix` is the one allowed to write.
+
+Bus activation is an act, so the look asks the bus who owns the name and talks to
+a wallet only if one already answers; a wallet that is merely activatable is left
+alone and the compartment reported *undetermined* — a third state beside found
+and missing, which produces no finding, because something nobody established is
+not something wrong.
+
+**Red before green** (rule 23). The scenario
+(`gnome-keyring-doctor-scenario.sh`) went red on both cases against the previous
+build. Two assertions could not fail in that session and were falsified where
+they can: creating nothing was made to fail by resolving the compartment the
+ordinary way (`looking created 1 collection(s)`), and the bound by dropping it
+(30 seconds instead of 2). One assertion passed for the wrong reason first — the
+findings were searched for the word "wallet", which another finding already
+contains — and was tightened to the wallet's own name before being believed.
+
+**Verified by running it** (rule 25): the real binary in a session with no
+screen, reporting `compartment: missing — "sshakku" is not there and this session
+has no screen to create it on`, and on a bus with no wallet naming the wallet
+among the findings; the same collections after the report as before; and a
+SIGSTOP-frozen daemon costing the report two seconds.
+
+Not done here, and left with its own analysis to do: now that the doctor can say
+the compartment is not there, `--fix` could create it — which works where there
+is a screen and cannot where there is none.
+
+→ features F25, F41; open decision 24.

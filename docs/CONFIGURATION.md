@@ -248,6 +248,13 @@ not subject to this — PAM opens it as part of the login — and neither is a
 backend that reaches its wallet by running a program (`keepassxc`, `1password`,
 `bitwarden`).
 
+You do not have to work this out from the passphrase prompts coming back:
+`sshakku doctor` says which of the pieces are there, and where the collection
+cannot be created it says so and why. The report only looks — it never creates
+the collection to find out, and it comes back even when the wallet does not
+answer at all. To have it prove the wallet really works, ask for that: `sshakku
+doctor --test-backend` stores, reads back and deletes an entry for real.
+
 Because the collection is separate from the desktop's default, it will not
 appear in wallet GUIs that only browse the default collection (e.g.
 KWalletManager on KDE, where `ksecretd` — the Secret Service backend — and
