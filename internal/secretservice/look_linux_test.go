@@ -3,6 +3,8 @@
 package secretservice
 
 import (
+	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -27,6 +29,23 @@ func startFakeOnBus(t *testing.T) *fakeService {
 	}
 	t.Cleanup(func() { _ = serverConn.Close() })
 	return startFakeSecretService(t, serverConn, "")
+}
+
+// failBusNames makes the message bus stop answering the named question for the
+// rest of the test, and go on answering the others. Only the bus's own name
+// lists are replaced: what the look then concludes is left to the code under
+// test.
+func failBusNames(t *testing.T, method string) {
+	t.Helper()
+	original := listBusNames
+	t.Cleanup(func() { listBusNames = original })
+
+	listBusNames = func(obj dbus.BusObject, timeout time.Duration, called string) ([]string, error) {
+		if strings.HasSuffix(called, method) {
+			return nil, errors.New("the bus stopped answering")
+		}
+		return original(obj, timeout, called)
+	}
 }
 
 func TestLookForCollection(t *testing.T) {
@@ -157,6 +176,28 @@ func TestLookForCollection(t *testing.T) {
 		}
 		if look.CollectionFound {
 			t.Error("CollectionFound = true without an answer saying so")
+		}
+	})
+
+	t.Run("a bus that will not say what is on it", func(t *testing.T) {
+		startFakeOnBus(t)
+		failBusNames(t, "ListNames")
+
+		if _, err := LookForCollection("sshakku", "sshakku", lookTestTimeout); err == nil {
+			t.Error("LookForCollection reported no error when the bus never said what was on it")
+		}
+	})
+
+	t.Run("a bus that will not say what could be started", func(t *testing.T) {
+		startSessionBus(t)
+		failBusNames(t, "ListActivatableNames")
+
+		look, err := LookForCollection("sshakku", "sshakku", lookTestTimeout)
+		if err == nil {
+			t.Error("LookForCollection reported no error when the bus never answered")
+		}
+		if look.Activatable {
+			t.Error("Activatable = true was concluded from a list that never arrived")
 		}
 	})
 

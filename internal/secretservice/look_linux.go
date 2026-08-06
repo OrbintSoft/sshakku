@@ -44,8 +44,8 @@ func LookForCollection(alias, label string, timeout time.Duration) (Look, error)
 	}
 	defer func() { _ = conn.Close() }()
 
-	var names []string
-	if err := lookCall(conn.BusObject(), timeout, "org.freedesktop.DBus.ListNames").Store(&names); err != nil {
+	names, err := listBusNames(conn.BusObject(), timeout, "org.freedesktop.DBus.ListNames")
+	if err != nil {
 		return Look{}, fmt.Errorf("secret service: list bus names: %w", err)
 	}
 
@@ -56,9 +56,8 @@ func LookForCollection(alias, label string, timeout time.Duration) (Look, error)
 		return look, nil
 	}
 	if !look.Running {
-		var activatable []string
-		if err := lookCall(conn.BusObject(), timeout,
-			"org.freedesktop.DBus.ListActivatableNames").Store(&activatable); err != nil {
+		activatable, err := listBusNames(conn.BusObject(), timeout, "org.freedesktop.DBus.ListActivatableNames")
+		if err != nil {
 			return look, fmt.Errorf("secret service: list activatable bus names: %w", err)
 		}
 		look.Activatable = slices.Contains(activatable, busName)
@@ -91,6 +90,16 @@ func LookForCollection(alias, label string, timeout time.Duration) (Look, error)
 	}
 	look.CollectionFound = found != noPrompt
 	return look, nil
+}
+
+// listBusNames asks the message bus for one of its own name lists. A var, not a
+// plain function, so a test can make the bus fail to answer: a live bus that has
+// just accepted a connection does not stop answering on request, and what a look
+// concludes when it cannot be asked is exactly what has to be checkable.
+var listBusNames = func(obj dbus.BusObject, timeout time.Duration, method string) ([]string, error) {
+	var names []string
+	err := lookCall(obj, timeout, method).Store(&names)
+	return names, err
 }
 
 // lookCall is one bounded D-Bus round-trip on an object this package holds no
