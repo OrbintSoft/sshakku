@@ -60,8 +60,8 @@ container session around it differs.
 | Session | X11 | Wayland | No display |
 | --- | --- | --- | --- |
 | KDE (`ksecretd`/`kwalletd6`) | ✅ `kde.Dockerfile`, `SSHAKKU_SESSION_SCRIPT=kde-x11-session.sh` (F4, F5, F9) | ✅ `kde.Dockerfile`, `SSHAKKU_SESSION_SCRIPT=kde-wayland-session.sh` (F4, F5, F9) | ✅ `kde.Dockerfile` (F4, F5, F9) |
-| GNOME (`gnome-keyring-daemon`, desktop session) | ✅ `gnome-keyring.Dockerfile` | ✅ `gnome-keyring.Dockerfile`, `SSHAKKU_SESSION_SCRIPT=gnome-keyring-wayland-session.sh` | — |
-| GNOME Keyring, headless-daemonized (no session/display at all) | — | — | ❌ |
+| GNOME (`gnome-keyring-daemon`, desktop session) | ✅ `gnome-keyring.Dockerfile` (F4, F5, F9) | ✅ `gnome-keyring.Dockerfile`, `SSHAKKU_SESSION_SCRIPT=gnome-keyring-wayland-session.sh` (F4, F5, F9) | — |
+| GNOME Keyring, headless-daemonized (no session/display at all) | — | — | ✅ `SSHAKKU_SESSION_SCRIPT=gnome-keyring-headless-session.sh`, twice over: the round trip against a compartment made in a login that had a screen, via `run-headless-wallet.sh` (F4, F5, F9, F39), and `gnome-keyring-headless-scenario.sh` for the machine where it was never made — the keys still load, the asking comes back every time, and a session with nobody to ask is not held up (F39, F40) |
 | KeePassXC (standalone, any desktop) | ✅ `keepassxc.Dockerfile` | ✅ `keepassxc.Dockerfile`, `SSHAKKU_SESSION_SCRIPT=keepassxc-wayland-session.sh` | — |
 
 KDE is the one wallet here that needs no display of any kind: PAM opens the
@@ -81,8 +81,17 @@ control that shows this now holds: with the X server taken away, the X11
 session fails because ksecretd never registers on the bus; with the pin put
 back, that same displayless session passes.
 
-GNOME Keyring's and KeePassXC's own daemons do need a display, hence their
-`—`s. XFCE has no native provider of its own -- it would only ever host GNOME
+The `—`s in the two desktop-session rows are what those rows are: a desktop
+session that has no display is not a desktop session. What GNOME Keyring's own
+daemon needs a display for is narrower than it looks, and the headless row is
+where that was established — it runs with no screen at all quite happily, and
+serves a compartment already on disk. What cannot be done without one is *making*
+that compartment: gnome-keyring answers `CreateCollection` with a prompt every
+time, and the prompter has nowhere to draw it. So the headless row is covered
+twice, once for each side of that line, and the second run is the one that says
+what a user gets on a machine where the compartment was never made.
+
+XFCE has no native provider of its own -- it would only ever host GNOME
 Keyring or KeePassXC, both already rows above -- so it isn't listed separately
 unless a KeePassXC-under-XFCE test is actually worth adding later.
 
@@ -178,6 +187,7 @@ table above has established where that backend is available at all.
 | Real environment variables tampered (`SSH_AUTH_SOCK`, `SSH_ASKPASS`, `SSH_ASKPASS_REQUIRE`, `SSHAKKU_ASKPASS`, `SSHAKKU_HANDOFF_TOKEN`) | ✅ `TestTamperedEnvVarsHandledSafely` — real `os.Getenv` reads feeding the real `gatherReport`/`dispatch`/`askpass`: a hijacked or cleared `SSH_AUTH_SOCK` is flagged unreachable, a leftover `SSHAKKU_ASKPASS` marker changes nothing about what a command does, and a malformed `SSHAKKU_HANDOFF_TOKEN` redeems nothing from the real store. Clearing `SSH_ASKPASS`/`SSH_ASKPASS_REQUIRE` is what the rows below exercise end to end, since without them the wallet is never consulted. | ✅ same |
 | A key gone from the agent is refilled from the wallet, in a shell already open, with no terminal and no graphical prompter (F6) | ✅ `test/bats/askpass-broker.bats` — the installed login hook is sourced, then a real `ssh-add` runs with no controlling terminal, so nothing can fall back to a prompt, and with no handoff token, so only the wallet can answer; the session log line naming the wallet is asserted, not merely the key reaching the agent | ✅ same, against the real keychain |
 | The askpass broker is wired in a session with no graphical prompter (F6) | ✅ `test/bats/askpass-broker.bats` and `TestAskpassEnvHeadless` — with no `DISPLAY`/`WAYLAND_DISPLAY` and no `kdialog`, `askpass-env` still emits both exports, `SSH_ASKPASS` naming the helper installed beside the binary | ✅ same |
+| A session with nobody to ask at all — no screen, and no terminal either, with nothing in the wallet to fall back on (F40) | ✅ `gnome-keyring-headless-scenario.sh` — in a login with no display, against a wallet that cannot be set up there, a `setsid` `ssh-add` with its input closed comes back at once rather than waiting, the session log says there was nobody to ask, and a key already in the agent is still usable from that same session. Made to fail by running it where the wallet does answer: there the passphrase comes from the wallet and nothing is ever left alone | ❌ not covered: this scenario reaches the state through a compartment that cannot be made, and the Keychain has none to make, so the same run does not transfer — the Mac form of it is a locked keychain in a session with no window server and no terminal, and nothing builds that today |
 | A command SSHakku does not recognise, typed in a shell it is wired into, is reported as unknown and never taken for a request for a secret (F30) | ✅ `TestUnknownCommandIsNotASecretRequest` — the real `dispatch` run under the binary's own name, with the wiring's exports set and a terminal that would answer if it were asked: two spellings of a mistake (a flag, and a mistyped subcommand with an argument) are each named on stderr with the usage, nothing reaches stdout, and the terminal is never read. `test/bats/askpass-broker.bats` drives the installed binary in a shell that has sourced the real hook. What the shell test cannot show is the terminal going unread — it runs with no controlling terminal, where "did not ask" and "had nobody to ask" are indistinguishable — so that half of the promise rests on the Go test alone | ✅ same |
 | A wallet that never answers — present but never returning — does not hold up an `ssh` or a login shell (F21), per backend that reaches its wallet by running a program | ✅ `test/bats/askpass-broker.bats`, once per backend × entry point: `secret-service` (blocked `secret-tool`, bounded by `command_timeout`) and `1password` (blocked `op`, bounded by `interactive_timeout`). `TestNoCommandBlocksIndefinitely` covers every external program this code runs, `bw` included — reached there by answering the master-password prompt Bitwarden asks for before it will run anything | ✅ `1password`; `secret-service` — (that backend does not exist on macOS). Bitwarden as on Linux |
 | A wallet that never answers, where the wallet is **not** a program (F21) | — (every Linux backend reaches its wallet by running one, or over D-Bus with its own `CallTimeout`) | ✅ `TestKeychainGivesUpOnAKeychainThatNeverAnswers` (F21) drives all four operations against a keychain that neither answers nor fails — `Lookup`, `Store`, `Delete` and `List`, since `forget --all` waits on the last two exactly as `load-keys` waits on the first — and each gives up inside `command_timeout` instead of waiting. `TestWithDeadline` covers the giving-up itself, and runs on both platforms. What no test here does is make a *real* keychain hang: see the row above |

@@ -239,6 +239,15 @@ again immediately after, instead of relying on the desktop's fixed idle
 timeout to bound how long an unlocked entry is queryable by another process of
 the same user.
 
+On GNOME Keyring that collection is made through a dialog, which a machine with
+no graphical session cannot show: log in there before it exists and your keys
+still load, but you are asked for each passphrase every time, because nothing
+can be saved. Make the collection once from a desktop session on the same
+account and it goes on serving logins that have no screen at all. KDE Wallet is
+not subject to this — PAM opens it as part of the login — and neither is a
+backend that reaches its wallet by running a program (`keepassxc`, `1password`,
+`bitwarden`).
+
 Because the collection is separate from the desktop's default, it will not
 appear in wallet GUIs that only browse the default collection (e.g.
 KWalletManager on KDE, where `ksecretd` — the Secret Service backend — and
