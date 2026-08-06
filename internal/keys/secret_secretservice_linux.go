@@ -91,8 +91,17 @@ var _ SecretSession = (*SecretServiceBackend)(nil)
 // is matched on the label — a name applied to only one of them would land in
 // the configured collection on one desktop and in SSHakku's own on another.
 func (b *SecretServiceBackend) collectionNames() (alias, label string) {
-	if b.Container != "" {
-		return b.Container, b.Container
+	return SecretServiceCollectionNames(b.Container)
+}
+
+// SecretServiceCollectionNames is how the compartment holding container's
+// entries is addressed, an empty container selecting the one SSHakku makes for
+// itself. Exported so that anything asking a wallet about that compartment
+// without going through this backend — the doctor, looking — asks about the
+// same one entries would be stored in.
+func SecretServiceCollectionNames(container string) (alias, label string) {
+	if container != "" {
+		return container, container
 	}
 	return secretServiceAlias, secretServiceLabel
 }

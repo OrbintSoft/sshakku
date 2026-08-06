@@ -86,6 +86,15 @@ func TestFormatWalletSection(t *testing.T) {
 			heading: true,
 		},
 		{
+			name: "a requirement nobody could settle is neither found nor missing",
+			wallet: WalletView{Backend: "secret-service", Requirements: []Requirement{
+				{Name: "compartment", Detail: "no wallet was answering to ask", Undetermined: true},
+			}},
+			want:    []string{"compartment:", "undetermined", "no wallet was answering"},
+			absent:  []string{"missing", "found"},
+			heading: true,
+		},
+		{
 			name:   "no backend resolved prints no section at all",
 			wallet: WalletView{},
 			absent: []string{"wallet:"},

@@ -35,6 +35,15 @@ func probeWith(goos string, found []string, present []string, bus string, listen
 	}
 }
 
+// withLook fixes what looking at the session bus found, and whether the session
+// has a screen, so every combination of the two can be described from a machine
+// that has neither.
+func (p walletProbe) withLook(look secretServiceLook, hasScreen bool) walletProbe {
+	p.look = func(string, string) secretServiceLook { return look }
+	p.hasScreen = hasScreen
+	return p
+}
+
 // requirement returns the named requirement, so a case can assert on the one
 // it is about without depending on the order of the rest.
 func requirement(t *testing.T, view diagnose.WalletView, name string) diagnose.Requirement {
@@ -174,6 +183,114 @@ func TestWalletViewPerBackend(t *testing.T) {
 				t.Errorf("%s detail = %q, want it to contain %q", req.Name, req.Detail, tc.wantDetail)
 			}
 		})
+	}
+}
+
+// TestSecretServiceRequirementsFromALook verifies F25 and F41 for every answer
+// a look can come back with. It runs on any platform, including one with no
+// session bus at all: what the report makes of a finding is a decision about
+// words, and a decision about words is checkable anywhere.
+func TestSecretServiceRequirementsFromALook(t *testing.T) {
+	tests := []struct {
+		name             string
+		look             secretServiceLook
+		hasScreen        bool
+		wantService      string // a fragment of the secret service detail
+		wantPresent      bool   // whether the compartment counts as a problem
+		wantUndetermined bool
+		wantCompartment  string // a fragment of the compartment detail
+	}{
+		{
+			name:            "a wallet is answering and the compartment is there",
+			look:            secretServiceLook{running: true, collectionFound: true},
+			wantService:     "answering",
+			wantPresent:     true,
+			wantCompartment: "sshakku",
+		},
+		{
+			name:            "no compartment, but a screen to make one on",
+			look:            secretServiceLook{running: true},
+			hasScreen:       true,
+			wantService:     "answering",
+			wantPresent:     true,
+			wantCompartment: "the first passphrase saved creates it",
+		},
+		{
+			name:            "no compartment and no screen: nothing can ever be saved",
+			look:            secretServiceLook{running: true},
+			wantService:     "answering",
+			wantCompartment: "no screen to create it on",
+		},
+		{
+			name:             "a wallet that did not answer is not a wallet that is empty",
+			look:             secretServiceLook{running: true, askFailed: true},
+			wantService:      "answering",
+			wantUndetermined: true,
+			wantCompartment:  "did not answer",
+		},
+		{
+			name:             "a wallet that is not running yet is started when needed",
+			look:             secretServiceLook{activatable: true},
+			wantService:      "not running",
+			wantUndetermined: true,
+			wantCompartment:  "no wallet was answering",
+		},
+		{
+			name:             "nothing on the bus, and nothing that would start",
+			look:             secretServiceLook{},
+			wantService:      "nothing answers to org.freedesktop.secrets",
+			wantUndetermined: true,
+			wantCompartment:  "no wallet was answering",
+		},
+		{
+			name:             "the bus itself could not be asked",
+			look:             secretServiceLook{lookFailed: true},
+			wantService:      "could not be asked",
+			wantUndetermined: true,
+			wantCompartment:  "no wallet was answering",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			service := serviceRequirement(tc.look)
+			if !strings.Contains(service.Detail, tc.wantService) {
+				t.Errorf("secret service detail = %q, want it to contain %q", service.Detail, tc.wantService)
+			}
+
+			compartment := compartmentRequirement("sshakku", tc.look, tc.hasScreen)
+			if compartment.Present != tc.wantPresent {
+				t.Errorf("compartment present = %v, want %v (detail %q)",
+					compartment.Present, tc.wantPresent, compartment.Detail)
+			}
+			if compartment.Undetermined != tc.wantUndetermined {
+				t.Errorf("compartment undetermined = %v, want %v (detail %q)",
+					compartment.Undetermined, tc.wantUndetermined, compartment.Detail)
+			}
+			if !strings.Contains(compartment.Detail, tc.wantCompartment) {
+				t.Errorf("compartment detail = %q, want it to contain %q", compartment.Detail, tc.wantCompartment)
+			}
+		})
+	}
+}
+
+// TestAnUndeterminedRequirementIsNotAFinding keeps the two apart where it
+// matters: findings are what a user is told is wrong, and something nobody
+// established is not wrong.
+func TestAnUndeterminedRequirementIsNotAFinding(t *testing.T) {
+	// The wallet is named as a plain string: which one it is decides nothing
+	// here, and the name of the one this case describes is a name only the
+	// platform that has it defines.
+	view := diagnose.WalletView{
+		Backend: "secret-service",
+		Requirements: []diagnose.Requirement{
+			{Name: "session bus", Detail: "unix:path=/run/bus", Present: true},
+			{Name: "compartment", Detail: "no wallet was answering to ask", Undetermined: true},
+		},
+	}
+
+	if findings := diagnose.WalletFindings(view); len(findings) != 0 {
+		t.Errorf("findings = %q, want none for a requirement nobody could settle", findings)
 	}
 }
 

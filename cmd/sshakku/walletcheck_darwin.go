@@ -5,6 +5,7 @@ package main
 import (
 	"fmt"
 
+	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/diagnose"
 )
 
@@ -12,7 +13,7 @@ import (
 // itself: off Linux that is the OS keychain, reached through the system rather
 // than through anything installed alongside, so there is no separate piece that
 // could be missing and nothing to report as absent.
-func (p walletProbe) platformWalletView(backend string) diagnose.WalletView {
+func (p walletProbe) platformWalletView(_ config.Settings, backend string) diagnose.WalletView {
 	return diagnose.WalletView{Backend: backend}
 }
 
@@ -23,10 +24,16 @@ func (p walletProbe) platformWalletView(backend string) diagnose.WalletView {
 // the user pinned is answered under its own name (F23) — but the answer here is
 // not a missing piece to go and install. It is that this way in does not exist
 // on this operating system, and another one has to be chosen.
-func (p walletProbe) keepassxcSecretServiceRoute() diagnose.Requirement {
-	return diagnose.Requirement{
+func (p walletProbe) keepassxcSecretServiceRoute() []diagnose.Requirement {
+	return []diagnose.Requirement{{
 		Name: "secret service",
 		Detail: fmt.Sprintf(
 			"%s provides no freedesktop Secret Service — set keepassxc_route to native or cli", p.goos),
-	}
+	}}
+}
+
+// realSecretServiceLook is the look a system with no session bus can take:
+// there is nothing to ask and nothing that could answer.
+func realSecretServiceLook(_, _ string) secretServiceLook {
+	return secretServiceLook{}
 }
