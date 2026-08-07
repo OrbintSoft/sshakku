@@ -139,6 +139,11 @@ type Requirement struct {
 	Name    string
 	Detail  string
 	Present bool
+	// Undetermined marks a requirement that could not be settled by looking —
+	// answering it would have taken an act, and the plain report performs
+	// none. It is neither here nor missing, and Detail says what it would
+	// take to find out.
+	Undetermined bool
 }
 
 // WalletView is the configured secret backend as the report presents it: which
@@ -161,7 +166,9 @@ type WalletView struct {
 func (w WalletView) Missing() []Requirement {
 	var missing []Requirement
 	for _, req := range w.Requirements {
-		if !req.Present {
+		// An undetermined requirement is not a missing one: reporting it as a
+		// problem would be stating as fact something nobody established.
+		if !req.Present && !req.Undetermined {
 			missing = append(missing, req)
 		}
 	}
@@ -498,7 +505,10 @@ func Format(w io.Writer, r Report) {
 		p("  %-22s %s\n", "backend:", walletBackendLine(r.Wallet))
 		for _, req := range r.Wallet.Requirements {
 			state := "found"
-			if !req.Present {
+			switch {
+			case req.Undetermined:
+				state = "undetermined"
+			case !req.Present:
 				state = "missing"
 			}
 			p("  %-22s %s — %s\n", req.Name+":", state, req.Detail)

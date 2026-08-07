@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
+	"github.com/OrbintSoft/sshakku/internal/diagnose"
 	"github.com/OrbintSoft/sshakku/internal/paths"
 )
 
@@ -69,13 +70,94 @@ func TestKeePassXCOverTheSecretServiceOnLinux(t *testing.T) {
 	}
 }
 
+// TestDoctorReportsAWalletThatCanHoldNothingHere verifies F25 end of the wiring:
+// on a machine with no screen the compartment cannot be created, so no
+// passphrase can ever be saved — and that has to reach the findings, where a
+// user looks for what is wrong, rather than staying a detail of the wallet
+// section.
+func TestDoctorReportsAWalletThatCanHoldNothingHere(t *testing.T) {
+	settings := config.Settings{SecretBackend: config.SecretBackendSecretService}
+	probe := probeWith("linux", nil, nil, "unix:path=/run/bus", nil).
+		withLook(secretServiceLook{running: true}, false)
+
+	view := walletView(settings, probe)
+
+	req := requirement(t, view, "compartment")
+	if req.Present || req.Undetermined {
+		t.Errorf("compartment = %+v, want a piece that is missing", req)
+	}
+	findings := diagnose.WalletFindings(view)
+	if len(findings) != 1 || !strings.Contains(findings[0], "compartment") {
+		t.Errorf("findings = %q, want one naming the compartment", findings)
+	}
+}
+
+// TestDoctorReportsTheCompartmentTheSettingsName covers the other half of that:
+// the compartment described is the one entries would go into, so a user who
+// named their own is told about theirs.
+func TestDoctorReportsTheCompartmentTheSettingsName(t *testing.T) {
+	settings := config.Settings{
+		SecretBackend:   config.SecretBackendSecretService,
+		SecretContainer: "my-own",
+	}
+	probe := probeWith("linux", nil, nil, "unix:path=/run/bus", nil).
+		withLook(secretServiceLook{running: true}, false)
+
+	req := requirement(t, walletView(settings, probe), "compartment")
+
+	if !strings.Contains(req.Detail, "my-own") {
+		t.Errorf("compartment detail = %q, want it to name the configured compartment", req.Detail)
+	}
+}
+
+// TestKeePassXCOverTheSecretServiceSeesAnEmptyBus is the route rather than the
+// wallet: reaching KeePassXC this way needs something answering on the bus just
+// as any other wallet behind that API does, and a bus with nothing on it is a
+// piece the user can go and provide.
+func TestKeePassXCOverTheSecretServiceSeesAnEmptyBus(t *testing.T) {
+	settings := config.Settings{
+		SecretBackend:  config.SecretBackendKeePassXC,
+		KeePassXCRoute: config.KeePassXCRouteSecretService,
+	}
+	probe := probeWith("linux", nil, nil, "unix:path=/run/bus", nil).
+		withLook(secretServiceLook{}, false)
+
+	view := walletView(settings, probe)
+
+	if req := requirement(t, view, "secret service"); req.Present {
+		t.Errorf("secret service = %+v, want it reported missing on a bus with nothing on it", req)
+	}
+	for _, req := range view.Requirements {
+		if req.Name == "compartment" {
+			t.Error("this route's entries live in a database the user opened; the desktop has no compartment to describe")
+		}
+	}
+}
+
+// TestALookThatCouldNotBeTakenSaysSo verifies F41 at the seam where the report
+// meets the bus: a look that fails is not an answer. Reporting it as one would
+// have the report state, as fact, that a wallet is not there — on the strength
+// of never having managed to ask.
+func TestALookThatCouldNotBeTakenSaysSo(t *testing.T) {
+	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent/bus")
+
+	look := realSecretServiceLook("sshakku", "sshakku")
+
+	if !look.lookFailed {
+		t.Error("a look that never reached a bus must say it failed")
+	}
+	if req := serviceRequirement(look); !req.Undetermined || req.Present {
+		t.Errorf("secret service = %+v, want it undetermined rather than declared absent", req)
+	}
+}
+
 // TestPlatformWalletViewNamesWhateverItIsGiven covers the fallback beside the
 // Secret Service: a name the configuration layer would never produce here still
 // gets named back, with nothing claimed about it, rather than being reported as
 // some other wallet. Saying "this is what you asked for" remains an answer to
 // "which wallet would be used"; inventing a requirement for it would not be.
 func TestPlatformWalletViewNamesWhateverItIsGiven(t *testing.T) {
-	view := probeWith("linux", nil, nil, "", nil).platformWalletView("something-else")
+	view := probeWith("linux", nil, nil, "", nil).platformWalletView(config.Settings{}, "something-else")
 
 	if view.Backend != "something-else" {
 		t.Errorf("backend = %q, want the name it was given back", view.Backend)

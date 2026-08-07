@@ -86,6 +86,20 @@ jobs:
           keyctl session - test/containers/keyring-session.sh
           test/containers/gnome-keyring-headless-scenario.sh
 
+      # What the doctor says about that wallet, on the machine where it can hold
+      # nothing. The activation file is removed so that a bus this scenario
+      # starts for itself has no wallet on it and none that could be started —
+      # the session's own daemon is launched directly and is unaffected.
+      - name: Run the GNOME Keyring doctor scenario
+        if: matrix.name == 'gnome-keyring'
+        run: >
+          docker run --init --rm
+          -v "${{ github.workspace }}":/src:ro
+          -e SSHAKKU_SESSION_SCRIPT=gnome-keyring-headless-session.sh
+          -e SSHAKKU_DISABLE_SECRETS_ACTIVATION=1
+          sshakku-test-desktop-stack-gnome-keyring
+          test/containers/gnome-keyring-doctor-scenario.sh
+
       # The same wallet reached from a login with a screen and no X server. The
       # image and the test are the ones the step above already ran: what is
       # being varied is the session around them, so a difference in the result
