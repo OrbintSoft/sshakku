@@ -40,7 +40,9 @@ type KeychainBackend struct {
 	// authorization nobody is there to grant, and something is waiting on the
 	// answer — a login shell, or an ssh at a passphrase prompt — so the wait is
 	// finite and the caller falls back to asking on the terminal. Zero selects
-	// DefaultCommandTimeout.
+	// DefaultInteractiveTimeout: when the framework does put up its approval
+	// dialog, what this call is waiting for is a person deciding, and from out
+	// here that call looks no different from one that answers by itself.
 	//
 	// Note what it does not do: a call already inside the framework cannot be
 	// cancelled from Go, so what elapses here ends the waiting, not the call.
@@ -66,7 +68,7 @@ type keychainSecret struct {
 func bounded[T any](b *KeychainBackend, call func() (T, error)) (T, error) {
 	timeout := b.Timeout
 	if timeout <= 0 {
-		timeout = DefaultCommandTimeout
+		timeout = DefaultInteractiveTimeout
 	}
 	return withDeadline("the keychain", timeout, call)
 }

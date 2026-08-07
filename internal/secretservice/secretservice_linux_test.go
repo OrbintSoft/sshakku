@@ -172,9 +172,9 @@ func TestClientUnlockLock(t *testing.T) {
 	})
 
 	t.Run("a hung prompt times out and is dismissed", func(t *testing.T) {
-		orig := promptTimeout
-		promptTimeout = 200 * time.Millisecond
-		defer func() { promptTimeout = orig }()
+		orig := defaultPromptTimeout
+		defaultPromptTimeout = 200 * time.Millisecond
+		defer func() { defaultPromptTimeout = orig }()
 
 		client, svc := newTestClient(t, "hang")
 		start := time.Now()
@@ -182,7 +182,7 @@ func TestClientUnlockLock(t *testing.T) {
 			t.Fatal("expected a timeout error")
 		}
 		if elapsed := time.Since(start); elapsed > 2*time.Second {
-			t.Fatalf("Unlock took %v, want close to the shortened promptTimeout", elapsed)
+			t.Fatalf("Unlock took %v, want close to the shortened defaultPromptTimeout", elapsed)
 		}
 
 		svc.mu.Lock()

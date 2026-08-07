@@ -16,6 +16,15 @@ import (
 // D-Bus user session) it logs the failure and falls back to SecretToolBackend,
 // so a key can still be looked up or stored via the desktop's default
 // collection rather than aborting the caller outright.
+// secretServiceBudgets hands a Secret Service client the two waits the user
+// configured: one for what the daemon answers by itself, one for a prompt the
+// desktop puts in front of them.
+func secretServiceBudgets(client *secretservice.Client, settings config.Settings) *secretservice.Client {
+	client.CallTimeout = settings.CommandTimeout
+	client.PromptTimeout = settings.InteractiveTimeout
+	return client
+}
+
 func newDefaultSecretBackend(user string, log keys.Logger, settings config.Settings) (keys.SecretBackend, func()) {
 	client, err := secretservice.NewClient()
 	if err != nil {
@@ -27,7 +36,12 @@ func newDefaultSecretBackend(user string, log keys.Logger, settings config.Setti
 	// without a real D-Bus Secret Service, so this cannot run in a unit test.
 	// The fallback above is unit-tested.
 	//coverage:ignore
-	return &keys.SecretServiceBackend{Client: client, User: user, Container: settings.SecretContainer}, func() {
+	backend := &keys.SecretServiceBackend{
+		Client:    secretServiceBudgets(client, settings),
+		User:      user,
+		Container: settings.SecretContainer,
+	}
+	return backend, func() {
 		//coverage:ignore
 		_ = client.Close()
 	}

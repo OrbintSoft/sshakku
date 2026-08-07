@@ -45,10 +45,16 @@ const (
 	noPrompt = dbus.ObjectPath("/")
 )
 
-// promptTimeout bounds how long Unlock/Lock/CreateCollection/CreateItem wait
-// for an interactive prompt to complete before dismissing it and treating the
-// operation as failed. A var, not a const, so tests can shorten it.
-var promptTimeout = 30 * time.Second
+// defaultPromptTimeout bounds how long Unlock/Lock/CreateCollection/CreateItem
+// wait for an interactive prompt when the caller sets no budget of its own,
+// before dismissing it and treating the operation as failed.
+//
+// A prompt is the desktop asking the user to unlock their wallet, so this is
+// counted in the minutes a person takes to read a dialog and type a password —
+// not in the seconds allowed to something answering by itself. Giving up early
+// costs the wallet for that login: what follows is being asked for a passphrase
+// that was already saved. A var, not a const, so tests can shorten it.
+var defaultPromptTimeout = 2 * time.Minute
 
 // defaultCallTimeout bounds every ordinary D-Bus round-trip when the caller
 // leaves Client.CallTimeout unset. Killing the daemon or the bus breaks the
@@ -78,6 +84,21 @@ type Client struct {
 	// defaultCallTimeout; set it lower to fail faster against a store that has
 	// stopped responding.
 	CallTimeout time.Duration
+
+	// PromptTimeout bounds how long an interactive prompt is waited for. A
+	// prompt is the desktop asking the user to unlock their wallet, so this is
+	// a wait on a person and belongs to the caller's interactive budget, not to
+	// the one bounding calls the daemon answers by itself. Zero selects
+	// defaultPromptTimeout.
+	PromptTimeout time.Duration
+}
+
+// promptWait is PromptTimeout or, when unset, defaultPromptTimeout.
+func (c *Client) promptWait() time.Duration {
+	if c.PromptTimeout > 0 {
+		return c.PromptTimeout
+	}
+	return defaultPromptTimeout
 }
 
 // callTimeout is CallTimeout or, when unset, defaultCallTimeout.
@@ -393,8 +414,8 @@ func (c *Client) completePrompt(path dbus.ObjectPath) (dbus.Variant, error) {
 			return dbus.Variant{}, fmt.Errorf("secret service: prompt %s dismissed", path)
 		}
 		return result, nil
-	case <-time.After(promptTimeout):
+	case <-time.After(c.promptWait()):
 		_ = c.call(prompt, promptIface+".Dismiss").Err
-		return dbus.Variant{}, fmt.Errorf("secret service: prompt %s timed out after %s", path, promptTimeout)
+		return dbus.Variant{}, fmt.Errorf("secret service: prompt %s timed out after %s", path, c.promptWait())
 	}
 }
