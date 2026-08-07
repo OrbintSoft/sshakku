@@ -107,6 +107,16 @@ type deps struct {
 	// /dev/tty; a fake lets the broker's decline path run without a controlling
 	// terminal.
 	tty keys.TTY
+	// walletProbe is how doctor finds out what the configured wallet needs and
+	// what of it is here: PATH, sockets, the session bus, and a wallet already
+	// answering on it. Injected so a test decides what the machine has instead
+	// of asking the one it runs on — which for --fix matters twice over, since
+	// what the report finds is what decides whether anything is created.
+	walletProbe func() walletProbe
+	// makeCompartment creates the compartment the configured wallet keeps
+	// SSHakku's entries in, and reports what it made. Nil where this system's
+	// wallet has no such thing to make. Only --fix ever calls it.
+	makeCompartment func(settings config.Settings) (string, error)
 }
 
 // realDeps wires deps to the production implementations.
@@ -121,6 +131,8 @@ func realDeps() deps {
 		graphicalPrompter: newGraphicalPrompter,
 		fetchHandoff:      keys.FetchHandoff,
 		tty:               ttyPrompter{},
+		walletProbe:       realWalletProbe,
+		makeCompartment:   realMakeCompartment,
 	}
 }
 

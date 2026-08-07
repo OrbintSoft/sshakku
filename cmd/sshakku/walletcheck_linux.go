@@ -72,6 +72,30 @@ func (p walletProbe) sessionBus() diagnose.Requirement {
 	}
 }
 
+// realMakeCompartment makes the compartment entries would be stored in, under
+// the same names the report asked about, and returns the name it made. The
+// wallet decides what making one takes — GNOME Keyring asks for a password to
+// protect the new compartment with — so this is the one place in the doctor that
+// may raise a dialog, and it is reached only from --fix.
+//
+// A compartment that is already there is returned as it is, which is why the
+// caller decides whether there was anything to make: what this reports is what
+// it resolved, not what it created.
+func realMakeCompartment(settings config.Settings) (string, error) {
+	alias, label := keys.SecretServiceCollectionNames(settings.SecretContainer)
+
+	client, err := secretservice.NewClient()
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = client.Close() }()
+
+	if _, err := client.Collection(alias, label); err != nil {
+		return "", err
+	}
+	return label, nil
+}
+
 // realSecretServiceLook asks the bus, and a wallet already answering on it,
 // about themselves. A look that fails is reported as a wallet that could not be
 // asked, never as one that is not there: the report says what it does not know.
