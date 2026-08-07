@@ -62,8 +62,8 @@ func GiveupTTL(raw string) (time.Duration, error) {
 // CommandTimeout parses the budget for something that is not waiting on a
 // person — reading the wallet, probing the display — expressed as a Go
 // duration, defaulting to keys.DefaultCommandTimeout when raw is empty. Most of
-// what it bounds is an external command; a wallet reached in-process rather
-// than by running anything, as the macOS keychain is, gets the same budget.
+// what it bounds is an external command, but whether something is run or called
+// into is not what decides: who is being waited for is.
 //
 // Unlike a key lifetime, zero and negative do not mean "no limit": something
 // with no limit can hold a login shell, or an ssh at a passphrase prompt, for
@@ -73,9 +73,10 @@ func CommandTimeout(raw string) (time.Duration, error) {
 	return positiveDuration(raw, keys.DefaultCommandTimeout, "command timeout")
 }
 
-// InteractiveTimeout parses the budget for a command that is waiting on a
-// person — a password dialog, a CLI deferring to a desktop app for approval —
-// defaulting to keys.DefaultInteractiveTimeout when raw is empty. It is
+// InteractiveTimeout parses the budget for something that is waiting on a
+// person — a password dialog, a CLI deferring to a desktop app for approval, an
+// OS keychain that has put up an approval dialog of its own — defaulting to
+// keys.DefaultInteractiveTimeout when raw is empty. It is
 // generous, since the limit is human, but finite for the same reason as
 // CommandTimeout: a dialog nobody answers must not strand the shell.
 func InteractiveTimeout(raw string) (time.Duration, error) {

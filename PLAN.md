@@ -1236,9 +1236,10 @@ not rediscovered one at a time.
    about anything SSHakku waits on, not only about programs it runs, so the gap
    was a stated violation of it rather than a case the promise never reached.
 
-   `KeychainBackend` now takes `command_timeout`, the same budget every other
-   wallet gets, and applies it to each of the four operations — `forget --all`
-   waits on `List` and `Delete` exactly as `load-keys` waits on `Find`. What
+   `KeychainBackend` now takes a budget and applies it to each of the four
+   operations — `forget --all` waits on `List` and `Delete` exactly as
+   `load-keys` waits on `Find`. Which budget it takes was decided here and
+   decided wrongly; Phase 27 has the correction. What
    elapses ends the waiting and not the call: nothing in Go can interrupt one
    already inside the framework, so the goroutine holding it stays blocked for
    as long as the framework does, deliberately and where the code says so.
@@ -1716,3 +1717,42 @@ the compartment is not there, `--fix` could create it — which works where ther
 is a screen and cannot where there is none.
 
 → features F25, F41; open decision 24.
+
+### Phase 27 — The wallet asked for a password, and was given thirty seconds ✅ Done
+
+Reported from real use on both platforms, and the two turned out to be one
+defect. On a Mac, after a reinstall, a lookup and a store each gave up after ten
+seconds while macOS was showing its approval dialog and the user was still
+typing. On Linux, after a reboot, the desktop asked for the wallet password, the
+answer came too late, and the login went on to ask for a passphrase that had
+been saved for months.
+
+**The analysis, before anything was changed.** F21 already promises exactly what
+was missing: the wait is bounded, and *how long to wait is configurable,
+separately for something expected to answer on its own and something that is
+waiting on you*. Both budgets existed and were right. What was wrong is which of
+them these two waits were given. The keychain took `command_timeout` — and
+`internal/config/config.go` said so on purpose, reasoning from *how* the wallet
+is reached (in-process, not by running a command) rather than from *who* is
+being waited for. The Secret Service prompt took neither: a package-level 30
+seconds that nothing could configure, which is the promise's second half broken
+outright. A defect in both places, and F21 stands unchanged.
+
+**Red before green** (rule 23). The macOS half cannot be run from this project's
+development machines at all, so its test was committed failing on its own and
+watched go red in the macOS job — `Timeout = 3s, want 1m30s`. The Linux half was
+made to fail on the numbers rather than on a missing symbol: the seams were
+added carrying the old values first, which reported an unconfigured prompt wait
+of 30s and a client handed no budget at all.
+
+**What is unverified**: no test puts a real dialog in front of a real person on
+either platform. The state was reached by hand — the two reports above are the
+reproduction — and what the tests pin is the budget each wait is given. See the
+two F21 dialog rows in `docs/TEST-MATRIX.md`.
+
+Not done here, and noted rather than guessed at: `promptTimeout` bounded the
+compartment-creation dialog too, which is the other place a person is asked to
+choose a password. It now takes the same configurable budget as every other
+prompt, but nothing exercises that path yet — Phase 26's follow-up will.
+
+→ feature F21; PLAN Phase 17 item 2 (which chose the budget this corrects).
