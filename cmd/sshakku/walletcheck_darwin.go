@@ -32,8 +32,8 @@ func (p walletProbe) keepassxcSecretServiceRoute() []diagnose.Requirement {
 	}}
 }
 
-// realSecretServiceLook is the look a system with no session bus can take:
-// there is nothing to ask and nothing that could answer.
-func realSecretServiceLook(_, _ string) secretServiceLook {
-	return secretServiceLook{}
-}
+// realSecretServiceLook is the look this system can take at a session bus, and
+// macOS has none: no bus, nothing on it, and nothing that could answer. It is
+// left nil rather than given a body that returns emptiness, because there is no
+// question here to answer at all.
+var realSecretServiceLook func(alias, label string) secretServiceLook
