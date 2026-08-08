@@ -1,0 +1,43 @@
+name: Colima experiment
+
+# Throwaway: answers whether a hosted macOS runner can run a Linux container at
+# all, and at what cost. Deleted once the answer is recorded.
+on:
+  push:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  colima:
+    name: Colima (${{ matrix.vm-type }})
+    runs-on: macos-latest
+    strategy:
+      # One run answers for both virtual machine types: vz is Apple's own
+      # hypervisor and needs the host to allow nesting, qemu emulates instead
+      # and needs nothing but time. Neither answer is the other's.
+      fail-fast: false
+      matrix:
+        vm-type: [vz, qemu]
+    steps:
+      - name: Install Colima and the Docker client
+        run: brew install colima docker
+
+      - name: Start a Linux virtual machine
+        timeout-minutes: 25
+        run: |
+          start=$SECONDS
+          colima start --vm-type ${{ matrix.vm-type }} --cpu 2 --memory 4 --disk 20
+          echo "colima start took $((SECONDS - start))s"
+
+      - name: Report what started
+        run: colima status && docker version
+
+      - name: Reach a container's published port from macOS
+        run: |
+          docker run -d --name probe -p 18080:80 nginx:alpine
+          curl --retry 10 --retry-delay 2 --retry-all-errors -fsS http://localhost:18080/ | head -n 5
