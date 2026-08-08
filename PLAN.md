@@ -1807,3 +1807,40 @@ make the compartment for the other scenarios. It could now drive the real
 binary, which would have the harness set the state up the way a user does.
 
 → features F42, F14, F39, F41; PLAN Phase 26 (whose follow-up this is).
+
+### Phase 29 — The configuration nobody had driven on a Mac ✅ Done
+
+Three cells of `docs/TEST-MATRIX.md` (F34, F35, F36) carried the same ❌ with
+the same excuse: nothing in them touches a facility of the operating system, so
+the unit tests running in the macOS job were taken for coverage of the whole
+promise. What that reasoning left out is that the promises were driven through
+the real binary exactly once, by hand, on the `debian` image — and a run that
+happened once on one platform says nothing about either.
+
+`test/bats/config-commands.bats` drives all three, twelve rounds, and it needed
+no new workflow: `make test-bats` already runs in the container job and on the
+macOS runner, so the suite closes both platforms by existing.
+
+**What running it found.** `doctor` printed the keys section only when it had a
+key to list, so a key directory that held nothing SSHakku recognised was never
+named — the case `docs/CONFIGURATION.md` describes as the reason the name is
+printed at all ("if it lists nothing you can see which directory it was told to
+look in"), and the one where a name rule matching nothing and a directory the
+user did not mean look identical from the outside. `KeysDir` is set only where
+the keys were actually looked for, which is what separates "looked and found
+nothing" from "never looked" — a report about another user, which must stay
+silent. F34 gained the sentence the fix satisfies.
+
+**Red before green** (rule 23), one round at a time rather than all at once: the
+default name rule widened to `["*"]`, `key_patterns` dropped from the mapping,
+`key_dir` ignored, and the `config` case removed from the command dispatch. The
+unit test for the empty section was red against the condition as it stood.
+
+The F34 rounds judge the selection on what SSHakku says it did — the session log
+naming the file it went and asked the wallet about, and the report listing it —
+not on the key reaching the agent. That last step turns on a passphrase handoff
+which a plain container has no kernel keyring for, and asserting it would have
+left the selection itself unexercised in the very job meant to cover it.
+
+→ features F34, F35, F36; PLAN Phase 6 item 6 (closing open matrix cells),
+Phase 17 (what was still unrun on macOS).
