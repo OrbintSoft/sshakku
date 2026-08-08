@@ -25,7 +25,7 @@ jobs:
         vm-type: [vz, qemu]
     steps:
       - name: Install Colima and the Docker client
-        run: brew install colima docker
+        run: brew install colima docker qemu
 
       - name: Start a Linux virtual machine
         timeout-minutes: 25
@@ -33,6 +33,13 @@ jobs:
           start=$SECONDS
           colima start --vm-type ${{ matrix.vm-type }} --cpu 2 --memory 4 --disk 20
           echo "colima start took $((SECONDS - start))s"
+
+      # Colima reports a failed boot as an empty error list and points at a file
+      # nobody is here to read; the machine's own account of it is in the logs
+      # the virtual machine wrote.
+      - name: Report why the virtual machine did not start
+        if: failure()
+        run: tail -n 80 ~/.colima/_lima/colima/ha.stderr.log ~/.colima/_lima/colima/serial*.log
 
       - name: Report what started
         run: colima status && docker version
