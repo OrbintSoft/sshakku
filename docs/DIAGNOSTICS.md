@@ -95,6 +95,10 @@ keys in /home/you/.ssh (2):
   id_rsa_old                  not loaded
 ```
 
+The heading is there whether or not anything was found — a directory holding no
+key sshakku recognises is still named, with a count of zero, so a name rule that
+matches nothing can be told from a directory you did not mean.
+
 A loaded key can also show:
 
 - `loaded, no expiry` — added with `key_lifetime`/`SSHAKKU_KEY_LIFETIME` set to

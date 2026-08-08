@@ -497,7 +497,13 @@ func Format(w io.Writer, r Report) {
 		}
 	}
 
-	if len(r.Keys) > 0 || r.KeysErr != nil {
+	// A directory that was read and held no key still gets the section, empty:
+	// that is the case where naming the directory is worth the most, since a
+	// name rule matching nothing and a directory that is not the one the user
+	// meant look identical from the outside. KeysDir is set only where the keys
+	// were actually looked for, which is what keeps a report that never looked
+	// — one about another user, say — silent about them.
+	if r.KeysDir != "" || len(r.Keys) > 0 || r.KeysErr != nil {
 		p("\nkeys in %s (%d):\n", keysDirName(r.KeysDir), len(r.Keys))
 		for _, k := range r.Keys {
 			p("  %-28s %s\n", k.Name, keyStatus(k))
