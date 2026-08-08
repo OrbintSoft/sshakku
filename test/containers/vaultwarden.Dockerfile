@@ -7,7 +7,7 @@
 # exist in the web-vault UI), so this image ships a pre-registered,
 # already-empty test account as a SQLite fixture
 # (vaultwarden-fixture/) instead of registering one at container
-# startup — see PLAN.md 4.2 for how that fixture was produced. The
+# startup; the fixture was produced once, by hand, through that UI. The
 # Vaultwarden binary is copied from the upstream image rather than built
 # here, at the same pinned version the fixture was produced against; only
 # used transiently inside this disposable CI container, never modified or
@@ -34,7 +34,8 @@ ENV PATH="/usr/local/go/bin:${PATH}"
 COPY --from=vaultwarden /vaultwarden /usr/local/bin/vaultwarden
 
 COPY test/containers/vaultwarden-fixture/ /opt/sshakku-desktop-stack/vaultwarden-fixture/
-COPY test/containers/vaultwarden-entrypoint.sh test/containers/vaultwarden-session.sh /opt/sshakku-desktop-stack/
+COPY test/containers/vaultwarden-entrypoint.sh test/containers/vaultwarden-session.sh \
+    test/containers/vaultwarden-fixture-account.sh /opt/sshakku-desktop-stack/
 RUN chmod +x /opt/sshakku-desktop-stack/vaultwarden-entrypoint.sh /opt/sshakku-desktop-stack/vaultwarden-session.sh
 
 WORKDIR /src

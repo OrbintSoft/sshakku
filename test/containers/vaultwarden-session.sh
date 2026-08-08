@@ -9,18 +9,8 @@ set -euo pipefail
 
 readonly VAULTWARDEN_PORT="8443"
 readonly VAULTWARDEN_URL="https://localhost:${VAULTWARDEN_PORT}"
-# This account's only purpose is to hold this disposable container's empty
-# test vault; the password protects nothing of value and is fixed on
-# purpose, so every run of this fixture unlocks the same way. Never reuse it
-# for anything real.
-#
-# This exact string is baked into the committed fixture (vaultwarden-fixture/
-# db.sqlite3): both the stored login hash and the wrapping of the vault key are
-# derived from it, so it is an opaque token bound to that binary, not free-form
-# prose. Changing it without regenerating the fixture makes login fail with
-# "Username or password is incorrect" — do not "tidy" it.
-readonly TEST_EMAIL="sshakku-test@example.invalid"
-readonly TEST_MASTER_PASSWORD="sshakku-tier2-fixture-not-a-real-secret-1"
+# shellcheck source=test/containers/vaultwarden-fixture-account.sh
+. "$(dirname "${BASH_SOURCE[0]}")/vaultwarden-fixture-account.sh"
 
 wait_for() {
 	local description="$1" tries=50
@@ -55,8 +45,8 @@ wait_for "Vaultwarden" wget -q --no-check-certificate -O /dev/null "${VAULTWARDE
 
 exec env \
 	SSHAKKU_TEST_ALLOW_REAL_BITWARDEN="1" \
-	SSHAKKU_TEST_BW_EMAIL="${TEST_EMAIL}" \
-	SSHAKKU_TEST_BW_PASSWORD="${TEST_MASTER_PASSWORD}" \
+	SSHAKKU_TEST_BW_EMAIL="${VAULTWARDEN_FIXTURE_EMAIL}" \
+	SSHAKKU_TEST_BW_PASSWORD="${VAULTWARDEN_FIXTURE_PASSWORD}" \
 	SSHAKKU_TEST_BW_SERVER="${VAULTWARDEN_URL}" \
 	NODE_EXTRA_CA_CERTS="${SSL_DIR}/cert.pem" \
 	"$@"

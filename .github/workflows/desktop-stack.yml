@@ -241,6 +241,35 @@ jobs:
           SSHAKKU_TEST_KEEPASSXC_APP: /Applications/KeePassXC.app/Contents/MacOS/KeePassXC
         run: go test ./internal/keys -run TestKeePassXCNativeFullRound -count=1 -v
 
+  bitwarden-macos:
+    name: Bitwarden on macOS
+    # Same integration gate as container-test: manual dispatch, or a push whose
+    # head commit opts in with [integration].
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[integration]')
+    runs-on: macos-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: ./.github/actions/setup-go-env
+
+      # bw and the test binary stay native: what is being exercised is a Mac
+      # talking to a Bitwarden server, so only the server may be Linux.
+      - name: Install the Bitwarden CLI and a Linux container runtime
+        run: brew install bitwarden-cli colima docker qemu
+
+      # The machine is emulated rather than virtualised: Apple's hypervisor
+      # refuses here — "Virtualization is not available on this hardware" —
+      # because this runner is itself a virtual machine and does not pass
+      # nesting through.
+      - name: Start a Linux virtual machine
+        timeout-minutes: 20
+        run: colima start --vm-type qemu --cpu 2 --memory 4 --disk 20
+
+      - name: Run the Bitwarden round trip against Vaultwarden
+        run: ./test/vaultwarden-server.sh ./test/bitwarden-real-account.sh
+
   midsession-failure:
     name: mid-session failure (${{ matrix.scenario }})
     # Same integration gate as container-test: manual dispatch, or a push whose

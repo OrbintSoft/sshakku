@@ -20,10 +20,11 @@ import (
 // server, SSHAKKU_TEST_BW_SERVER. It never runs `op signin`-equivalent setup
 // itself beyond that: Unlock is the exact production code path, exercised
 // here for real rather than assumed correct because it round-trips through
-// a fake Runner in secret_bitwarden_test.go. It only runs locally or in the
-// Vaultwarden desktop-stack container for now — a Bitwarden/Vaultwarden
-// account needs a server to talk to, unlike the local `op` app-integration
-// case.
+// a fake Runner in secret_bitwarden_test.go. A Bitwarden/Vaultwarden account
+// needs a server to talk to, unlike the local `op` app-integration case, so
+// something has to stand one up: the container's own session script on Linux,
+// or test/vaultwarden-server.sh, which puts the server in a container and
+// leaves this test and the bw CLI outside it.
 const allowRealBitwardenEnv = "SSHAKKU_TEST_ALLOW_REAL_BITWARDEN"
 
 // TestBitwardenBackendRealAccount exercises BitwardenBackend end to end
@@ -35,7 +36,7 @@ const allowRealBitwardenEnv = "SSHAKKU_TEST_ALLOW_REAL_BITWARDEN"
 // and deletes it in t.Cleanup regardless of outcome.
 func TestBitwardenBackendRealAccount(t *testing.T) {
 	if os.Getenv(allowRealBitwardenEnv) == "" {
-		t.Skipf("skipping: set %s=1 plus SSHAKKU_TEST_BW_EMAIL/SSHAKKU_TEST_BW_PASSWORD (and optionally SSHAKKU_TEST_BW_SERVER) to run against a real bw account (see PLAN.md 4.2)", allowRealBitwardenEnv)
+		t.Skipf("skipping: set %s=1 plus SSHAKKU_TEST_BW_EMAIL/SSHAKKU_TEST_BW_PASSWORD (and optionally SSHAKKU_TEST_BW_SERVER) to run against a real bw account; test/vaultwarden-server.sh sets all of them up around a disposable server", allowRealBitwardenEnv)
 	}
 	if _, err := exec.LookPath(bitwardenBin); err != nil {
 		t.Skipf("bw CLI not found: %v", err)
