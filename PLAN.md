@@ -1332,10 +1332,33 @@ not rediscovered one at a time.
    answerable is unverified until someone runs it on a Mac they are sitting
    at. See the ⚠️ in `docs/TEST-MATRIX.md`.
 
-7. **The CLI backends are untested on macOS.** 1Password and Bitwarden are
-   supported on both platforms, but the real-account jobs run on
-   `ubuntu-latest` only, so nothing exercises them where the rest of the
-   platform differs.
+7. **The CLI backends were untested on macOS.** Both are supported on both
+   platforms, but the real-account jobs ran on `ubuntu-latest` only, so nothing
+   exercised them where the rest of the platform differs.
+
+   **1Password: done, and settled by running it.** The real-account job is a
+   matrix over both systems now, and the round trip — a throwaway vault
+   created, stored into, read back, listed, deleted, and the vault removed —
+   passed on `macos-latest` in 13s against a real service account. The answer
+   was not knowable from here: the test cannot be run on a developer's machine
+   without creating a vault in their own account, so the macOS job was the
+   experiment, not a confirmation of one.
+
+   Adding the job was the smaller half. That test skips itself when `op` is
+   absent, when it is not authenticated, or when its opt-in variable is unset,
+   and `go test -run` exits 0 on a skip — reproduced with the command the job
+   ran: `--- SKIP`, then `PASS`, then `ok`, exit 0. A macOS leg added on top of
+   that would have gone green having run nothing, which is worth less than the
+   ❌ it replaced, and the Linux leg had the same hole already. Both go through
+   `test/onepassword-real-account.sh`, which requires the test's own
+   `--- PASS:` line in the output; made to fail by that same skipped run.
+
+   **Bitwarden stays uncovered on macOS**, and the reason is the runner rather
+   than the product: the Linux job reaches a real Bitwarden by standing
+   Vaultwarden up in a container, and a hosted macOS runner has no Docker to
+   stand one up in. That is a wallet nobody has watched work on a Mac, not a
+   promise known to be broken — and it stays a ❌ in the matrix for exactly
+   that reason.
 
 → features F5, F6, F13, F17, F21, F25, F26; open decision 23.
 
