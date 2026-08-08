@@ -193,6 +193,20 @@ func TestGatherKeysEnumerateError(t *testing.T) {
 	}
 }
 
+func TestFormatNamesTheDirectoryItReadWhenItHeldNoKey(t *testing.T) {
+	ks := &KeySource{Dir: "/home/u/work-keys", Lister: fakeKeyLister{}}
+	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, fakeSource{}, fakeProber{}, nil, nil, ks, nil)
+
+	var b strings.Builder
+	Format(&b, r)
+	// A name rule that matches nothing and a directory that is not the one the
+	// user meant produce the same empty answer, and the directory's name is the
+	// only thing in the report that tells them apart.
+	if !strings.Contains(b.String(), "keys in /home/u/work-keys (0)") {
+		t.Fatalf("Format output must name the directory it read even when it held no key, got:\n%s", b.String())
+	}
+}
+
 func TestGatherNilKeySourceSkipsKeysSection(t *testing.T) {
 	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, fakeSource{}, fakeProber{}, nil, nil, nil, nil)
 	if r.Keys != nil || r.KeysErr != nil {

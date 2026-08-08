@@ -1,0 +1,2 @@
+# A key lifetime no duration parser can read.
+key_lifetime = "half a day"

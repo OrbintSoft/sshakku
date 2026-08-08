@@ -1,0 +1,3 @@
+# Names a key of the user's own alongside OpenSSH's convention, so a key
+# called work-github is one SSHakku looks for.
+key_patterns = ["id_*", "work-*"]
