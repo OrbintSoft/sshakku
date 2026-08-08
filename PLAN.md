@@ -1805,6 +1805,7 @@ second chance to answer it.
 Not done here: `gnome-keyring-create-collection.sh` still runs a `go test` to
 make the compartment for the other scenarios. It could now drive the real
 binary, which would have the harness set the state up the way a user does.
+Done in Phase 30.
 
 → features F42, F14, F39, F41; PLAN Phase 26 (whose follow-up this is).
 
@@ -1844,3 +1845,49 @@ left the selection itself unexercised in the very job meant to cover it.
 
 → features F34, F35, F36; PLAN Phase 6 item 6 (closing open matrix cells),
 Phase 17 (what was still unrun on macOS).
+
+### Phase 30 — The compartment the harness made for itself ✅ Done
+
+Phase 28's leftover. The gnome-keyring image built the state every run in it
+starts from — the compartment the wallet keeps SSHakku's passphrases in — by
+running `go test ./internal/keys -run TestSecretServiceBackendRealDaemon`. So
+the precondition of those runs was reached by a road no user has, while the one
+command a user does have for it (F42's `sshakku doctor --fix`) did not exist
+when that script was written.
+
+Both create-collection scripts now run the real binary, and the half they share
+moved into `gnome-keyring-make-compartment.sh` — leaving in each script only how
+a button is pressed, which is what their comments had always claimed was the
+only difference between them while both in fact also carried the trigger. X11
+answers from the keyboard, Phase 28's finding applied where it came from;
+Wayland still clicks and must, since the dialog grabs the seat there and ignores
+every key sent to it.
+
+The setup now also asks the wallet — over the bus, not through SSHakku — whether
+the compartment is there before letting the session continue. It had no such
+check: a press lost to render timing left the compartment unmade and the setup
+silent, and the run that followed failed somewhere far from the cause.
+
+**Red before green** (rule 23). Two deliberate breakages, both observed in the
+image: with the answering loop removed, `--fix` is killed at its budget and the
+session refuses to start; with the dialog answered but the check pointed at a
+name nothing makes, the session fails on the check alone, while `--fix` itself
+reports having made the compartment.
+
+**What running it settled** (rule 25). `doctor --fix` does more than make a
+compartment — it heals agent state too, so the setup now leaves an ssh-agent
+running before everything else in that image, the whole Go suite included.
+Whether that mattered was measured rather than argued: `make test`, the Wayland
+round trip, the compartment-repair scenario on a screen and the frozen-daemon
+scenario all pass. The headless round trip is the one that settles it, since it
+is the two logins together: a compartment `--fix` made in the login with a
+screen is there in the login with none.
+
+**Found on the way, not fixed here.** `doctor` prints a compartment that is not
+there as `found`: `compartmentRequirement`'s fixable branch sets `Present: true`,
+which is how "not a finding where there is a screen to make one on" was
+obtained, since `WalletFindings` reads `Missing()`. Suppressing the finding and
+reporting the piece as present are two different things, and the state column
+now contradicts the sentence printed beside it.
+
+→ feature F42; PLAN Phase 28 (whose leftover this is).

@@ -1,10 +1,9 @@
 #!/bin/bash
 # Runs as the disposable test account (see gnome-keyring-entrypoint.sh):
 # starts a headless X server, a private D-Bus session bus and
-# gnome-keyring-daemon, drives the one-time "create the sshakku collection
-# with a blank password" dialog via xdotool (gnome-keyring has no
-# non-interactive equivalent of KDE's kwalletrc pre-seed), then runs the
-# given command against the now prompt-free collection.
+# gnome-keyring-daemon, makes the compartment SSHakku keeps its passphrases in
+# (see gnome-keyring-create-collection.sh), then runs the given command against
+# the now prompt-free collection.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

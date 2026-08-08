@@ -1,21 +1,28 @@
 #!/bin/bash
-# Drives the one-time "Choose password for new keyring" / "Store passwords
-# unencrypted?" gcr-prompter dialog pair headlessly on Wayland, answering with
-# a blank password. The X11 script does the same job with xdotool; the two
-# differ only in how a button is pressed. Must run from the module root (go.mod)
-# with the compositor, D-Bus and gnome-keyring-daemon already up.
+# Makes the compartment the wallet keeps SSHakku's passphrases in, in a session
+# with a Wayland compositor and no X server: gnome-keyring-make-compartment.sh
+# runs the command that makes one, and this answers the "Choose password for new
+# keyring" / "Store passwords unencrypted?" pair GNOME Keyring raises in reply,
+# with a blank password.
 #
 # The dialog cannot be answered from the keyboard here: it grabs the seat, and
 # every key sent to it is ignored while it holds focus. It is clicked instead,
 # through the compositor's own cursor — which exists because the session was
 # given a pointer device (see wayland-pointer.sh).
 #
-# The two points clicked are the ones the X11 script clicks, and they are the
-# same points because they are read the same way: on X11 the dialog is placed at
-# the origin, so the coordinates there are already relative to the window. Here
-# they are added to wherever the compositor put it, which it is asked for rather
-# than told.
+# Where each "Continue" sits is recorded relative to the dialog's own window, and
+# the compositor is asked where it put that window rather than told, so a dialog
+# placed somewhere else is still pressed where its button is.
+#
+# Must run from the module root (go.mod) with the compositor, D-Bus and
+# gnome-keyring-daemon already up.
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
+
+# shellcheck source=test/containers/gnome-keyring-make-compartment.sh
+source "${SCRIPT_DIR}/gnome-keyring-make-compartment.sh"
 
 # Where "Continue" sits in each of the two dialogs, relative to its own window.
 readonly PASSWORD_CONTINUE_X=700
@@ -60,19 +67,13 @@ click_in() {
 	swaymsg seat - cursor release button1 >/dev/null
 }
 
-# Triggers CreateCollection for the "sshakku" collection exactly the way
-# sshakku's own code does, so gcr-prompter renders the real dialog this script
-# answers. A silent no-op if the collection already exists.
-SSHAKKU_TEST_ALLOW_REAL_SECRETSERVICE=1 go test ./internal/keys -run TestSecretServiceBackendRealDaemon -count=1 >/tmp/create-collection-trigger.log 2>&1 &
-readonly TRIGGER_PID=$!
+start_making_the_compartment
 
-# Each attempt is idempotent — clicking after the daemon already resolved the
-# prompt is a no-op — so a missed press from render-timing jitter is retried
-# rather than failing outright.
+# Each attempt is idempotent — pressing after the daemon already resolved the
+# prompt is a no-op — so a press lost to render-timing jitter is retried rather
+# than failing outright.
 for _ in 1 2 3 4 5; do
-	if ! kill -0 "${TRIGGER_PID}" 2>/dev/null; then
-		break
-	fi
+	kill -0 "${compartment_pid}" 2>/dev/null || break
 	if wait_for "the new-keyring password dialog" 40 dialog_on_screen; then
 		sleep 0.5
 		click_in "${PASSWORD_CONTINUE_X}" "${PASSWORD_CONTINUE_Y}" # blank password
@@ -84,8 +85,4 @@ for _ in 1 2 3 4 5; do
 	sleep 2
 done
 
-if ! wait "${TRIGGER_PID}"; then
-	echo "gnome-keyring-wayland-create-collection: trigger test failed:" >&2
-	cat /tmp/create-collection-trigger.log >&2
-	exit 1
-fi
+finish_making_the_compartment
