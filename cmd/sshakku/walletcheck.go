@@ -137,7 +137,6 @@ func compartmentRequirement(compartment string, look secretServiceLook, hasScree
 			Detail: fmt.Sprintf(
 				"%q is not there yet; sshakku doctor --fix makes it now, through a dialog on this screen, "+
 					"and otherwise the first passphrase saved creates it", compartment),
-			Present: true,
 			Fixable: true,
 		}
 	default:
