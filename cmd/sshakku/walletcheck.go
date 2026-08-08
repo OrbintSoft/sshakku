@@ -55,6 +55,11 @@ type secretServiceLook struct {
 	lookFailed bool
 }
 
+// realWalletView describes the configured wallet as this machine actually is.
+func realWalletView(settings config.Settings) diagnose.WalletView {
+	return walletView(settings, realWalletProbe())
+}
+
 // realWalletProbe looks at the machine this is running on.
 func realWalletProbe() walletProbe {
 	return walletProbe{

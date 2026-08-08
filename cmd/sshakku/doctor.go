@@ -199,8 +199,7 @@ func (d deps) doctor(stdout, stderr io.Writer, args []string) int {
 	// knowledge, not the diagnose package's.
 	settings := loadSettings(layout, "doctor", sessionlog.New(layout.LogFile))
 	report := d.gather(env, layout, settings)
-	probe := d.walletProbe()
-	report.Wallet = walletView(settings, probe)
+	report.Wallet = d.wallet(settings)
 	report.Findings = append(report.Findings, diagnose.WalletFindings(report.Wallet)...)
 	diagnose.Format(stdout, report)
 
