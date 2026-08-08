@@ -92,6 +92,30 @@ func TestDoctorReportsAWalletThatCanHoldNothingHere(t *testing.T) {
 	}
 }
 
+// TestDoctorSaysACompartmentItCanMakeIsNotThereYet verifies F42 where the
+// session can make one: the report says the compartment is not there, and does
+// not call that a fault. Both halves matter and they are separate claims — one
+// that would appear by itself at the first passphrase saved is nothing wrong
+// with the machine, but it is still not something the report may call found.
+func TestDoctorSaysACompartmentItCanMakeIsNotThereYet(t *testing.T) {
+	settings := config.Settings{SecretBackend: config.SecretBackendSecretService}
+	probe := probeWith("linux", nil, nil, "unix:path=/run/bus", nil).
+		withLook(secretServiceLook{running: true}, true)
+
+	view := walletView(settings, probe)
+
+	req := requirement(t, view, "compartment")
+	if req.Present {
+		t.Errorf("compartment = %+v, want a piece that is not there yet", req)
+	}
+	if !req.Fixable {
+		t.Errorf("compartment = %+v, want one this session can go and provide", req)
+	}
+	if findings := diagnose.WalletFindings(view); len(findings) != 0 {
+		t.Errorf("findings = %q, want none: a compartment this session can make is not a fault to report", findings)
+	}
+}
+
 // TestDoctorReportsTheCompartmentTheSettingsName covers the other half of that:
 // the compartment described is the one entries would go into, so a user who
 // named their own is told about theirs.
