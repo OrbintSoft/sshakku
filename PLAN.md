@@ -1888,6 +1888,41 @@ there as `found`: `compartmentRequirement`'s fixable branch sets `Present: true`
 which is how "not a finding where there is a screen to make one on" was
 obtained, since `WalletFindings` reads `Missing()`. Suppressing the finding and
 reporting the piece as present are two different things, and the state column
-now contradicts the sentence printed beside it.
+now contradicts the sentence printed beside it. Fixed in Phase 31.
 
 → feature F42; PLAN Phase 28 (whose leftover this is).
+
+### Phase 31 — A compartment that is not there is not found ✅ Done
+
+Phase 30's leftover, and a plain breach of F42: on a session that can make one,
+`sshakku doctor` printed `compartment: found — "sshakku" is not there yet; …`.
+The promise says the report tells you it is not there and names `--fix`; only
+the second half was kept, and the first was contradicted on the same line.
+
+`compartmentRequirement`'s fixable branch set `Present: true`. That bought one
+thing worth having — a compartment that would appear at the first passphrase
+saved is not a fault, and does not belong among the findings — but bought it by
+claiming the piece was there, because `Present` is read both by the printer
+choosing the word and by `Missing()` deciding findings. The two are separate
+claims, as `Fixable`'s own comment already said, so the suppression moved to
+`Missing()`, which now passes over what this session can provide itself, and
+`Present` went back to meaning what it says.
+
+The same conflation was in the tests: a table field named `wantPresent` and
+commented "whether the compartment counts as a problem". Split in two, so a
+change to either answer is caught rather than absorbed by the other.
+
+**Red before green** (rule 23). Three, all observed failing first. The subtest
+whose name already promised this — "the report says it is not there, and names
+--fix as what makes it" — asserted only the second clause; given the first, it
+failed printing the self-contradicting line. A new case pinned the requirement
+itself, `Present:true` on a piece whose own Detail says it is not there. And the
+scenario, driven through the real binary in the image's X11 session, failed on
+the new assertion alone while its other six stayed green.
+
+**What running it settled** (rule 25). The fix-compartment scenario on a screen
+(7 assertions) and with none (5), and the doctor scenario (9) — the last of
+which holds the other side down: with no screen the compartment is still stated
+where a user looks for problems, because there it really cannot be made.
+
+→ feature F42; PLAN Phase 30 (whose leftover this is).

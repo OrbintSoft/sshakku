@@ -168,14 +168,18 @@ type WalletView struct {
 	Requirements []Requirement
 }
 
-// Missing returns the requirements that are not satisfied, in the order they
-// were given.
+// Missing returns the requirements that are not satisfied and would stop the
+// wallet working, in the order they were given.
 func (w WalletView) Missing() []Requirement {
 	var missing []Requirement
 	for _, req := range w.Requirements {
 		// An undetermined requirement is not a missing one: reporting it as a
-		// problem would be stating as fact something nobody established.
-		if !req.Present && !req.Undetermined {
+		// problem would be stating as fact something nobody established. Nor is
+		// one this session can provide itself: a piece that would appear the
+		// first time it is needed is not something wrong with the machine, and
+		// the report says separately that it is not there and how to have it
+		// now.
+		if !req.Present && !req.Undetermined && !req.Fixable {
 			missing = append(missing, req)
 		}
 	}

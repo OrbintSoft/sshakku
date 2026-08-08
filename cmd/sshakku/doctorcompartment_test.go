@@ -87,6 +87,9 @@ func TestDoctorMakesTheCompartment(t *testing.T) {
 			t.Fatalf("doctor = %d, want 0; stderr=%q", got, errOut.String())
 		}
 
+		if line := compartmentLine(t, out.String()); strings.Contains(line, "found") {
+			t.Errorf("the report calls a compartment that is not there found:\n%s", line)
+		}
 		if !strings.Contains(out.String(), "--fix") {
 			t.Errorf("the report never names --fix as what makes the compartment:\n%s", out.String())
 		}
@@ -198,6 +201,21 @@ func TestDoctorMakesTheCompartment(t *testing.T) {
 			t.Error("one wallet that refused took the whole report with it")
 		}
 	})
+}
+
+// compartmentLine is the one line of the report a user reads to learn whether
+// the compartment is there. Taken from the printed report rather than from the
+// requirement behind it, because the word that appears on it is the whole of
+// what is being judged.
+func compartmentLine(t *testing.T, report string) string {
+	t.Helper()
+	for _, line := range strings.Split(report, "\n") {
+		if strings.Contains(line, "compartment:") {
+			return line
+		}
+	}
+	t.Fatalf("no compartment line in:\n%s", report)
+	return ""
 }
 
 // fixSection is what --fix printed about its own work: everything from the

@@ -196,7 +196,8 @@ func TestSecretServiceRequirementsFromALook(t *testing.T) {
 		look             secretServiceLook
 		hasScreen        bool
 		wantService      string // a fragment of the secret service detail
-		wantPresent      bool   // whether the compartment counts as a problem
+		wantPresent      bool   // whether the compartment is there
+		wantFixable      bool   // whether this session could go and make one
 		wantUndetermined bool
 		wantCompartment  string // a fragment of the compartment detail
 	}{
@@ -212,7 +213,7 @@ func TestSecretServiceRequirementsFromALook(t *testing.T) {
 			look:            secretServiceLook{running: true},
 			hasScreen:       true,
 			wantService:     "answering",
-			wantPresent:     true,
+			wantFixable:     true,
 			wantCompartment: "the first passphrase saved creates it",
 		},
 		{
@@ -262,6 +263,10 @@ func TestSecretServiceRequirementsFromALook(t *testing.T) {
 			if compartment.Present != tc.wantPresent {
 				t.Errorf("compartment present = %v, want %v (detail %q)",
 					compartment.Present, tc.wantPresent, compartment.Detail)
+			}
+			if compartment.Fixable != tc.wantFixable {
+				t.Errorf("compartment fixable = %v, want %v (detail %q)",
+					compartment.Fixable, tc.wantFixable, compartment.Detail)
 			}
 			if compartment.Undetermined != tc.wantUndetermined {
 				t.Errorf("compartment undetermined = %v, want %v (detail %q)",

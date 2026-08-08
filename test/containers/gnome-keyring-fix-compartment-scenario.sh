@@ -88,6 +88,13 @@ report="$(timeout 60 "${SSHAKKU}" doctor 2>&1)"
 
 if [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
 	# ── F42, the session that can make one ─────────────────────────────
+	if grep -E 'compartment: *found' <<<"${report}" >/dev/null; then
+		fail "the report calls a compartment that is not there found"
+		echo "${report}" >&2
+	else
+		ok "the report says the compartment is not there"
+	fi
+
 	if grep -q -- '--fix' <<<"${report}"; then
 		ok "the report names --fix as what makes the compartment"
 	else
