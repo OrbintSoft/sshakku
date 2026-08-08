@@ -17,9 +17,7 @@ set -euo pipefail
 readonly PORT="8443"
 readonly URL="https://localhost:${PORT}"
 readonly CONTAINER="sshakku-vaultwarden-fixture"
-# The fixture's database was produced against this version of the server, and is
-# only guaranteed to be readable by it.
-readonly IMAGE="vaultwarden/server:1.36.0"
+readonly IMAGE="sshakku-vaultwarden-fixture"
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$repo_root"
@@ -31,24 +29,32 @@ cd "$repo_root"
 work="$(mktemp -d "${TMPDIR:-/tmp}/sshakku-vaultwarden.XXXXXX")"
 cleanup() {
 	docker rm -f "${CONTAINER}" >/dev/null 2>&1 || true
+	docker rmi -f "${IMAGE}" >/dev/null 2>&1 || true
 	rm -rf "${work}"
 }
 trap cleanup EXIT
 
-# The fixture is copied rather than mounted: the server writes to its database,
-# and what it writes must not survive the run or reach the working tree.
-mkdir -p "${work}/data" "${work}/ssl"
+# The work directory is a build context, not a mount: what the container needs
+# is sent to the daemon rather than shared with it, so nothing here depends on
+# which of the host's directories the daemon can see — see
+# test/containers/vaultwarden-server.Dockerfile. The certificate is generated
+# per run and belongs to that one build.
+#
+# The server refuses to start on storage it cannot keep, which is exactly the
+# storage wanted here, so it is told so: everything this vault holds is thrown
+# away with the container, deliberately.
 cp test/containers/vaultwarden-fixture/db.sqlite3 \
-	test/containers/vaultwarden-fixture/rsa_key.pem "${work}/data/"
-chmod u+w "${work}/data/db.sqlite3"
+	test/containers/vaultwarden-fixture/rsa_key.pem "${work}/"
+chmod u+w "${work}/db.sqlite3"
 
-openssl req -x509 -newkey rsa:2048 -keyout "${work}/ssl/key.pem" -out "${work}/ssl/cert.pem" \
+openssl req -x509 -newkey rsa:2048 -keyout "${work}/key.pem" -out "${work}/cert.pem" \
 	-days 1 -nodes -subj "/CN=localhost" 2>/dev/null
 
+docker build -q -f test/containers/vaultwarden-server.Dockerfile -t "${IMAGE}" "${work}" >/dev/null
+
 docker run -d --name "${CONTAINER}" -p "${PORT}:${PORT}" \
-	-v "${work}/data:/data" \
-	-v "${work}/ssl:/ssl:ro" \
 	-e DATA_FOLDER=/data \
+	-e I_REALLY_WANT_VOLATILE_STORAGE=true \
 	-e ROCKET_PORT="${PORT}" \
 	-e ROCKET_TLS='{certs="/ssl/cert.pem",key="/ssl/key.pem"}' \
 	-e DOMAIN="${URL}" \
@@ -80,5 +86,5 @@ env \
 	SSHAKKU_TEST_BW_EMAIL="${VAULTWARDEN_FIXTURE_EMAIL}" \
 	SSHAKKU_TEST_BW_PASSWORD="${VAULTWARDEN_FIXTURE_PASSWORD}" \
 	SSHAKKU_TEST_BW_SERVER="${URL}" \
-	NODE_EXTRA_CA_CERTS="${work}/ssl/cert.pem" \
+	NODE_EXTRA_CA_CERTS="${work}/cert.pem" \
 	"$@"
