@@ -32,6 +32,14 @@ func (p walletProbe) keepassxcSecretServiceRoute() []diagnose.Requirement {
 	}}
 }
 
+// realMakeCompartment is how this system makes the compartment its wallet keeps
+// SSHakku's entries in, and the Keychain has none to make: entries go into the
+// login keychain the account already has, so there is nothing to create and
+// nothing that could be missing. Left nil rather than given a body that does
+// nothing, because doing nothing successfully is not the same as having nothing
+// to do.
+var realMakeCompartment func(settings config.Settings) (string, error)
+
 // realSecretServiceLook is the look this system can take at a session bus, and
 // macOS has none: no bus, nothing on it, and nothing that could answer. It is
 // left nil rather than given a body that returns emptiness, because there is no

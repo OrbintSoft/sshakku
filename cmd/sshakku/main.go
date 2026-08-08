@@ -107,6 +107,18 @@ type deps struct {
 	// /dev/tty; a fake lets the broker's decline path run without a controlling
 	// terminal.
 	tty keys.TTY
+	// wallet describes the configured wallet as this machine actually is: which
+	// one would be opened, how it would be reached, and what of that is here.
+	// Injected so a test decides what the machine has instead of asking the one
+	// it runs on — which for --fix matters twice over, since what the report
+	// finds is what decides whether anything is created. Taking the finished
+	// view rather than the probe behind it also keeps that decision checkable
+	// from a machine whose wallet has no compartment at all.
+	wallet func(settings config.Settings) diagnose.WalletView
+	// makeCompartment creates the compartment the configured wallet keeps
+	// SSHakku's entries in, and reports what it made. Nil where this system's
+	// wallet has no such thing to make. Only --fix ever calls it.
+	makeCompartment func(settings config.Settings) (string, error)
 }
 
 // realDeps wires deps to the production implementations.
@@ -121,6 +133,8 @@ func realDeps() deps {
 		graphicalPrompter: newGraphicalPrompter,
 		fetchHandoff:      keys.FetchHandoff,
 		tty:               ttyPrompter{},
+		wallet:            realWalletView,
+		makeCompartment:   realMakeCompartment,
 	}
 }
 

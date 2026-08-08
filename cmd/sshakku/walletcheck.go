@@ -55,6 +55,11 @@ type secretServiceLook struct {
 	lookFailed bool
 }
 
+// realWalletView describes the configured wallet as this machine actually is.
+func realWalletView(settings config.Settings) diagnose.WalletView {
+	return walletView(settings, realWalletProbe())
+}
+
 // realWalletProbe looks at the machine this is running on.
 func realWalletProbe() walletProbe {
 	return walletProbe{
@@ -104,6 +109,11 @@ func serviceRequirement(look secretServiceLook) diagnose.Requirement {
 // the first passphrase saved makes it through a dialog, and until then there is
 // nothing wrong to report. Without one there is no dialog to answer, which is
 // the whole of what goes wrong on a machine reached over ssh.
+//
+// Where it could be made, the report says so and names the command that makes
+// one, rather than leaving it to happen as a side effect of the next passphrase
+// saved: waiting for a dialog to appear in the middle of an ssh is a worse
+// moment to meet it than one the user chose.
 func compartmentRequirement(compartment string, look secretServiceLook, hasScreen bool) diagnose.Requirement {
 	const name = "compartment"
 	switch {
@@ -123,9 +133,12 @@ func compartmentRequirement(compartment string, look secretServiceLook, hasScree
 		return diagnose.Requirement{Name: name, Detail: compartment, Present: true}
 	case hasScreen:
 		return diagnose.Requirement{
-			Name:    name,
-			Detail:  fmt.Sprintf("%q is not there yet; the first passphrase saved creates it, through a dialog on this screen", compartment),
+			Name: name,
+			Detail: fmt.Sprintf(
+				"%q is not there yet; sshakku doctor --fix makes it now, through a dialog on this screen, "+
+					"and otherwise the first passphrase saved creates it", compartment),
 			Present: true,
+			Fixable: true,
 		}
 	default:
 		return diagnose.Requirement{

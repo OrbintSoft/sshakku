@@ -127,7 +127,10 @@ func crossUserGuard(target targetUser, fix, testBackend bool, euid int) string {
 // ours, whether each answers, and whether this shell's SSH_AUTH_SOCK is wired to
 // a healthy agent. Plain `doctor` inspects only and changes nothing. With --fix
 // it then applies the same self-heal the login path runs (reap dead agents,
-// start on the fixed socket, or adopt a healthy foreign one) and re-reports.
+// start on the fixed socket, or adopt a healthy foreign one), provides what the
+// wallet report said this session could provide (see repairWallet), and
+// re-reports. A repair that was attempted and failed exits non-zero, so a caller
+// reading only the exit code is not told the repair succeeded.
 //
 // --user <name|uid> diagnoses a different user's session instead of the
 // invoking one (auto-detected from SUDO_UID when invoked as root via sudo with
@@ -198,9 +201,7 @@ func (d deps) doctor(stdout, stderr io.Writer, args []string) int {
 	// it: which wallets exist and what each one needs is this package's
 	// knowledge, not the diagnose package's.
 	settings := loadSettings(layout, "doctor", sessionlog.New(layout.LogFile))
-	report := d.gather(env, layout, settings)
-	report.Wallet = walletView(settings, realWalletProbe())
-	report.Findings = append(report.Findings, diagnose.WalletFindings(report.Wallet)...)
+	report := d.reportWithWallet(env, layout, settings)
 	diagnose.Format(stdout, report)
 
 	exitCode := 0
@@ -226,8 +227,12 @@ func (d deps) doctor(stdout, stderr io.Writer, args []string) int {
 		return code
 	}
 
+	if !d.repairWallet(stdout, report.Wallet, settings) {
+		exitCode = 1
+	}
+
 	_, _ = io.WriteString(stdout, "\nafter:\n\n")
-	after := d.gather(env, layout, settings)
+	after := d.reportWithWallet(env, layout, settings)
 	diagnose.Format(stdout, after)
 	if after.EnvSock != liveSock {
 		_, _ = fmt.Fprintf(stdout,
@@ -235,6 +240,55 @@ func (d deps) doctor(stdout, stderr io.Writer, args []string) int {
 			shellSingleQuote(liveSock))
 	}
 	return exitCode
+}
+
+// reportWithWallet is the picture the doctor presents: the agent situation, the
+// configured wallet described alongside it, and whatever either of them is
+// missing carried into the findings, where a user looks for what is wrong.
+//
+// Both the plain report and the one --fix prints afterwards are built here, so
+// that what a repair is judged against is the same report that named the problem
+// — a section present in one and absent from the other would leave anything it
+// covers unshowable as repaired.
+func (d deps) reportWithWallet(env paths.Env, layout paths.Layout, settings config.Settings) diagnose.Report {
+	report := d.gather(env, layout, settings)
+	report.Wallet = d.wallet(settings)
+	report.Findings = append(report.Findings, diagnose.WalletFindings(report.Wallet)...)
+	return report
+}
+
+// repairWallet provides what the wallet report named as something this session
+// could provide itself, and says what it made. It reports whether everything it
+// touched succeeded.
+//
+// It acts only where the report said the session can act. Where the report said
+// it cannot — no screen for a wallet that will only make a compartment through a
+// dialog — this says so and repeats what it would take, leaving the wallet
+// holding exactly what it held before: a compartment made half way is worse than
+// one not made at all, and a user told nothing would go looking for the wrong
+// fault.
+func (d deps) repairWallet(stdout io.Writer, view diagnose.WalletView, settings config.Settings) bool {
+	ok := true
+	for _, req := range view.Requirements {
+		switch {
+		case req.Fixable && d.makeCompartment != nil:
+			made, err := d.makeCompartment(settings)
+			if err != nil {
+				_, _ = fmt.Fprintf(stdout, "wallet: the %s could not be made: %v\n", req.Name, err)
+				ok = false
+				continue
+			}
+			_, _ = fmt.Fprintf(stdout, "wallet: made the %s %q\n", req.Name, made)
+		case req.Fixable, req.Present, req.Undetermined:
+			// Nothing to do: either this system's wallet has nothing of the
+			// kind to make, or the piece is here, or nobody established
+			// whether it is — and acting on a guess is how a wallet ends up
+			// holding something nobody asked for.
+		default:
+			_, _ = fmt.Fprintf(stdout, "wallet: the %s is not something --fix can provide here — %s\n", req.Name, req.Detail)
+		}
+	}
+	return ok
 }
 
 // doctorProbeService is the throwaway entry testSecretBackend stores, looks up,

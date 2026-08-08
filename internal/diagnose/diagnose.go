@@ -144,6 +144,13 @@ type Requirement struct {
 	// none. It is neither here nor missing, and Detail says what it would
 	// take to find out.
 	Undetermined bool
+	// Fixable marks a piece this session could provide itself, which is what
+	// makes it something `--fix` may go and provide. It is separate from
+	// Present because the two answer different questions: a piece that is not
+	// there yet and would appear by itself when first needed is nothing to
+	// report as wrong, and is still something a user may reasonably ask for
+	// now rather than later.
+	Fixable bool
 }
 
 // WalletView is the configured secret backend as the report presents it: which
