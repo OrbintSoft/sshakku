@@ -1,0 +1,17 @@
+#!/bin/sh
+# Stands in for the user's $EDITOR in the config-commands bats suite: it
+# records the arguments it was handed in $SSHAKKU_TEST_EDITOR_ARGV, appends
+# $SSHAKKU_TEST_EDITOR_LINE to the file it was given, and exits — which is what
+# a person who saved one line and closed the window leaves behind.
+#
+# The argv record is the only way a test can tell which file was really opened,
+# and how many: a suite that only inspected the file afterwards could not tell
+# an editor handed one path from one handed three.
+set -eu
+
+: "${SSHAKKU_TEST_EDITOR_ARGV:?SSHAKKU_TEST_EDITOR_ARGV must name a file to record the arguments in}"
+printf '%s\n' "$@" >"$SSHAKKU_TEST_EDITOR_ARGV"
+
+[ "$#" -ge 1 ] || exit 0
+[ -n "${SSHAKKU_TEST_EDITOR_LINE:-}" ] || exit 0
+printf '%s\n' "$SSHAKKU_TEST_EDITOR_LINE" >>"$1"

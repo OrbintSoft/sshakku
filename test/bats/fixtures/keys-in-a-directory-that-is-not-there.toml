@@ -1,0 +1,3 @@
+# Names a key directory that is not there — a mistyped key_dir, which must not
+# read like a directory that simply holds no keys.
+key_dir = "no-such-directory"

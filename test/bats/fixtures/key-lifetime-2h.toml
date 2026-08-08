@@ -1,0 +1,3 @@
+# A key lifetime in the user's own file, for a drop-in or an exported
+# variable to take the place of.
+key_lifetime = "2h"

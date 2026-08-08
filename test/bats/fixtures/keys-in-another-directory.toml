@@ -1,0 +1,5 @@
+# Points SSHakku at a key directory of the user's own, relative to their
+# home, with the widest name rule a user can write: every key in there, and
+# nothing outside it.
+key_dir = "work-keys"
+key_patterns = ["*"]
