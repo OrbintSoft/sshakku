@@ -88,17 +88,23 @@ func realMakeCompartment(settings config.Settings) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// Reached only when the session bus is live and something is answering on
-	// it; making a compartment is an act against a real wallet, which a unit
-	// test has no stand-in for. The failure to reach a bus at all, above, is
-	// unit-tested, and the act itself is driven through the real binary by
-	// gnome-keyring-fix-compartment-scenario.sh.
+	// Everything below acts against a wallet that is really answering, which a
+	// unit test has no stand-in for; the failure to reach a bus at all, above,
+	// stays unit-tested, and the act itself is driven through the real binary
+	// by gnome-keyring-fix-compartment-scenario.sh. Each straight-line block
+	// carries its own ignore marker because go-ignore-cov scopes per block.
 	//coverage:ignore
-	defer func() { _ = client.Close() }()
+	defer func() {
+		//coverage:ignore
+		_ = client.Close()
+	}()
 
+	//coverage:ignore
 	if _, err := client.Collection(alias, label); err != nil {
+		//coverage:ignore
 		return "", err
 	}
+	//coverage:ignore
 	return label, nil
 }
 
