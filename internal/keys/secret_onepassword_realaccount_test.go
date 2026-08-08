@@ -50,7 +50,7 @@ const opSetupTimeout = 30 * time.Second
 
 func TestOnePasswordBackendRealAccount(t *testing.T) {
 	if os.Getenv(allowRealOnePasswordEnv) == "" {
-		t.Skipf("skipping: set %s=1 to run against a real, already-authenticated 1Password account (local only — see PLAN.md 4.2)", allowRealOnePasswordEnv)
+		t.Skipf("skipping: set %s=1 to run against a real, already-authenticated 1Password account — this creates and deletes a vault in whichever account op is signed in to", allowRealOnePasswordEnv)
 	}
 	if _, err := exec.LookPath(onePasswordBin); err != nil {
 		t.Skipf("op CLI not found: %v", err)
