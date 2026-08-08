@@ -100,6 +100,27 @@ jobs:
           sshakku-test-desktop-stack-gnome-keyring
           test/containers/gnome-keyring-doctor-scenario.sh
 
+      # What --fix does about the compartment, in the session that can make one:
+      # the wallet raises its own dialog, and the scenario answers it. The same
+      # scenario runs again below with no screen, where there is no dialog to
+      # answer — one script, because what changes is only the session.
+      - name: Run the GNOME Keyring compartment repair on a screen
+        if: matrix.name == 'gnome-keyring'
+        run: >
+          docker run --init --rm
+          -v "${{ github.workspace }}":/src:ro
+          sshakku-test-desktop-stack-gnome-keyring
+          test/containers/gnome-keyring-fix-compartment-scenario.sh
+
+      - name: Run the GNOME Keyring compartment repair with no screen
+        if: matrix.name == 'gnome-keyring'
+        run: >
+          docker run --init --rm
+          -v "${{ github.workspace }}":/src:ro
+          -e SSHAKKU_SESSION_SCRIPT=gnome-keyring-headless-session.sh
+          sshakku-test-desktop-stack-gnome-keyring
+          test/containers/gnome-keyring-fix-compartment-scenario.sh
+
       # The same wallet reached from a login with a screen and no X server. The
       # image and the test are the ones the step above already ran: what is
       # being varied is the session around them, so a difference in the result
