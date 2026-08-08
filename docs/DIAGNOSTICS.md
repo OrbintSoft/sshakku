@@ -222,6 +222,43 @@ A running program cannot change the environment of the shell that started it, so
 points somewhere other than the healed socket, the command prints an
 `export SSH_AUTH_SOCK=…` line to run — or you can simply open a new shell.
 
+### Making the wallet's compartment
+
+Some wallets keep sshakku's passphrases in a compartment of their own — a
+keyring the desktop has to create — and creating one takes a dialog. Where the
+report says that compartment is not there yet, it also names `--fix` as what
+makes it:
+
+```text
+compartment:  found — "sshakku" is not there yet; sshakku doctor --fix makes it
+              now, through a dialog on this screen, and otherwise the first
+              passphrase saved creates it
+```
+
+Running `--fix` there answers that dialog once, at a moment you chose, instead
+of meeting it in the middle of an `ssh`:
+
+```text
+wallet: made the compartment "sshakku"
+```
+
+This is worth doing before you next log in without a screen. A session reached
+over SSH has nowhere to draw the dialog, so the compartment cannot be made
+there — and without it no passphrase can be saved, and you are asked for every
+one. Run `--fix` from a desktop session on the same account and later logins
+find the compartment already made. Where `--fix` cannot make it, it says so and
+says what it would take, and leaves the wallet holding exactly what it held
+before:
+
+```text
+wallet: the compartment is not something --fix can provide here — "sshakku" is
+        not there and this session has no screen to create it on …
+```
+
+A repair that was attempted and failed — the dialog dismissed, say — is
+reported, and the command exits non-zero so a script is not told it succeeded.
+The report that follows shows the result either way.
+
 ## `sshakku doctor --test-backend [name]`
 
 A misconfigured secret backend otherwise only surfaces the first time `ssh`

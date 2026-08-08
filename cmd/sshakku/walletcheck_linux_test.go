@@ -151,6 +151,23 @@ func TestALookThatCouldNotBeTakenSaysSo(t *testing.T) {
 	}
 }
 
+// TestMakingACompartmentWithNoWalletToMakeItIn verifies F42 where it is easiest
+// to get wrong: a repair that could not be performed has to say so. A maker that
+// swallowed the failure would have --fix report a compartment it never made, and
+// the next login would be the one to find out.
+func TestMakingACompartmentWithNoWalletToMakeItIn(t *testing.T) {
+	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent/bus")
+
+	made, err := realMakeCompartment(config.Settings{})
+
+	if err == nil {
+		t.Fatalf("realMakeCompartment = %q with no bus to reach, want an error", made)
+	}
+	if made != "" {
+		t.Errorf("realMakeCompartment named %q while failing; nothing was made", made)
+	}
+}
+
 // TestPlatformWalletViewNamesWhateverItIsGiven covers the fallback beside the
 // Secret Service: a name the configuration layer would never produce here still
 // gets named back, with nothing claimed about it, rather than being reported as

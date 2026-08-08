@@ -88,6 +88,12 @@ func realMakeCompartment(settings config.Settings) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// Reached only when the session bus is live and something is answering on
+	// it; making a compartment is an act against a real wallet, which a unit
+	// test has no stand-in for. The failure to reach a bus at all, above, is
+	// unit-tested, and the act itself is driven through the real binary by
+	// gnome-keyring-fix-compartment-scenario.sh.
+	//coverage:ignore
 	defer func() { _ = client.Close() }()
 
 	if _, err := client.Collection(alias, label); err != nil {

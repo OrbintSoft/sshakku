@@ -1714,7 +1714,7 @@ SIGSTOP-frozen daemon costing the report two seconds.
 
 Not done here, and left with its own analysis to do: now that the doctor can say
 the compartment is not there, `--fix` could create it — which works where there
-is a screen and cannot where there is none.
+is a screen and cannot where there is none. Phase 28 is that follow-up.
 
 → features F25, F41; open decision 24.
 
@@ -1753,6 +1753,57 @@ two F21 dialog rows in `docs/TEST-MATRIX.md`.
 Not done here, and noted rather than guessed at: `promptTimeout` bounded the
 compartment-creation dialog too, which is the other place a person is asked to
 choose a password. It now takes the same configurable budget as every other
-prompt, but nothing exercises that path yet — Phase 26's follow-up will.
+prompt, but nothing exercises that path yet — Phase 28 does.
 
 → feature F21; PLAN Phase 17 item 2 (which chose the budget this corrects).
+
+### Phase 28 — The compartment the report told you to go and make yourself ✅ Done
+
+Phase 26's own follow-up. The doctor could say the compartment a wallet keeps
+SSHakku's passphrases in was not there, and offered no way of making one: the
+only way was to save a passphrase and let the first save create it, which is a
+side effect of another operation rather than something a user can ask for. F39
+tells the user to "make that compartment once from a desktop session" and the
+project had no command for it — not even its own test harness, which ran a `go
+test` to trigger the creation.
+
+**The analysis, before anything was written.** Not a defect against F14: that
+promise repairs "what it reports as fixable", nothing in the code classified a
+finding as fixable, and so nothing was mechanically broken. The behaviour was
+missing rather than wrong, so the promise was written first, as F42.
+
+The reproduction found the shape of it exactly: `--fix` could act precisely
+where the report said nothing was wrong (with a screen, "not there yet" and no
+finding), and was helpless precisely where the report raised a problem (no
+screen, where the dialog has nowhere to appear). And in both sessions the
+`after:` report had no wallet section at all, so F14's "the same report comes
+back clean" was unshowable for anything wallet-shaped — a second, smaller gap
+found by running the command rather than by reading it.
+
+**Red before green** (rule 23). The unit assertions were written from F42's "how
+you can tell" and every one failed on behaviour: the report never named `--fix`,
+the maker was asked for zero times, the report afterwards had nothing about the
+wallet. The scenario (`gnome-keyring-fix-compartment-scenario.sh`) was run
+against the previous build in both sessions — five failures on a screen, three
+without — before being run against this one.
+
+One assertion was corrected rather than satisfied: a repair that was attempted
+and refused now exits non-zero. It had been written expecting zero, which would
+have told a caller reading only the exit code that a repair it asked for had
+succeeded.
+
+**Verified by running it** (rule 25): the real binary in both sessions of the
+`gnome-keyring` image, with the wallet's own dialog answered. On a screen the
+bus itself — asked directly, not through SSHakku — holds a collection it did not
+hold before; with no screen it holds exactly what it held before.
+
+The scenario answers that dialog from the keyboard rather than by clicking a
+coordinate, and the difference is not cosmetic: a click that lands where the
+button is not does not miss harmlessly, it dismisses the prompt, and there is no
+second chance to answer it.
+
+Not done here: `gnome-keyring-create-collection.sh` still runs a `go test` to
+make the compartment for the other scenarios. It could now drive the real
+binary, which would have the harness set the state up the way a user does.
+
+→ features F42, F14, F39, F41; PLAN Phase 26 (whose follow-up this is).
