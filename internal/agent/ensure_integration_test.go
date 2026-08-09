@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/sys/unix"
 )
 
@@ -26,12 +28,10 @@ import (
 func lockRealAgentTests(t *testing.T) {
 	t.Helper()
 	f, err := os.OpenFile(filepath.Join(os.TempDir(), "sshakku-test-real-agent.lock"), os.O_CREATE|os.O_RDWR, 0o600)
-	if err != nil {
-		t.Fatalf("open cross-package real-agent test lock: %v", err)
-	}
+	require.NoError(t, err, "open cross-package real-agent test lock")
 	if err := unix.Flock(int(f.Fd()), unix.LOCK_EX); err != nil {
 		_ = f.Close()
-		t.Fatalf("flock cross-package real-agent test lock: %v", err)
+		require.NoError(t, err, "flock cross-package real-agent test lock")
 	}
 	t.Cleanup(func() {
 		_ = unix.Flock(int(f.Fd()), unix.LOCK_UN)
@@ -127,7 +127,7 @@ func waitGone(t *testing.T, pid int) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	t.Fatalf("pid %d did not exit in time", pid)
+	require.Failf(t, "a process outlived its deadline", "pid %d did not exit in time", pid)
 }
 
 // isZombie reports whether pid is a defunct/zombie process, per its
@@ -151,9 +151,7 @@ func isZombie(pid int) bool {
 func startForeignAgent(t *testing.T, sock string) int {
 	t.Helper()
 	pid, err := (ExecRunner{}).Start(sock)
-	if err != nil {
-		t.Fatalf("start foreign ssh-agent: %v", err)
-	}
+	require.NoError(t, err, "start foreign ssh-agent")
 	t.Cleanup(func() { stopAgent(t, pid) })
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
@@ -162,7 +160,7 @@ func startForeignAgent(t *testing.T, sock string) int {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	t.Fatalf("foreign ssh-agent pid %d never became reachable on %s", pid, sock)
+	require.Failf(t, "a foreign agent never came up", "pid %d never became reachable on %s", pid, sock)
 	return pid
 }
 
@@ -172,20 +170,12 @@ func TestEnsureAgentRealClean(t *testing.T) {
 	cfg := realCfg(t)
 
 	res, err := m.EnsureAgent(cfg, nil)
-	if err != nil {
-		t.Fatalf("EnsureAgent: %v", err)
-	}
+	require.NoError(t, err, "EnsureAgent")
 	t.Cleanup(func() { stopAgent(t, res.Started) })
 
-	if res.Situation != SituationClean {
-		t.Errorf("Situation = %s, want clean", res.Situation)
-	}
-	if res.Started == 0 {
-		t.Error("expected a started pid")
-	}
-	if !m.Prober.Reachable(cfg.FixedSock) {
-		t.Error("fixed socket not reachable after a clean start")
-	}
+	assert.Equal(t, SituationClean, res.Situation, "situation")
+	assert.NotZero(t, res.Started, "a pid must have been started")
+	assert.True(t, m.Prober.Reachable(cfg.FixedSock), "the fixed socket must be reachable after a clean start")
 }
 
 func TestEnsureAgentRealHealthyReuse(t *testing.T) {
@@ -194,21 +184,13 @@ func TestEnsureAgentRealHealthyReuse(t *testing.T) {
 	cfg := realCfg(t)
 
 	res1, err := m.EnsureAgent(cfg, nil)
-	if err != nil {
-		t.Fatalf("first EnsureAgent: %v", err)
-	}
+	require.NoError(t, err, "first EnsureAgent")
 	t.Cleanup(func() { stopAgent(t, res1.Started) })
 
 	res2, err := m.EnsureAgent(cfg, nil)
-	if err != nil {
-		t.Fatalf("second EnsureAgent: %v", err)
-	}
-	if res2.Situation != SituationHealthy {
-		t.Errorf("Situation = %s, want healthy", res2.Situation)
-	}
-	if res2.Started != 0 {
-		t.Errorf("expected no new agent started on reuse, got pid %d", res2.Started)
-	}
+	require.NoError(t, err, "second EnsureAgent")
+	assert.Equal(t, SituationHealthy, res2.Situation, "situation")
+	assert.Zero(t, res2.Started, "no new agent must be started on reuse")
 }
 
 // TestEnsureAgentRealReachableButEmptyIsHealthy covers the D1 case: an
@@ -220,9 +202,7 @@ func TestEnsureAgentRealReachableButEmptyIsHealthy(t *testing.T) {
 	cfg := realCfg(t)
 
 	res1, err := m.EnsureAgent(cfg, nil)
-	if err != nil {
-		t.Fatalf("first EnsureAgent: %v", err)
-	}
+	require.NoError(t, err, "first EnsureAgent")
 	t.Cleanup(func() { stopAgent(t, res1.Started) })
 
 	// No keys were ever added, so the agent's own reply to
@@ -232,15 +212,9 @@ func TestEnsureAgentRealReachableButEmptyIsHealthy(t *testing.T) {
 	// the point being tested is that EnsureAgent still calls this healthy.
 
 	res2, err := m.EnsureAgent(cfg, nil)
-	if err != nil {
-		t.Fatalf("second EnsureAgent: %v", err)
-	}
-	if res2.Situation != SituationHealthy {
-		t.Errorf("Situation = %s, want healthy (an empty agent is still healthy)", res2.Situation)
-	}
-	if res2.Started != 0 {
-		t.Error("an empty-but-reachable agent must never be replaced")
-	}
+	require.NoError(t, err, "second EnsureAgent")
+	assert.Equal(t, SituationHealthy, res2.Situation, "an empty agent is still healthy")
+	assert.Zero(t, res2.Started, "an empty-but-reachable agent must never be replaced")
 }
 
 func TestEnsureAgentRealZombie(t *testing.T) {
@@ -249,29 +223,18 @@ func TestEnsureAgentRealZombie(t *testing.T) {
 	cfg := realCfg(t)
 
 	res1, err := m.EnsureAgent(cfg, nil)
-	if err != nil {
-		t.Fatalf("first EnsureAgent: %v", err)
-	}
+	require.NoError(t, err, "first EnsureAgent")
 	killAgentLeavingSocket(t, res1.Started)
-	if m.Prober.Reachable(cfg.FixedSock) {
-		t.Fatal("socket should be dead after SIGKILL")
-	}
+	require.False(t, m.Prober.Reachable(cfg.FixedSock), "the socket must be dead after SIGKILL")
 
 	res2, err := m.EnsureAgent(cfg, nil)
-	if err != nil {
-		t.Fatalf("second EnsureAgent: %v", err)
-	}
+	require.NoError(t, err, "second EnsureAgent")
 	t.Cleanup(func() { stopAgent(t, res2.Started) })
 
-	if res2.Situation != SituationZombie {
-		t.Errorf("Situation = %s, want zombie", res2.Situation)
-	}
-	if len(res2.Reaped.Terminated) == 0 && len(res2.Reaped.RemovedSockets) == 0 {
-		t.Error("expected the dead agent/socket to be reaped")
-	}
-	if !m.Prober.Reachable(cfg.FixedSock) {
-		t.Error("expected a fresh healthy agent after the zombie reap")
-	}
+	assert.Equal(t, SituationZombie, res2.Situation, "situation")
+	assert.False(t, len(res2.Reaped.Terminated) == 0 && len(res2.Reaped.RemovedSockets) == 0,
+		"the dead agent or its socket must have been reaped")
+	assert.True(t, m.Prober.Reachable(cfg.FixedSock), "a fresh healthy agent must answer after the zombie reap")
 }
 
 // TestEnsureAgentRealGracefulStopRemovesSocket is the graceful counterpart to
@@ -285,39 +248,25 @@ func TestEnsureAgentRealGracefulStopRemovesSocket(t *testing.T) {
 	cfg := realCfg(t)
 
 	res1, err := m.EnsureAgent(cfg, nil)
-	if err != nil {
-		t.Fatalf("first EnsureAgent: %v", err)
-	}
-	if res1.Situation != SituationClean {
-		t.Fatalf("setup Situation = %s, want clean", res1.Situation)
-	}
-	if !m.Prober.Reachable(cfg.FixedSock) {
-		t.Fatal("fixed socket not reachable after a clean start")
-	}
+	require.NoError(t, err, "first EnsureAgent")
+	require.Equal(t, SituationClean, res1.Situation, "setup situation")
+	require.True(t, m.Prober.Reachable(cfg.FixedSock), "the fixed socket must be reachable after a clean start")
 
 	// SIGTERM, not SIGKILL: ssh-agent catches it and unlinks its own socket.
 	stopAgent(t, res1.Started)
 
-	if m.Prober.Reachable(cfg.FixedSock) {
-		t.Fatal("socket should be dead after SIGTERM")
-	}
-	if _, err := os.Lstat(cfg.FixedSock); !os.IsNotExist(err) {
-		t.Errorf("socket %s still present after graceful SIGTERM; want it unlinked, not left stale (Lstat err = %v)", cfg.FixedSock, err)
-	}
+	require.False(t, m.Prober.Reachable(cfg.FixedSock), "the socket must be dead after SIGTERM")
+	_, err = os.Lstat(cfg.FixedSock)
+	assert.ErrorIs(t, err, os.ErrNotExist, "a graceful SIGTERM must leave the socket unlinked, not stale")
 
 	// With no stale socket to reap, the next EnsureAgent is a clean start.
 	res2, err := m.EnsureAgent(cfg, nil)
-	if err != nil {
-		t.Fatalf("second EnsureAgent: %v", err)
-	}
+	require.NoError(t, err, "second EnsureAgent")
 	t.Cleanup(func() { stopAgent(t, res2.Started) })
 
-	if res2.Situation != SituationClean {
-		t.Errorf("Situation after graceful stop = %s, want clean (no stale socket to reap)", res2.Situation)
-	}
-	if len(res2.Reaped.RemovedSockets) != 0 || len(res2.Reaped.Terminated) != 0 {
-		t.Errorf("nothing should have been reaped after a graceful stop, got %+v", res2.Reaped)
-	}
+	assert.Equal(t, SituationClean, res2.Situation, "with no stale socket to reap this is a clean start")
+	assert.Empty(t, res2.Reaped.RemovedSockets, "nothing must have been removed after a graceful stop")
+	assert.Empty(t, res2.Reaped.Terminated, "nothing must have been terminated after a graceful stop")
 }
 
 // TestEnsureAgentRealForeignAdopted covers state D: a healthy agent sshakku
@@ -331,29 +280,16 @@ func TestEnsureAgentRealForeignAdopted(t *testing.T) {
 	foreignPID := startForeignAgent(t, foreignSock)
 
 	res, err := m.EnsureAgent(cfg, nil)
-	if err != nil {
-		t.Fatalf("EnsureAgent: %v", err)
-	}
+	require.NoError(t, err, "EnsureAgent")
 
-	if res.Situation != SituationForeign {
-		t.Errorf("Situation = %s, want foreign", res.Situation)
-	}
-	if res.Started != 0 {
-		t.Error("must never start a competing agent when a healthy foreign one exists")
-	}
-	if res.Adopted == nil || res.Adopted.PID != foreignPID {
-		t.Errorf("Adopted = %+v, want pid %d", res.Adopted, foreignPID)
-	}
-	if res.Anomaly == "" {
-		t.Error("adopting a foreign agent must report an anomaly")
-	}
-	if !m.Prober.Reachable(cfg.FixedSock) {
-		t.Error("fixed socket should reach the adopted foreign agent")
-	}
+	assert.Equal(t, SituationForeign, res.Situation, "situation")
+	assert.Zero(t, res.Started, "a competing agent must never be started when a healthy foreign one exists")
+	require.NotNil(t, res.Adopted, "an agent must have been adopted")
+	assert.Equal(t, foreignPID, res.Adopted.PID, "the adopted pid")
+	assert.NotEmpty(t, res.Anomaly, "adopting a foreign agent must report an anomaly")
+	assert.True(t, m.Prober.Reachable(cfg.FixedSock), "the fixed socket must reach the adopted foreign agent")
 	// The foreign agent itself must still be alive — never killed.
-	if err := syscall.Kill(foreignPID, 0); err != nil {
-		t.Errorf("foreign agent pid %d was killed, want it left running: %v", foreignPID, err)
-	}
+	assert.NoError(t, syscall.Kill(foreignPID, 0), "the foreign agent must be left running")
 }
 
 // TestEnsureAgentRealDisasterReapsAndAdoptsLowestPID covers state E: a dead
@@ -365,9 +301,7 @@ func TestEnsureAgentRealDisasterReapsAndAdoptsLowestPID(t *testing.T) {
 	cfg := realCfg(t)
 
 	res1, err := m.EnsureAgent(cfg, nil)
-	if err != nil {
-		t.Fatalf("seed EnsureAgent: %v", err)
-	}
+	require.NoError(t, err, "seed EnsureAgent")
 	killAgentLeavingSocket(t, res1.Started) // now dead-ours
 
 	sockA := filepath.Join(shortDir(t), "foreign-a.sock")
@@ -380,22 +314,13 @@ func TestEnsureAgentRealDisasterReapsAndAdoptsLowestPID(t *testing.T) {
 	}
 
 	res2, err := m.EnsureAgent(cfg, nil)
-	if err != nil {
-		t.Fatalf("EnsureAgent: %v", err)
-	}
+	require.NoError(t, err, "EnsureAgent")
 
-	if res2.Situation != SituationDisaster {
-		t.Errorf("Situation = %s, want disaster", res2.Situation)
-	}
-	if len(res2.Reaped.RemovedSockets) == 0 {
-		t.Error("expected the dead-ours socket to be reaped")
-	}
-	if res2.Adopted == nil || res2.Adopted.PID != lowest {
-		t.Errorf("Adopted = %+v, want the lowest-pid healthy foreign agent (%d)", res2.Adopted, lowest)
-	}
+	assert.Equal(t, SituationDisaster, res2.Situation, "situation")
+	assert.NotEmpty(t, res2.Reaped.RemovedSockets, "the dead-ours socket must have been reaped")
+	require.NotNil(t, res2.Adopted, "an agent must have been adopted")
+	assert.Equal(t, lowest, res2.Adopted.PID, "the lowest-pid healthy foreign agent must be adopted")
 	for _, pid := range []int{pidA, pidB} {
-		if err := syscall.Kill(pid, 0); err != nil {
-			t.Errorf("foreign agent pid %d was killed, want both left running: %v", pid, err)
-		}
+		assert.NoErrorf(t, syscall.Kill(pid, 0), "foreign agent pid %d must be left running", pid)
 	}
 }

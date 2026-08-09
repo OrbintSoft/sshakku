@@ -5,6 +5,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // mapProber reports reachability from a fixed map; absent paths are unreachable.
@@ -40,9 +43,7 @@ func (s *recordSignaler) Terminate(pid int) error {
 func makeSocketFile(t *testing.T, path string) {
 	t.Helper()
 	l, err := net.ListenUnix("unix", &net.UnixAddr{Name: path, Net: "unix"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	l.SetUnlinkOnClose(false)
 	_ = l.Close()
 }
@@ -55,20 +56,9 @@ func makeSocketFile(t *testing.T, path string) {
 func shortDir(t *testing.T) string {
 	t.Helper()
 	dir, err := os.MkdirTemp("", "sshakku")
-	if err != nil {
-		t.Fatalf("mkdir temp: %v", err)
-	}
+	require.NoError(t, err, "mkdir temp")
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	return dir
-}
-
-func contains(xs []int, x int) bool {
-	for _, v := range xs {
-		if v == x {
-			return true
-		}
-	}
-	return false
 }
 
 func TestManagerReap(t *testing.T) {
@@ -90,22 +80,14 @@ func TestManagerReap(t *testing.T) {
 	m := Manager{Prober: prober, Inspector: Inspector{ProcRoot: root}, Signaler: sig}
 
 	res, err := m.Reap(ourUID)
-	if err != nil {
-		t.Fatalf("Reap: %v", err)
-	}
+	require.NoError(t, err, "Reap")
 
-	if len(sig.killed) != 1 || !contains(sig.killed, 200) {
-		t.Fatalf("terminated %v, want only pid 200", sig.killed)
-	}
-	if len(res.RemovedSockets) != 1 || res.RemovedSockets[0] != deadOurs {
-		t.Fatalf("removed %v, want only %s", res.RemovedSockets, deadOurs)
-	}
-	if _, err := os.Lstat(deadOurs); !os.IsNotExist(err) {
-		t.Errorf("our dead socket should be gone, lstat err = %v", err)
-	}
-	if _, err := os.Lstat(deadOther); err != nil {
-		t.Errorf("another user's socket must be left intact, lstat err = %v", err)
-	}
+	assert.Equal(t, []int{200}, sig.killed, "only our own dead agent is terminated")
+	assert.Equal(t, []string{deadOurs}, res.RemovedSockets, "only our own dead socket is removed")
+	_, err = os.Lstat(deadOurs)
+	assert.ErrorIs(t, err, os.ErrNotExist, "our dead socket must be gone")
+	_, err = os.Lstat(deadOther)
+	assert.NoError(t, err, "another user's socket must be left intact")
 }
 
 func TestManagerStart(t *testing.T) {
@@ -119,76 +101,53 @@ func TestManagerStart(t *testing.T) {
 	m := Manager{Prober: mapProber{}, Runner: runner}
 
 	pid, err := m.Start(socket, state)
-	if err != nil {
-		t.Fatalf("Start: %v", err)
-	}
-	if pid != 4242 || runner.started != socket {
-		t.Fatalf("started pid=%d socket=%q", pid, runner.started)
-	}
+	require.NoError(t, err, "Start")
+	assert.Equal(t, 4242, pid, "the pid the runner announced")
+	assert.Equal(t, socket, runner.started, "the socket the runner was asked for")
 
 	got, err := ReadState(state)
-	if err != nil {
-		t.Fatalf("ReadState: %v", err)
-	}
-	if got.PID != 4242 || got.Socket != socket {
-		t.Fatalf("state = %+v, want pid 4242 socket %q", got, socket)
-	}
+	require.NoError(t, err, "ReadState")
+	assert.Equal(t, State{PID: 4242, Socket: socket}, got, "the state written for the next shell")
 }
 
 func TestStateRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "agent.state")
 	want := State{PID: 99, Socket: "/run/user/1000/sshakku/tok/agent.sock"}
-	if err := WriteState(path, want); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, WriteState(path, want))
 	got, err := ReadState(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got != want {
-		t.Fatalf("round-trip = %+v, want %+v", got, want)
-	}
-	if _, err := ReadState(filepath.Join(t.TempDir(), "missing")); err == nil {
-		t.Error("ReadState of a missing file should error")
-	}
+	require.NoError(t, err)
+	assert.Equal(t, want, got, "the state must survive a round trip")
+
+	_, err = ReadState(filepath.Join(t.TempDir(), "missing"))
+	assert.Error(t, err, "ReadState of a missing file must be reported")
 }
 
 func TestRemoveSocket(t *testing.T) {
 	dir := shortDir(t)
 	sock := filepath.Join(dir, "a.sock")
 	makeSocketFile(t, sock)
-	if !removeSocket(sock) {
-		t.Fatal("removeSocket should remove a socket")
-	}
-	if _, err := os.Lstat(sock); !os.IsNotExist(err) {
-		t.Errorf("socket should be gone, err = %v", err)
-	}
+	assert.True(t, removeSocket(sock), "removeSocket must remove a socket")
+	_, err := os.Lstat(sock)
+	assert.ErrorIs(t, err, os.ErrNotExist, "the socket must be gone")
 
 	reg := filepath.Join(dir, "regular")
-	if err := os.WriteFile(reg, []byte("x"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if removeSocket(reg) {
-		t.Error("removeSocket must refuse a regular file")
-	}
-	if _, err := os.Lstat(reg); err != nil {
-		t.Errorf("regular file must survive, err = %v", err)
-	}
-	if removeSocket(filepath.Join(dir, "missing")) {
-		t.Error("removeSocket of a missing path should report false")
-	}
+	require.NoError(t, os.WriteFile(reg, []byte("x"), 0o600))
+	assert.False(t, removeSocket(reg), "removeSocket must refuse a regular file")
+	_, err = os.Lstat(reg)
+	assert.NoError(t, err, "a regular file must survive")
+
+	assert.False(t, removeSocket(filepath.Join(dir, "missing")), "removeSocket of a missing path reports false")
 }
 
 func TestParseAgentPID(t *testing.T) {
 	good := "SSH_AUTH_SOCK=/x; export SSH_AUTH_SOCK;\nSSH_AGENT_PID=12345; export SSH_AGENT_PID;\n"
 	pid, err := parseAgentPID([]byte(good))
-	if err != nil || pid != 12345 {
-		t.Fatalf("parseAgentPID = %d, %v; want 12345", pid, err)
-	}
-	if _, err := parseAgentPID([]byte("no pid here")); err == nil {
-		t.Error("want error when SSH_AGENT_PID is absent")
-	}
-	if _, err := parseAgentPID([]byte("SSH_AGENT_PID=;")); err == nil {
-		t.Error("want error for a malformed SSH_AGENT_PID")
-	}
+	require.NoError(t, err, "parseAgentPID")
+	assert.Equal(t, 12345, pid, "the announced pid")
+
+	_, err = parseAgentPID([]byte("no pid here"))
+	assert.Error(t, err, "an absent SSH_AGENT_PID must be reported")
+
+	_, err = parseAgentPID([]byte("SSH_AGENT_PID=;"))
+	assert.Error(t, err, "a malformed SSH_AGENT_PID must be reported")
 }

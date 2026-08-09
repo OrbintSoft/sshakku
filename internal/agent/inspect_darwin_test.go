@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"golang.org/x/sys/unix"
 )
 
@@ -20,7 +21,6 @@ func TestPlatformAgentsSysctlError(t *testing.T) {
 		return nil, errors.New("boom")
 	}
 
-	if _, err := (Inspector{}).Agents(); err == nil {
-		t.Fatal("Agents() = nil error, want the wrapped sysctl failure")
-	}
+	_, err := (Inspector{}).Agents()
+	assert.Error(t, err, "a failing sysctl must be reported, not yield a partial process list")
 }

@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestUIDGatedProberReachable(t *testing.T) {
@@ -16,27 +18,19 @@ func TestUIDGatedProberReachable(t *testing.T) {
 
 	t.Run("owned by UID: defers to the wrapped prober", func(t *testing.T) {
 		g := UIDGatedProber{UID: ownerUID, Prober: real}
-		if !g.Reachable(sock) {
-			t.Fatal("want reachable: socket is owned by UID")
-		}
+		assert.True(t, g.Reachable(sock), "a socket owned by UID is reachable")
 	})
 	t.Run("owned by someone else: unreachable without dialing", func(t *testing.T) {
 		g := UIDGatedProber{UID: ownerUID + 123456, Prober: real}
-		if g.Reachable(sock) {
-			t.Fatal("want unreachable: socket is not owned by UID, even though it answers")
-		}
+		assert.False(t, g.Reachable(sock), "a socket owned by somebody else is unreachable, even though it answers")
 	})
 	t.Run("empty path", func(t *testing.T) {
 		g := UIDGatedProber{UID: ownerUID, Prober: real}
-		if g.Reachable("") {
-			t.Fatal("want unreachable for an empty path")
-		}
+		assert.False(t, g.Reachable(""), "an empty path is unreachable")
 	})
 	t.Run("missing socket", func(t *testing.T) {
 		g := UIDGatedProber{UID: ownerUID, Prober: real}
-		if g.Reachable(filepath.Join(shortDir(t), "nope.sock")) {
-			t.Fatal("want unreachable for a missing socket")
-		}
+		assert.False(t, g.Reachable(filepath.Join(shortDir(t), "nope.sock")), "a missing socket is unreachable")
 	})
 }
 

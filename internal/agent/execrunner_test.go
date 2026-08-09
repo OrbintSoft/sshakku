@@ -3,8 +3,10 @@ package agent
 import (
 	"errors"
 	"os/exec"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestExecRunnerStart(t *testing.T) {
@@ -19,18 +21,10 @@ func TestExecRunnerStart(t *testing.T) {
 			return []byte("SSH_AUTH_SOCK=/tmp/a.sock; export SSH_AUTH_SOCK;\nSSH_AGENT_PID=4242; export SSH_AGENT_PID;\n"), nil
 		}
 		pid, err := ExecRunner{Path: "/opt/bin/ssh-agent"}.Start("/run/agent.sock")
-		if err != nil {
-			t.Fatalf("Start: %v", err)
-		}
-		if pid != 4242 {
-			t.Errorf("pid = %d, want 4242 from the announced SSH_AGENT_PID", pid)
-		}
-		if gotName != "/opt/bin/ssh-agent" {
-			t.Errorf("bin = %q, want the explicit Path", gotName)
-		}
-		if len(gotArgs) != 2 || gotArgs[0] != "-a" || gotArgs[1] != "/run/agent.sock" {
-			t.Errorf("args = %v, want [-a /run/agent.sock]", gotArgs)
-		}
+		require.NoError(t, err, "Start")
+		assert.Equal(t, 4242, pid, "pid must come from the announced SSH_AGENT_PID")
+		assert.Equal(t, "/opt/bin/ssh-agent", gotName, "the explicit Path must be used")
+		assert.Equal(t, []string{"-a", "/run/agent.sock"}, gotArgs, "args")
 	})
 
 	t.Run("defaults to ssh-agent on PATH when Path is empty", func(t *testing.T) {
@@ -40,24 +34,17 @@ func TestExecRunnerStart(t *testing.T) {
 			return []byte("SSH_AGENT_PID=5555;\n"), nil
 		}
 		pid, err := ExecRunner{}.Start("/run/agent.sock")
-		if err != nil {
-			t.Fatalf("Start: %v", err)
-		}
-		if pid != 5555 {
-			t.Errorf("pid = %d, want 5555", pid)
-		}
-		if gotName != "ssh-agent" {
-			t.Errorf("bin = %q, want \"ssh-agent\" for PATH resolution", gotName)
-		}
+		require.NoError(t, err, "Start")
+		assert.Equal(t, 5555, pid, "pid")
+		assert.Equal(t, "ssh-agent", gotName, "a bare name is what leaves the lookup to PATH")
 	})
 
 	t.Run("wraps an exec failure", func(t *testing.T) {
 		execOutput = func(string, ...string) ([]byte, error) {
 			return nil, errors.New("cannot execute")
 		}
-		if _, err := (ExecRunner{}).Start("/run/agent.sock"); err == nil {
-			t.Fatal("want an error when ssh-agent cannot be executed")
-		}
+		_, err := (ExecRunner{}).Start("/run/agent.sock")
+		assert.Error(t, err, "an ssh-agent that cannot be executed must be reported")
 	})
 
 	// An agent that refuses to start says why on its stderr, and an exit
@@ -68,12 +55,8 @@ func TestExecRunnerStart(t *testing.T) {
 			return exec.Command("sh", "-c", "echo 'bind: Invalid argument' >&2; exit 1").Output()
 		}
 		_, err := (ExecRunner{}).Start("/run/agent.sock")
-		if err == nil {
-			t.Fatal("want an error when ssh-agent exits non-zero")
-		}
-		if !strings.Contains(err.Error(), "bind: Invalid argument") {
-			t.Errorf("error = %q, want it to carry what ssh-agent said", err)
-		}
+		require.Error(t, err, "an ssh-agent that exits non-zero must be reported")
+		assert.ErrorContains(t, err, "bind: Invalid argument", "the error must carry what ssh-agent said")
 	})
 
 	// Nothing to add is not an excuse to lose the exit status.
@@ -81,8 +64,7 @@ func TestExecRunnerStart(t *testing.T) {
 		execOutput = func(string, ...string) ([]byte, error) {
 			return exec.Command("sh", "-c", "exit 3").Output()
 		}
-		if _, err := (ExecRunner{}).Start("/run/agent.sock"); err == nil {
-			t.Fatal("want an error when ssh-agent exits non-zero in silence")
-		}
+		_, err := (ExecRunner{}).Start("/run/agent.sock")
+		assert.Error(t, err, "an ssh-agent that exits non-zero in silence must still be reported")
 	})
 }

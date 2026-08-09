@@ -7,6 +7,9 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // fakeProc writes a /proc/<pid> entry with the given argv and (optional) status
@@ -15,21 +18,15 @@ import (
 func fakeProc(t *testing.T, root string, pid int, argv []string, uid int) {
 	t.Helper()
 	dir := filepath.Join(root, strconv.Itoa(pid))
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(dir, 0o755))
 	cmdline := strings.Join(argv, "\x00")
 	if len(argv) > 0 {
 		cmdline += "\x00" // the kernel NUL-terminates the final arg too
 	}
-	if err := os.WriteFile(filepath.Join(dir, "cmdline"), []byte(cmdline), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "cmdline"), []byte(cmdline), 0o644))
 	if uid >= 0 {
 		status := "Name:\tssh-agent\nUid:\t" + strconv.Itoa(uid) + "\t" + strconv.Itoa(uid) + "\t" + strconv.Itoa(uid) + "\t" + strconv.Itoa(uid) + "\n"
-		if err := os.WriteFile(filepath.Join(dir, "status"), []byte(status), 0o644); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "status"), []byte(status), 0o644))
 	}
 }
 
@@ -53,45 +50,37 @@ func TestInspectorAgents(t *testing.T) {
 	fakeProc(t, root, 700, []string{"ssh-agent", "-a", "/tmp/noid.sock"}, -1) // owner unknown
 
 	// A non-pid entry must be ignored.
-	if err := os.MkdirAll(filepath.Join(root, "net"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "net"), 0o755))
 
 	in := Inspector{ProcRoot: root}
 	procs, err := in.Agents()
-	if err != nil {
-		t.Fatalf("Agents: %v", err)
-	}
+	require.NoError(t, err, "Agents")
 
-	wantPIDs := map[int]bool{100: true, 200: true, 300: true, 400: true, 700: true}
-	if len(procs) != len(wantPIDs) {
-		t.Fatalf("got %d agents %v, want %d", len(procs), procs, len(wantPIDs))
-	}
+	gotPIDs := make([]int, 0, len(procs))
 	for _, p := range procs {
-		if !wantPIDs[p.PID] {
-			t.Errorf("unexpected agent pid %d", p.PID)
-		}
+		gotPIDs = append(gotPIDs, p.PID)
 	}
+	assert.ElementsMatch(t, []int{100, 200, 300, 400, 700}, gotPIDs, "the agents found, and only those")
 
-	if p, _ := findPID(procs, 100); p.Socket != "/run/user/1000/sshakku/tok/agent.sock" || p.UID != 1000 {
-		t.Errorf("pid 100: got socket=%q uid=%d", p.Socket, p.UID)
-	}
-	if p, _ := findPID(procs, 300); p.Socket != "" || p.UID != 1001 {
-		t.Errorf("pid 300: got socket=%q uid=%d, want empty socket, uid 1001", p.Socket, p.UID)
-	}
-	if p, _ := findPID(procs, 400); p.Socket != "/tmp/joined.sock" {
-		t.Errorf("pid 400: joined -a form, got socket=%q", p.Socket)
-	}
-	if p, _ := findPID(procs, 700); p.UID != -1 {
-		t.Errorf("pid 700: missing status, got uid=%d, want -1", p.UID)
-	}
+	p100, _ := findPID(procs, 100)
+	assert.Equal(t, "/run/user/1000/sshakku/tok/agent.sock", p100.Socket, "pid 100 socket")
+	assert.Equal(t, 1000, p100.UID, "pid 100 uid")
+
+	p300, _ := findPID(procs, 300)
+	assert.Empty(t, p300.Socket, "pid 300 names no socket")
+	assert.Equal(t, 1001, p300.UID, "pid 300 uid")
+
+	p400, _ := findPID(procs, 400)
+	assert.Equal(t, "/tmp/joined.sock", p400.Socket, "pid 400 uses the joined -a form")
+
+	p700, _ := findPID(procs, 700)
+	assert.Equal(t, -1, p700.UID, "pid 700 has no status file, so its owner is unknown")
 }
 
 func TestInspectorAgentsMissingRoot(t *testing.T) {
 	in := Inspector{ProcRoot: filepath.Join(t.TempDir(), "nope")}
-	if _, err := in.Agents(); err == nil {
-		t.Fatal("want error for a missing procfs root")
-	}
+	_, err := in.Agents()
+	assert.Error(t, err, "a missing procfs root must be reported")
 }
 
 func TestClassify(t *testing.T) {
@@ -111,19 +100,14 @@ func TestClassify(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := Classify(AgentProc{Socket: c.socket}, fixed, legacyDir)
-			if got != c.want {
-				t.Errorf("Classify(%q) = %v, want %v", c.socket, got, c.want)
-			}
+			assert.Equalf(t, c.want, Classify(AgentProc{Socket: c.socket}, fixed, legacyDir), "Classify(%q)", c.socket)
 		})
 	}
 }
 
 func TestProcKindString(t *testing.T) {
 	for k, want := range map[ProcKind]string{KindOurs: "ours", KindLegacy: "legacy", KindForeign: "foreign"} {
-		if got := k.String(); got != want {
-			t.Errorf("ProcKind(%d).String() = %q, want %q", k, got, want)
-		}
+		assert.Equalf(t, want, k.String(), "ProcKind(%d).String()", k)
 	}
 }
 
@@ -141,9 +125,7 @@ func TestSocketArg(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := socketArg(c.argv); got != c.want {
-				t.Errorf("socketArg(%v) = %q, want %q", c.argv, got, c.want)
-			}
+			assert.Equalf(t, c.want, socketArg(c.argv), "socketArg(%v)", c.argv)
 		})
 	}
 }
@@ -170,34 +152,19 @@ func TestParseKernProcArgs2(t *testing.T) {
 	t.Run("normal, no padding", func(t *testing.T) {
 		want := []string{"ssh-agent", "-a", "/tmp/x.sock"}
 		buf := buildKernProcArgs2("/usr/bin/ssh-agent", 0, want)
-		got := parseKernProcArgs2(buf)
-		if len(got) != len(want) {
-			t.Fatalf("parseKernProcArgs2 = %v, want %v", got, want)
-		}
-		for i := range want {
-			if got[i] != want[i] {
-				t.Errorf("argv[%d] = %q, want %q", i, got[i], want[i])
-			}
-		}
+		assert.Equal(t, want, parseKernProcArgs2(buf), "parseKernProcArgs2")
 	})
 	t.Run("with word-alignment padding", func(t *testing.T) {
 		want := []string{"ssh-agent", "-D"}
 		buf := buildKernProcArgs2("/usr/bin/ssh-agent", 5, want)
-		got := parseKernProcArgs2(buf)
-		if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
-			t.Fatalf("parseKernProcArgs2 = %v, want %v", got, want)
-		}
+		assert.Equal(t, want, parseKernProcArgs2(buf), "parseKernProcArgs2")
 	})
 	t.Run("buffer too short", func(t *testing.T) {
-		if got := parseKernProcArgs2([]byte{1, 2}); got != nil {
-			t.Errorf("parseKernProcArgs2(short) = %v, want nil", got)
-		}
+		assert.Nil(t, parseKernProcArgs2([]byte{1, 2}), "a buffer too short to hold argc yields nothing")
 	})
 	t.Run("zero argc", func(t *testing.T) {
 		buf := buildKernProcArgs2("/usr/bin/ssh-agent", 0, nil)
-		if got := parseKernProcArgs2(buf); got != nil {
-			t.Errorf("parseKernProcArgs2(argc=0) = %v, want nil", got)
-		}
+		assert.Nil(t, parseKernProcArgs2(buf), "argc = 0 yields nothing")
 	})
 	t.Run("argc larger than available chunks does not panic or overrun", func(t *testing.T) {
 		// A real kernel buffer's argc always matches its actual argv count;
@@ -208,11 +175,9 @@ func TestParseKernProcArgs2(t *testing.T) {
 		buf := buildKernProcArgs2("/usr/bin/ssh-agent", 0, []string{"ssh-agent"})
 		binary.LittleEndian.PutUint32(buf[:4], 5) // claim 5 args, only 1 present
 		got := parseKernProcArgs2(buf)
-		if len(got) == 0 || got[0] != "ssh-agent" {
-			t.Fatalf("parseKernProcArgs2(truncated) = %v, want a slice starting with ssh-agent", got)
-		}
-		if len(got) > 2 {
-			t.Errorf("parseKernProcArgs2(truncated) returned %d entries from a 1-entry buffer, want at most 2 (real arg + trailing empty)", len(got))
-		}
+		require.NotEmpty(t, got, "a truncated buffer must still yield the argument it does hold")
+		assert.Equal(t, "ssh-agent", got[0], "the first argument")
+		assert.LessOrEqual(t, len(got), 2,
+			"a 1-entry buffer must yield at most 2 entries (the real arg plus a trailing empty one)")
 	})
 }
