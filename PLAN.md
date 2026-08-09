@@ -1353,12 +1353,30 @@ not rediscovered one at a time.
    `test/onepassword-real-account.sh`, which requires the test's own
    `--- PASS:` line in the output; made to fail by that same skipped run.
 
-   **Bitwarden stays uncovered on macOS**, and the reason is the runner rather
-   than the product: the Linux job reaches a real Bitwarden by standing
-   Vaultwarden up in a container, and a hosted macOS runner has no Docker to
-   stand one up in. That is a wallet nobody has watched work on a Mac, not a
-   promise known to be broken — and it stays a ❌ in the matrix for exactly
-   that reason.
+   **Bitwarden: done too, and the runner was not the obstacle it looked like.**
+   The blocker had been recorded as "a hosted macOS runner has no Docker".
+   Colima gives it one — emulated rather than virtualised, since Apple's
+   hypervisor refuses on a runner that is itself a virtual machine and says so
+   ("Virtualization is not available on this hardware"). Only the server goes in
+   the container: `bw` and the test binary stay native, because a Mac talking to
+   a Bitwarden is exactly what nothing had ever watched. The round trip passes
+   on `macos-latest` in 114s.
+
+   Two things were learned by running it that could not have been read off the
+   code. The first bind mount carried nothing: Colima's machine cannot see
+   macOS's temporary directory, and Docker substitutes an empty directory
+   silently, so the server announced creating the private key it should have
+   found. The fixture now travels as a build context instead, which depends on
+   no mount at all.
+
+   The second looked far worse than it was. The current `bw` threw from inside
+   its own SDK on `create item` — on Linux too, and on its own item template, so
+   neither the platform nor SSHakku's payload. Against Vaultwarden 1.37.1 the
+   same CLI and the same fixture database create the item and exit 0: the client
+   was fine and the fixture's server was too old for it. Pinning the CLI back
+   would have made the job green on a pair no user runs, so the server moved
+   instead — and the lesson is that a client-side exception is not evidence of a
+   broken client.
 
 → features F5, F6, F13, F17, F21, F25, F26; open decision 23.
 
