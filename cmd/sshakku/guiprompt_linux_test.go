@@ -10,6 +10,8 @@ import (
 
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestNoGraphicalPrompterWithNoDisplayServer covers the answer a headless Linux
@@ -20,9 +22,8 @@ func TestNoGraphicalPrompterWithNoDisplayServer(t *testing.T) {
 	t.Setenv("WAYLAND_DISPLAY", "")
 	t.Setenv("DISPLAY", "")
 
-	if p := newGraphicalPrompter(config.Settings{}, nil); p != nil {
-		t.Errorf("newGraphicalPrompter = %T with no display server, want nil", p)
-	}
+	assert.Nil(t, newGraphicalPrompter(config.Settings{}, nil),
+		"with no display server a dialog would be drawn nowhere, and the login shell would wait for it")
 }
 
 // fakePinentry is a program that speaks pinentry's line protocol for real, so a
@@ -52,16 +53,12 @@ func TestGraphicalPromptOnADesktopWithoutKDE(t *testing.T) {
 	t.Setenv("SSHAKKU_TEST_PINENTRY_PIN", typed)
 
 	p := newGraphicalPrompter(config.Settings{}, nil)
-	if p == nil {
-		t.Fatal("newGraphicalPrompter = nil on a graphical session that is not KDE, so the passphrase would be asked for on the terminal instead of in a dialog")
-	}
+	require.NotNil(t, p,
+		"a graphical session that is not KDE still has a screen, so the passphrase is asked for in a dialog")
+
 	pass, err := p.Prompt("id_test")
-	if err != nil {
-		t.Fatalf("Prompt = %v, want the passphrase typed into the dialog", err)
-	}
-	if pass != typed {
-		t.Errorf("Prompt = %q, want %q", pass, typed)
-	}
+	require.NoError(t, err, "the dialog must answer")
+	assert.Equal(t, typed, pass, "with what was typed into it")
 }
 
 // TestGraphicalPromptWithOnlyZenity verifies F29 on the desktops that have
@@ -76,12 +73,9 @@ func TestGraphicalPromptWithOnlyZenity(t *testing.T) {
 
 	p := newGraphicalPrompter(config.Settings{}, nil)
 	fallback, ok := p.(keys.FallbackPrompter)
-	if !ok {
-		t.Fatalf("newGraphicalPrompter = %T with only zenity installed, want a dialog paired with the terminal", p)
-	}
-	if _, ok := fallback.Primary.(keys.ZenityPrompter); !ok {
-		t.Errorf("the dialog asked in is %T, want zenity", fallback.Primary)
-	}
+	require.Truef(t, ok, "a dialog must be paired with the terminal to fall back to, got %T", p)
+	assert.IsType(t, keys.ZenityPrompter{}, fallback.Primary,
+		"zenity is what is installed, so zenity is what asks")
 }
 
 // TestGraphicalPromptWhereTheOnlyPinentryIsAConsoleOne verifies F29 on a session
@@ -105,12 +99,9 @@ func TestGraphicalPromptWhereTheOnlyPinentryIsAConsoleOne(t *testing.T) {
 
 	p := newGraphicalPrompter(config.Settings{}, nil)
 	fallback, ok := p.(keys.FallbackPrompter)
-	if !ok {
-		t.Fatalf("newGraphicalPrompter = %T on a session with a screen and zenity installed, want a dialog paired with the terminal", p)
-	}
-	if _, ok := fallback.Primary.(keys.ZenityPrompter); !ok {
-		t.Errorf("the dialog asked in is %T, want zenity: a pinentry that draws on a terminal is not a dialog, and taking the prompt away from one that is leaves nothing on the screen at all", fallback.Primary)
-	}
+	require.Truef(t, ok, "a dialog must be paired with the terminal to fall back to, got %T", p)
+	assert.IsType(t, keys.ZenityPrompter{}, fallback.Primary,
+		"a pinentry that draws on a terminal is not a dialog, and taking the prompt from one that is leaves the screen empty")
 }
 
 // TestGraphicalPrompterHonoursTheConfiguration verifies F37: which dialog asks
@@ -133,9 +124,8 @@ func TestGraphicalPrompterHonoursTheConfiguration(t *testing.T) {
 	t.Run("none asks on the terminal even with a screen and a dialog installed", func(t *testing.T) {
 		install(t, "pinentry", "kdialog")
 
-		if p := newGraphicalPrompter(config.Settings{GUIPrompter: config.GUIPrompterNone}, nil); p != nil {
-			t.Errorf("newGraphicalPrompter = %T with gui_prompter = %q, want no dialog at all", p, config.GUIPrompterNone)
-		}
+		assert.Nilf(t, newGraphicalPrompter(config.Settings{GUIPrompter: config.GUIPrompterNone}, nil),
+			"gui_prompter = %q means no dialog, screen or no screen", config.GUIPrompterNone)
 	})
 
 	t.Run("a named dialog is the one asked in", func(t *testing.T) {
@@ -143,20 +133,15 @@ func TestGraphicalPrompterHonoursTheConfiguration(t *testing.T) {
 
 		p := newGraphicalPrompter(config.Settings{GUIPrompter: config.GUIPrompterKDialog}, nil)
 		fallback, ok := p.(keys.FallbackPrompter)
-		if !ok {
-			t.Fatalf("newGraphicalPrompter = %T, want a dialog paired with the terminal", p)
-		}
-		if _, ok := fallback.Primary.(keys.KDialogPrompter); !ok {
-			t.Errorf("the dialog asked in is %T, want kdialog: naming one must not get another", fallback.Primary)
-		}
+		require.Truef(t, ok, "a dialog must be paired with the terminal to fall back to, got %T", p)
+		assert.IsType(t, keys.KDialogPrompter{}, fallback.Primary, "naming one dialog must not get another")
 	})
 
 	t.Run("a named dialog that is not installed goes to the terminal, not to another", func(t *testing.T) {
 		install(t, "kdialog")
 
-		if p := newGraphicalPrompter(config.Settings{GUIPrompter: config.GUIPrompterPinentry}, nil); p != nil {
-			t.Errorf("newGraphicalPrompter = %T with only kdialog installed and pinentry named, want the terminal: a dialog the user did not choose is not a fallback", p)
-		}
+		assert.Nil(t, newGraphicalPrompter(config.Settings{GUIPrompter: config.GUIPrompterPinentry}, nil),
+			"a dialog the user did not choose is not a fallback for the one they did")
 	})
 }
 
@@ -168,9 +153,8 @@ func TestGraphicalSessionWithNoDialogInstalledAsksOnTheTerminal(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	t.Setenv("WAYLAND_DISPLAY", "wayland-0")
 
-	if p := newGraphicalPrompter(config.Settings{}, nil); p != nil {
-		t.Errorf("newGraphicalPrompter = %T on a screen with no dialog installed at all, want the terminal", p)
-	}
+	assert.Nil(t, newGraphicalPrompter(config.Settings{}, nil),
+		"a screen is not enough on its own: with no dialog installed the question must go to the terminal")
 }
 
 // TestANamedPinentryThatCannotDrawIsNotReportedMissing verifies the half of F37
@@ -187,17 +171,13 @@ func TestANamedPinentryThatCannotDrawIsNotReportedMissing(t *testing.T) {
 	t.Setenv("SSHAKKU_TEST_PINENTRY_FLAVOR", "curses")
 
 	log := &recordingLogger{}
-	if p := newGraphicalPrompter(config.Settings{GUIPrompter: config.GUIPrompterPinentry}, log); p != nil {
-		t.Errorf("newGraphicalPrompter = %T with a console pinentry named, want the terminal", p)
-	}
+	assert.Nil(t, newGraphicalPrompter(config.Settings{GUIPrompter: config.GUIPrompterPinentry}, log),
+		"a named pinentry that cannot draw here sends the question to the terminal")
 
 	said := strings.Join(log.lines, "\n")
-	if !strings.Contains(said, config.GUIPrompterPinentry) {
-		t.Errorf("the log says %q, want it to name the dialog that could not ask", said)
-	}
-	if !strings.Contains(said, "screen") {
-		t.Errorf("the log says %q, want it to allow for the case it is in: a pinentry that is installed and simply cannot draw where the user is looking", said)
-	}
+	assert.Contains(t, said, config.GUIPrompterPinentry, "the log must name the dialog that could not ask")
+	assert.Contains(t, said, "screen",
+		"and allow for the case it is in: one that is installed and simply cannot draw where the user is looking")
 }
 
 // installFakeBin puts one of this package's testdata scripts into dir under the
@@ -206,12 +186,8 @@ func TestANamedPinentryThatCannotDrawIsNotReportedMissing(t *testing.T) {
 func installFakeBin(t *testing.T, dir, name, script string) {
 	t.Helper()
 	body, err := os.ReadFile(script)
-	if err != nil {
-		t.Fatalf("reading %s: %v", script, err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, name), body, 0o755); err != nil {
-		t.Fatalf("installing %s: %v", name, err)
-	}
+	require.NoErrorf(t, err, "reading %s", script)
+	require.NoErrorf(t, os.WriteFile(filepath.Join(dir, name), body, 0o755), "installing %s", name)
 }
 
 // TestGraphicalPrompterWithASessionAndKDialog covers the opposite answer, which
@@ -225,21 +201,15 @@ func installFakeBin(t *testing.T, dir, name, script string) {
 // it would put it there. What decides remains the real GUIAvailable.
 func TestGraphicalPrompterWithASessionAndKDialog(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "kdialog"), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
-		t.Fatalf("writing a kdialog to find: %v", err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "kdialog"), []byte("#!/bin/sh\nexit 0\n"), 0o755),
+		"writing a kdialog to find")
 	t.Setenv("PATH", dir)
 	t.Setenv("WAYLAND_DISPLAY", "wayland-0")
 
 	p := newGraphicalPrompter(config.Settings{}, nil)
-	if p == nil {
-		t.Fatal("newGraphicalPrompter = nil with a compositor advertised and kdialog installed")
-	}
+	require.NotNil(t, p, "a compositor is advertised and kdialog is installed, so there is a dialog to ask in")
 	fallback, ok := p.(keys.FallbackPrompter)
-	if !ok {
-		t.Fatalf("newGraphicalPrompter = %T, want a dialog paired with the terminal", p)
-	}
-	if _, ok := fallback.Primary.(keys.KDialogPrompter); !ok {
-		t.Errorf("the dialog asked first is %T, want kdialog: a KDE session must not lose the dialog it already had", fallback.Primary)
-	}
+	require.Truef(t, ok, "a dialog must be paired with the terminal to fall back to, got %T", p)
+	assert.IsType(t, keys.KDialogPrompter{}, fallback.Primary,
+		"a KDE session must not lose the dialog it already had")
 }

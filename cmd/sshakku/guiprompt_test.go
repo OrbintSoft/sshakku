@@ -5,7 +5,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestADialogThatCannotDrawIsFollowedByOneThatCan verifies F37 for the case a
@@ -35,23 +38,16 @@ func TestADialogThatCannotDrawIsFollowedByOneThatCan(t *testing.T) {
 		{"kdialog", notInstalled},
 		{"zenity", canDraw},
 	}, "", terminal, log)
-	if p == nil {
-		t.Fatal("chooseDialog = nil with two dialogs installed, want the one the user can be asked in")
-	}
+	require.NotNil(t, p, "with two dialogs installed the user must be asked in one of them")
 
 	pass, err := p.Prompt("id_a")
-	if err != nil {
-		t.Fatalf("Prompt = %v, want the passphrase from the dialog that can draw", err)
-	}
-	if pass != typed {
-		t.Errorf("Prompt = %q, want %q: the dialog that could not draw took the question past the one that could", pass, typed)
-	}
-	if terminal.asked != 0 {
-		t.Errorf("the terminal was asked %d time(s), want none: the user is at a screen with a working dialog on it", terminal.asked)
-	}
-	if said := strings.Join(log.lines, "\n"); !strings.Contains(said, "pinentry") {
-		t.Errorf("the log says %q, want the dialog that could not ask named in it", said)
-	}
+	require.NoError(t, err, "the dialog that can draw must answer")
+	assert.Equal(t, typed, pass,
+		"a dialog that could not draw must not take the question past one that could")
+	assert.Zero(t, terminal.asked,
+		"the user is sitting at a screen with a working dialog on it, so the terminal is not for asking")
+	assert.Contains(t, strings.Join(log.lines, "\n"), "pinentry",
+		"the dialog that could not ask must be named where the user can find it")
 }
 
 // TestANamedDialogThatCannotDrawGoesToTheTerminal covers the other half of the
@@ -69,17 +65,12 @@ func TestANamedDialogThatCannotDrawGoesToTheTerminal(t *testing.T) {
 		{"pinentry", cannotDraw},
 		{"zenity", canDraw},
 	}, "pinentry", terminal, nil)
-	if p == nil {
-		t.Fatal("chooseDialog = nil with the named dialog installed, want it asked in")
-	}
+	require.NotNil(t, p, "the dialog the user named is installed, so it is the one asked in")
 
 	pass, err := p.Prompt("id_a")
-	if err != nil {
-		t.Fatalf("Prompt = %v, want the terminal's answer", err)
-	}
-	if pass != onTheTerminal {
-		t.Errorf("Prompt = %q, want %q: a dialog the user did not name is not a substitute for the one they did", pass, onTheTerminal)
-	}
+	require.NoError(t, err, "the terminal must answer when the named dialog cannot")
+	assert.Equal(t, onTheTerminal, pass,
+		"a dialog the user did not name is not a substitute for the one they did")
 }
 
 // TestADialogThisPlatformHasNotGotAsksOnTheTerminal covers a name that is valid
@@ -90,9 +81,8 @@ func TestANamedDialogThatCannotDrawGoesToTheTerminal(t *testing.T) {
 func TestADialogThisPlatformHasNotGotAsksOnTheTerminal(t *testing.T) {
 	here := &fakeDialog{name: "zenity", installed: true, answer: "the-one-nobody-asked-for"}
 
-	if p := chooseDialog([]dialog{{"zenity", here}}, "kdialog", &fakeDialog{}, nil); p != nil {
-		t.Errorf("chooseDialog = %T for a dialog this platform has no entry for, want the terminal", p)
-	}
+	assert.Nil(t, chooseDialog([]dialog{{"zenity", here}}, "kdialog", &fakeDialog{}, nil),
+		"a name this platform has no dialog for sends the question to the terminal, not to another dialog")
 }
 
 // TestANamedDialogThatIsNotInstalledIsSaidSo verifies the sentence F37 makes
@@ -104,22 +94,38 @@ func TestANamedDialogThatIsNotInstalledIsSaidSo(t *testing.T) {
 	t.Run("the log names the one that could not ask", func(t *testing.T) {
 		log := &recordingLogger{}
 
-		p := chooseDialog([]dialog{{"pinentry", &fakeDialog{name: "pinentry"}}}, "pinentry", &fakeDialog{}, log)
-		if p != nil {
-			t.Errorf("chooseDialog = %T for a dialog that is not installed, want the terminal", p)
-		}
-		if said := strings.Join(log.lines, "\n"); !strings.Contains(said, "pinentry") {
-			t.Errorf("the log says %q, want the dialog the user named in it", said)
-		}
+		assert.Nil(t, chooseDialog([]dialog{{"pinentry", &fakeDialog{name: "pinentry"}}}, "pinentry", &fakeDialog{}, log),
+			"a dialog that is not installed cannot ask, so the terminal does")
+		assert.Contains(t, strings.Join(log.lines, "\n"), "pinentry",
+			"and the user must be told which one could not, or the setting looks ignored")
 	})
 
 	t.Run("with nowhere to write it, the answer is the same", func(t *testing.T) {
 		// A caller that keeps no log still gets a prompt: what is written down
 		// is a courtesy, and losing it must not cost the user the question.
-		if p := chooseDialog([]dialog{{"pinentry", &fakeDialog{name: "pinentry"}}}, "pinentry", &fakeDialog{}, nil); p != nil {
-			t.Errorf("chooseDialog = %T with no log to write to, want the terminal", p)
-		}
+		assert.Nil(t, chooseDialog([]dialog{{"pinentry", &fakeDialog{name: "pinentry"}}}, "pinentry", &fakeDialog{}, nil),
+			"what is written down is a courtesy; losing it must not cost the user the question")
 	})
+}
+
+// TestWritingAutoIsTheSameAsNamingNoDialogAtAll covers the value a user writes
+// to say "choose for me" out loud. It is a setting, not a dialog's name, and
+// read as one it matches nothing installed — so writing down the default would
+// take away every dialog on the desktop and send the prompt to the terminal,
+// which is the one outcome the setting exists to avoid.
+func TestWritingAutoIsTheSameAsNamingNoDialogAtAll(t *testing.T) {
+	const inTheDialog = "the-one-typed-into-the-dialog"
+
+	installed := &fakeDialog{name: "zenity", installed: true, answer: inTheDialog}
+	terminal := &fakeDialog{name: "the terminal", installed: true, answer: "the-one-typed-on-the-terminal"}
+
+	p := chooseDialog([]dialog{{"zenity", installed}}, config.GUIPrompterAuto, terminal, nil)
+	require.NotNil(t, p, "auto means choose one for me, not ask nowhere")
+
+	pass, err := p.Prompt("id_a")
+	require.NoError(t, err, "the dialog must answer")
+	assert.Equal(t, inTheDialog, pass, "and the dialog that is installed is the one that asks")
+	assert.Zero(t, terminal.asked, "the terminal is not where a user with a screen and a dialog is asked")
 }
 
 // TestClosingTheFirstDialogDoesNotRaiseTheNext verifies F38 where F37 now
@@ -137,12 +143,10 @@ func TestClosingTheFirstDialogDoesNotRaiseTheNext(t *testing.T) {
 		{"zenity", next},
 	}, "", terminal, nil)
 
-	if _, err := p.Prompt("id_a"); !errors.Is(err, keys.ErrPromptCanceled) {
-		t.Errorf("Prompt = %v, want the dismissal passed on as the answer it is", err)
-	}
-	if next.asked != 0 || terminal.asked != 0 {
-		t.Errorf("after the dialog was closed, zenity was asked %d time(s) and the terminal %d, want none of either", next.asked, terminal.asked)
-	}
+	_, err := p.Prompt("id_a")
+	assert.ErrorIs(t, err, keys.ErrPromptCanceled, "closing a dialog is an answer, and must be passed on as one")
+	assert.Zero(t, next.asked, "the next dialog must not be raised over a window the user just shut")
+	assert.Zero(t, terminal.asked, "nor the terminal")
 }
 
 // recordingLogger keeps what was written, so a test can read the line a user

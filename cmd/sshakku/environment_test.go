@@ -2,11 +2,12 @@ package main
 
 import (
 	"bytes"
-	"strings"
 	"testing"
 
 	"github.com/OrbintSoft/sshakku/internal/diagnose"
 	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestEnvironmentReportReadsTheShellItRunsIn verifies F31: the variables the
@@ -30,12 +31,31 @@ func TestEnvironmentReportReadsTheShellItRunsIn(t *testing.T) {
 		"SSHAKKU_QUIET":        "1",
 	}
 	for name, value := range want {
-		if got[name] != value {
-			t.Errorf("%s reported as %q, want %q", name, got[name], value)
-		}
+		assert.Equalf(t, value, got[name], "%s must be reported as this shell set it", name)
 	}
-	if _, ok := got["SSH_AUTH_SOCK"]; !ok {
-		t.Error("SSH_AUTH_SOCK is not among the variables the report covers")
+	assert.Contains(t, got, "SSH_AUTH_SOCK", "the report must cover the variable everything else depends on")
+}
+
+// TestTheNamesForASessionThisProcessCannotReadCarryNoValues covers the report
+// about somebody else's session. The names are still worth showing — they say
+// what the report would have covered — but every value is withheld. Filled in
+// from this process's own environment they would be printed as the target
+// user's: wrong about them, and a disclosure of the caller's own session into a
+// report that is not about it.
+func TestTheNamesForASessionThisProcessCannotReadCarryNoValues(t *testing.T) {
+	t.Setenv("SSH_AUTH_SOCK", "/run/user/0/keyring/ssh")
+	t.Setenv(keys.EnvPassHandoffToken, "a-token-belonging-to-the-caller")
+
+	shown, secrets := environmentNames()
+
+	require.NotEmpty(t, shown, "the names still say what the report would have covered")
+	for _, v := range shown {
+		assert.Emptyf(t, v.Value, "%s must carry nothing read from this process's own environment", v.Name)
+	}
+
+	require.NotEmpty(t, secrets, "including the ones whose value is a secret")
+	for _, s := range secrets {
+		assert.Falsef(t, s.Set, "%s must not be reported set on the strength of this process having it", s.Name)
 	}
 }
 
@@ -52,9 +72,7 @@ func TestASecretsValueNeverReachesTheReport(t *testing.T) {
 	shown, secrets := environmentReport()
 
 	for _, v := range shown {
-		if strings.Contains(v.Value, token) {
-			t.Fatalf("%s carries the secret's value into the report", v.Name)
-		}
+		require.NotContainsf(t, v.Value, token, "%s carries the secret's value into the report", v.Name)
 	}
 
 	set := map[string]bool{}
@@ -62,9 +80,7 @@ func TestASecretsValueNeverReachesTheReport(t *testing.T) {
 		set[s.Name] = s.Set
 	}
 	for _, name := range []string{keys.EnvPassHandoffToken, "SSHAKKU_BW_PASSWORD"} {
-		if !set[name] {
-			t.Errorf("%s is set in this shell but the report does not say so", name)
-		}
+		assert.Truef(t, set[name], "%s is set in this shell, and the report must say so", name)
 	}
 
 	var buf bytes.Buffer
@@ -74,7 +90,6 @@ func TestASecretsValueNeverReachesTheReport(t *testing.T) {
 		Env:       shown,
 		SecretEnv: secrets,
 	})
-	if strings.Contains(buf.String(), token) {
-		t.Errorf("the rendered report contains the secret's value:\n%s", buf.String())
-	}
+	assert.NotContains(t, buf.String(), token,
+		"a report is what a user pastes into a bug report, so no secret's value may be anywhere in it")
 }

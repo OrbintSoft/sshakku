@@ -5,10 +5,11 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"testing"
 
 	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // configuredPrefix writes a config.toml choosing prefix as the name SSHakku's
@@ -21,13 +22,9 @@ func configuredPrefix(t *testing.T, prefix string, backend keys.SecretBackend) d
 
 	root := t.TempDir()
 	configDir := filepath.Join(root, "config", "sshakku")
-	if err := os.MkdirAll(configDir, 0o700); err != nil {
-		t.Fatalf("make the config dir: %v", err)
-	}
+	require.NoError(t, os.MkdirAll(configDir, 0o700), "make the config dir")
 	body := "service_prefix = " + strconv.Quote(prefix) + "\n"
-	if err := os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(body), 0o600); err != nil {
-		t.Fatalf("write config.toml: %v", err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(body), 0o600), "write config.toml")
 	t.Setenv("HOME", root)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
 	t.Setenv("XDG_STATE_HOME", filepath.Join(root, "state"))
@@ -49,13 +46,9 @@ func TestForgetRemovesTheEntryTheConfiguredPrefixNames(t *testing.T) {
 	d := configuredPrefix(t, prefix, backend)
 
 	var out, errOut bytes.Buffer
-	if got := d.forget(&out, &errOut, []string{"id_rsa"}); got != 0 {
-		t.Fatalf("forget id_rsa = %d, want 0; stderr=%q", got, errOut.String())
-	}
-	if _, still := backend.stored[prefix+"-id_rsa"]; still {
-		t.Errorf("stored = %v, want %q gone", backend.stored, prefix+"-id_rsa")
-	}
-	if want := "forgot " + prefix + "-id_rsa"; !strings.Contains(out.String(), want) {
-		t.Errorf("output = %q, want it to name %q", out.String(), want)
-	}
+	require.Zerof(t, d.forget(&out, &errOut, []string{"id_rsa"}), "forget id_rsa; stderr=%q", errOut.String())
+	assert.NotContains(t, backend.stored, prefix+"-id_rsa",
+		"the entry the configured prefix names is the one that must be gone from the wallet")
+	assert.Contains(t, out.String(), "forgot "+prefix+"-id_rsa",
+		"and the report must name it — a report naming an entry it never deleted is the failure this guards against")
 }

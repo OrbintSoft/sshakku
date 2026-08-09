@@ -11,6 +11,8 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/keys"
 	"github.com/OrbintSoft/sshakku/internal/paths"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestTamperedEnvVarsHandledSafely drives the real environment-reading paths
@@ -32,15 +34,10 @@ func TestTamperedEnvVarsHandledSafely(t *testing.T) {
 		env := paths.FromOS()
 		report := gatherReport(env, paths.Resolve(env, paths.ProbeDir), config.Settings{})
 
-		if report.EnvSock != bogus {
-			t.Errorf("report.EnvSock = %q, want the tampered value %q", report.EnvSock, bogus)
-		}
-		if report.EnvReachable {
-			t.Error("report.EnvReachable = true for a socket nothing is listening on")
-		}
-		if !findingContains(report.Findings, "not answering") {
-			t.Errorf("no finding flagged the unreachable SSH_AUTH_SOCK; findings = %q", report.Findings)
-		}
+		assert.Equal(t, bogus, report.EnvSock, "the report must show the value the shell really carries")
+		assert.False(t, report.EnvReachable, "a socket nothing is listening on is not a live agent")
+		assert.Truef(t, findingContains(report.Findings, "not answering"),
+			"and the user must be told: %q", report.Findings)
 	})
 
 	// A cleared SSH_AUTH_SOCK (another way to derail a shell) must surface as
@@ -52,12 +49,9 @@ func TestTamperedEnvVarsHandledSafely(t *testing.T) {
 		env := paths.FromOS()
 		report := gatherReport(env, paths.Resolve(env, paths.ProbeDir), config.Settings{})
 
-		if report.EnvSock != "" {
-			t.Errorf("report.EnvSock = %q, want empty", report.EnvSock)
-		}
-		if !findingContains(report.Findings, "SSH_AUTH_SOCK is unset") {
-			t.Errorf("no finding flagged the missing SSH_AUTH_SOCK; findings = %q", report.Findings)
-		}
+		assert.Empty(t, report.EnvSock, "a shell that exported nothing has nothing to show")
+		assert.Truef(t, findingContains(report.Findings, "SSH_AUTH_SOCK is unset"),
+			"and a cleared variable must not pass unnoticed: %q", report.Findings)
 	})
 
 	// SSHAKKU_ASKPASS is set in the login shells of installations that wired
@@ -71,12 +65,9 @@ func TestTamperedEnvVarsHandledSafely(t *testing.T) {
 		var stdout, stderr bytes.Buffer
 		code := dispatch(realDeps(), &stdout, &stderr, "/usr/local/bin/sshakku", []string{"help"})
 
-		if code != 0 {
-			t.Fatalf("dispatch(help) exit = %d, want 0 (stderr: %s)", code, stderr.String())
-		}
-		if !strings.Contains(stdout.String(), "usage: sshakku") {
-			t.Errorf("help output did not run; something still reads the marker. stdout: %s", stdout.String())
-		}
+		require.Zerof(t, code, "asking for help is not a failure (stderr: %s)", stderr.String())
+		assert.Contains(t, stdout.String(), "usage: sshakku",
+			"a variable SSHakku does not read must not be able to change what it does")
 	})
 
 	// A tampered SSHAKKU_HANDOFF_TOKEN must be rejected by the real store and
@@ -89,12 +80,8 @@ func TestTamperedEnvVarsHandledSafely(t *testing.T) {
 		var stdout bytes.Buffer
 		code := realDeps().askpass(&stdout, []string{"Enter passphrase:"})
 
-		if code != 1 {
-			t.Errorf("askpass with a bogus handoff token exit = %d, want 1", code)
-		}
-		if stdout.Len() != 0 {
-			t.Errorf("askpass emitted %q on stdout; a tampered token must leak nothing", stdout.String())
-		}
+		assert.Equal(t, 1, code, "a handle no stash was made under can redeem nothing")
+		assert.Empty(t, stdout.String(), "and a tampered token must leak nothing at all")
 	})
 }
 

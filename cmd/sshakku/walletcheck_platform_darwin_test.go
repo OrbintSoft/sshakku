@@ -4,11 +4,11 @@ package main
 
 import (
 	"runtime"
-	"strings"
 	"testing"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/paths"
+	"github.com/stretchr/testify/assert"
 )
 
 // TestDoctorReportOnAnUnconfiguredMachine is the defect as a user met it: on a
@@ -27,15 +27,12 @@ func TestDoctorReportOnAnUnconfiguredMachine(t *testing.T) {
 
 	view := walletView(settings, probeWith(runtime.GOOS, nil, nil, "", nil))
 
-	if view.Backend != config.SecretBackendKeychain {
-		t.Errorf("doctor names %q as the wallet, want %q — the report names one SSHakku would not open",
-			view.Backend, config.SecretBackendKeychain)
-	}
+	assert.Equal(t, config.SecretBackendKeychain, view.Backend,
+		"the report must name the wallet the passphrases actually go into")
 	for _, req := range view.Requirements {
-		if req.Name == "session bus" {
-			t.Errorf("doctor asks for a D-Bus session bus on %s, which has none: %q",
-				runtime.GOOS, req.Detail)
-		}
+		assert.NotEqualf(t, "session bus", req.Name,
+			"%s has no D-Bus session bus, so asking for one sends the user after a piece that cannot exist (%q)",
+			runtime.GOOS, req.Detail)
 	}
 }
 
@@ -52,19 +49,13 @@ func TestKeePassXCOverASecretServiceThisPlatformHasNot(t *testing.T) {
 
 	view := walletView(settings, probeWith(runtime.GOOS, nil, nil, "", nil))
 
-	if view.Route != config.KeePassXCRouteSecretService {
-		t.Errorf("route = %q, want the pinned one to be answered under its own name", view.Route)
-	}
+	assert.Equal(t, config.KeePassXCRouteSecretService, view.Route,
+		"a route the user pinned is answered under its own name, not swapped for another")
 	req := requirement(t, view, "secret service")
-	if req.Present {
-		t.Error("a Secret Service must not be reported as present on a system that has none")
-	}
-	if !strings.Contains(req.Detail, "provides no freedesktop Secret Service") {
-		t.Errorf("detail = %q, want it to say the platform has no such API", req.Detail)
-	}
-	if !strings.Contains(req.Detail, runtime.GOOS) {
-		t.Errorf("detail = %q, want it to name the platform", req.Detail)
-	}
+	assert.False(t, req.Present, "a Secret Service must not be reported as present on a system that has none")
+	assert.Contains(t, req.Detail, "provides no freedesktop Secret Service",
+		"and the answer must be that the way in does not exist, not that a piece of it is missing")
+	assert.Contains(t, req.Detail, runtime.GOOS, "naming the platform that has not got it")
 }
 
 // discardLogger is the session log a test has no use for.

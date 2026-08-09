@@ -7,6 +7,8 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/keys"
 	"github.com/OrbintSoft/sshakku/internal/secretservice"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestNewSecretBackendFallback covers the default secret-service branch's
@@ -20,12 +22,8 @@ func TestNewSecretBackendFallback(t *testing.T) {
 	backend, closeFn := newSecretBackend("alice", fakeLogger{}, config.Settings{SecretBackend: config.SecretBackendSecretService})
 	defer closeFn()
 	tool, ok := backend.(keys.SecretToolBackend)
-	if !ok {
-		t.Fatalf("backend = %T, want a keys.SecretToolBackend fallback", backend)
-	}
-	if tool.User != "alice" {
-		t.Errorf("User = %q, want %q", tool.User, "alice")
-	}
+	require.Truef(t, ok, "a bus that cannot be reached must fall back rather than fail outright, got %T", backend)
+	assert.Equal(t, "alice", tool.User, "scoped to the account it is being opened for")
 }
 
 // TestTheSecretServiceIsGivenBothConfiguredBudgets verifies F21 where the
@@ -45,10 +43,8 @@ func TestTheSecretServiceIsGivenBothConfiguredBudgets(t *testing.T) {
 
 	client := secretServiceBudgets(&secretservice.Client{}, settings)
 
-	if client.CallTimeout != settings.CommandTimeout {
-		t.Errorf("CallTimeout = %s, want %s — what the daemon answers by itself", client.CallTimeout, settings.CommandTimeout)
-	}
-	if client.PromptTimeout != settings.InteractiveTimeout {
-		t.Errorf("PromptTimeout = %s, want %s — the unlock dialog is waiting on a person", client.PromptTimeout, settings.InteractiveTimeout)
-	}
+	assert.Equal(t, settings.CommandTimeout, client.CallTimeout,
+		"an ordinary call is answered by the daemon itself, on the budget for that")
+	assert.Equal(t, settings.InteractiveTimeout, client.PromptTimeout,
+		"the unlock dialog is waiting on a person, and gets the budget for that instead")
 }

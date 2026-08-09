@@ -4,8 +4,10 @@ package main
 
 import (
 	"os"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestExecTokenSourceRequiresRoot exercises only the non-root guard: the actual
@@ -17,10 +19,6 @@ func TestExecTokenSourceRequiresRoot(t *testing.T) {
 		t.Skip("running as root: the requires-root guard cannot be exercised here")
 	}
 	_, err := execTokenSource{}.ReadToken(1, 1)
-	if err == nil {
-		t.Fatal("ReadToken() as non-root = nil error, want an error")
-	}
-	if !strings.Contains(err.Error(), "root") {
-		t.Errorf("ReadToken() error = %q, want it to mention root privileges", err)
-	}
+	require.Error(t, err, "reading another user's keyring without root must be refused, not attempted")
+	assert.ErrorContains(t, err, "root", "and the refusal must say what would be needed")
 }
