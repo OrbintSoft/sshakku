@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/diagnose"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // These verify F25 (docs/FEATURES.md): the doctor names the wallet it would
@@ -28,12 +29,8 @@ func configuredWallet(t *testing.T, config string) deps {
 
 	root := t.TempDir()
 	configDir := filepath.Join(root, "config", "sshakku")
-	if err := os.MkdirAll(configDir, 0o700); err != nil {
-		t.Fatalf("make the config dir: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(config), 0o600); err != nil {
-		t.Fatalf("write config.toml: %v", err)
-	}
+	require.NoError(t, os.MkdirAll(configDir, 0o700), "make the config dir")
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(config), 0o600), "write config.toml")
 	t.Setenv("HOME", root)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
 	t.Setenv("XDG_STATE_HOME", filepath.Join(root, "state"))
@@ -52,9 +49,7 @@ func onlyOnPath(t *testing.T, names ...string) {
 	dir := t.TempDir()
 	for _, name := range names {
 		script := filepath.Join(dir, name)
-		if err := os.WriteFile(script, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
-			t.Fatalf("write %s: %v", script, err)
-		}
+		require.NoErrorf(t, os.WriteFile(script, []byte("#!/bin/sh\nexit 0\n"), 0o755), "write %s", script)
 	}
 	t.Setenv("PATH", dir)
 }
@@ -64,41 +59,27 @@ func TestDoctorNamesTheWalletAndWhatIsMissing(t *testing.T) {
 	onlyOnPath(t)
 
 	var out, errOut bytes.Buffer
-	if got := d.doctor(&out, &errOut, nil); got != 0 {
-		t.Fatalf("doctor() = %d, want 0; stderr=%q", got, errOut.String())
-	}
+	require.Zerof(t, d.doctor(&out, &errOut, nil), "a report changes nothing and cannot fail; stderr=%q", errOut.String())
 	report := out.String()
 
 	for _, want := range []string{"keepassxc", "cli", "keepassxc-cli", "missing"} {
-		if !strings.Contains(report, want) {
-			t.Errorf("the report never mentions %q, so nothing tells the user what is wrong:\n%s", want, report)
-		}
+		assert.Containsf(t, report, want, "nothing tells the user what is wrong without %q", want)
 	}
-	if !strings.Contains(report, "/nowhere/vault.kdbx") {
-		t.Errorf("the report does not name the database it cannot find:\n%s", report)
-	}
+	assert.Contains(t, report, "/nowhere/vault.kdbx", "the report must name the database it could not find")
 }
 
 func TestDoctorSaysNothingIsMissingWhenNothingIs(t *testing.T) {
 	database := filepath.Join(t.TempDir(), "vault.kdbx")
-	if err := os.WriteFile(database, []byte("not really a database"), 0o600); err != nil {
-		t.Fatalf("write the database file: %v", err)
-	}
+	require.NoError(t, os.WriteFile(database, []byte("not really a database"), 0o600), "write the database file")
 	d := configuredWallet(t, "secret_backend = \"keepassxc\"\nkeepassxc_route = \"cli\"\nkeepassxc_database = \""+database+"\"\n")
 	onlyOnPath(t, "keepassxc-cli")
 
 	var out, errOut bytes.Buffer
-	if got := d.doctor(&out, &errOut, nil); got != 0 {
-		t.Fatalf("doctor() = %d, want 0; stderr=%q", got, errOut.String())
-	}
+	require.Zerof(t, d.doctor(&out, &errOut, nil), "a report changes nothing and cannot fail; stderr=%q", errOut.String())
 	report := out.String()
 
-	if !strings.Contains(report, "keepassxc-cli") {
-		t.Errorf("the report does not name the tool it found:\n%s", report)
-	}
-	if strings.Contains(report, "missing") {
-		t.Errorf("the report calls something missing when everything is there:\n%s", report)
-	}
+	assert.Contains(t, report, "keepassxc-cli", "the report must name the tool it found")
+	assert.NotContains(t, report, "missing", "nothing may be called missing when everything is there")
 }
 
 // TestDoctorNamesTheWalletThatWouldBeUsed verifies F25 through the whole
@@ -114,12 +95,9 @@ func TestDoctorNamesTheWalletThatWouldBeUsed(t *testing.T) {
 	onlyOnPath(t)
 
 	var out, errOut bytes.Buffer
-	if got := d.doctor(&out, &errOut, nil); got != 0 {
-		t.Fatalf("doctor() = %d, want 0; stderr=%q", got, errOut.String())
-	}
-	if want := config.DefaultSecretBackend(); !strings.Contains(out.String(), want) {
-		t.Errorf("the report never names %q, the wallet SSHakku would open:\n%s", want, out.String())
-	}
+	require.Zerof(t, d.doctor(&out, &errOut, nil), "a report changes nothing and cannot fail; stderr=%q", errOut.String())
+	assert.Containsf(t, out.String(), config.DefaultSecretBackend(),
+		"the report must name %q, the wallet an unconfigured machine would open", config.DefaultSecretBackend())
 }
 
 // TestDoctorRefusesAWalletThisSystemHasNot verifies F26 through the command: a
@@ -135,14 +113,10 @@ func TestDoctorRefusesAWalletThisSystemHasNot(t *testing.T) {
 	onlyOnPath(t)
 
 	var out, errOut bytes.Buffer
-	if got := d.doctor(&out, &errOut, nil); got != 0 {
-		t.Fatalf("doctor() = %d, want 0; stderr=%q", got, errOut.String())
-	}
+	require.Zerof(t, d.doctor(&out, &errOut, nil), "a report changes nothing and cannot fail; stderr=%q", errOut.String())
 	report := out.String()
-	if strings.Contains(report, "backend:               "+absent) {
-		t.Errorf("the report names %q, a wallet this system has not got:\n%s", absent, report)
-	}
-	if want := config.DefaultSecretBackend(); !strings.Contains(report, want) {
-		t.Errorf("the report never names %q, the wallet actually in use:\n%s", want, report)
-	}
+	assert.NotContainsf(t, report, "backend:               "+absent,
+		"the report must not name %q, a wallet this system has not got", absent)
+	assert.Containsf(t, report, config.DefaultSecretBackend(),
+		"it must name %q, the wallet actually in use", config.DefaultSecretBackend())
 }
