@@ -9,12 +9,14 @@
 # (vaultwarden-fixture/) instead of registering one at container
 # startup; the fixture was produced once, by hand, through that UI. The
 # Vaultwarden binary is copied from the upstream image rather than built
-# here, at the same pinned version the fixture was produced against; only
+# here, pinned alongside the CLI version above because the two are a client
+# and a server of the same API: a server too old for the CLI fails at
+# creating an item, inside bw's own SDK. Only
 # used transiently inside this disposable CI container, never modified or
 # offered as a service, so AGPL-3.0's network-copyleft clause does not apply
 # (rule 16). Go is fetched at the "stable" release, matching the go-version
 # used by the other CI jobs (actions/setup-go), rather than hand-pinned here.
-FROM vaultwarden/server:1.36.0 AS vaultwarden
+FROM vaultwarden/server:1.37.1 AS vaultwarden
 
 FROM debian:trixie-slim
 
@@ -25,7 +27,7 @@ RUN apt-get update \
         ca-certificates wget gcc libc6-dev make openssh-client keyutils \
         nodejs npm openssl sqlite3 libmariadb3 libpq5 \
     && rm -rf /var/lib/apt/lists/* \
-    && npm install -g @bitwarden/cli@2026.6.0 \
+    && npm install -g @bitwarden/cli@2026.7.0 \
     && GO_VERSION=$(wget -qO- 'https://go.dev/VERSION?m=text' | head -n1) \
     && wget -qO- "https://go.dev/dl/${GO_VERSION}.linux-amd64.tar.gz" | tar -C /usr/local -xz
 

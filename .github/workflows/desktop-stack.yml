@@ -256,8 +256,14 @@ jobs:
 
       # bw and the test binary stay native: what is being exercised is a Mac
       # talking to a Bitwarden server, so only the server may be Linux.
+      #
+      # The CLI is pinned, and to the same version the containerised one is: this
+      # job exists to vary the operating system, and a CLI that drifted between
+      # the two would leave it varying two things while answering for one.
       - name: Install the Bitwarden CLI and a Linux container runtime
-        run: brew install bitwarden-cli colima docker qemu
+        run: |
+          npm install -g @bitwarden/cli@2026.7.0
+          brew install colima docker qemu
 
       # The machine is emulated rather than virtualised: Apple's hypervisor
       # refuses here — "Virtualization is not available on this hardware" —
