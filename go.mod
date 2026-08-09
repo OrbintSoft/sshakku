@@ -10,6 +10,8 @@ require github.com/BurntSushi/toml v1.6.0
 
 require github.com/godbus/dbus/v5 v5.2.2
 
-require go.uber.org/goleak v1.3.0
-
-require golang.org/x/crypto v0.54.0 // indirect
+require (
+	github.com/ebitengine/purego v0.10.2
+	go.uber.org/goleak v1.3.0
+	golang.org/x/crypto v0.54.0
+)

@@ -45,7 +45,7 @@ jobs:
         run: docker build -f ${{ matrix.dockerfile }} -t sshakku-test-desktop-stack-${{ matrix.name }} .
 
       - name: Run make test in ${{ matrix.name }}
-        run: docker run --init --rm -v "${{ github.workspace }}":/src:ro sshakku-test-desktop-stack-${{ matrix.name }} make test
+        run: docker run --init --rm -e SSHAKKU_RACE=1 -v "${{ github.workspace }}":/src:ro sshakku-test-desktop-stack-${{ matrix.name }} make test
 
       # The round trip against a real Bitwarden, asked for by name rather than
       # left inside the suite above: that test skips itself when its account or
