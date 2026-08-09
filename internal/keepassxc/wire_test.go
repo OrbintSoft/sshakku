@@ -1,10 +1,11 @@
 package keepassxc
 
 import (
-	"errors"
-	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // These pin the parts of KeePassXC's wire format that cannot be inferred from
@@ -24,12 +25,8 @@ func TestAcceptanceIsStatedInsideTheEncryptedMessage(t *testing.T) {
 	c := s.connect()
 
 	assoc, err := c.Associate()
-	if err != nil {
-		t.Fatalf("Associate with acceptance stated only inside the message = %v, want it accepted", err)
-	}
-	if assoc.ID != "db" {
-		t.Errorf("association id = %q, want %q", assoc.ID, "db")
-	}
+	require.NoError(t, err, "acceptance stated only inside the message must still be accepted")
+	assert.Equal(t, "db", assoc.ID, "association id")
 }
 
 // TestARefusalInsideTheEncryptedMessageIsReported is the other half: the same
@@ -42,9 +39,8 @@ func TestARefusalInsideTheEncryptedMessageIsReported(t *testing.T) {
 	}
 	c := s.connect()
 
-	if _, err := c.Associate(); err == nil {
-		t.Fatal("a reply whose encrypted body refused the request must not be reported as success")
-	}
+	_, err := c.Associate()
+	assert.Error(t, err, "a reply whose encrypted body refused the request must not be reported as success")
 }
 
 // TestAURLThatMatchesNothingIsNotAFailure records that KeePassXC answers a
@@ -57,12 +53,8 @@ func TestAURLThatMatchesNothingIsNotAFailure(t *testing.T) {
 	c := s.connect()
 
 	entries, err := c.GetLogins("sshakku://never-stored", Association{ID: "db", IDKey: "key"})
-	if err != nil {
-		t.Fatalf("GetLogins on a URL with no entry = %v, want no error", err)
-	}
-	if len(entries) != 0 {
-		t.Errorf("entries = %v, want none", entries)
-	}
+	require.NoError(t, err, "a URL with no entry must not be an error")
+	assert.Empty(t, entries, "entries")
 }
 
 // TestAStaleAssociationIsReportedAsSuchHoweverItIsRefused covers the one
@@ -77,18 +69,14 @@ func TestAStaleAssociationIsReportedAsSuchHoweverItIsRefused(t *testing.T) {
 			return map[string]any{"success": "false"}
 		}
 		c := s.connect()
-		if err := c.TestAssociate(Association{ID: "db", IDKey: "key"}); !errors.Is(err, ErrNotAssociated) {
-			t.Errorf("TestAssociate = %v, want ErrNotAssociated", err)
-		}
+		assert.ErrorIs(t, c.TestAssociate(Association{ID: "db", IDKey: "key"}), ErrNotAssociated, "TestAssociate")
 	})
 
 	t.Run("locked database stays its own answer", func(t *testing.T) {
 		s := newFakeServer(t)
 		s.failWith[actionTestAssociate] = envelope{Error: "locked", Code: errCodeDatabaseNotOpened}
 		c := s.connect()
-		if err := c.TestAssociate(Association{ID: "db", IDKey: "key"}); !errors.Is(err, ErrDatabaseLocked) {
-			t.Errorf("TestAssociate against a locked database = %v, want ErrDatabaseLocked", err)
-		}
+		assert.ErrorIs(t, c.TestAssociate(Association{ID: "db", IDKey: "key"}), ErrDatabaseLocked, "TestAssociate against a locked database")
 	})
 }
 
@@ -121,12 +109,8 @@ func TestAKeyExchangeThatIsRefusedIsNotTreatedAsAgreed(t *testing.T) {
 			s := newFakeServer(t)
 			s.failWith[actionChangePublicKeys] = tc.reply
 			_, err := Connect(s.dial(), 5*time.Second, 5*time.Second)
-			if err == nil {
-				t.Fatal("Connect succeeded on a key exchange that never agreed on a key")
-			}
-			if !strings.Contains(err.Error(), tc.want) {
-				t.Errorf("Connect = %v, want it to mention %q", err, tc.want)
-			}
+			require.Error(t, err, "Connect must not succeed on a key exchange that never agreed on a key")
+			assert.ErrorContains(t, err, tc.want, "the error must say why")
 		})
 	}
 }

@@ -1,26 +1,20 @@
 package keepassxc
 
 import (
-	"bytes"
-	"errors"
-	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestConnectExchangesKeys(t *testing.T) {
 	s := newFakeServer(t)
 	c := s.connect()
 
-	if c.hostKey == nil {
-		t.Fatal("Connect must record the host public key")
-	}
-	if *c.hostKey != *s.keys.public {
-		t.Error("the recorded host key is not the one the server sent")
-	}
-	if c.clientID == "" {
-		t.Error("Connect must generate a client id")
-	}
+	require.NotNil(t, c.hostKey, "Connect must record the host public key")
+	assert.Equal(t, *s.keys.public, *c.hostKey, "the recorded host key must be the one the server sent")
+	assert.NotEmpty(t, c.clientID, "Connect must generate a client id")
 }
 
 func TestConnectRejectsAKeyOfTheWrongWidth(t *testing.T) {
@@ -32,12 +26,8 @@ func TestConnectRejectsAKeyOfTheWrongWidth(t *testing.T) {
 	}}
 
 	_, err := Connect(s.dial(), 2*time.Second, 2*time.Second)
-	if err == nil {
-		t.Fatal("a public key of the wrong width must be refused")
-	}
-	if !strings.Contains(err.Error(), "32 bytes") {
-		t.Errorf("error = %v, want it to name the expected width", err)
-	}
+	require.Error(t, err, "a public key of the wrong width must be refused")
+	assert.ErrorContains(t, err, "32 bytes", "the error must name the expected width")
 }
 
 func TestAssociateReturnsTheDatabaseIdAndIdentificationKey(t *testing.T) {
@@ -51,22 +41,15 @@ func TestAssociateReturnsTheDatabaseIdAndIdentificationKey(t *testing.T) {
 	c := s.connect()
 
 	got, err := c.Associate()
-	if err != nil {
-		t.Fatalf("Associate: %v", err)
-	}
-	if got.ID != "sshakku-db" {
-		t.Errorf("ID = %q, want sshakku-db", got.ID)
-	}
-	if got.IDKey == "" {
-		t.Error("Associate must return the identification key it registered")
-	}
+	require.NoError(t, err, "Associate")
+	assert.Equal(t, "sshakku-db", got.ID, "ID")
+	assert.NotEmpty(t, got.IDKey, "Associate must return the identification key it registered")
 
 	// The key returned must be the one actually sent, or a later
 	// test-associate would present a key KeePassXC never saw.
 	opened := s.openedPayloads()
-	if len(opened) != 1 || opened[0]["idKey"] != got.IDKey {
-		t.Errorf("the returned idKey is not the one sent on the wire: %v", opened)
-	}
+	require.Len(t, opened, 1, "exactly one payload must have been sent")
+	assert.Equal(t, got.IDKey, opened[0]["idKey"], "the returned idKey must be the one sent on the wire")
 }
 
 func TestAssociateWithoutADatabaseIdIsAnError(t *testing.T) {
@@ -76,9 +59,8 @@ func TestAssociateWithoutADatabaseIdIsAnError(t *testing.T) {
 	}
 	c := s.connect()
 
-	if _, err := c.Associate(); err == nil {
-		t.Fatal("an association naming no database must not be reported as success")
-	}
+	_, err := c.Associate()
+	assert.Error(t, err, "an association naming no database must not be reported as success")
 }
 
 // The error codes below are written as the literals KeePassXC puts on the wire,
@@ -91,9 +73,7 @@ func TestTestAssociateRefusedReportsNotAssociated(t *testing.T) {
 	c := s.connect()
 
 	err := c.TestAssociate(Association{ID: "gone", IDKey: "key"})
-	if !errors.Is(err, ErrNotAssociated) {
-		t.Fatalf("err = %v, want ErrNotAssociated — the caller decides to associate again from this", err)
-	}
+	assert.ErrorIs(t, err, ErrNotAssociated, "the caller decides to associate again from this")
 }
 
 func TestLockedDatabaseIsItsOwnError(t *testing.T) {
@@ -102,9 +82,7 @@ func TestLockedDatabaseIsItsOwnError(t *testing.T) {
 	c := s.connect()
 
 	_, err := c.GetLogins("ssh://id_test", Association{ID: "db", IDKey: "key"})
-	if !errors.Is(err, ErrDatabaseLocked) {
-		t.Fatalf("err = %v, want ErrDatabaseLocked", err)
-	}
+	assert.ErrorIs(t, err, ErrDatabaseLocked, "GetLogins against a locked database")
 }
 
 func TestGetLoginsReturnsTheStoredEntry(t *testing.T) {
@@ -124,18 +102,10 @@ func TestGetLoginsReturnsTheStoredEntry(t *testing.T) {
 	c := s.connect()
 
 	entries, err := c.GetLogins("ssh://id_test", Association{ID: "db", IDKey: "key"})
-	if err != nil {
-		t.Fatalf("GetLogins: %v", err)
-	}
-	if len(entries) != 1 {
-		t.Fatalf("got %d entries, want 1", len(entries))
-	}
-	if entries[0].Password != "test-passphrase" {
-		t.Errorf("password = %q, want test-passphrase", entries[0].Password)
-	}
-	if entries[0].UUID != "u-1" {
-		t.Errorf("uuid = %q, want u-1 — it is what lets a later store update in place", entries[0].UUID)
-	}
+	require.NoError(t, err, "GetLogins")
+	require.Len(t, entries, 1, "entries")
+	assert.Equal(t, "test-passphrase", entries[0].Password, "password")
+	assert.Equal(t, "u-1", entries[0].UUID, "uuid — it is what lets a later store update in place")
 }
 
 func TestGetLoginsNoMatchIsEmptyNotAnError(t *testing.T) {
@@ -146,12 +116,8 @@ func TestGetLoginsNoMatchIsEmptyNotAnError(t *testing.T) {
 	c := s.connect()
 
 	entries, err := c.GetLogins("ssh://absent", Association{ID: "db", IDKey: "key"})
-	if err != nil {
-		t.Fatalf("a miss must not be an error, got %v", err)
-	}
-	if len(entries) != 0 {
-		t.Errorf("got %d entries, want none", len(entries))
-	}
+	require.NoError(t, err, "a miss must not be an error")
+	assert.Empty(t, entries, "entries")
 }
 
 // TestSetLoginNeverPutsThePassphraseInTheClear is the assertion the whole
@@ -163,24 +129,19 @@ func TestSetLoginNeverPutsThePassphraseInTheClear(t *testing.T) {
 	s := newFakeServer(t)
 	c := s.connect()
 
-	if err := c.SetLogin("ssh://id_test", "id_test", passphrase, "", "SSHakku", Association{ID: "db", IDKey: "key"}); err != nil {
-		t.Fatalf("SetLogin: %v", err)
-	}
+	require.NoError(t,
+		c.SetLogin("ssh://id_test", "id_test", passphrase, "", "SSHakku", Association{ID: "db", IDKey: "key"}),
+		"SetLogin")
 
 	// First prove the round trip works, so the absence below is not just an
 	// absence of anything: the server did receive the passphrase, decrypted.
 	opened := s.openedPayloads()
-	if len(opened) != 1 || opened[0]["password"] != passphrase {
-		t.Fatalf("the server decrypted %v, want the passphrase — the round trip is broken", opened)
-	}
+	require.Len(t, opened, 1, "the server must have opened exactly one payload")
+	require.Equal(t, passphrase, opened[0]["password"], "the server must have decrypted the passphrase — otherwise the round trip is broken")
 
 	wire := s.rawBytes()
-	if len(wire) == 0 {
-		t.Fatal("nothing was recorded off the socket, so the assertion below would prove nothing")
-	}
-	if bytes.Contains(wire, []byte(passphrase)) {
-		t.Fatal("the passphrase crossed the socket in the clear")
-	}
+	require.NotEmpty(t, wire, "nothing was recorded off the socket, so the assertion below would prove nothing")
+	assert.NotContains(t, string(wire), passphrase, "the passphrase must not cross the socket in the clear")
 }
 
 // TestUnsolicitedFrameIsSkipped drives the case KeePassXC creates on its own:
@@ -201,12 +162,8 @@ func TestUnsolicitedFrameIsSkipped(t *testing.T) {
 	c := s.connect()
 
 	entries, err := c.GetLogins("ssh://id_test", Association{ID: "db", IDKey: "key"})
-	if err != nil {
-		t.Fatalf("an unsolicited frame must be skipped, not mistaken for the reply: %v", err)
-	}
-	if len(entries) != 1 {
-		t.Fatalf("got %d entries, want 1", len(entries))
-	}
+	require.NoError(t, err, "an unsolicited frame must be skipped, not mistaken for the reply")
+	assert.Len(t, entries, 1, "entries")
 }
 
 // TestReplyUnderTheWrongNonceIsRefused proves the nonce is checked rather than
@@ -220,9 +177,8 @@ func TestReplyUnderTheWrongNonceIsRefused(t *testing.T) {
 	}
 	c := s.connect()
 
-	if _, err := c.Associate(); err == nil {
-		t.Fatal("a reply sealed under a different nonce must not decrypt")
-	}
+	_, err := c.Associate()
+	assert.Error(t, err, "a reply sealed under a different nonce must not decrypt")
 }
 
 func TestIncrementNonce(t *testing.T) {
@@ -259,16 +215,13 @@ func TestIncrementNonce(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got, want := incrementNonce(tc.in()), tc.want(); got != want {
-				t.Errorf("incrementNonce = %v, want %v", got, want)
-			}
+			assert.Equal(t, tc.want(), incrementNonce(tc.in()), "incrementNonce")
 		})
 	}
 }
 
 func TestRequestBeforeKeyExchangeIsRefused(t *testing.T) {
 	c := &Client{timeout: time.Second}
-	if err := c.request(actionGetLogins, struct{}{}, &getLoginsReply{}); err == nil {
-		t.Fatal("a request before the key exchange must not be attempted")
-	}
+	err := c.request(actionGetLogins, struct{}{}, &getLoginsReply{})
+	assert.Error(t, err, "a request before the key exchange must not be attempted")
 }

@@ -12,6 +12,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 // fakeServer is a stand-in for KeePassXC that speaks the real protocol: it
@@ -73,14 +75,10 @@ type fakeServer struct {
 func newFakeServer(t *testing.T) *fakeServer {
 	t.Helper()
 	keys, err := newKeyPair()
-	if err != nil {
-		t.Fatalf("generating the server key pair: %v", err)
-	}
+	require.NoError(t, err, "generating the server key pair")
 	path := filepath.Join(shortSocketDir(t), "s")
 	ln, err := net.Listen("unix", path)
-	if err != nil {
-		t.Fatalf("listening on %s: %v", path, err)
-	}
+	require.NoErrorf(t, err, "listening on %s", path)
 	s := &fakeServer{
 		t:        t,
 		ln:       ln,
@@ -104,9 +102,7 @@ func newFakeServer(t *testing.T) *fakeServer {
 func shortSocketDir(t *testing.T) string {
 	t.Helper()
 	dir, err := os.MkdirTemp("/tmp", "kpxc")
-	if err != nil {
-		t.Fatalf("mkdir temp: %v", err)
-	}
+	require.NoError(t, err, "mkdir temp")
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	return dir
 }
@@ -129,9 +125,7 @@ func (s *fakeServer) openedPayloads() []map[string]any {
 func (s *fakeServer) dial() net.Conn {
 	s.t.Helper()
 	conn, err := net.Dial("unix", s.path)
-	if err != nil {
-		s.t.Fatalf("dialling %s: %v", s.path, err)
-	}
+	require.NoErrorf(s.t, err, "dialling %s", s.path)
 	s.t.Cleanup(func() { _ = conn.Close() })
 	return conn
 }
@@ -141,9 +135,7 @@ func (s *fakeServer) dial() net.Conn {
 func (s *fakeServer) connect() *Client {
 	s.t.Helper()
 	c, err := Connect(s.dial(), 5*time.Second, 5*time.Second)
-	if err != nil {
-		s.t.Fatalf("Connect: %v", err)
-	}
+	require.NoError(s.t, err, "Connect")
 	return c
 }
 
