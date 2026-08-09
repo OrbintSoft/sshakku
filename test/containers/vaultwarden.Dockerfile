@@ -7,14 +7,16 @@
 # exist in the web-vault UI), so this image ships a pre-registered,
 # already-empty test account as a SQLite fixture
 # (vaultwarden-fixture/) instead of registering one at container
-# startup — see PLAN.md 4.2 for how that fixture was produced. The
+# startup; the fixture was produced once, by hand, through that UI. The
 # Vaultwarden binary is copied from the upstream image rather than built
-# here, at the same pinned version the fixture was produced against; only
+# here, pinned alongside the CLI version above because the two are a client
+# and a server of the same API: a server too old for the CLI fails at
+# creating an item, inside bw's own SDK. Only
 # used transiently inside this disposable CI container, never modified or
 # offered as a service, so AGPL-3.0's network-copyleft clause does not apply
 # (rule 16). Go is fetched at the "stable" release, matching the go-version
 # used by the other CI jobs (actions/setup-go), rather than hand-pinned here.
-FROM vaultwarden/server:1.36.0 AS vaultwarden
+FROM vaultwarden/server:1.37.1 AS vaultwarden
 
 FROM debian:trixie-slim
 
@@ -25,7 +27,7 @@ RUN apt-get update \
         ca-certificates wget gcc libc6-dev make openssh-client keyutils \
         nodejs npm openssl sqlite3 libmariadb3 libpq5 \
     && rm -rf /var/lib/apt/lists/* \
-    && npm install -g @bitwarden/cli@2026.6.0 \
+    && npm install -g @bitwarden/cli@2026.7.0 \
     && GO_VERSION=$(wget -qO- 'https://go.dev/VERSION?m=text' | head -n1) \
     && wget -qO- "https://go.dev/dl/${GO_VERSION}.linux-amd64.tar.gz" | tar -C /usr/local -xz
 
@@ -34,7 +36,8 @@ ENV PATH="/usr/local/go/bin:${PATH}"
 COPY --from=vaultwarden /vaultwarden /usr/local/bin/vaultwarden
 
 COPY test/containers/vaultwarden-fixture/ /opt/sshakku-desktop-stack/vaultwarden-fixture/
-COPY test/containers/vaultwarden-entrypoint.sh test/containers/vaultwarden-session.sh /opt/sshakku-desktop-stack/
+COPY test/containers/vaultwarden-entrypoint.sh test/containers/vaultwarden-session.sh \
+    test/containers/vaultwarden-fixture-account.sh /opt/sshakku-desktop-stack/
 RUN chmod +x /opt/sshakku-desktop-stack/vaultwarden-entrypoint.sh /opt/sshakku-desktop-stack/vaultwarden-session.sh
 
 WORKDIR /src
