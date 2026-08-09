@@ -3,8 +3,10 @@
 package config
 
 import (
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestSecretBackendChoicesOnLinux verifies F26 for Linux: the wallet a Linux
@@ -18,25 +20,15 @@ import (
 func TestSecretBackendChoicesOnLinux(t *testing.T) {
 	t.Run("named nothing, gets the secret service", func(t *testing.T) {
 		s, errs := Resolve(File{}, lookupFrom(nil))
-		if len(errs) != 0 {
-			t.Fatalf("unexpected errors: %v", errs)
-		}
-		if s.SecretBackend != SecretBackendSecretService {
-			t.Errorf("SecretBackend = %q, want %q", s.SecretBackend, SecretBackendSecretService)
-		}
+		require.Empty(t, errs, "unexpected errors")
+		assert.Equal(t, SecretBackendSecretService, s.SecretBackend, "SecretBackend")
 	})
 
 	t.Run("the keychain is not a wallet this system has", func(t *testing.T) {
 		s, errs := Resolve(File{SecretBackend: ptr("keychain")}, lookupFrom(nil))
 
-		if len(errs) == 0 {
-			t.Fatal("naming a wallet this platform has not got must be reported, not silently accepted")
-		}
-		if got := errs[0].Error(); !strings.Contains(got, "keychain") {
-			t.Errorf("error = %q, want it to name the value that cannot be used here", got)
-		}
-		if s.SecretBackend != SecretBackendSecretService {
-			t.Errorf("SecretBackend = %q, want the platform default %q", s.SecretBackend, SecretBackendSecretService)
-		}
+		require.NotEmpty(t, errs, "naming a wallet this platform has not got must be reported, not silently accepted")
+		assert.Contains(t, errs[0].Error(), "keychain", "the error must name the value that cannot be used here")
+		assert.Equal(t, SecretBackendSecretService, s.SecretBackend, "SecretBackend must fall back to the platform default")
 	})
 }

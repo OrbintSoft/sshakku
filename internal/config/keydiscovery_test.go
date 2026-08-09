@@ -5,6 +5,9 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestResolveKeyDiscovery covers the two settings that say which files SSHakku
@@ -19,32 +22,21 @@ import (
 func TestResolveKeyDiscovery(t *testing.T) {
 	t.Run("the directory is kept as written", func(t *testing.T) {
 		s, errs := Resolve(File{KeyDir: ptr("keys/ssh")}, lookupFrom(nil))
-		if len(errs) != 0 {
-			t.Fatalf("unexpected errors: %v", errs)
-		}
-		if s.KeyDir != "keys/ssh" {
-			t.Errorf("KeyDir = %q, want the file's own value", s.KeyDir)
-		}
+		require.Empty(t, errs, "unexpected errors")
+		assert.Equal(t, "keys/ssh", s.KeyDir, "KeyDir must be the file's own value")
 	})
 
 	t.Run("the patterns are kept as written, in order", func(t *testing.T) {
 		s, errs := Resolve(File{KeyPatterns: []string{"id_*", "work-*"}}, lookupFrom(nil))
-		if len(errs) != 0 {
-			t.Fatalf("unexpected errors: %v", errs)
-		}
-		if strings.Join(s.KeyPatterns, ",") != "id_*,work-*" {
-			t.Errorf("KeyPatterns = %v, want the file's own list", s.KeyPatterns)
-		}
+		require.Empty(t, errs, "unexpected errors")
+		assert.Equal(t, []string{"id_*", "work-*"}, s.KeyPatterns, "KeyPatterns must be the file's own list, in order")
 	})
 
 	t.Run("naming neither leaves both unset", func(t *testing.T) {
 		s, errs := Resolve(File{}, lookupFrom(nil))
-		if len(errs) != 0 {
-			t.Fatalf("unexpected errors: %v", errs)
-		}
-		if s.KeyDir != "" || s.KeyPatterns != nil {
-			t.Errorf("KeyDir/KeyPatterns = %q/%v, want both left unset", s.KeyDir, s.KeyPatterns)
-		}
+		require.Empty(t, errs, "unexpected errors")
+		assert.Empty(t, s.KeyDir, "KeyDir must be left unset")
+		assert.Nil(t, s.KeyPatterns, "KeyPatterns must be left unset")
 	})
 
 	// A pattern that cannot match a file name is worse than a pattern that
@@ -61,12 +53,8 @@ func TestResolveKeyDiscovery(t *testing.T) {
 	// this setting exists to remove.
 	t.Run("an explicitly empty list is refused", func(t *testing.T) {
 		s, errs := Resolve(File{KeyPatterns: []string{}}, lookupFrom(nil))
-		if s.KeyPatterns != nil {
-			t.Errorf("KeyPatterns = %v, want SSHakku's own rule left in force", s.KeyPatterns)
-		}
-		if len(errs) == 0 {
-			t.Error("errors = none, want one saying the list is empty")
-		}
+		assert.Nil(t, s.KeyPatterns, "SSHakku's own rule must be left in force")
+		assert.NotEmpty(t, errs, "one error must say the list is empty")
 	})
 }
 
@@ -78,18 +66,14 @@ func assertPatternsRefused(t *testing.T, patterns []string) {
 	t.Helper()
 	bad := patterns[len(patterns)-1]
 	s, errs := Resolve(File{KeyPatterns: patterns}, lookupFrom(nil))
-	if s.KeyPatterns != nil {
-		t.Errorf("KeyPatterns = %v for %v, want SSHakku's own rule left in force", s.KeyPatterns, patterns)
-	}
+	assert.Nilf(t, s.KeyPatterns, "for %v, SSHakku's own rule must be left in force", patterns)
 	var named bool
 	for _, err := range errs {
 		if strings.Contains(err.Error(), strconv.Quote(bad)) {
 			named = true
 		}
 	}
-	if !named {
-		t.Errorf("errors for %v = %v, want one quoting the rejected pattern", patterns, errs)
-	}
+	assert.Truef(t, named, "errors for %v = %v, want one quoting the rejected pattern", patterns, errs)
 }
 
 // TestKeyEnumeratorFromSettings covers the one place the two settings are
@@ -102,42 +86,31 @@ func TestKeyEnumeratorFromSettings(t *testing.T) {
 
 	t.Run("naming no directory looks where OpenSSH keeps keys", func(t *testing.T) {
 		e := Settings{}.KeyEnumerator(home)
-		if e.Dir != filepath.Join(home, ".ssh") {
-			t.Errorf("Dir = %q, want the default under home", e.Dir)
-		}
-		if e.MustExist {
-			t.Error("MustExist = true, want an absent ~/.ssh to stay an ordinary empty account")
-		}
+		assert.Equal(t, filepath.Join(home, ".ssh"), e.Dir, "Dir must be the default under home")
+		assert.False(t, e.MustExist, "an absent ~/.ssh must stay an ordinary empty account")
 	})
 
 	t.Run("a named directory is resolved against home", func(t *testing.T) {
 		for _, written := range []string{"keys/ssh", "~/keys/ssh"} {
 			e := Settings{KeyDir: written}.KeyEnumerator(home)
-			if e.Dir != filepath.Join(home, "keys", "ssh") {
-				t.Errorf("Dir = %q for %q, want it under home", e.Dir, written)
-			}
+			assert.Equalf(t, filepath.Join(home, "keys", "ssh"), e.Dir, "Dir for %q must be under home", written)
 		}
 	})
 
 	t.Run("an absolute directory is taken as it is", func(t *testing.T) {
 		e := Settings{KeyDir: "/srv/keys"}.KeyEnumerator(home)
-		if e.Dir != "/srv/keys" {
-			t.Errorf("Dir = %q, want the absolute path unchanged", e.Dir)
-		}
+		assert.Equal(t, "/srv/keys", e.Dir, "an absolute path must be unchanged")
 	})
 
 	// A directory nobody asked for can be absent; one the user named cannot,
 	// because a typo and an empty directory produce the same silence otherwise.
 	t.Run("a named directory must be there", func(t *testing.T) {
-		if !(Settings{KeyDir: "keys/ssh"}).KeyEnumerator(home).MustExist {
-			t.Error("MustExist = false, want a directory the user named to be required")
-		}
+		e := Settings{KeyDir: "keys/ssh"}.KeyEnumerator(home)
+		assert.True(t, e.MustExist, "a directory the user named must be required")
 	})
 
 	t.Run("the patterns are handed to the enumerator", func(t *testing.T) {
 		e := Settings{KeyPatterns: []string{"work-*"}}.KeyEnumerator(home)
-		if strings.Join(e.Patterns, ",") != "work-*" {
-			t.Errorf("Patterns = %v, want the configured list", e.Patterns)
-		}
+		assert.Equal(t, []string{"work-*"}, e.Patterns, "Patterns must be the configured list")
 	})
 }

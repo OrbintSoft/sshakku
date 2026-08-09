@@ -5,6 +5,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/OrbintSoft/sshakku/internal/keys"
 )
 
@@ -15,32 +18,22 @@ import (
 func TestResolveServicePrefix(t *testing.T) {
 	t.Run("a chosen name is used as given", func(t *testing.T) {
 		s, errs := Resolve(File{ServicePrefix: ptr("wallet-of-mine")}, lookupFrom(nil))
-		if len(errs) != 0 {
-			t.Fatalf("unexpected errors: %v", errs)
-		}
-		if s.ServicePrefix != "wallet-of-mine" {
-			t.Errorf("ServicePrefix = %q, want the file's own value", s.ServicePrefix)
-		}
+		require.Empty(t, errs, "unexpected errors")
+		assert.Equal(t, "wallet-of-mine", s.ServicePrefix, "ServicePrefix must be the file's own value")
 	})
 
 	t.Run("absent or empty takes the default", func(t *testing.T) {
 		for _, file := range []File{{}, {ServicePrefix: ptr("")}} {
 			s, errs := Resolve(file, lookupFrom(nil))
-			if len(errs) != 0 {
-				t.Fatalf("unexpected errors for %+v: %v", file, errs)
-			}
-			if s.ServicePrefix != keys.DefaultServicePrefix {
-				t.Errorf("ServicePrefix = %q for %+v, want %q", s.ServicePrefix, file, keys.DefaultServicePrefix)
-			}
+			require.Emptyf(t, errs, "unexpected errors for %+v", file)
+			assert.Equalf(t, keys.DefaultServicePrefix, s.ServicePrefix, "ServicePrefix for %+v", file)
 		}
 	})
 
 	t.Run("whitespace or a slash is refused, and said so", func(t *testing.T) {
 		for _, bad := range []string{"my wallet", "sshakku/keys", "tab\there", "trailing "} {
 			s, errs := Resolve(File{ServicePrefix: ptr(bad)}, lookupFrom(nil))
-			if s.ServicePrefix != keys.DefaultServicePrefix {
-				t.Errorf("ServicePrefix = %q for %q, want the default", s.ServicePrefix, bad)
-			}
+			assert.Equalf(t, keys.DefaultServicePrefix, s.ServicePrefix, "ServicePrefix for %q must be the default", bad)
 			// The value must be named in the report: a login shell writes this
 			// to the session log and nowhere else, so an error that does not
 			// quote what was rejected leaves nothing to search the config for.
@@ -52,9 +45,7 @@ func TestResolveServicePrefix(t *testing.T) {
 					named = true
 				}
 			}
-			if !named {
-				t.Errorf("errors for %q = %v, want one quoting the rejected value", bad, errs)
-			}
+			assert.Truef(t, named, "errors for %q = %v, want one quoting the rejected value", bad, errs)
 		}
 	})
 }

@@ -3,12 +3,13 @@ package config
 import (
 	"fmt"
 	"path/filepath"
-
-	"github.com/OrbintSoft/sshakku/internal/keys"
-	"reflect"
-	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/OrbintSoft/sshakku/internal/keys"
 )
 
 func ptr[T any](v T) *T { return &v }
@@ -22,88 +23,54 @@ func lookupFrom(m map[string]string) func(string) (string, bool) {
 
 func TestLoadValid(t *testing.T) {
 	f, err := Load(filepath.Join("testdata", "valid.toml"))
-	if err != nil {
-		t.Fatalf("Load(valid) error = %v", err)
-	}
-	if f.KeyLifetime == nil || *f.KeyLifetime != "8h" {
-		t.Errorf("KeyLifetime = %v, want 8h", f.KeyLifetime)
-	}
-	if f.MaxAttempts == nil || *f.MaxAttempts != 5 {
-		t.Errorf("MaxAttempts = %v, want 5", f.MaxAttempts)
-	}
-	if f.GiveupTTL == nil || *f.GiveupTTL != "30m" {
-		t.Errorf("GiveupTTL = %v, want 30m", f.GiveupTTL)
-	}
-	if f.NoGiveup == nil || !*f.NoGiveup {
-		t.Errorf("NoGiveup = %v, want true", f.NoGiveup)
-	}
-	if f.Quiet == nil || !*f.Quiet {
-		t.Errorf("Quiet = %v, want true", f.Quiet)
-	}
+	require.NoError(t, err, "Load(valid)")
+	assert.Equal(t, ptr("8h"), f.KeyLifetime, "KeyLifetime")
+	assert.Equal(t, ptr(5), f.MaxAttempts, "MaxAttempts")
+	assert.Equal(t, ptr("30m"), f.GiveupTTL, "GiveupTTL")
+	assert.Equal(t, ptr(true), f.NoGiveup, "NoGiveup")
+	assert.Equal(t, ptr(true), f.Quiet, "Quiet")
 }
 
 func TestLoadPartialLeavesAbsentKeysNil(t *testing.T) {
 	f, err := Load(filepath.Join("testdata", "partial.toml"))
-	if err != nil {
-		t.Fatalf("Load(partial) error = %v", err)
-	}
-	if f.KeyLifetime == nil || *f.KeyLifetime != "2h" {
-		t.Errorf("KeyLifetime = %v, want 2h", f.KeyLifetime)
-	}
-	if f.MaxAttempts != nil || f.GiveupTTL != nil || f.NoGiveup != nil {
-		t.Errorf("absent keys must stay nil, got %+v", f)
-	}
+	require.NoError(t, err, "Load(partial)")
+	assert.Equal(t, ptr("2h"), f.KeyLifetime, "KeyLifetime")
+	assert.Nil(t, f.MaxAttempts, "an absent key must stay nil")
+	assert.Nil(t, f.GiveupTTL, "an absent key must stay nil")
+	assert.Nil(t, f.NoGiveup, "an absent key must stay nil")
 }
 
 func TestLoadMissingIsZeroNoError(t *testing.T) {
 	f, err := Load(filepath.Join("testdata", "does-not-exist.toml"))
-	if err != nil {
-		t.Fatalf("a missing file must not error, got %v", err)
-	}
-	if !reflect.DeepEqual(f, File{}) {
-		t.Errorf("a missing file must give the zero File, got %+v", f)
-	}
+	require.NoError(t, err, "a missing file must not error")
+	assert.Equal(t, File{}, f, "a missing file must give the zero File")
 }
 
 func TestLoadUnknownKeyErrorsButDecodesKnown(t *testing.T) {
 	f, err := Load(filepath.Join("testdata", "unknown.toml"))
-	if err == nil || !strings.Contains(err.Error(), "bogus_key") {
-		t.Fatalf("want an error naming bogus_key, got %v", err)
-	}
-	if f.KeyLifetime == nil || *f.KeyLifetime != "1h" {
-		t.Errorf("the recognised key must still decode, got %v", f.KeyLifetime)
-	}
+	assert.ErrorContains(t, err, "bogus_key", "the error must name the unknown key")
+	assert.Equal(t, ptr("1h"), f.KeyLifetime, "the recognised key must still decode")
 }
 
 func TestLoadMalformedErrors(t *testing.T) {
 	f, err := Load(filepath.Join("testdata", "malformed.toml"))
-	if err == nil {
-		t.Fatal("a syntax error must be reported")
-	}
-	if !reflect.DeepEqual(f, File{}) {
-		t.Errorf("a malformed file must give the zero File, got %+v", f)
-	}
+	assert.Error(t, err, "a syntax error must be reported")
+	assert.Equal(t, File{}, f, "a malformed file must give the zero File")
 }
 
 func TestMergeOtherWinsWhenSet(t *testing.T) {
 	base := File{KeyLifetime: ptr("1h"), WalletStoreInclude: []string{"id_rsa"}}
 	other := File{KeyLifetime: ptr("2h")}
 	got := base.Merge(other)
-	if got.KeyLifetime == nil || *got.KeyLifetime != "2h" {
-		t.Errorf("KeyLifetime = %v, want 2h (other's value)", got.KeyLifetime)
-	}
-	if !reflect.DeepEqual(got.WalletStoreInclude, []string{"id_rsa"}) {
-		t.Errorf("WalletStoreInclude = %v, want base's untouched [id_rsa]", got.WalletStoreInclude)
-	}
+	assert.Equal(t, ptr("2h"), got.KeyLifetime, "KeyLifetime must be other's value")
+	assert.Equal(t, []string{"id_rsa"}, got.WalletStoreInclude, "base's list must be untouched")
 }
 
 func TestMergeExplicitEmptyListOverrides(t *testing.T) {
 	base := File{WalletStoreInclude: []string{"id_rsa"}}
 	other := File{WalletStoreInclude: []string{}}
 	got := base.Merge(other)
-	if got.WalletStoreInclude == nil || len(got.WalletStoreInclude) != 0 {
-		t.Errorf("WalletStoreInclude = %v, want an explicit empty list from other", got.WalletStoreInclude)
-	}
+	assert.Equal(t, []string{}, got.WalletStoreInclude, "an explicit empty list from other must win")
 }
 
 // dropIns reads a fixture configuration directory the way every command does,
@@ -123,68 +90,42 @@ func dropIns(t *testing.T, fixture string) (File, []error) {
 
 func TestDropInsMergeInFilenameOrder(t *testing.T) {
 	f, errs := dropIns(t, "confd")
-	if len(errs) != 0 {
-		t.Fatalf("unexpected errors: %v", errs)
-	}
-	if f.KeyLifetime == nil || *f.KeyLifetime != "2h" {
-		t.Errorf("KeyLifetime = %v, want 2h (10-override.toml wins over 00-base.toml)", f.KeyLifetime)
-	}
-	if !reflect.DeepEqual(f.WalletStoreInclude, []string{"id_rsa"}) {
-		t.Errorf("WalletStoreInclude = %v, want [id_rsa] from 00-base.toml (10-override.toml never sets it)", f.WalletStoreInclude)
-	}
+	require.Empty(t, errs, "unexpected errors")
+	assert.Equal(t, ptr("2h"), f.KeyLifetime, "10-override.toml must win over 00-base.toml")
+	assert.Equal(t, []string{"id_rsa"}, f.WalletStoreInclude,
+		"the list must come from 00-base.toml, which 10-override.toml never sets")
 }
 
 func TestDropInExplicitEmptyListOverrides(t *testing.T) {
 	f, errs := dropIns(t, "confd-emptylist")
-	if len(errs) != 0 {
-		t.Fatalf("unexpected errors: %v", errs)
-	}
-	if f.WalletStoreInclude == nil || len(f.WalletStoreInclude) != 0 {
-		t.Errorf("WalletStoreInclude = %v, want an explicit empty list from 10-clear.toml", f.WalletStoreInclude)
-	}
+	require.Empty(t, errs, "unexpected errors")
+	assert.Equal(t, []string{}, f.WalletStoreInclude, "an explicit empty list from 10-clear.toml must win")
 }
 
 func TestMalformedDropInIsSkippedAndTheOthersKept(t *testing.T) {
 	f, errs := dropIns(t, "confd-malformed")
-	if len(errs) != 1 {
-		t.Fatalf("want exactly one error (the malformed file), got %v", errs)
-	}
-	if !strings.Contains(errs[0].Error(), "10-bad.toml") {
-		t.Errorf("error %v must name the offending file", errs[0])
-	}
-	if f.KeyLifetime == nil || *f.KeyLifetime != "3h" {
-		t.Errorf("KeyLifetime = %v, want 3h from 00-good.toml despite 10-bad.toml", f.KeyLifetime)
-	}
-	if f.Quiet == nil || !*f.Quiet {
-		t.Errorf("Quiet = %v, want true from 20-good2.toml despite 10-bad.toml", f.Quiet)
-	}
+	require.Len(t, errs, 1, "only the malformed file must be reported")
+	assert.ErrorContains(t, errs[0], "10-bad.toml", "the error must name the offending file")
+	assert.Equal(t, ptr("3h"), f.KeyLifetime, "00-good.toml must still be read despite 10-bad.toml")
+	assert.Equal(t, ptr(true), f.Quiet, "20-good2.toml must still be read despite 10-bad.toml")
 }
 
 func TestUnknownKeyInADropInKeepsTheRecognisedFields(t *testing.T) {
 	f, errs := dropIns(t, "confd-unknown")
-	if len(errs) != 1 || !strings.Contains(errs[0].Error(), "bogus_key") {
-		t.Fatalf("want one error naming bogus_key, got %v", errs)
-	}
-	if f.KeyLifetime == nil || *f.KeyLifetime != "1h" {
-		t.Errorf("KeyLifetime = %v, want 1h (the recognised field must still merge)", f.KeyLifetime)
-	}
+	require.Len(t, errs, 1, "only the unknown key must be reported")
+	assert.ErrorContains(t, errs[0], "bogus_key", "the error must name the unknown key")
+	assert.Equal(t, ptr("1h"), f.KeyLifetime, "the recognised field must still merge")
 }
 
 func TestAConfigDirectoryThatIsNotThereIsNoError(t *testing.T) {
 	f, errs := dropIns(t, "does-not-exist-dir")
-	if len(errs) != 0 {
-		t.Fatalf("a missing dir must not error, got %v", errs)
-	}
-	if !reflect.DeepEqual(f, File{}) {
-		t.Errorf("a missing dir must give the zero File, got %+v", f)
-	}
+	require.Empty(t, errs, "a missing dir must not error")
+	assert.Equal(t, File{}, f, "a missing dir must give the zero File")
 }
 
 func TestResolveDefaults(t *testing.T) {
 	s, errs := Resolve(File{}, lookupFrom(nil))
-	if len(errs) != 0 {
-		t.Fatalf("unexpected errors: %v", errs)
-	}
+	require.Empty(t, errs, "unexpected errors")
 	want := Settings{
 		KeyLifetime: DefaultKeyLifetime, GiveupTTL: DefaultGiveupTTL,
 		CommandTimeout: keys.DefaultCommandTimeout, InteractiveTimeout: keys.DefaultInteractiveTimeout,
@@ -199,9 +140,7 @@ func TestResolveDefaults(t *testing.T) {
 		GUIPrompter:    GUIPrompterAuto,
 		OnDismiss:      keys.OnDismissStop,
 	}
-	if !reflect.DeepEqual(s, want) {
-		t.Errorf("Resolve(empty) = %+v, want %+v", s, want)
-	}
+	assert.Equal(t, want, s, "Resolve(empty)")
 }
 
 func TestResolveFileWins(t *testing.T) {
@@ -213,9 +152,7 @@ func TestResolveFileWins(t *testing.T) {
 		Quiet:       ptr(true),
 	}
 	s, errs := Resolve(file, lookupFrom(nil))
-	if len(errs) != 0 {
-		t.Fatalf("unexpected errors: %v", errs)
-	}
+	require.Empty(t, errs, "unexpected errors")
 	want := Settings{
 		KeyLifetime: 2 * time.Hour,
 		MaxAttempts: 5,
@@ -234,43 +171,27 @@ func TestResolveFileWins(t *testing.T) {
 		GUIPrompter:        GUIPrompterAuto,
 		OnDismiss:          keys.OnDismissStop,
 	}
-	if !reflect.DeepEqual(s, want) {
-		t.Errorf("Resolve(file) = %+v, want %+v", s, want)
-	}
+	assert.Equal(t, want, s, "Resolve(file)")
 }
 
 func TestResolveWalletStoreModeDefaultsToAll(t *testing.T) {
 	s, errs := Resolve(File{}, lookupFrom(nil))
-	if len(errs) != 0 {
-		t.Fatalf("unexpected errors: %v", errs)
-	}
-	if s.WalletStoreMode != WalletStoreModeAll {
-		t.Errorf("WalletStoreMode = %q, want %q", s.WalletStoreMode, WalletStoreModeAll)
-	}
+	require.Empty(t, errs, "unexpected errors")
+	assert.Equal(t, WalletStoreModeAll, s.WalletStoreMode, "WalletStoreMode")
 }
 
 func TestResolveWalletStoreModeFromFile(t *testing.T) {
 	for _, mode := range []string{WalletStoreModeAll, WalletStoreModeInclude, WalletStoreModeExclude} {
-		file := File{WalletStoreMode: ptr(mode)}
-		s, errs := Resolve(file, lookupFrom(nil))
-		if len(errs) != 0 {
-			t.Fatalf("mode %q: unexpected errors: %v", mode, errs)
-		}
-		if s.WalletStoreMode != mode {
-			t.Errorf("mode %q: WalletStoreMode = %q", mode, s.WalletStoreMode)
-		}
+		s, errs := Resolve(File{WalletStoreMode: ptr(mode)}, lookupFrom(nil))
+		require.Emptyf(t, errs, "mode %q: unexpected errors", mode)
+		assert.Equalf(t, mode, s.WalletStoreMode, "mode %q", mode)
 	}
 }
 
 func TestResolveWalletStoreModeInvalidFallsBackToAll(t *testing.T) {
-	file := File{WalletStoreMode: ptr("bogus")}
-	s, errs := Resolve(file, lookupFrom(nil))
-	if len(errs) == 0 {
-		t.Fatal("an invalid wallet_store_mode must be reported")
-	}
-	if s.WalletStoreMode != WalletStoreModeAll {
-		t.Errorf("WalletStoreMode = %q, want %q on an invalid value", s.WalletStoreMode, WalletStoreModeAll)
-	}
+	s, errs := Resolve(File{WalletStoreMode: ptr("bogus")}, lookupFrom(nil))
+	assert.NotEmpty(t, errs, "an invalid wallet_store_mode must be reported")
+	assert.Equal(t, WalletStoreModeAll, s.WalletStoreMode, "WalletStoreMode on an invalid value")
 }
 
 func TestResolveWalletStoreListsPassThrough(t *testing.T) {
@@ -280,19 +201,13 @@ func TestResolveWalletStoreListsPassThrough(t *testing.T) {
 		WalletStoreExclude: []string{"id_ignored"},
 	}
 	s, _ := Resolve(file, lookupFrom(nil))
-	if !reflect.DeepEqual(s.WalletStoreInclude, []string{"id_rsa", "id_ed25519"}) {
-		t.Errorf("WalletStoreInclude = %v", s.WalletStoreInclude)
-	}
-	if !reflect.DeepEqual(s.WalletStoreExclude, []string{"id_ignored"}) {
-		t.Errorf("WalletStoreExclude = %v", s.WalletStoreExclude)
-	}
+	assert.Equal(t, []string{"id_rsa", "id_ed25519"}, s.WalletStoreInclude, "WalletStoreInclude")
+	assert.Equal(t, []string{"id_ignored"}, s.WalletStoreExclude, "WalletStoreExclude")
 }
 
 func TestStoresWalletAllModeStoresEverything(t *testing.T) {
 	s := Settings{WalletStoreMode: WalletStoreModeAll}
-	if !s.StoresWallet("anything") {
-		t.Error("mode all must store every key")
-	}
+	assert.True(t, s.StoresWallet("anything"), "mode all must store every key")
 }
 
 func TestStoresWalletIncludeModeConsultsOnlyInclude(t *testing.T) {
@@ -301,12 +216,8 @@ func TestStoresWalletIncludeModeConsultsOnlyInclude(t *testing.T) {
 		WalletStoreInclude: []string{"id_rsa"},
 		WalletStoreExclude: []string{"id_rsa"}, // must be ignored: mode is authoritative
 	}
-	if !s.StoresWallet("id_rsa") {
-		t.Error("id_rsa is in the include list, must store")
-	}
-	if s.StoresWallet("id_ed25519") {
-		t.Error("id_ed25519 is not in the include list, must not store")
-	}
+	assert.True(t, s.StoresWallet("id_rsa"), "id_rsa is in the include list, must store")
+	assert.False(t, s.StoresWallet("id_ed25519"), "id_ed25519 is not in the include list, must not store")
 }
 
 func TestStoresWalletExcludeModeConsultsOnlyExclude(t *testing.T) {
@@ -315,46 +226,28 @@ func TestStoresWalletExcludeModeConsultsOnlyExclude(t *testing.T) {
 		WalletStoreInclude: []string{"id_ed25519"}, // must be ignored: mode is authoritative
 		WalletStoreExclude: []string{"id_rsa"},
 	}
-	if s.StoresWallet("id_rsa") {
-		t.Error("id_rsa is in the exclude list, must not store")
-	}
-	if !s.StoresWallet("id_ed25519") {
-		t.Error("id_ed25519 is not in the exclude list, must store")
-	}
+	assert.False(t, s.StoresWallet("id_rsa"), "id_rsa is in the exclude list, must not store")
+	assert.True(t, s.StoresWallet("id_ed25519"), "id_ed25519 is not in the exclude list, must store")
 }
 
 func TestResolveAutoLoadModeDefaultsToAll(t *testing.T) {
 	s, errs := Resolve(File{}, lookupFrom(nil))
-	if len(errs) != 0 {
-		t.Fatalf("unexpected errors: %v", errs)
-	}
-	if s.AutoLoadMode != AutoLoadModeAll {
-		t.Errorf("AutoLoadMode = %q, want %q", s.AutoLoadMode, AutoLoadModeAll)
-	}
+	require.Empty(t, errs, "unexpected errors")
+	assert.Equal(t, AutoLoadModeAll, s.AutoLoadMode, "AutoLoadMode")
 }
 
 func TestResolveAutoLoadModeFromFile(t *testing.T) {
 	for _, mode := range []string{AutoLoadModeAll, AutoLoadModeInclude, AutoLoadModeExclude} {
-		file := File{AutoLoadMode: ptr(mode)}
-		s, errs := Resolve(file, lookupFrom(nil))
-		if len(errs) != 0 {
-			t.Fatalf("mode %q: unexpected errors: %v", mode, errs)
-		}
-		if s.AutoLoadMode != mode {
-			t.Errorf("mode %q: AutoLoadMode = %q", mode, s.AutoLoadMode)
-		}
+		s, errs := Resolve(File{AutoLoadMode: ptr(mode)}, lookupFrom(nil))
+		require.Emptyf(t, errs, "mode %q: unexpected errors", mode)
+		assert.Equalf(t, mode, s.AutoLoadMode, "mode %q", mode)
 	}
 }
 
 func TestResolveAutoLoadModeInvalidFallsBackToAll(t *testing.T) {
-	file := File{AutoLoadMode: ptr("bogus")}
-	s, errs := Resolve(file, lookupFrom(nil))
-	if len(errs) == 0 {
-		t.Fatal("an invalid auto_load_mode must be reported")
-	}
-	if s.AutoLoadMode != AutoLoadModeAll {
-		t.Errorf("AutoLoadMode = %q, want %q on an invalid value", s.AutoLoadMode, AutoLoadModeAll)
-	}
+	s, errs := Resolve(File{AutoLoadMode: ptr("bogus")}, lookupFrom(nil))
+	assert.NotEmpty(t, errs, "an invalid auto_load_mode must be reported")
+	assert.Equal(t, AutoLoadModeAll, s.AutoLoadMode, "AutoLoadMode on an invalid value")
 }
 
 func TestResolveAutoLoadListsPassThrough(t *testing.T) {
@@ -364,19 +257,13 @@ func TestResolveAutoLoadListsPassThrough(t *testing.T) {
 		AutoLoadExclude: []string{"id_ignored"},
 	}
 	s, _ := Resolve(file, lookupFrom(nil))
-	if !reflect.DeepEqual(s.AutoLoadInclude, []string{"id_rsa", "id_ed25519"}) {
-		t.Errorf("AutoLoadInclude = %v", s.AutoLoadInclude)
-	}
-	if !reflect.DeepEqual(s.AutoLoadExclude, []string{"id_ignored"}) {
-		t.Errorf("AutoLoadExclude = %v", s.AutoLoadExclude)
-	}
+	assert.Equal(t, []string{"id_rsa", "id_ed25519"}, s.AutoLoadInclude, "AutoLoadInclude")
+	assert.Equal(t, []string{"id_ignored"}, s.AutoLoadExclude, "AutoLoadExclude")
 }
 
 func TestAutoLoadsAllModeLoadsEverything(t *testing.T) {
 	s := Settings{AutoLoadMode: AutoLoadModeAll}
-	if !s.AutoLoads("anything") {
-		t.Error("mode all must load every key")
-	}
+	assert.True(t, s.AutoLoads("anything"), "mode all must load every key")
 }
 
 func TestAutoLoadsIncludeModeConsultsOnlyInclude(t *testing.T) {
@@ -385,12 +272,8 @@ func TestAutoLoadsIncludeModeConsultsOnlyInclude(t *testing.T) {
 		AutoLoadInclude: []string{"id_rsa"},
 		AutoLoadExclude: []string{"id_rsa"}, // must be ignored: mode is authoritative
 	}
-	if !s.AutoLoads("id_rsa") {
-		t.Error("id_rsa is in the include list, must load")
-	}
-	if s.AutoLoads("id_ed25519") {
-		t.Error("id_ed25519 is not in the include list, must not load")
-	}
+	assert.True(t, s.AutoLoads("id_rsa"), "id_rsa is in the include list, must load")
+	assert.False(t, s.AutoLoads("id_ed25519"), "id_ed25519 is not in the include list, must not load")
 }
 
 func TestAutoLoadsExcludeModeConsultsOnlyExclude(t *testing.T) {
@@ -399,12 +282,8 @@ func TestAutoLoadsExcludeModeConsultsOnlyExclude(t *testing.T) {
 		AutoLoadInclude: []string{"id_ed25519"}, // must be ignored: mode is authoritative
 		AutoLoadExclude: []string{"id_rsa"},
 	}
-	if s.AutoLoads("id_rsa") {
-		t.Error("id_rsa is in the exclude list, must not load")
-	}
-	if !s.AutoLoads("id_ed25519") {
-		t.Error("id_ed25519 is not in the exclude list, must load")
-	}
+	assert.False(t, s.AutoLoads("id_rsa"), "id_rsa is in the exclude list, must not load")
+	assert.True(t, s.AutoLoads("id_ed25519"), "id_ed25519 is not in the exclude list, must load")
 }
 
 func TestResolveEnvOverridesFile(t *testing.T) {
@@ -414,31 +293,21 @@ func TestResolveEnvOverridesFile(t *testing.T) {
 		"SSHAKKU_MAX_ATTEMPTS": "7",
 	}
 	s, errs := Resolve(file, lookupFrom(env))
-	if len(errs) != 0 {
-		t.Fatalf("unexpected errors: %v", errs)
-	}
-	if s.KeyLifetime != 15*time.Minute {
-		t.Errorf("KeyLifetime = %v, want 15m (env wins)", s.KeyLifetime)
-	}
-	if s.MaxAttempts != 7 {
-		t.Errorf("MaxAttempts = %d, want 7 (env wins)", s.MaxAttempts)
-	}
+	require.Empty(t, errs, "unexpected errors")
+	assert.Equal(t, 15*time.Minute, s.KeyLifetime, "KeyLifetime: the environment wins")
+	assert.Equal(t, 7, s.MaxAttempts, "MaxAttempts: the environment wins")
 }
 
 func TestResolveEnvCanOverrideBoolToFalse(t *testing.T) {
 	file := File{Quiet: ptr(true)}
 	s, _ := Resolve(file, lookupFrom(map[string]string{"SSHAKKU_QUIET": "0"}))
-	if s.Quiet {
-		t.Error("SSHAKKU_QUIET=0 must override quiet = true in the file")
-	}
+	assert.False(t, s.Quiet, "SSHAKKU_QUIET=0 must override quiet = true in the file")
 }
 
 func TestResolveInvalidEnvMaxAttemptsFallsToFile(t *testing.T) {
 	file := File{MaxAttempts: ptr(4)}
 	s, _ := Resolve(file, lookupFrom(map[string]string{"SSHAKKU_MAX_ATTEMPTS": "0"}))
-	if s.MaxAttempts != 4 {
-		t.Errorf("MaxAttempts = %d, want 4 (invalid env falls through to file)", s.MaxAttempts)
-	}
+	assert.Equal(t, 4, s.MaxAttempts, "an invalid environment value must fall through to the file")
 }
 
 // TestSecretBackendsIsTheOneList guards what the exported answers are for:
@@ -447,69 +316,47 @@ func TestResolveInvalidEnvMaxAttemptsFallsToFile(t *testing.T) {
 // diagnostics came to accept a name the configuration would not.
 func TestSecretBackendsIsTheOneList(t *testing.T) {
 	names := SecretBackends()
-	if len(names) == 0 {
-		t.Fatal("this system offers no wallet at all")
-	}
+	require.NotEmpty(t, names, "this system offers no wallet at all")
 	for _, name := range names {
-		if !SecretBackendAvailable(name) {
-			t.Errorf("SecretBackendAvailable(%q) = false for a wallet the same package offers", name)
-		}
+		assert.Truef(t, SecretBackendAvailable(name),
+			"SecretBackendAvailable(%q) = false for a wallet the same package offers", name)
 		s, errs := Resolve(File{SecretBackend: ptr(name)}, lookupFrom(nil))
-		if len(errs) != 0 || s.SecretBackend != name {
-			t.Errorf("naming %q resolved to %q with errors %v; an offered wallet must be accepted", name, s.SecretBackend, errs)
-		}
+		assert.Emptyf(t, errs, "naming the offered wallet %q must not be reported", name)
+		assert.Equalf(t, name, s.SecretBackend, "an offered wallet must be accepted")
 	}
-	if SecretBackendAvailable("bogus") {
-		t.Error(`SecretBackendAvailable("bogus") = true, want false`)
-	}
-	if !SecretBackendAvailable(DefaultSecretBackend()) {
-		t.Errorf("the default wallet %q is not among the ones offered", DefaultSecretBackend())
-	}
+	assert.False(t, SecretBackendAvailable("bogus"), `SecretBackendAvailable("bogus")`)
+	assert.Truef(t, SecretBackendAvailable(DefaultSecretBackend()),
+		"the default wallet %q is not among the ones offered", DefaultSecretBackend())
 
 	// The returned slice is the caller's own: handing out the live one would
 	// let any caller reorder or empty the list every other caller reads.
 	names[0] = "tampered"
-	if SecretBackends()[0] == "tampered" {
-		t.Error("SecretBackends hands out the list itself, so a caller can change what every other caller sees")
-	}
+	assert.NotEqual(t, "tampered", SecretBackends()[0],
+		"SecretBackends hands out the list itself, so a caller can change what every other caller sees")
 }
 
 func TestResolveSecretBackendDefaultsToThePlatformWallet(t *testing.T) {
 	s, errs := Resolve(File{}, lookupFrom(nil))
-	if len(errs) != 0 {
-		t.Fatalf("unexpected errors: %v", errs)
-	}
-	if s.SecretBackend != platformDefaultSecretBackend {
-		t.Errorf("SecretBackend = %q, want %q", s.SecretBackend, platformDefaultSecretBackend)
-	}
+	require.Empty(t, errs, "unexpected errors")
+	assert.Equal(t, platformDefaultSecretBackend, s.SecretBackend, "SecretBackend")
 }
 
 // TestResolveSecretBackendFromFile walks whatever this system offers rather
 // than a written-out list, so it cannot drift from the list the product
 // actually consults. Which names those are on each platform is pinned in
-// backend_platform_linux_test.go and backend_platform_other_test.go.
+// backend_platform_linux_test.go and backend_platform_darwin_test.go.
 func TestResolveSecretBackendFromFile(t *testing.T) {
 	for _, backend := range platformSecretBackends {
-		file := File{SecretBackend: ptr(backend)}
-		s, errs := Resolve(file, lookupFrom(nil))
-		if len(errs) != 0 {
-			t.Fatalf("backend %q: unexpected errors: %v", backend, errs)
-		}
-		if s.SecretBackend != backend {
-			t.Errorf("backend %q: SecretBackend = %q", backend, s.SecretBackend)
-		}
+		s, errs := Resolve(File{SecretBackend: ptr(backend)}, lookupFrom(nil))
+		require.Emptyf(t, errs, "backend %q: unexpected errors", backend)
+		assert.Equalf(t, backend, s.SecretBackend, "backend %q", backend)
 	}
 }
 
 func TestResolveSecretBackendInvalidFallsBackToThePlatformWallet(t *testing.T) {
-	file := File{SecretBackend: ptr("bogus")}
-	s, errs := Resolve(file, lookupFrom(nil))
-	if len(errs) == 0 {
-		t.Fatal("an invalid secret_backend must be reported")
-	}
-	if s.SecretBackend != platformDefaultSecretBackend {
-		t.Errorf("SecretBackend = %q, want %q on an invalid value", s.SecretBackend, platformDefaultSecretBackend)
-	}
+	s, errs := Resolve(File{SecretBackend: ptr("bogus")}, lookupFrom(nil))
+	assert.NotEmpty(t, errs, "an invalid secret_backend must be reported")
+	assert.Equal(t, platformDefaultSecretBackend, s.SecretBackend, "SecretBackend on an invalid value")
 }
 
 // TestResolveSecretBackendFromEitherPlatformsWallets checks the rule itself
@@ -554,18 +401,11 @@ func TestResolveSecretBackendFromEitherPlatformsWallets(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := resolveSecretBackendFrom(tc.named, tc.available, tc.fallback)
-			if got != tc.want {
-				t.Errorf("backend = %q, want %q", got, tc.want)
-			}
-			switch {
-			case tc.wantErr == "":
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-				}
-			case err == nil:
-				t.Fatalf("want an error naming %q, got none", tc.wantErr)
-			case !strings.Contains(err.Error(), tc.wantErr):
-				t.Errorf("error = %v, want it to name %q", err, tc.wantErr)
+			assert.Equal(t, tc.want, got, "backend")
+			if tc.wantErr == "" {
+				assert.NoError(t, err, "unexpected error")
+			} else {
+				assert.ErrorContains(t, err, tc.wantErr, "the error must name the value that cannot be used")
 			}
 		})
 	}
@@ -579,38 +419,24 @@ func TestResolveSecretBackendAccountFieldsPassThrough(t *testing.T) {
 		BitwardenServer:  ptr("https://vault.example.invalid"),
 	}
 	s, errs := Resolve(file, lookupFrom(nil))
-	if len(errs) != 0 {
-		t.Fatalf("unexpected errors: %v", errs)
-	}
-	if s.OnePasswordVault != "sshakku-vault" {
-		t.Errorf("OnePasswordVault = %q", s.OnePasswordVault)
-	}
-	if s.BitwardenEmail != "user@example.invalid" {
-		t.Errorf("BitwardenEmail = %q", s.BitwardenEmail)
-	}
-	if s.BitwardenServer != "https://vault.example.invalid" {
-		t.Errorf("BitwardenServer = %q", s.BitwardenServer)
-	}
+	require.Empty(t, errs, "unexpected errors")
+	assert.Equal(t, "sshakku-vault", s.OnePasswordVault, "OnePasswordVault")
+	assert.Equal(t, "user@example.invalid", s.BitwardenEmail, "BitwardenEmail")
+	assert.Equal(t, "https://vault.example.invalid", s.BitwardenServer, "BitwardenServer")
 }
 
 func TestResolveSecretBackendAccountFieldsDefaultEmpty(t *testing.T) {
 	s, errs := Resolve(File{}, lookupFrom(nil))
-	if len(errs) != 0 {
-		t.Fatalf("unexpected errors: %v", errs)
-	}
-	if s.OnePasswordVault != "" || s.BitwardenEmail != "" || s.BitwardenServer != "" {
-		t.Errorf("absent account fields must default empty, got %+v", s)
-	}
+	require.Empty(t, errs, "unexpected errors")
+	assert.Empty(t, s.OnePasswordVault, "OnePasswordVault must default empty")
+	assert.Empty(t, s.BitwardenEmail, "BitwardenEmail must default empty")
+	assert.Empty(t, s.BitwardenServer, "BitwardenServer must default empty")
 }
 
 func TestResolveMalformedEnvDurationReportsAndDefaults(t *testing.T) {
 	s, errs := Resolve(File{}, lookupFrom(map[string]string{"SSHAKKU_KEY_LIFETIME": "banana"}))
-	if len(errs) == 0 {
-		t.Fatal("a malformed duration must be reported")
-	}
-	if s.KeyLifetime != DefaultKeyLifetime {
-		t.Errorf("KeyLifetime = %v, want the default on a malformed value", s.KeyLifetime)
-	}
+	assert.NotEmpty(t, errs, "a malformed duration must be reported")
+	assert.Equal(t, DefaultKeyLifetime, s.KeyLifetime, "KeyLifetime must be the default on a malformed value")
 }
 
 // TestResolveGUIPrompterFrom covers the rule both platforms share, against each
@@ -638,11 +464,11 @@ func TestResolveGUIPrompterFrom(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			got, err := resolveGUIPrompterFrom(c.val, c.available)
-			if got != c.want {
-				t.Errorf("resolveGUIPrompterFrom = %q, want %q", got, c.want)
-			}
-			if (err != nil) != c.wantErr {
-				t.Errorf("error = %v, want error: %v", err, c.wantErr)
+			assert.Equal(t, c.want, got, "resolveGUIPrompterFrom")
+			if c.wantErr {
+				assert.Error(t, err, "a dialog this system has not got must be reported")
+			} else {
+				assert.NoError(t, err, "unexpected error")
 			}
 		})
 	}
