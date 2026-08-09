@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/godbus/dbus/v5"
+	"github.com/stretchr/testify/assert"
 )
 
 // TestAPromptIsGivenTheBudgetForAWaitOnAPerson verifies F21 on the wallet Linux
@@ -28,20 +29,17 @@ func TestAPromptIsGivenTheBudgetForAWaitOnAPerson(t *testing.T) {
 		client.PromptTimeout = 200 * time.Millisecond
 
 		start := time.Now()
-		if err := client.Unlock(col); err == nil {
-			t.Fatal("Unlock returned no error against a prompt that never completes")
-		}
-		if elapsed := time.Since(start); elapsed > 5*time.Second {
-			t.Errorf("Unlock waited %v against a prompt budget of 200ms; the configured wait is not the one in force", elapsed)
-		}
+		err := client.Unlock(col)
+		assert.Error(t, err, "a prompt that never completes must not be reported as an unlock")
+		assert.Less(t, time.Since(start), 5*time.Second,
+			"the configured 200ms prompt budget is not the one in force")
 	})
 
 	t.Run("with none configured, the wait is a person's", func(t *testing.T) {
 		// Not a round number picked here: a wait on someone typing a password
 		// is counted in minutes, and anything a caller who chose nothing gets
 		// must be long enough for that. Thirty seconds is not.
-		if wait := (&Client{}).promptWait(); wait < 2*time.Minute {
-			t.Errorf("an unconfigured prompt wait is %v, want at least the couple of minutes a person needs to answer a dialog", wait)
-		}
+		assert.GreaterOrEqual(t, (&Client{}).promptWait(), 2*time.Minute,
+			"an unconfigured prompt wait must allow the couple of minutes a person needs to answer a dialog")
 	})
 }

@@ -2,10 +2,11 @@ package secretservice
 
 import (
 	"context"
-	"errors"
-	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestClientCallTimesOutWhenDaemonUnresponsive proves the bound the ordinary
@@ -24,17 +25,11 @@ func TestClientCallTimesOutWhenDaemonUnresponsive(t *testing.T) {
 	_, err := client.Collection("sshakku", "SSHakku")
 	elapsed := time.Since(start)
 
-	if err == nil {
-		t.Fatal("Collection succeeded against an unresponsive daemon; want a deadline error")
-	}
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("Collection error = %v, want it to wrap context.DeadlineExceeded", err)
-	}
+	require.Error(t, err, "an unresponsive daemon must not be reported as a collection")
+	assert.ErrorIs(t, err, context.DeadlineExceeded, "the error must say the deadline was exceeded")
 	// The deadline is 150ms; anything near the test binary's default timeout
 	// would mean the call was not bounded at all.
-	if elapsed > 5*time.Second {
-		t.Fatalf("Collection took %s to fail; the call was not bounded", elapsed)
-	}
+	assert.Less(t, elapsed, 5*time.Second, "the call was not bounded")
 }
 
 // TestClientPropertyRejectsMalformedName covers property's guard against a
@@ -43,10 +38,6 @@ func TestClientCallTimesOutWhenDaemonUnresponsive(t *testing.T) {
 func TestClientPropertyRejectsMalformedName(t *testing.T) {
 	var c Client
 	_, err := c.property(nil, "no-dot-here")
-	if err == nil {
-		t.Fatal("property accepted a malformed name; want an error")
-	}
-	if !strings.Contains(err.Error(), "malformed property name") {
-		t.Fatalf("property error = %v, want it to mention a malformed property name", err)
-	}
+	require.Error(t, err, "a malformed property name must be refused")
+	assert.ErrorContains(t, err, "malformed property name", "the error must say what was wrong with it")
 }

@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/godbus/dbus/v5"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // newTestClient starts a private session bus, exports a fakeService on it
@@ -15,16 +17,12 @@ func newTestClient(t *testing.T, behavior string) (*Client, *fakeService) {
 	startSessionBus(t)
 
 	serverConn, err := dbus.ConnectSessionBus()
-	if err != nil {
-		t.Fatalf("server connect: %v", err)
-	}
+	require.NoError(t, err, "server connect")
 	t.Cleanup(func() { _ = serverConn.Close() })
 	svc := startFakeSecretService(t, serverConn, behavior)
 
 	client, err := NewClient()
-	if err != nil {
-		t.Fatalf("NewClient: %v", err)
-	}
+	require.NoError(t, err, "NewClient")
 	t.Cleanup(func() { _ = client.Close() })
 
 	return client, svc
@@ -39,41 +37,30 @@ func TestClientCollection(t *testing.T) {
 		svc.mu.Unlock()
 
 		got, err := client.Collection("sshakku", "sshakku")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if got != existing {
-			t.Fatalf("Collection = %v, want %v", got, existing)
-		}
+		require.NoError(t, err, "Collection")
+		assert.Equal(t, existing, got, "the aliased collection must be returned as it is")
 	})
 
 	t.Run("creates the collection immediately when no prompt is needed", func(t *testing.T) {
 		client, _ := newTestClient(t, "")
 		got, err := client.Collection("sshakku", "sshakku")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if got == "" || got == noPrompt {
-			t.Fatalf("Collection = %v, want a real object path", got)
-		}
+		require.NoError(t, err, "Collection")
+		assert.NotEmpty(t, got, "a real object path")
+		assert.NotEqual(t, noPrompt, got, "a real object path, not the no-prompt sentinel")
 	})
 
 	t.Run("creates the collection via a completed prompt", func(t *testing.T) {
 		client, _ := newTestClient(t, "ok")
 		got, err := client.Collection("sshakku", "sshakku")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if got == "" || got == noPrompt {
-			t.Fatalf("Collection = %v, want a real object path", got)
-		}
+		require.NoError(t, err, "Collection")
+		assert.NotEmpty(t, got, "a real object path")
+		assert.NotEqual(t, noPrompt, got, "a real object path, not the no-prompt sentinel")
 	})
 
 	t.Run("a dismissed prompt is an error", func(t *testing.T) {
 		client, _ := newTestClient(t, "dismiss")
-		if _, err := client.Collection("sshakku", "sshakku"); err == nil {
-			t.Fatal("expected an error for a dismissed prompt")
-		}
+		_, err := client.Collection("sshakku", "sshakku")
+		assert.Error(t, err, "a dismissed prompt must be reported")
 	})
 
 	// GNOME Keyring rejects CreateCollection for any alias other than ""
@@ -87,18 +74,15 @@ func TestClientCollection(t *testing.T) {
 		svc.mu.Unlock()
 
 		got, err := client.Collection("sshakku", "sshakku")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if got == "" || got == noPrompt {
-			t.Fatalf("Collection = %v, want a real object path", got)
-		}
+		require.NoError(t, err, "Collection")
+		assert.NotEmpty(t, got, "a real object path")
+		assert.NotEqual(t, noPrompt, got, "a real object path, not the no-prompt sentinel")
 		svc.mu.Lock()
 		_, aliased := svc.aliases["sshakku"]
+		asked := svc.createCalls
 		svc.mu.Unlock()
-		if aliased {
-			t.Fatal("collection was created with an alias despite restrictAlias")
-		}
+		assert.False(t, aliased, "no alias may be set when the wallet refuses one")
+		assert.Equal(t, 2, asked, "the refused alias must be answered by asking again without one")
 	})
 
 	t.Run("falls back to a completed prompt when the alias is not supported", func(t *testing.T) {
@@ -108,12 +92,9 @@ func TestClientCollection(t *testing.T) {
 		svc.mu.Unlock()
 
 		got, err := client.Collection("sshakku", "sshakku")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if got == "" || got == noPrompt {
-			t.Fatalf("Collection = %v, want a real object path", got)
-		}
+		require.NoError(t, err, "Collection")
+		assert.NotEmpty(t, got, "a real object path")
+		assert.NotEqual(t, noPrompt, got, "a real object path, not the no-prompt sentinel")
 	})
 
 	t.Run("finds an existing collection by label when the alias is not supported", func(t *testing.T) {
@@ -123,24 +104,16 @@ func TestClientCollection(t *testing.T) {
 		svc.mu.Unlock()
 
 		first, err := client.Collection("sshakku", "sshakku")
-		if err != nil {
-			t.Fatalf("first Collection call: unexpected error: %v", err)
-		}
+		require.NoError(t, err, "first Collection call")
 
 		second, err := client.Collection("sshakku", "sshakku")
-		if err != nil {
-			t.Fatalf("second Collection call: unexpected error: %v", err)
-		}
-		if second != first {
-			t.Fatalf("second Collection = %v, want the same path as the first %v (found by label, not recreated)", second, first)
-		}
+		require.NoError(t, err, "second Collection call")
+		assert.Equal(t, first, second, "the second call must find the first by label, not recreate it")
 
 		svc.mu.Lock()
 		n := len(svc.collections)
 		svc.mu.Unlock()
-		if n != 1 {
-			t.Fatalf("collections created = %d, want 1 (second call should have found the first by label)", n)
-		}
+		assert.Equal(t, 1, n, "only one collection may have been created")
 	})
 }
 
@@ -149,26 +122,18 @@ func TestClientUnlockLock(t *testing.T) {
 
 	t.Run("completes immediately when no prompt is needed", func(t *testing.T) {
 		client, _ := newTestClient(t, "")
-		if err := client.Unlock(col); err != nil {
-			t.Fatalf("Unlock: %v", err)
-		}
-		if err := client.Lock(col); err != nil {
-			t.Fatalf("Lock: %v", err)
-		}
+		assert.NoError(t, client.Unlock(col), "Unlock")
+		assert.NoError(t, client.Lock(col), "Lock")
 	})
 
 	t.Run("completes via a completed prompt", func(t *testing.T) {
 		client, _ := newTestClient(t, "ok")
-		if err := client.Unlock(col); err != nil {
-			t.Fatalf("Unlock: %v", err)
-		}
+		assert.NoError(t, client.Unlock(col), "Unlock")
 	})
 
 	t.Run("a dismissed prompt is an error", func(t *testing.T) {
 		client, _ := newTestClient(t, "dismiss")
-		if err := client.Unlock(col); err == nil {
-			t.Fatal("expected an error for a dismissed prompt")
-		}
+		assert.Error(t, client.Unlock(col), "a dismissed prompt must be reported")
 	})
 
 	t.Run("a hung prompt times out and is dismissed", func(t *testing.T) {
@@ -178,85 +143,51 @@ func TestClientUnlockLock(t *testing.T) {
 
 		client, svc := newTestClient(t, "hang")
 		start := time.Now()
-		if err := client.Unlock(col); err == nil {
-			t.Fatal("expected a timeout error")
-		}
-		if elapsed := time.Since(start); elapsed > 2*time.Second {
-			t.Fatalf("Unlock took %v, want close to the shortened defaultPromptTimeout", elapsed)
-		}
+		assert.Error(t, client.Unlock(col), "a prompt that never completes must be reported")
+		assert.Less(t, time.Since(start), 2*time.Second, "the shortened prompt budget must be the one in force")
 
 		svc.mu.Lock()
 		prompt := svc.lastPrompt
 		svc.mu.Unlock()
-		if prompt == nil {
-			t.Fatal("no prompt was created")
-		}
+		require.NotNil(t, prompt, "a prompt must have been created")
 		prompt.mu.Lock()
 		dismissed := prompt.dismissedCalls
 		prompt.mu.Unlock()
-		if dismissed == 0 {
-			t.Fatal("expected the timed-out prompt to be dismissed")
-		}
+		assert.NotZero(t, dismissed, "the timed-out prompt must be dismissed")
 	})
 }
 
 func TestClientSearchCreateGetSecret(t *testing.T) {
 	client, _ := newTestClient(t, "")
 	col, err := client.Collection("sshakku", "sshakku")
-	if err != nil {
-		t.Fatalf("Collection: %v", err)
-	}
+	require.NoError(t, err, "Collection")
 	attrs := map[string]string{"service": "test-service-id_rsa", "username": "alice"}
 
 	t.Run("a search with no match is empty, not an error", func(t *testing.T) {
 		items, err := client.SearchItems(col, attrs)
-		if err != nil {
-			t.Fatalf("SearchItems: %v", err)
-		}
-		if len(items) != 0 {
-			t.Fatalf("SearchItems = %v, want none", items)
-		}
+		require.NoError(t, err, "SearchItems")
+		assert.Empty(t, items, "nothing has been stored yet")
 	})
 
-	if err := client.CreateItem(col, "SSH Passphrase for id_rsa", attrs, "hunter2", true); err != nil {
-		t.Fatalf("CreateItem: %v", err)
-	}
+	require.NoError(t, client.CreateItem(col, "SSH Passphrase for id_rsa", attrs, "hunter2", true), "CreateItem")
 
 	t.Run("the created item is found and its secret reads back", func(t *testing.T) {
 		items, err := client.SearchItems(col, attrs)
-		if err != nil {
-			t.Fatalf("SearchItems: %v", err)
-		}
-		if len(items) != 1 {
-			t.Fatalf("SearchItems = %v, want exactly one match", items)
-		}
+		require.NoError(t, err, "SearchItems")
+		require.Len(t, items, 1, "exactly one match")
 		pass, err := client.GetSecret(items[0])
-		if err != nil {
-			t.Fatalf("GetSecret: %v", err)
-		}
-		if pass != "hunter2" {
-			t.Fatalf("GetSecret = %q, want hunter2", pass)
-		}
+		require.NoError(t, err, "GetSecret")
+		assert.Equal(t, "hunter2", pass, "the secret that was stored")
 	})
 
 	t.Run("replace=true overwrites in place instead of duplicating", func(t *testing.T) {
-		if err := client.CreateItem(col, "renamed", attrs, "newpass", true); err != nil {
-			t.Fatalf("CreateItem (replace): %v", err)
-		}
+		require.NoError(t, client.CreateItem(col, "renamed", attrs, "newpass", true), "CreateItem (replace)")
 		items, err := client.SearchItems(col, attrs)
-		if err != nil {
-			t.Fatalf("SearchItems: %v", err)
-		}
-		if len(items) != 1 {
-			t.Fatalf("SearchItems after replace = %v, want still exactly one item", items)
-		}
+		require.NoError(t, err, "SearchItems")
+		require.Len(t, items, 1, "still exactly one item after a replace")
 		pass, err := client.GetSecret(items[0])
-		if err != nil {
-			t.Fatalf("GetSecret: %v", err)
-		}
-		if pass != "newpass" {
-			t.Fatalf("GetSecret after replace = %q, want newpass", pass)
-		}
+		require.NoError(t, err, "GetSecret")
+		assert.Equal(t, "newpass", pass, "the replacing secret")
 	})
 }
 
@@ -264,106 +195,71 @@ func TestClientItemsAttributesDelete(t *testing.T) {
 	t.Run("Items and ItemAttributes reflect what was created", func(t *testing.T) {
 		client, _ := newTestClient(t, "")
 		col, err := client.Collection("sshakku", "sshakku")
-		if err != nil {
-			t.Fatalf("Collection: %v", err)
-		}
-
-		if items, err := client.Items(col); err != nil || len(items) != 0 {
-			t.Fatalf("Items on empty collection = %v, %v, want none, no error", items, err)
-		}
-
-		attrs := map[string]string{"service": "test-service-id_rsa", "username": "alice"}
-		if err := client.CreateItem(col, "SSH Passphrase for id_rsa", attrs, "hunter2", true); err != nil {
-			t.Fatalf("CreateItem: %v", err)
-		}
+		require.NoError(t, err, "Collection")
 
 		items, err := client.Items(col)
-		if err != nil {
-			t.Fatalf("Items: %v", err)
-		}
-		if len(items) != 1 {
-			t.Fatalf("Items = %v, want exactly one", items)
-		}
+		require.NoError(t, err, "Items on an empty collection")
+		assert.Empty(t, items, "an empty collection holds nothing")
+
+		attrs := map[string]string{"service": "test-service-id_rsa", "username": "alice"}
+		require.NoError(t, client.CreateItem(col, "SSH Passphrase for id_rsa", attrs, "hunter2", true), "CreateItem")
+
+		items, err = client.Items(col)
+		require.NoError(t, err, "Items")
+		require.Len(t, items, 1, "exactly one item")
 
 		got, err := client.ItemAttributes(items[0])
-		if err != nil {
-			t.Fatalf("ItemAttributes: %v", err)
-		}
-		if got["service"] != attrs["service"] || got["username"] != attrs["username"] {
-			t.Fatalf("ItemAttributes = %v, want %v", got, attrs)
-		}
+		require.NoError(t, err, "ItemAttributes")
+		assert.Equal(t, attrs["service"], got["service"], "the service attribute")
+		assert.Equal(t, attrs["username"], got["username"], "the username attribute")
 	})
 
 	t.Run("DeleteItem removes the item immediately when no prompt is needed", func(t *testing.T) {
 		client, _ := newTestClient(t, "")
 		col, err := client.Collection("sshakku", "sshakku")
-		if err != nil {
-			t.Fatalf("Collection: %v", err)
-		}
-		if err := client.CreateItem(col, "x", map[string]string{"service": "s"}, "p", true); err != nil {
-			t.Fatalf("CreateItem: %v", err)
-		}
+		require.NoError(t, err, "Collection")
+		require.NoError(t, client.CreateItem(col, "x", map[string]string{"service": "s"}, "p", true), "CreateItem")
 		items, err := client.Items(col)
-		if err != nil || len(items) != 1 {
-			t.Fatalf("Items = %v, %v, want exactly one", items, err)
-		}
+		require.NoError(t, err, "Items")
+		require.Len(t, items, 1, "exactly one item")
 
-		if err := client.DeleteItem(items[0]); err != nil {
-			t.Fatalf("DeleteItem: %v", err)
-		}
+		require.NoError(t, client.DeleteItem(items[0]), "DeleteItem")
 		items, err = client.Items(col)
-		if err != nil || len(items) != 0 {
-			t.Fatalf("Items after DeleteItem = %v, %v, want none", items, err)
-		}
+		require.NoError(t, err, "Items after DeleteItem")
+		assert.Empty(t, items, "the item must be gone")
 	})
 
 	t.Run("DeleteItem completes via a completed prompt", func(t *testing.T) {
 		client, _ := newTestClient(t, "ok")
 		col, err := client.Collection("sshakku", "sshakku")
-		if err != nil {
-			t.Fatalf("Collection: %v", err)
-		}
-		if err := client.CreateItem(col, "x", map[string]string{"service": "s"}, "p", true); err != nil {
-			t.Fatalf("CreateItem: %v", err)
-		}
+		require.NoError(t, err, "Collection")
+		require.NoError(t, client.CreateItem(col, "x", map[string]string{"service": "s"}, "p", true), "CreateItem")
 		items, err := client.Items(col)
-		if err != nil || len(items) != 1 {
-			t.Fatalf("Items = %v, %v, want exactly one", items, err)
-		}
+		require.NoError(t, err, "Items")
+		require.Len(t, items, 1, "exactly one item")
 
-		if err := client.DeleteItem(items[0]); err != nil {
-			t.Fatalf("DeleteItem: %v", err)
-		}
+		require.NoError(t, client.DeleteItem(items[0]), "DeleteItem")
 		items, err = client.Items(col)
-		if err != nil || len(items) != 0 {
-			t.Fatalf("Items after DeleteItem = %v, %v, want none", items, err)
-		}
+		require.NoError(t, err, "Items after DeleteItem")
+		assert.Empty(t, items, "the item must be gone")
 	})
 
 	t.Run("a dismissed prompt leaves the item in place and is an error", func(t *testing.T) {
 		client, svc := newTestClient(t, "")
 		col, err := client.Collection("sshakku", "sshakku")
-		if err != nil {
-			t.Fatalf("Collection: %v", err)
-		}
-		if err := client.CreateItem(col, "x", map[string]string{"service": "s"}, "p", true); err != nil {
-			t.Fatalf("CreateItem: %v", err)
-		}
+		require.NoError(t, err, "Collection")
+		require.NoError(t, client.CreateItem(col, "x", map[string]string{"service": "s"}, "p", true), "CreateItem")
 		items, err := client.Items(col)
-		if err != nil || len(items) != 1 {
-			t.Fatalf("Items = %v, %v, want exactly one", items, err)
-		}
+		require.NoError(t, err, "Items")
+		require.Len(t, items, 1, "exactly one item")
 
 		svc.mu.Lock()
 		svc.behavior = "dismiss"
 		svc.mu.Unlock()
 
-		if err := client.DeleteItem(items[0]); err == nil {
-			t.Fatal("expected an error for a dismissed prompt")
-		}
+		assert.Error(t, client.DeleteItem(items[0]), "a dismissed prompt must be reported")
 		items, err = client.Items(col)
-		if err != nil || len(items) != 1 {
-			t.Fatalf("Items after dismissed DeleteItem = %v, %v, want still one", items, err)
-		}
+		require.NoError(t, err, "Items after a dismissed DeleteItem")
+		assert.Len(t, items, 1, "the item must still be there")
 	})
 }

@@ -438,6 +438,8 @@ Per-file-type lint decisions (rule 12), current as of the last file type added:
 | Go (`*.go`) | `gofmt -l` + `go vet` + `golangci-lint` (config `.golangci.yml`); `golang.org/x/sys` (BSD-3-Clause) recorded in `COPYRIGHT.md` |
 | TOML (`*.toml`) | `taplo lint` + `taplo format --check`; runtime parser `github.com/BurntSushi/toml` (MIT) recorded in `COPYRIGHT.md` |
 | Dockerfile (`test/containers/*.Dockerfile`) | `hadolint` (config ignores DL3008 — no viable apt-pin story against a rolling suite; the base image tag is the point-in-time anchor) |
+| XML (`internal/*/testdata/*.xml`) | `xmllint --noout` (`lint-xml`) — well-formedness only; the DTD the D-Bus bus configuration names is an `http://` URL and is deliberately not fetched, so `make lint` needs no network. Ubuntu's `libxml2-utils` is installed by the workflow rather than by the pinned tool cache, which a cache hit would skip |
+| D-Bus service file (`*.service`) | **No linter.** `desktop-file-validate` validates desktop entries and rejects this format outright (`first group is not "Desktop Entry"`), and nothing else parses it; the only checker that applies is `editorconfig-checker`. The file is exercised instead: a test that reads it asserts the bus it is given to reports the name as activatable |
 
 ### Phase 1 — Harden the primary target: shell plumbing (still bash) ✅ Done
 

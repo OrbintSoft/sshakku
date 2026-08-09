@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-BUS Bus Configuration 1.0//EN"
+  "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
+
+<!--
+  Configuration for the private session bus these tests talk to.
+
+  It names one service directory and, deliberately, none of the standard ones:
+  what this bus knows how to start is then decided by what a test puts in
+  @SERVICEDIR@, not by which wallets happen to be installed on the machine
+  running it. A bus that inherited the system directories would answer that a
+  Secret Service is activatable on a developer's desktop and that it is not in
+  a bare container, so a test asking that question could only agree with the
+  host.
+
+  @SERVICEDIR@ is replaced with a fresh empty directory before the bus is
+  started; this is a template rather than a finished configuration because that
+  directory has to belong to one test.
+-->
+<busconfig>
+  <type>session</type>
+  <listen>unix:tmpdir=/tmp</listen>
+  <servicedir>@SERVICEDIR@</servicedir>
+  <policy context="default">
+    <allow send_destination="*" eavesdrop="true"/>
+    <allow eavesdrop="true"/>
+    <allow own="*"/>
+  </policy>
+</busconfig>
