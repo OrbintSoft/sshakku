@@ -188,3 +188,16 @@ appending. See `docs/THREAT-MODEL.md` for the threat model and the June 2026 inc
     platform-neutral, taking that table as an argument, so both answers stay
     checkable from either machine. Where that is not possible, move the test
     with the code so the other platform's job still covers it.
+
+27. **Tests assert through `require` and `assert`.** Every check a test makes
+    goes through `github.com/stretchr/testify`; a bare `t.Errorf`/`t.Fatalf`
+    used as an assertion is a defect. Use `require` when there is no sense in
+    continuing — a failed precondition, or a result the following lines would
+    dereference into a panic. Use `assert` when carrying on yields a better
+    report: several independent checks that each want to be named, so one run
+    tells you all of them rather than only the first. `t.Fatalf` remains correct
+    for what is not an assertion at all (a `default:` an exhaustive switch must
+    never reach). Never put `require` inside a goroutine: it calls `FailNow` off
+    the test's own goroutine, which hangs the run instead of failing it —
+    `testifylint` in `.golangci.yml` catches that one and several other ways an
+    assertion can compile, pass, and check nothing.
