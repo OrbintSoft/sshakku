@@ -2,16 +2,16 @@
 
 package paths
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
 
 // TestSocketTokenNoKeyring covers the off-Linux token stubs: with no kernel
 // keyring there is no per-login socket token, so both accessors yield an empty
 // string and the caller degrades to a tokenless socket path.
 func TestSocketTokenNoKeyring(t *testing.T) {
-	if tok := SocketToken(); tok != "" {
-		t.Errorf("SocketToken() = %q, want empty", tok)
-	}
-	if tok := ReadSocketToken(); tok != "" {
-		t.Errorf("ReadSocketToken() = %q, want empty", tok)
-	}
+	assert.Empty(t, SocketToken(), "with no kernel keyring there is no token to create")
+	assert.Empty(t, ReadSocketToken(), "with no kernel keyring there is no token to read")
 }

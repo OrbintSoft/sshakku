@@ -3,6 +3,8 @@ package keyring
 import (
 	"errors"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // saveProbeSeams snapshots Available's probe seams and restores them when the
@@ -17,9 +19,7 @@ func TestAvailableSeam(t *testing.T) {
 	t.Run("a failed add means unavailable", func(t *testing.T) {
 		saveProbeSeams(t)
 		probeAdd = func(string, []byte) (Serial, error) { return 0, errors.New("EDQUOT") }
-		if Available() {
-			t.Error("Available() = true, want false when the probe add fails")
-		}
+		assert.False(t, Available(), "a probe add that fails means unavailable")
 	})
 
 	t.Run("a failed read means unavailable", func(t *testing.T) {
@@ -28,12 +28,8 @@ func TestAvailableSeam(t *testing.T) {
 		probeAdd = func(string, []byte) (Serial, error) { return 1, nil }
 		probeRead = func(Serial) ([]byte, error) { return nil, errors.New("EACCES") }
 		probeUnlink = func(Serial) error { unlinked = true; return nil }
-		if Available() {
-			t.Error("Available() = true, want false when the probe read fails")
-		}
-		if !unlinked {
-			t.Error("Available() did not unlink the probe key")
-		}
+		assert.False(t, Available(), "a probe read that fails means unavailable")
+		assert.True(t, unlinked, "the probe key must be unlinked")
 	})
 
 	t.Run("a full round trip means available", func(t *testing.T) {
@@ -42,11 +38,7 @@ func TestAvailableSeam(t *testing.T) {
 		probeAdd = func(string, []byte) (Serial, error) { return 1, nil }
 		probeRead = func(Serial) ([]byte, error) { return []byte("probe"), nil }
 		probeUnlink = func(Serial) error { unlinked = true; return nil }
-		if !Available() {
-			t.Error("Available() = false, want true when the probe round trip succeeds")
-		}
-		if !unlinked {
-			t.Error("Available() did not unlink the probe key")
-		}
+		assert.True(t, Available(), "a probe round trip that succeeds means available")
+		assert.True(t, unlinked, "the probe key must be unlinked")
 	})
 }
