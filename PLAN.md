@@ -725,7 +725,8 @@ macOS as a wide port, never trust Apple; then Windows last as the most divergent
 
 **macOS half ✅ Done** (PRs #77–#84). Full port per open decision 8: sshakku's
 own agent runs on macOS exactly as on Linux, backed by a real Keychain
-`SecretBackend` (Security.framework via cgo, open decision 23).
+`SecretBackend` (Security.framework via cgo, open decision 23 — moved off cgo
+in Phase 32).
 
 - `macos-latest` CI job (build + full test suite), surfacing and fixing two
   real portability gaps (`unix.TCGETS`/`TCSETS` termios constants,
@@ -824,7 +825,8 @@ decisions 9, 20, 24.
    `test-macos` CI job, against a throwaway default keychain the job stands up
    first (`test/macos-keychain-setup.sh`) so the runner's login keychain is
    never touched. The ASan/MSan pass over the cgo keychain path (deferred here
-   from item 7) rides on top of this test as a follow-up. The Linux
+   from item 7) was dropped in Phase 32 for want of an object: there is no cgo
+   left to instrument. The Linux
    install/uninstall cells are closed too: `test/linux-install-smoke.sh` stages
    `make install`/`uninstall`, `install-user`/`uninstall-user`, the opt-in
    non-login `WIRE_BASHRC` wiring (both the `bashrc.d` drop-in and the
@@ -864,9 +866,9 @@ decisions 9, 20, 24.
    `make test-leakprofile`, wired into the Linux CI job) to catch a goroutine
    blocked *forever* — a class the running-count check can't see. It skips when
    the profiler isn't compiled in, so it's inert in the normal suite. Memory:
-   the race detector already covers Go memory-safety; ASan/MSan add value only
-   on the cgo path (the darwin keychain), so they ride with the live-keychain
-   integration test (item 6) rather than the pure-Go suite.
+   the race detector already covers Go memory-safety; ASan/MSan added value only
+   on the cgo path (the darwin keychain), and Phase 32 removed it — the tree is
+   pure Go on both platforms, so there is nothing left for them to instrument.
 8. **Performance/benchmark tests**, tracked over time alongside the coverage
    report.
 
@@ -1231,8 +1233,8 @@ not rediscovered one at a time.
    still takes the database password on standard input, something it offers no
    documented flag for.
 2. **Nothing bounded the keychain — done.** `SecItemCopyMatching` is a
-   synchronous cgo call with no timeout, context or cancellation, so on macOS's
-   default backend there was no deadline at all. **Decided 2026-08-01**: F21 is
+   synchronous call into a system framework with no timeout, context or
+   cancellation, so on macOS's default backend there was no deadline at all. **Decided 2026-08-01**: F21 is
    about anything SSHakku waits on, not only about programs it runs, so the gap
    was a stated violation of it rather than a case the promise never reached.
 
@@ -1967,3 +1969,60 @@ which holds the other side down: with no screen the compartment is still stated
 where a user looks for problems, because there it really cannot be made.
 
 → feature F42; PLAN Phase 30 (whose leftover this is).
+
+### Phase 32 — The build that needed a Mac to make a Mac binary ✅ Done
+
+One file in the tree opened `import "C"`: the Keychain client, linked against
+Security.framework. Everything downstream of that followed from it — a macOS
+binary could only be produced on a machine carrying Apple's SDK and a C
+compiler, and that file alone could not be type-checked from anywhere else,
+while every other darwin file could.
+
+`DarwinKeychainClient` now reaches Security.framework and CoreFoundation
+through `purego` (Apache-2.0, see `COPYRIGHT.md`), which loads them at run time.
+The type, the `KeychainClient` interface, its five methods and their errors are
+unchanged; no user-visible behaviour moved, so `docs/FEATURES.md` gained
+nothing.
+
+**Red first, and the red said more than the change did.** `make build-cross`
+builds both targets with `CGO_ENABLED=0`. On the tree before the rewrite it
+failed with `undefined: keys.DarwinKeychainClient` — not "C source files not
+allowed": with cgo off, Go drops the file that opens `import "C"` *silently*.
+A cgo-free macOS binary built then would not have failed; it would have shipped
+with no Keychain at all.
+
+**Race and cgo stopped being one decision.** The race detector is built on cgo
+and a distributed binary should need neither, so `SSHAKKU_RACE` selects: set,
+the suite runs under `-race` with cgo; unset, it runs as the shipped binary is
+built. CI sets it. `build` never consults it, and neither does `test-keychain` —
+the one test that reaches the framework has to reach it the way the shipped
+binary will.
+
+Three things were established by running them rather than by reasoning, and are
+worth keeping:
+
+- `Dlsym` yields the *address of* a data symbol, so a framework constant is one
+  dereference away — checked against libc's `environ` on Linux, the mechanism
+  being the same everywhere. The two `kCFTypeDictionary*CallBacks` are structs,
+  so there the address itself is the value wanted.
+- `go vet` rejects `unsafe.Pointer(uintptr)` and has no per-line suppression,
+  so that dereference goes through `memcpy`, keeping the address on the C side.
+- purego panics at *registration* on a signature it cannot marshal, and
+  `RegisterFunc` takes a bare address it never calls — so all nineteen
+  declarations were put to it on Linux, with no Apple symbol present. That is a
+  type check, not a verification: accepting a signature is not agreeing with
+  Apple's API.
+
+**What running it settled** (rule 25). The live round trip
+(`TestDarwinKeychainClientRealRoundTrip`) passed on `macos-latest` against a
+real keychain with `CGO_ENABLED=0`, which is the only thing that could say the
+signatures match the framework. On the Linux job, `CGO_ENABLED=0 GOOS=darwin go
+build ./...` passed on a machine with no Mac and no Apple SDK.
+
+Two consequences elsewhere: the ASan/MSan follow-up recorded in Phase 6 items 6
+and 7 no longer has an object, there being no cgo path left to instrument; and
+`CGO_ENABLED=0 GOOS=darwin go vet ./...` now covers the whole macOS tree, tests
+included, from either platform.
+
+→ features F4, F5, F6, F9 (unchanged, and the round trip is what says so);
+Phase 6 items 6, 7; Phase 8, which no longer needs a Mac to build for one.
