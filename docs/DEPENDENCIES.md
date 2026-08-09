@@ -6,13 +6,14 @@ packaging it.
 
 ## To build
 
-- **Go 1.26.5 or newer.** The only build-time requirement; `go build ./...` (or
-  `make build`) fetches the Go module dependencies itself
-  (`github.com/godbus/dbus/v5`, `github.com/BurntSushi/toml`, `golang.org/x/sys`
-  — all pure Go, no C toolchain or cgo involved on Linux). On macOS, building
-  additionally needs a C toolchain (Xcode Command Line Tools, `xcode-select
-  --install`) for the Keychain backend, which uses cgo to call
-  Security.framework directly rather than shelling out.
+- **Go 1.26.5 or newer.** The only build-time requirement, on either platform;
+  `go build ./...` (or `make build`) fetches the Go module dependencies itself
+  (`github.com/godbus/dbus/v5`, `github.com/BurntSushi/toml`,
+  `golang.org/x/sys`, `github.com/ebitengine/purego`). All are pure Go: nothing
+  here needs a C compiler, an Apple SDK, or cgo, so a build for either platform
+  can be produced on either one. The macOS Keychain backend reaches
+  Security.framework by loading it at run time rather than by linking against it
+  at build time.
 
 ## To run
 
@@ -48,8 +49,8 @@ none of this, nor any configuration to get it (see
   [Where passphrases are stored](CONFIGURATION.md#where-passphrases-are-stored).
 
 On macOS the Keychain — the default there — needs nothing beyond what is
-already on every Mac: SSHakku talks to Security.framework directly (via cgo),
-never shelling out to the `security` CLI.
+already on every Mac: SSHakku talks to Security.framework directly, never
+shelling out to the `security` CLI.
 
 Required only when a graphical passphrase prompt is used (a GUI session is
 detected — Wayland or X11 with a live `$DISPLAY` confirmed via `xset` on
@@ -75,8 +76,8 @@ Required only when `secret_backend` selects that backend in `config.toml` (see
 
 A distribution package should declare:
 
-- A build-time dependency on the Go toolchain (`>= 1.25`); on macOS, also a C
-  toolchain, for the cgo Keychain backend.
+- A build-time dependency on the Go toolchain (`>= 1.25`), and nothing else on
+  either platform — no C toolchain is involved.
 - A runtime dependency on `openssh` (for `ssh-add`/`ssh-agent`/`ssh-keygen`).
 - On Linux: `libsecret`'s tools (for `secret-tool`) and `kdialog` as
   recommended, not mandatory, runtime dependencies — both are optional

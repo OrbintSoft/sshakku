@@ -15,13 +15,13 @@ var ErrTimedOut = errors.New("timed out")
 // produced, or gives up on it once timeout has elapsed. what names the thing
 // being waited on, so a session log says which one ran out of time.
 //
-// It exists for a call that cannot be interrupted — a library entered through
-// cgo, where nothing in Go can reach in and stop it. Giving up is therefore not
-// cancelling: the call goes on for as long as it likes and only the waiting
-// stops, so the goroutine is expected to outlive this function. The channel is
-// buffered for exactly that reason — when the call does finally return, it must
-// be able to put its answer down and exit rather than block forever on a send
-// nobody is listening for.
+// It exists for a call that cannot be interrupted — one that has left Go for a
+// system library, where nothing can reach in and stop it. Giving up is
+// therefore not cancelling: the call goes on for as long as it likes and only
+// the waiting stops, so the goroutine is expected to outlive this function. The
+// channel is buffered for exactly that reason — when the call does finally
+// return, it must be able to put its answer down and exit rather than block
+// forever on a send nobody is listening for.
 //
 // A caller that can cancel what it waits on should do that instead; this is the
 // last resort for one that cannot.

@@ -137,7 +137,7 @@ bitwarden_server = "https://vault.example.com" # optional; a self-hosted Vaultwa
 - `"secret-service"` (the Linux default) is described in the next section.
 - `"keychain"` stores passphrases as generic-password items in the macOS
   Keychain, one per key, scoped to your account. SSHakku talks to
-  Security.framework directly (via cgo), never shelling out to the `security`
+  Security.framework directly, never shelling out to the `security`
   CLI — a plain status read has no secret material to protect from `ps`/argv
   exposure, but a passphrase does, and `security add-generic-password -w`
   has no way to take it other than on the command line. It is the default

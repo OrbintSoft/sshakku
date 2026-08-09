@@ -31,16 +31,28 @@ Compiled into the distributed binary:
 - **golang.org/x/crypto** — BSD-3-Clause (NaCl box: the X25519 and
   XSalsa20-Poly1305 primitives KeePassXC's local protocol encrypts every
   message with).
+- **github.com/ebitengine/purego** — Apache-2.0 (calling macOS's
+  Security.framework and CoreFoundation, loaded at run time, so building for
+  macOS needs no C toolchain).
 
 Imported only by tests, never linked into the distributed binary:
 
 - **go.uber.org/goleak** — MIT (goroutine-leak detection in the test suite).
 
-These permissive licences (BSD-2-Clause, BSD-3-Clause and MIT) are compatible
-with the EUPL 1.2 and with offering the project under additional licences, so
-they do not obstruct relicensing. Build- and CI-only tools (the Go toolchain and
-the linters) run as separate processes, are neither bundled nor distributed, and
-impose no terms on the software.
+These permissive licences (Apache-2.0, BSD-2-Clause, BSD-3-Clause and MIT) are
+compatible with the EUPL 1.2 and with offering the project under additional
+licences, so they do not obstruct relicensing. Apache-2.0 carries two conditions
+the others do not — its notice and attribution requirements, met by this file,
+and a patent grant that terminates for anyone who starts patent litigation over
+the covered work. Neither restricts how this project may be licensed onward. It
+is worth knowing, rather than discovering later, that Apache-2.0 cannot be
+combined with GPLv2, one of the licences the EUPL's appendix would otherwise
+allow this work to be relicensed to; GPLv3 and every other listed option are
+unaffected.
+
+Build- and CI-only tools (the Go toolchain and the linters) run as separate
+processes, are neither bundled nor distributed, and impose no terms on the
+software.
 
 ## Relicensing
 
