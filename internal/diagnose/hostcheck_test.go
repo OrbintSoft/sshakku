@@ -6,26 +6,21 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func writeFile(t *testing.T, path, content string) {
 	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755), "lay out the directory for the fake file")
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644), "write the fake file")
 }
 
 func symlink(t *testing.T, oldname, newname string) {
 	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(newname), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink(oldname, newname); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(filepath.Dir(newname), 0o755), "lay out the directory for the fake symlink")
+	require.NoError(t, os.Symlink(oldname, newname), "create the fake symlink")
 }
 
 func TestChecksDiskEncryptedPlainPartition(t *testing.T) {
@@ -34,9 +29,7 @@ func TestChecksDiskEncryptedPlainPartition(t *testing.T) {
 	writeFile(t, filepath.Join(proc, "mounts"), "/dev/sda2 / ext4 rw,relatime 0 0\n")
 
 	got := ProcfsHostSource{ProcRoot: proc, SysRoot: sys, DevRoot: filepath.Join(root, "dev"), Target: "/"}.Checks()
-	if got.DiskEncrypted == nil || *got.DiskEncrypted {
-		t.Fatalf("DiskEncrypted = %v, want false", got.DiskEncrypted)
-	}
+	assert.False(t, settled(t, got.DiskEncrypted, "disk encryption"), "a plain partition is not encrypted")
 }
 
 func TestChecksDiskEncryptedDirectLUKS(t *testing.T) {
@@ -47,9 +40,7 @@ func TestChecksDiskEncryptedDirectLUKS(t *testing.T) {
 	writeFile(t, filepath.Join(sys, "class", "block", "dm-1", "dm", "uuid"), "CRYPT-LUKS2-abcdef-luks-root\n")
 
 	got := ProcfsHostSource{ProcRoot: proc, SysRoot: sys, DevRoot: dev, Target: "/"}.Checks()
-	if got.DiskEncrypted == nil || !*got.DiskEncrypted {
-		t.Fatalf("DiskEncrypted = %v, want true", got.DiskEncrypted)
-	}
+	assert.True(t, settled(t, got.DiskEncrypted, "disk encryption"), "a LUKS volume is encrypted")
 }
 
 func TestChecksDiskEncryptedLUKSUnderLVM(t *testing.T) {
@@ -58,15 +49,11 @@ func TestChecksDiskEncryptedLUKSUnderLVM(t *testing.T) {
 	writeFile(t, filepath.Join(proc, "mounts"), "/dev/mapper/vg-root / ext4 rw,relatime 0 0\n")
 	symlink(t, "../dm-2", filepath.Join(dev, "mapper", "vg-root"))
 	writeFile(t, filepath.Join(sys, "class", "block", "dm-2", "dm", "uuid"), "LVM-abcdef-vg-root\n")
-	if err := os.MkdirAll(filepath.Join(sys, "class", "block", "dm-2", "slaves", "dm-1"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(filepath.Join(sys, "class", "block", "dm-2", "slaves", "dm-1"), 0o755), "lay out the fake slave device")
 	writeFile(t, filepath.Join(sys, "class", "block", "dm-1", "dm", "uuid"), "CRYPT-LUKS2-abcdef-luks-vg-root\n")
 
 	got := ProcfsHostSource{ProcRoot: proc, SysRoot: sys, DevRoot: dev, Target: "/"}.Checks()
-	if got.DiskEncrypted == nil || !*got.DiskEncrypted {
-		t.Fatalf("DiskEncrypted = %v, want true", got.DiskEncrypted)
-	}
+	assert.True(t, settled(t, got.DiskEncrypted, "disk encryption"), "LVM on top of LUKS is still encrypted underneath")
 }
 
 func TestChecksDiskEncryptedUnresolvable(t *testing.T) {
@@ -75,17 +62,13 @@ func TestChecksDiskEncryptedUnresolvable(t *testing.T) {
 	writeFile(t, filepath.Join(proc, "mounts"), "overlay / overlay rw 0 0\n")
 
 	got := ProcfsHostSource{ProcRoot: proc, SysRoot: sys, DevRoot: filepath.Join(root, "dev"), Target: "/"}.Checks()
-	if got.DiskEncrypted != nil {
-		t.Fatalf("DiskEncrypted = %v, want nil (unresolvable device)", got.DiskEncrypted)
-	}
+	assert.Nil(t, got.DiskEncrypted, "a device nothing could be traced to leaves the question open")
 }
 
 func TestChecksDiskEncryptedNoMountsFile(t *testing.T) {
 	root := t.TempDir()
 	got := ProcfsHostSource{ProcRoot: filepath.Join(root, "proc"), SysRoot: filepath.Join(root, "sys"), Target: "/"}.Checks()
-	if got.DiskEncrypted != nil {
-		t.Fatalf("DiskEncrypted = %v, want nil (no /proc/mounts)", got.DiskEncrypted)
-	}
+	assert.Nil(t, got.DiskEncrypted, "with no mount table to read, the question stays open")
 }
 
 func TestChecksDiskEncryptedPicksLongestMount(t *testing.T) {
@@ -98,9 +81,26 @@ func TestChecksDiskEncryptedPicksLongestMount(t *testing.T) {
 	writeFile(t, filepath.Join(sys, "class", "block", "dm-3", "dm", "uuid"), "CRYPT-LUKS2-abcdef-luks-home\n")
 
 	got := ProcfsHostSource{ProcRoot: proc, SysRoot: sys, DevRoot: dev, Target: "/home/alice"}.Checks()
-	if got.DiskEncrypted == nil || !*got.DiskEncrypted {
-		t.Fatalf("DiskEncrypted = %v, want true (should match /home, not /)", got.DiskEncrypted)
-	}
+	assert.True(t, settled(t, got.DiskEncrypted, "disk encryption"),
+		"the answer must come from the mount the target is actually on, /home rather than /")
+}
+
+// TestChecksDiskEncryptedDoesNotMatchAPrefixOfAMountPoint pins that a mount
+// point is matched at a path boundary and not as a bare string prefix: /home
+// and /homework are different places, and answering about the wrong one would
+// report somebody's unencrypted directory as encrypted.
+func TestChecksDiskEncryptedDoesNotMatchAPrefixOfAMountPoint(t *testing.T) {
+	root := t.TempDir()
+	proc, sys, dev := filepath.Join(root, "proc"), filepath.Join(root, "sys"), filepath.Join(root, "dev")
+	writeFile(t, filepath.Join(proc, "mounts"),
+		"/dev/sda1 / ext4 rw 0 0\n"+
+			"/dev/mapper/luks-home /home ext4 rw 0 0\n")
+	symlink(t, "../dm-3", filepath.Join(dev, "mapper", "luks-home"))
+	writeFile(t, filepath.Join(sys, "class", "block", "dm-3", "dm", "uuid"), "CRYPT-LUKS2-abcdef-luks-home\n")
+
+	got := ProcfsHostSource{ProcRoot: proc, SysRoot: sys, DevRoot: dev, Target: "/homework"}.Checks()
+	assert.False(t, settled(t, got.DiskEncrypted, "disk encryption"),
+		"/homework is not under /home, so the answer must come from the root mount")
 }
 
 func TestChecksTmpTmpfs(t *testing.T) {
@@ -115,12 +115,8 @@ func TestChecksTmpTmpfs(t *testing.T) {
 	t.Cleanup(func() { tmpfsSize = orig })
 
 	got := ProcfsHostSource{ProcRoot: proc, SysRoot: sys, DevRoot: filepath.Join(root, "dev"), Target: "/"}.Checks()
-	if got.TmpTmpfs == nil || !*got.TmpTmpfs {
-		t.Fatalf("TmpTmpfs = %v, want true", got.TmpTmpfs)
-	}
-	if got.TmpSizeBytes != 512*1024*1024 {
-		t.Fatalf("TmpSizeBytes = %d, want %d", got.TmpSizeBytes, 512*1024*1024)
-	}
+	assert.True(t, settled(t, got.TmpTmpfs, "whether /tmp is a tmpfs"), "a tmpfs mounted on /tmp is one")
+	assert.Equal(t, int64(512*1024*1024), got.TmpSizeBytes, "the size must be the measured one, not the one in the mount options")
 }
 
 func TestChecksTmpNotTmpfs(t *testing.T) {
@@ -129,12 +125,8 @@ func TestChecksTmpNotTmpfs(t *testing.T) {
 	writeFile(t, filepath.Join(proc, "mounts"), "/dev/sda1 / ext4 rw 0 0\n")
 
 	got := ProcfsHostSource{ProcRoot: proc, SysRoot: sys, DevRoot: filepath.Join(root, "dev"), Target: "/"}.Checks()
-	if got.TmpTmpfs == nil || *got.TmpTmpfs {
-		t.Fatalf("TmpTmpfs = %v, want false (no separate /tmp mount)", got.TmpTmpfs)
-	}
-	if got.TmpSizeBytes != 0 {
-		t.Fatalf("TmpSizeBytes = %d, want 0", got.TmpSizeBytes)
-	}
+	assert.False(t, settled(t, got.TmpTmpfs, "whether /tmp is a tmpfs"), "with no /tmp mount of its own, /tmp is not a tmpfs")
+	assert.Zero(t, got.TmpSizeBytes, "there is no tmpfs to have a size")
 }
 
 func TestChecksTmpShadowedByLaterMount(t *testing.T) {
@@ -146,9 +138,8 @@ func TestChecksTmpShadowedByLaterMount(t *testing.T) {
 			"tmpfs /tmp tmpfs rw 0 0\n")
 
 	got := ProcfsHostSource{ProcRoot: proc, SysRoot: sys, DevRoot: filepath.Join(root, "dev"), Target: "/"}.Checks()
-	if got.TmpTmpfs == nil || !*got.TmpTmpfs {
-		t.Fatalf("TmpTmpfs = %v, want true (the later /tmp entry should win)", got.TmpTmpfs)
-	}
+	assert.True(t, settled(t, got.TmpTmpfs, "whether /tmp is a tmpfs"),
+		"where a path is mounted twice, the mount in force is the later one")
 }
 
 func TestChecksTPMPresent2_0(t *testing.T) {
@@ -157,52 +148,35 @@ func TestChecksTPMPresent2_0(t *testing.T) {
 	writeFile(t, filepath.Join(sys, "class", "tpm", "tpm0", "tpm_version_major"), "2\n")
 
 	got := ProcfsHostSource{ProcRoot: filepath.Join(root, "proc"), SysRoot: sys, DevRoot: filepath.Join(root, "dev")}.Checks()
-	if got.SecureHardwarePresent == nil || !*got.SecureHardwarePresent {
-		t.Fatalf("SecureHardwarePresent = %v, want true", got.SecureHardwarePresent)
-	}
-	if got.SecureHardwareKind != "TPM 2.0" {
-		t.Fatalf("SecureHardwareKind = %q, want %q", got.SecureHardwareKind, "TPM 2.0")
-	}
+	assert.True(t, settled(t, got.SecureHardwarePresent, "secure hardware"), "a TPM device entry is secure hardware")
+	assert.Equal(t, "TPM 2.0", got.SecureHardwareKind, "the version the device reports")
 }
 
 func TestChecksTPMPresent1_2(t *testing.T) {
 	root := t.TempDir()
 	sys := filepath.Join(root, "sys")
-	if err := os.MkdirAll(filepath.Join(sys, "class", "tpm", "tpm0"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(filepath.Join(sys, "class", "tpm", "tpm0"), 0o755), "lay out the fake TPM entry")
 
 	got := ProcfsHostSource{ProcRoot: filepath.Join(root, "proc"), SysRoot: sys, DevRoot: filepath.Join(root, "dev")}.Checks()
-	if got.SecureHardwarePresent == nil || !*got.SecureHardwarePresent {
-		t.Fatalf("SecureHardwarePresent = %v, want true", got.SecureHardwarePresent)
-	}
-	if got.SecureHardwareKind != "TPM 1.2" {
-		t.Fatalf("SecureHardwareKind = %q, want %q", got.SecureHardwareKind, "TPM 1.2")
-	}
+	assert.True(t, settled(t, got.SecureHardwarePresent, "secure hardware"), "a TPM device entry is secure hardware")
+	assert.Equal(t, "TPM 1.2", got.SecureHardwareKind, "a device that reports no version is the older one")
 }
 
 func TestChecksTPMAbsent(t *testing.T) {
 	root := t.TempDir()
 	got := ProcfsHostSource{ProcRoot: filepath.Join(root, "proc"), SysRoot: filepath.Join(root, "sys"), DevRoot: filepath.Join(root, "dev")}.Checks()
-	if got.SecureHardwarePresent == nil || *got.SecureHardwarePresent {
-		t.Fatalf("SecureHardwarePresent = %v, want false", got.SecureHardwarePresent)
-	}
-	if got.SecureHardwareKind != "" {
-		t.Fatalf("SecureHardwareKind = %q, want empty", got.SecureHardwareKind)
-	}
+	assert.False(t, settled(t, got.SecureHardwarePresent, "secure hardware"), "a machine with no TPM entry has none")
+	assert.Empty(t, got.SecureHardwareKind, "there is no device to name a version for")
 }
 
 func TestChecksTPMIgnoresResourceManagerEntry(t *testing.T) {
 	root := t.TempDir()
 	sys := filepath.Join(root, "sys")
-	if err := os.MkdirAll(filepath.Join(sys, "class", "tpm", "tpmrm0"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(filepath.Join(sys, "class", "tpm", "tpmrm0"), 0o755), "lay out the fake resource-manager entry")
 
 	got := ProcfsHostSource{ProcRoot: filepath.Join(root, "proc"), SysRoot: sys, DevRoot: filepath.Join(root, "dev")}.Checks()
-	if got.SecureHardwarePresent == nil || *got.SecureHardwarePresent {
-		t.Fatalf("SecureHardwarePresent = %v, want false (tpmrm0 is not a TPM device entry)", got.SecureHardwarePresent)
-	}
+	assert.False(t, settled(t, got.SecureHardwarePresent, "secure hardware"),
+		"tpmrm0 is the kernel's resource manager, not a TPM device")
 }
 
 func TestUnescapeMount(t *testing.T) {
@@ -212,8 +186,6 @@ func TestUnescapeMount(t *testing.T) {
 		`back\134slash`:    `back\slash`,
 	}
 	for in, want := range cases {
-		if got := unescapeMount(in); got != want {
-			t.Errorf("unescapeMount(%q) = %q, want %q", in, got, want)
-		}
+		assert.Equalf(t, want, unescapeMount(in), "the mount point behind %s", in)
 	}
 }

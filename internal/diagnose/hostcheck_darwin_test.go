@@ -5,6 +5,9 @@ package diagnose
 import (
 	"errors"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // stubHostProbes points the shell-out/sysctl seams at fixed results for one
@@ -22,19 +25,17 @@ func stubHostProbes(t *testing.T, fdesetup func() ([]byte, error), bridge func()
 func TestDarwinChecksAppleSilicon(t *testing.T) {
 	stubHostProbes(t,
 		func() ([]byte, error) { return []byte("FileVault is On.\n"), nil },
-		func() ([]byte, error) { t.Fatal("bridge probe must not run on arm64"); return nil, nil },
+		func() ([]byte, error) {
+			require.FailNow(t, "the Intel bridge probe must not run on an Apple Silicon host")
+			return nil, nil
+		},
 		func() (uint32, error) { return 1, nil },
 	)
 	hc := DarwinHostSource{}.Checks()
-	if hc.DiskEncrypted == nil || !*hc.DiskEncrypted {
-		t.Errorf("DiskEncrypted = %v, want true", hc.DiskEncrypted)
-	}
-	if hc.TmpTmpfs == nil || *hc.TmpTmpfs {
-		t.Errorf("TmpTmpfs = %v, want a definite false", hc.TmpTmpfs)
-	}
-	if hc.SecureHardwarePresent == nil || !*hc.SecureHardwarePresent || hc.SecureHardwareKind != "Secure Enclave" {
-		t.Errorf("SecureHardware = (%v, %q), want (true, Secure Enclave)", hc.SecureHardwarePresent, hc.SecureHardwareKind)
-	}
+	assert.True(t, settled(t, hc.DiskEncrypted, "disk encryption"), "FileVault reported on means the disk is encrypted")
+	assert.False(t, settled(t, hc.TmpTmpfs, "whether /tmp is a tmpfs"), "macOS has no tmpfs on /tmp, and that is known rather than guessed")
+	assert.True(t, settled(t, hc.SecureHardwarePresent, "secure hardware"), "an Apple Silicon host carries a Secure Enclave")
+	assert.Equal(t, "Secure Enclave", hc.SecureHardwareKind, "what the report calls it")
 }
 
 // TestFileVaultStatusRunError covers fileVaultStatus's run-failure branch: a
@@ -45,9 +46,7 @@ func TestFileVaultStatusRunError(t *testing.T) {
 		func() ([]byte, error) { return nil, nil },
 		func() (uint32, error) { return 0, errors.New("not arm64") },
 	)
-	if got := fileVaultStatus(); got != nil {
-		t.Errorf("fileVaultStatus() = %v, want nil on a run failure", *got)
-	}
+	assert.Nil(t, fileVaultStatus(), "a probe that could not run settles nothing, and must not guess")
 }
 
 // TestSecureEnclaveInfoIntel covers secureEnclaveInfo's Intel path: the arm64
@@ -57,17 +56,17 @@ func TestSecureEnclaveInfoIntel(t *testing.T) {
 	notARM64 := func() (uint32, error) { return 0, errors.New("not arm64") }
 
 	stubHostProbes(t, nil, func() ([]byte, error) { return []byte("Apple T2 Security Chip"), nil }, notARM64)
-	if present, kind := secureEnclaveInfo(); present == nil || !*present || kind != "Secure Enclave" {
-		t.Errorf("secureEnclaveInfo() = (%v, %q), want (true, Secure Enclave)", present, kind)
-	}
+	present, kind := secureEnclaveInfo()
+	assert.True(t, settled(t, present, "secure hardware"), "a T2 chip is secure hardware")
+	assert.Equal(t, "Secure Enclave", kind, "what the report calls it")
 
 	stubHostProbes(t, nil, func() ([]byte, error) { return []byte("no security chip"), nil }, notARM64)
-	if present, kind := secureEnclaveInfo(); present == nil || *present || kind != "" {
-		t.Errorf("secureEnclaveInfo() = (%v, %q), want (false, \"\")", present, kind)
-	}
+	present, kind = secureEnclaveInfo()
+	assert.False(t, settled(t, present, "secure hardware"), "an Intel Mac with no security chip has none")
+	assert.Empty(t, kind, "there is no chip to name")
 
 	stubHostProbes(t, nil, func() ([]byte, error) { return nil, errors.New("system_profiler failed") }, notARM64)
-	if present, kind := secureEnclaveInfo(); present != nil || kind != "" {
-		t.Errorf("secureEnclaveInfo() = (%v, %q), want (nil, \"\") on a probe failure", present, kind)
-	}
+	present, kind = secureEnclaveInfo()
+	assert.Nil(t, present, "a probe that could not run settles nothing, and must not guess")
+	assert.Empty(t, kind, "nothing was learned to name")
 }

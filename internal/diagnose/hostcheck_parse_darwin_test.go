@@ -2,7 +2,12 @@
 
 package diagnose
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
 
 // TestParseFileVaultStatus covers every branch of the fdesetup-status parser:
 // a definite On, a definite Off, and unrecognized output that yields nil.
@@ -20,13 +25,11 @@ func TestParseFileVaultStatus(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := parseFileVaultStatus([]byte(c.out))
-			switch {
-			case c.want == nil && got != nil:
-				t.Errorf("parseFileVaultStatus(%q) = %v, want nil", c.out, *got)
-			case c.want != nil && (got == nil || *got != *c.want):
-				t.Errorf("parseFileVaultStatus(%q) = %v, want %v", c.out, got, *c.want)
-			}
+			// A nil answer and a false one are different things — "the output
+			// said nothing I understand" and "FileVault is off" — and Equal on
+			// the pointers keeps them apart.
+			assert.Equal(t, c.want, parseFileVaultStatus([]byte(c.out)),
+				"what this fdesetup output says about FileVault")
 		})
 	}
 }
@@ -48,12 +51,9 @@ func TestBridgeSecureEnclave(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			got, kind := bridgeSecureEnclave([]byte(c.out))
-			if got == nil {
-				t.Fatalf("bridgeSecureEnclave(%q) = nil, want a definite %v", c.out, c.want)
-			}
-			if *got != c.want || kind != c.wantKind {
-				t.Errorf("bridgeSecureEnclave(%q) = (%v, %q), want (%v, %q)", c.out, *got, kind, c.want, c.wantKind)
-			}
+			require.NotNil(t, got, "output that was read settles the question either way")
+			assert.Equal(t, c.want, *got, "whether this machine carries a security chip")
+			assert.Equal(t, c.wantKind, kind, "what the report calls it")
 		})
 	}
 }

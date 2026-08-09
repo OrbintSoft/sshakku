@@ -1,9 +1,12 @@
 package diagnose
 
 import (
-	"github.com/OrbintSoft/sshakku/internal/agent"
 	"strconv"
 	"testing"
+
+	"github.com/OrbintSoft/sshakku/internal/agent"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // procParent is one entry in a fake process tree.
@@ -29,30 +32,18 @@ func TestAncestry(t *testing.T) {
 		50:  {ppid: 1, name: "bash"},
 		1:   {ppid: 0, name: "systemd"},
 	}
-	got := ancestry(100, tree)
 	want := []ProcInfo{{100, "ssh-agent"}, {50, "bash"}, {1, "systemd"}}
-	if len(got) != len(want) {
-		t.Fatalf("ancestry = %v, want %v", got, want)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Errorf("chain[%d] = %v, want %v", i, got[i], want[i])
-		}
-	}
+	assert.Equal(t, want, ancestry(100, tree), "the chain from the agent up to init")
 }
 
 func TestAncestryNilSource(t *testing.T) {
-	if got := ancestry(100, nil); got != nil {
-		t.Errorf("ancestry(nil source) = %v, want nil", got)
-	}
+	assert.Nil(t, ancestry(100, nil), "with nothing to ask, there is no chain to report")
 }
 
 func TestAncestryMissingParent(t *testing.T) {
 	// A parent absent from the tree stops the walk without error.
 	got := ancestry(100, fakeAncestry{100: {ppid: 50, name: "ssh-agent"}})
-	if len(got) != 1 || got[0].Name != "ssh-agent" {
-		t.Errorf("chain = %v, want just the agent", got)
-	}
+	assert.Equal(t, []ProcInfo{{100, "ssh-agent"}}, got, "the walk stops where the tree does")
 }
 
 func TestAncestryCycle(t *testing.T) {
@@ -60,9 +51,7 @@ func TestAncestryCycle(t *testing.T) {
 		100: {ppid: 50, name: "a"},
 		50:  {ppid: 100, name: "b"}, // points back → cycle
 	}
-	if got := ancestry(100, tree); len(got) != 2 {
-		t.Errorf("cycle: chain = %v, want 2 entries then stop", got)
-	}
+	assert.Len(t, ancestry(100, tree), 2, "a tree that points back at itself must stop the walk, not loop it")
 }
 
 func TestAncestryDepthCap(t *testing.T) {
@@ -70,17 +59,12 @@ func TestAncestryDepthCap(t *testing.T) {
 	for i := 1; i <= 100; i++ {
 		tree[i] = procParent{ppid: i + 1, name: "p" + strconv.Itoa(i)}
 	}
-	if got := ancestry(1, tree); len(got) != maxAncestry {
-		t.Errorf("depth cap: chain len = %d, want %d", len(got), maxAncestry)
-	}
+	assert.Len(t, ancestry(1, tree), maxAncestry, "a chain longer than the cap is cut at it")
 }
 
 func TestChainString(t *testing.T) {
 	got := chainString([]ProcInfo{{100, "ssh-agent"}, {1, "systemd"}})
-	want := "ssh-agent(100) ← systemd(1)"
-	if got != want {
-		t.Errorf("chainString = %q, want %q", got, want)
-	}
+	assert.Equal(t, "ssh-agent(100) ← systemd(1)", got, "the chain as the report writes it")
 }
 
 // fakeCgroup is a fixed pid → systemd unit map standing in for /proc/<pid>/cgroup.
@@ -108,12 +92,10 @@ func TestGatherForeignAttribution(t *testing.T) {
 	}
 	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000}, src, prober, anc, nil, nil, nil)
 
-	if len(r.Agents) != 1 || len(r.Agents[0].Ancestry) != 3 {
-		t.Fatalf("ancestry not populated: %+v", r.Agents)
-	}
-	if !hasFinding(r, "started by an SSH login session (sshd)") {
-		t.Errorf("findings = %v, want a foreign-attribution finding", r.Findings)
-	}
+	require.Len(t, r.Agents, 1, "the one agent that was found")
+	assert.Len(t, r.Agents[0].Ancestry, 3, "the chain walked up from the agent")
+	assert.Truef(t, hasFinding(r, "started by an SSH login session (sshd)"),
+		"the report must say who started the foreign agent: %v", r.Findings)
 }
 
 // TestGatherRecordsWhatTheCgroupSourceReports covers Gather storing what a
@@ -132,10 +114,6 @@ func TestGatherRecordsWhatTheCgroupSourceReports(t *testing.T) {
 
 	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000}, src, prober, anc, cg, nil, nil)
 
-	if len(r.Agents) != 1 {
-		t.Fatalf("agents = %+v, want exactly one", r.Agents)
-	}
-	if r.Agents[0].Cgroup != "app-gpg-agent.service" {
-		t.Errorf("Cgroup = %q, want what the source reported", r.Agents[0].Cgroup)
-	}
+	require.Len(t, r.Agents, 1, "the one agent that was found")
+	assert.Equal(t, "app-gpg-agent.service", r.Agents[0].Cgroup, "the report carries what the cgroup source answered")
 }

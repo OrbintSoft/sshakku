@@ -6,6 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseCgroupUnit(t *testing.T) {
@@ -50,9 +53,8 @@ func TestParseCgroupUnit(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			got, ok := parseCgroupUnit([]byte(c.line))
-			if ok != c.ok || got != c.want {
-				t.Errorf("parseCgroupUnit(%q) = (%q,%v), want (%q,%v)", c.line, got, ok, c.want, c.ok)
-			}
+			assert.Equal(t, c.ok, ok, "whether a unit was found at all")
+			assert.Equal(t, c.want, got, "the unit read out of the cgroup line")
 		})
 	}
 }
@@ -60,18 +62,14 @@ func TestParseCgroupUnit(t *testing.T) {
 func TestProcfsCgroupCgroup(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, "77")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(dir, 0o755), "lay out the fake /proc entry")
 	content := "0::/user.slice/user-1000.slice/user@1000.service/app.slice/app-gpg-agent.service\n"
-	if err := os.WriteFile(filepath.Join(dir, "cgroup"), []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "cgroup"), []byte(content), 0o644), "write the fake cgroup file")
+
 	unit, ok := ProcfsCgroup{Root: root}.Cgroup(77)
-	if !ok || unit != "app-gpg-agent.service" {
-		t.Errorf("Cgroup(77) = (%q,%v), want (app-gpg-agent.service,true)", unit, ok)
-	}
-	if _, ok := (ProcfsCgroup{Root: root}).Cgroup(999); ok {
-		t.Error("Cgroup(999) reported ok for a missing process")
-	}
+	assert.True(t, ok, "a process whose cgroup file is there must be answered for")
+	assert.Equal(t, "app-gpg-agent.service", unit, "the unit the process runs under")
+
+	_, ok = ProcfsCgroup{Root: root}.Cgroup(999)
+	assert.False(t, ok, "a process that is not there must not be answered for")
 }

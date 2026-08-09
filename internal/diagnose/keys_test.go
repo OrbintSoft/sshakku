@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/OrbintSoft/sshakku/internal/keystate"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // fakeKeyLister returns a fixed list of key paths (or an error).
@@ -64,24 +66,21 @@ func TestGatherKeysLoadedAndTracked(t *testing.T) {
 	}
 	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, fakeSource{}, fakeProber{}, nil, nil, ks, nil)
 
-	if len(r.Keys) != 1 {
-		t.Fatalf("Keys = %v, want 1 entry", r.Keys)
-	}
+	require.Len(t, r.Keys, 1, "the one key the directory held")
 	kv := r.Keys[0]
-	if kv.Name != "id_ed25519" || !kv.Loaded || !kv.Tracked || kv.NoExpiry {
-		t.Fatalf("unexpected KeyView: %+v", kv)
-	}
-	wantExpiry := fixedNow.Add(7 * time.Hour)
-	if !kv.ExpiresAt.Equal(wantExpiry) {
-		t.Fatalf("ExpiresAt = %v, want %v", kv.ExpiresAt, wantExpiry)
-	}
+	// Four separate things the report says about this key; assert, so one run
+	// names every one it got wrong rather than only the first.
+	assert.Equal(t, "id_ed25519", kv.Name, "the key's name")
+	assert.True(t, kv.Loaded, "the agent reported this key's fingerprint")
+	assert.True(t, kv.Tracked, "a key with a record is one whose TTL is known")
+	assert.False(t, kv.NoExpiry, "a record carrying a lifetime is one that expires")
+	assert.Equal(t, fixedNow.Add(7*time.Hour), kv.ExpiresAt, "what is left of an 8h lifetime an hour in")
 
 	var b strings.Builder
 	Format(&b, r)
 	out := b.String()
-	if !strings.Contains(out, "id_ed25519") || !strings.Contains(out, "expires in 7h0m0s") {
-		t.Fatalf("Format output missing expected key/TTL line, got:\n%s", out)
-	}
+	assert.Contains(t, out, "id_ed25519", "the report must name the key")
+	assert.Contains(t, out, "expires in 7h0m0s", "the report must say how long the key has left")
 }
 
 func TestGatherKeysNotLoaded(t *testing.T) {
@@ -94,15 +93,13 @@ func TestGatherKeysNotLoaded(t *testing.T) {
 	}
 	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, fakeSource{}, fakeProber{}, nil, nil, ks, nil)
 
-	if len(r.Keys) != 1 || r.Keys[0].Loaded {
-		t.Fatalf("Keys = %+v, want one not-loaded key", r.Keys)
-	}
+	require.Len(t, r.Keys, 1, "the one key the directory held")
+	assert.False(t, r.Keys[0].Loaded, "the agent did not report this key's fingerprint")
 
 	var b strings.Builder
 	Format(&b, r)
-	if !strings.Contains(b.String(), "id_rsa") || !strings.Contains(b.String(), "not loaded") {
-		t.Fatalf("Format output missing not-loaded line, got:\n%s", b.String())
-	}
+	assert.Contains(t, b.String(), "id_rsa", "the report must name the key")
+	assert.Contains(t, b.String(), "not loaded", "the report must say the agent does not hold it")
 }
 
 func TestGatherKeysLoadedNoExpiry(t *testing.T) {
@@ -118,14 +115,13 @@ func TestGatherKeysLoadedNoExpiry(t *testing.T) {
 	}
 	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, fakeSource{}, fakeProber{}, nil, nil, ks, nil)
 
-	if len(r.Keys) != 1 || !r.Keys[0].Loaded || !r.Keys[0].NoExpiry {
-		t.Fatalf("Keys = %+v, want one loaded, no-expiry key", r.Keys)
-	}
+	require.Len(t, r.Keys, 1, "the one key the directory held")
+	assert.True(t, r.Keys[0].Loaded, "the agent reported this key's fingerprint")
+	assert.True(t, r.Keys[0].NoExpiry, "a record with no lifetime is one that never expires")
+
 	var b strings.Builder
 	Format(&b, r)
-	if !strings.Contains(b.String(), "no expiry") {
-		t.Fatalf("Format output missing 'no expiry', got:\n%s", b.String())
-	}
+	assert.Contains(t, b.String(), "no expiry", "the report must say the key will not expire")
 }
 
 func TestGatherKeysLoadedUntracked(t *testing.T) {
@@ -139,14 +135,13 @@ func TestGatherKeysLoadedUntracked(t *testing.T) {
 	}
 	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, fakeSource{}, fakeProber{}, nil, nil, ks, nil)
 
-	if len(r.Keys) != 1 || !r.Keys[0].Loaded || r.Keys[0].Tracked {
-		t.Fatalf("Keys = %+v, want one loaded, untracked key", r.Keys)
-	}
+	require.Len(t, r.Keys, 1, "the one key the directory held")
+	assert.True(t, r.Keys[0].Loaded, "the agent reported this key's fingerprint")
+	assert.False(t, r.Keys[0].Tracked, "with nothing recording when it was added, its TTL is not known")
+
 	var b strings.Builder
 	Format(&b, r)
-	if !strings.Contains(b.String(), "TTL unknown") {
-		t.Fatalf("Format output missing 'TTL unknown', got:\n%s", b.String())
-	}
+	assert.Contains(t, b.String(), "TTL unknown", "the report must say the TTL is not known")
 }
 
 func TestGatherKeysExpired(t *testing.T) {
@@ -173,24 +168,18 @@ func TestGatherKeysExpired(t *testing.T) {
 	// report it as no-longer-trustworthy TTL tracking, not a confident
 	// "expired" that also wrongly promises a new shell will refill it (it
 	// won't: the loader dedups on an already-loaded fingerprint and skips).
-	if !strings.Contains(out, "TTL unknown") || !strings.Contains(out, "record expired 1h0m0s ago") {
-		t.Fatalf("Format output missing the stale-record TTL-unknown line, got:\n%s", out)
-	}
-	if strings.Contains(out, "a new shell will refill it") {
-		t.Fatalf("Format output makes a false refill promise for a key the loader would just skip, got:\n%s", out)
-	}
+	assert.Contains(t, out, "TTL unknown", "a record that outlived its lifetime no longer says what the TTL is")
+	assert.Contains(t, out, "record expired 1h0m0s ago", "the report must say how stale the record is")
+	assert.NotContains(t, out, "a new shell will refill it",
+		"a key the loader would skip must not be promised a refill")
 }
 
 func TestGatherKeysEnumerateError(t *testing.T) {
 	ks := &KeySource{Lister: fakeKeyLister{err: errors.New("boom")}}
 	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, fakeSource{}, fakeProber{}, nil, nil, ks, nil)
 
-	if r.KeysErr == nil {
-		t.Fatal("KeysErr = nil, want the enumeration error")
-	}
-	if len(r.Keys) != 0 {
-		t.Fatalf("Keys = %v, want none on enumeration error", r.Keys)
-	}
+	assert.Error(t, r.KeysErr, "a directory that could not be listed must be reported")
+	assert.Empty(t, r.Keys, "nothing may be listed from a directory that could not be read")
 }
 
 func TestFormatNamesTheDirectoryItReadWhenItHeldNoKey(t *testing.T) {
@@ -202,19 +191,16 @@ func TestFormatNamesTheDirectoryItReadWhenItHeldNoKey(t *testing.T) {
 	// A name rule that matches nothing and a directory that is not the one the
 	// user meant produce the same empty answer, and the directory's name is the
 	// only thing in the report that tells them apart.
-	if !strings.Contains(b.String(), "keys in /home/u/work-keys (0)") {
-		t.Fatalf("Format output must name the directory it read even when it held no key, got:\n%s", b.String())
-	}
+	assert.Contains(t, b.String(), "keys in /home/u/work-keys (0)",
+		"the report must name the directory it read even when it held no key")
 }
 
 func TestGatherNilKeySourceSkipsKeysSection(t *testing.T) {
 	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, fakeSource{}, fakeProber{}, nil, nil, nil, nil)
-	if r.Keys != nil || r.KeysErr != nil {
-		t.Fatalf("Keys/KeysErr = %v/%v, want both zero when KeySource is nil", r.Keys, r.KeysErr)
-	}
+	assert.Nil(t, r.Keys, "with nowhere to look, no key is listed")
+	assert.NoError(t, r.KeysErr, "not looking is not a failure to look")
+
 	var b strings.Builder
 	Format(&b, r)
-	if strings.Contains(b.String(), "keys in") {
-		t.Fatalf("Format output must omit the keys section when Keys is empty, got:\n%s", b.String())
-	}
+	assert.NotContains(t, b.String(), "keys in", "the report must leave out a section it has nothing for")
 }

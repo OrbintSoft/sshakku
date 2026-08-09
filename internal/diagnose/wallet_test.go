@@ -2,8 +2,10 @@ package diagnose
 
 import (
 	"bytes"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestWalletMissingKeepsOnlyWhatIsNotThere(t *testing.T) {
@@ -15,12 +17,9 @@ func TestWalletMissingKeepsOnlyWhatIsNotThere(t *testing.T) {
 		},
 	}
 	missing := view.Missing()
-	if len(missing) != 1 || missing[0].Name != "database" {
-		t.Fatalf("Missing() = %+v, want only the database", missing)
-	}
-	if len(WalletView{}.Missing()) != 0 {
-		t.Error("a wallet with no requirements has nothing missing")
-	}
+	require.Len(t, missing, 1, "only the unmet requirement is missing")
+	assert.Equal(t, "database", missing[0].Name, "the requirement that was not met")
+	assert.Empty(t, WalletView{}.Missing(), "a wallet with no requirements has nothing missing")
 }
 
 func TestWalletFindingsNameTheWalletAndThePiece(t *testing.T) {
@@ -32,17 +31,14 @@ func TestWalletFindingsNameTheWalletAndThePiece(t *testing.T) {
 		},
 	}
 	findings := WalletFindings(view)
-	if len(findings) != 1 {
-		t.Fatalf("findings = %v, want one", findings)
-	}
-	for _, want := range []string{"bitwarden", "bw", "not on PATH"} {
-		if !strings.Contains(findings[0], want) {
-			t.Errorf("finding %q does not mention %q", findings[0], want)
-		}
-	}
-	if WalletFindings(view.withEverythingPresent()) != nil {
-		t.Error("a wallet with nothing missing must produce no findings")
-	}
+	require.Len(t, findings, 1, "one unmet requirement, one finding")
+	// Three things a reader needs to act on it: which wallet, which piece, and
+	// what is wrong with it. Assert, so one run names every one left out.
+	assert.Contains(t, findings[0], "bitwarden", "the finding must name the wallet")
+	assert.Contains(t, findings[0], "bw", "the finding must name the piece that is missing")
+	assert.Contains(t, findings[0], "not on PATH", "the finding must say what is wrong with it")
+
+	assert.Nil(t, WalletFindings(view.withEverythingPresent()), "a wallet with nothing missing must produce no findings")
 }
 
 // withEverythingPresent returns the same wallet with every requirement met, so
@@ -59,40 +55,35 @@ func (w WalletView) withEverythingPresent() WalletView {
 
 func TestFormatWalletSection(t *testing.T) {
 	tests := []struct {
-		name    string
-		wallet  WalletView
-		want    []string
-		absent  []string
-		heading bool
+		name   string
+		wallet WalletView
+		want   []string
+		absent []string
 	}{
 		{
-			name:    "a backend with a route names both",
-			wallet:  WalletView{Backend: "keepassxc", Route: "cli", Requirements: []Requirement{{Name: "keepassxc-cli", Detail: "nowhere"}}},
-			want:    []string{"wallet:", "keepassxc", "route: cli", "keepassxc-cli:", "missing", "nowhere"},
-			heading: true,
+			name:   "a backend with a route names both",
+			wallet: WalletView{Backend: "keepassxc", Route: "cli", Requirements: []Requirement{{Name: "keepassxc-cli", Detail: "nowhere"}}},
+			want:   []string{"wallet:", "keepassxc", "route: cli", "keepassxc-cli:", "missing", "nowhere"},
 		},
 		{
-			name:    "a backend with one way to be reached names no route",
-			wallet:  WalletView{Backend: "keychain"},
-			want:    []string{"wallet:", "keychain"},
-			absent:  []string{"route:"},
-			heading: true,
+			name:   "a backend with one way to be reached names no route",
+			wallet: WalletView{Backend: "keychain"},
+			want:   []string{"wallet:", "keychain"},
+			absent: []string{"route:"},
 		},
 		{
-			name:    "a satisfied requirement is not called missing",
-			wallet:  WalletView{Backend: "1password", Requirements: []Requirement{{Name: "op", Detail: "/usr/bin/op", Present: true}}},
-			want:    []string{"op:", "found", "/usr/bin/op"},
-			absent:  []string{"missing"},
-			heading: true,
+			name:   "a satisfied requirement is not called missing",
+			wallet: WalletView{Backend: "1password", Requirements: []Requirement{{Name: "op", Detail: "/usr/bin/op", Present: true}}},
+			want:   []string{"op:", "found", "/usr/bin/op"},
+			absent: []string{"missing"},
 		},
 		{
 			name: "a requirement nobody could settle is neither found nor missing",
 			wallet: WalletView{Backend: "secret-service", Requirements: []Requirement{
 				{Name: "compartment", Detail: "no wallet was answering to ask", Undetermined: true},
 			}},
-			want:    []string{"compartment:", "undetermined", "no wallet was answering"},
-			absent:  []string{"missing", "found"},
-			heading: true,
+			want:   []string{"compartment:", "undetermined", "no wallet was answering"},
+			absent: []string{"missing", "found"},
 		},
 		{
 			name:   "no backend resolved prints no section at all",
@@ -107,14 +98,10 @@ func TestFormatWalletSection(t *testing.T) {
 			Format(&out, Report{Wallet: tc.wallet})
 			got := out.String()
 			for _, want := range tc.want {
-				if !strings.Contains(got, want) {
-					t.Errorf("report does not contain %q:\n%s", want, got)
-				}
+				assert.Containsf(t, got, want, "the wallet section must say %q", want)
 			}
 			for _, absent := range tc.absent {
-				if strings.Contains(got, absent) {
-					t.Errorf("report should not contain %q:\n%s", absent, got)
-				}
+				assert.NotContainsf(t, got, absent, "the wallet section must not say %q", absent)
 			}
 		})
 	}

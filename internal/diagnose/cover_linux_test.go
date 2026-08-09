@@ -5,15 +5,17 @@ package diagnose
 import (
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestParseMountsSkipsShortLine covers parseMounts dropping a line with fewer
 // than three whitespace-separated fields.
 func TestParseMountsSkipsShortLine(t *testing.T) {
 	entries := parseMounts([]byte("only two\n/dev/sda1 / ext4 rw 0 0\n"))
-	if len(entries) != 1 || entries[0].mountPoint != "/" {
-		t.Errorf("parseMounts = %+v, want just the well-formed entry", entries)
-	}
+	require.Len(t, entries, 1, "only the well-formed line describes a mount")
+	assert.Equal(t, "/", entries[0].mountPoint, "the mount point of the line that was kept")
 }
 
 // TestResolveDevBaseAbsoluteSymlink covers resolveDevBase following an absolute
@@ -23,14 +25,10 @@ func TestResolveDevBaseAbsoluteSymlink(t *testing.T) {
 	dev := t.TempDir()
 	// mapper/root → absolute /dev/dm-3 (stays under /dev): base resolves to dm-3.
 	symlink(t, "/dev/dm-3", filepath.Join(dev, "mapper", "root"))
-	if got := resolveDevBase(dev, "/dev/mapper/root"); got != "dm-3" {
-		t.Errorf("resolveDevBase = %q, want dm-3", got)
-	}
+	assert.Equal(t, "dm-3", resolveDevBase(dev, "/dev/mapper/root"), "a target still under /dev is followed")
 	// mapper/escape → absolute path outside /dev: the walk stops at the symlink.
 	symlink(t, "/elsewhere/x", filepath.Join(dev, "mapper", "escape"))
-	if got := resolveDevBase(dev, "/dev/mapper/escape"); got != "escape" {
-		t.Errorf("resolveDevBase = %q, want escape (walk stops when leaving /dev)", got)
-	}
+	assert.Equal(t, "escape", resolveDevBase(dev, "/dev/mapper/escape"), "the walk stops where the target leaves /dev")
 }
 
 // TestDeviceEncryptedNonLUKSNoSlaves covers deviceEncrypted's final false return
@@ -38,15 +36,26 @@ func TestResolveDevBaseAbsoluteSymlink(t *testing.T) {
 func TestDeviceEncryptedNonLUKSNoSlaves(t *testing.T) {
 	sys := t.TempDir()
 	writeFile(t, filepath.Join(sys, "class", "block", "dm-9", "dm", "uuid"), "LVM-plainvolume\n")
-	if got := deviceEncrypted(sys, "dm-9", 1); got == nil || *got {
-		t.Errorf("deviceEncrypted = %v, want a definite false", got)
-	}
+	got := deviceEncrypted(sys, "dm-9", 1)
+	require.NotNil(t, got, "a device that was read must be answered for, not left undetermined")
+	assert.False(t, *got, "a plain LVM volume with nothing under it is not encrypted")
+}
+
+// TestDeviceEncryptedVerityIsNotEncryption pins that the device-mapper check
+// looks for LUKS and not merely for the CRYPT family: dm-verity authenticates
+// a volume without encrypting it, and calling such a disk encrypted would tell
+// a user their keys are protected at rest when they are not.
+func TestDeviceEncryptedVerityIsNotEncryption(t *testing.T) {
+	sys := t.TempDir()
+	writeFile(t, filepath.Join(sys, "class", "block", "dm-7", "dm", "uuid"), "CRYPT-VERITY-abcdef-root\n")
+	got := deviceEncrypted(sys, "dm-7", 1)
+	require.NotNil(t, got, "a device that was read must be answered for")
+	assert.False(t, *got, "an authenticated volume is not an encrypted one")
 }
 
 // TestRealTmpfsSizeError covers realTmpfsSize returning 0 when statfs fails on a
 // path that does not exist.
 func TestRealTmpfsSizeError(t *testing.T) {
-	if got := realTmpfsSize(filepath.Join(t.TempDir(), "does-not-exist")); got != 0 {
-		t.Errorf("realTmpfsSize of a missing path = %d, want 0", got)
-	}
+	assert.Zero(t, realTmpfsSize(filepath.Join(t.TempDir(), "does-not-exist")),
+		"a path that could not be measured has no size to report")
 }
