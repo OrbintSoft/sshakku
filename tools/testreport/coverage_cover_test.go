@@ -4,6 +4,9 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // errReader fails on the first read, so parseCoverageProfile's scanner-error
@@ -19,38 +22,30 @@ func TestParseCoverageProfileSkipsBlankLines(t *testing.T) {
 		`sshakku/pkg/x.go:1.1,2.2 3 1`,
 	)
 	total, _, err := parseCoverageProfile(strings.NewReader(in))
-	if err != nil {
-		t.Fatalf("parseCoverageProfile: %v", err)
-	}
-	if total != 100.0 {
-		t.Fatalf("total = %v, want 100", total)
-	}
+	require.NoError(t, err, "parseCoverageProfile")
+	assert.InDelta(t, 100.0, total, floatTolerance, "a blank line is not a statement that went uncovered")
 }
 
 func TestParseCoverageProfileRejectsBadFieldCount(t *testing.T) {
 	// A line with a position but only two fields after it, not three.
 	in := fixture(`mode: set`, `sshakku/pkg/x.go:1.1,2.2 3`)
-	if _, _, err := parseCoverageProfile(strings.NewReader(in)); err == nil {
-		t.Fatal("expected an error for the wrong field count")
-	}
+	_, _, err := parseCoverageProfile(strings.NewReader(in))
+	assert.Error(t, err, "a line missing a field must be reported, not read as far as it goes")
 }
 
 func TestParseCoverageProfileRejectsBadStatementCount(t *testing.T) {
 	in := fixture(`mode: set`, `sshakku/pkg/x.go:1.1,2.2 notanumber 1`)
-	if _, _, err := parseCoverageProfile(strings.NewReader(in)); err == nil {
-		t.Fatal("expected an error for a non-numeric statement count")
-	}
+	_, _, err := parseCoverageProfile(strings.NewReader(in))
+	assert.Error(t, err, "a statement count that is not a number must be reported")
 }
 
 func TestParseCoverageProfileRejectsBadHitCount(t *testing.T) {
 	in := fixture(`mode: set`, `sshakku/pkg/x.go:1.1,2.2 3 notanumber`)
-	if _, _, err := parseCoverageProfile(strings.NewReader(in)); err == nil {
-		t.Fatal("expected an error for a non-numeric hit count")
-	}
+	_, _, err := parseCoverageProfile(strings.NewReader(in))
+	assert.Error(t, err, "a hit count that is not a number must be reported")
 }
 
 func TestParseCoverageProfileReportsReadErrors(t *testing.T) {
-	if _, _, err := parseCoverageProfile(errReader{}); err == nil {
-		t.Fatal("expected the scanner read error to surface")
-	}
+	_, _, err := parseCoverageProfile(errReader{})
+	assert.Error(t, err, "a profile that could not be read to the end must not be reported as complete")
 }

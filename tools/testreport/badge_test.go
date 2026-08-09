@@ -1,6 +1,11 @@
 package main
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
 
 func TestBadgeColorThresholds(t *testing.T) {
 	cases := []struct {
@@ -15,9 +20,7 @@ func TestBadgeColorThresholds(t *testing.T) {
 		{100, "brightgreen"},
 	}
 	for _, c := range cases {
-		if got := badgeColor(c.percent); got != c.want {
-			t.Errorf("badgeColor(%v) = %q, want %q", c.percent, got, c.want)
-		}
+		assert.Equalf(t, c.want, badgeColor(c.percent), "the badge colour at %v%%", c.percent)
 	}
 }
 
@@ -27,25 +30,34 @@ func TestRenderBadgeJSONFields(t *testing.T) {
 		CoveragePercent: 87.5,
 		PackageCoverage: []PackageCoverage{{Package: "pkg", Percent: 87.5}},
 	})
-	if err != nil {
-		t.Fatalf("renderBadgeJSON: %v", err)
-	}
-	if !contains(string(out), `"message": "87.5%"`) {
-		t.Fatalf("expected the coverage percentage as message, got:\n%s", out)
-	}
-	if !contains(string(out), `"color": "brightgreen"`) {
-		t.Fatalf("expected brightgreen for 87.5%%, got:\n%s", out)
-	}
-	if !contains(string(out), `"schemaVersion": 1`) {
-		t.Fatalf("expected shields.io schemaVersion 1, got:\n%s", out)
-	}
-	if !contains(string(out), `"label": "coverage linux"`) {
-		t.Fatalf("expected the OS in the label, got:\n%s", out)
-	}
+	require.NoError(t, err, "renderBadgeJSON")
+
+	// Four independent things the badge has to carry; assert, so one run names
+	// every one it left out.
+	badge := string(out)
+	assert.Contains(t, badge, `"message": "87.5%"`, "the badge must show the coverage percentage")
+	assert.Contains(t, badge, `"color": "brightgreen"`, "87.5% is in the green band")
+	assert.Contains(t, badge, `"schemaVersion": 1`, "shields.io reads the schema version")
+	assert.Contains(t, badge, `"label": "coverage linux"`, "the label must say which OS the number is from")
+}
+
+// TestRenderBadgeJSONColourFollowsTheNumberShown pins that the colour is
+// computed from this report's own coverage and not from anything else. The
+// number and the colour are the whole badge, and of the two the colour is the
+// one people read at a glance: a badge saying 12.0% in brightgreen tells the
+// reader the opposite of what it says.
+func TestRenderBadgeJSONColourFollowsTheNumberShown(t *testing.T) {
+	out, err := renderBadgeJSON(Report{
+		OS:              "linux",
+		CoveragePercent: 12.0,
+		PackageCoverage: []PackageCoverage{{Package: "pkg", Percent: 12.0}},
+	})
+	require.NoError(t, err, "renderBadgeJSON")
+	assert.Contains(t, string(out), `"message": "12.0%"`, "the badge must show this report's coverage")
+	assert.Contains(t, string(out), `"color": "red"`, "and must be coloured by that same number")
 }
 
 func TestRenderBadgeJSONErrorsWithoutCoverage(t *testing.T) {
-	if _, err := renderBadgeJSON(Report{OS: "linux"}); err == nil {
-		t.Fatal("expected an error when the report has no coverage data")
-	}
+	_, err := renderBadgeJSON(Report{OS: "linux"})
+	assert.Error(t, err, "a run that measured no coverage must not be given a badge saying it did")
 }
