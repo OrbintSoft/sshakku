@@ -14,6 +14,8 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/keys"
 	"github.com/OrbintSoft/sshakku/internal/paths"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestRun exercises argument dispatch only. shell-init and ensure-agent are
@@ -42,9 +44,8 @@ func TestRun(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := realDeps().run(io.Discard, io.Discard, tc.args); got != tc.want {
-				t.Errorf("run(%q) = %d, want %d", tc.args, got, tc.want)
-			}
+			assert.Equalf(t, tc.want, realDeps().run(io.Discard, io.Discard, tc.args),
+				"the exit status for %q", tc.args)
 		})
 	}
 }
@@ -55,20 +56,14 @@ func TestRun(t *testing.T) {
 // being written out again here, which is what stopped them agreeing before.
 func TestEveryChoosableWalletCanBeDiagnosed(t *testing.T) {
 	names := config.SecretBackends()
-	if len(names) == 0 {
-		t.Fatal("this system offers no wallet at all")
-	}
+	require.NotEmpty(t, names, "this system offers no wallet at all")
 	for _, name := range names {
-		if !config.SecretBackendAvailable(name) {
-			t.Errorf("SecretBackendAvailable(%q) = false, want true for a wallet that can be chosen", name)
-		}
+		assert.Truef(t, config.SecretBackendAvailable(name),
+			"%q can be chosen, so it must be one the diagnostics accept", name)
 	}
-	if config.SecretBackendAvailable("bogus") {
-		t.Error(`SecretBackendAvailable("bogus") = true, want false`)
-	}
-	if !config.SecretBackendAvailable(config.DefaultSecretBackend()) {
-		t.Errorf("the default wallet %q is not among the ones this system offers", config.DefaultSecretBackend())
-	}
+	assert.False(t, config.SecretBackendAvailable("bogus"), "a name nobody offers must not be accepted")
+	assert.Truef(t, config.SecretBackendAvailable(config.DefaultSecretBackend()),
+		"the default wallet %q must be one this system offers", config.DefaultSecretBackend())
 }
 
 func TestResolveTargetUser(t *testing.T) {
@@ -77,26 +72,23 @@ func TestResolveTargetUser(t *testing.T) {
 		t.Skipf("user.Current: %v", err)
 	}
 	selfUID := os.Getuid()
+	// resolveTargetUser answers two things: whose files to look at, and whether
+	// that is somebody other than the caller — Source is empty for the caller
+	// and names how the other user was arrived at otherwise.
 
 	t.Run("no --user, not root: self, no lookup needed", func(t *testing.T) {
 		t.Setenv("SUDO_UID", "")
 		got, err := resolveTargetUser("", paths.Env{UID: selfUID})
-		if err != nil {
-			t.Fatalf("resolveTargetUser: %v", err)
-		}
-		if got.UID != selfUID || got.Source != "" {
-			t.Errorf("got %+v, want UID=%d Source=\"\"", got, selfUID)
-		}
+		require.NoError(t, err, "resolveTargetUser")
+		assert.Equal(t, selfUID, got.UID, "the caller's own uid")
+		assert.Empty(t, got.Source, "nothing cross-user happened")
 	})
 
 	t.Run("--user names the invoking user: still self", func(t *testing.T) {
 		got, err := resolveTargetUser(self.Username, paths.Env{UID: selfUID})
-		if err != nil {
-			t.Fatalf("resolveTargetUser: %v", err)
-		}
-		if got.UID != selfUID || got.Source != "" {
-			t.Errorf("got %+v, want UID=%d Source=\"\"", got, selfUID)
-		}
+		require.NoError(t, err, "resolveTargetUser")
+		assert.Equal(t, selfUID, got.UID, "the caller's own uid")
+		assert.Empty(t, got.Source, "naming yourself is not going cross-user")
 	})
 
 	t.Run("--user names someone else: cross-user, regardless of who's actually invoking", func(t *testing.T) {
@@ -104,18 +96,14 @@ func TestResolveTargetUser(t *testing.T) {
 		// the "different from invoker" branch without depending on whether the test
 		// process happens to be root.
 		got, err := resolveTargetUser(self.Username, paths.Env{UID: -1})
-		if err != nil {
-			t.Fatalf("resolveTargetUser: %v", err)
-		}
-		if got.UID != selfUID || got.Source == "" {
-			t.Errorf("got %+v, want UID=%d and a non-empty Source", got, selfUID)
-		}
+		require.NoError(t, err, "resolveTargetUser")
+		assert.Equal(t, selfUID, got.UID, "the uid of the user named")
+		assert.NotEmpty(t, got.Source, "a target that is not the caller must say how it was arrived at")
 	})
 
 	t.Run("unknown --user value errors", func(t *testing.T) {
-		if _, err := resolveTargetUser("sshakku-test-no-such-user", paths.Env{UID: selfUID}); err == nil {
-			t.Error("resolveTargetUser: got nil error for an unknown user")
-		}
+		_, err := resolveTargetUser("sshakku-test-no-such-user", paths.Env{UID: selfUID})
+		assert.Error(t, err, "a user nobody can resolve must be reported, not silently taken for the caller")
 	})
 
 	t.Run("SUDO_UID auto-detected only when invoking as root", func(t *testing.T) {
@@ -129,35 +117,32 @@ func TestResolveTargetUser(t *testing.T) {
 		}
 		t.Setenv("SUDO_UID", strconv.Itoa(selfUID))
 		got, err := resolveTargetUser("", paths.Env{UID: 0})
-		if err != nil {
-			t.Fatalf("resolveTargetUser: %v", err)
-		}
-		if got.UID != selfUID || got.Source == "" {
-			t.Errorf("got %+v, want UID=%d and a non-empty Source", got, selfUID)
-		}
+		require.NoError(t, err, "resolveTargetUser")
+		assert.Equal(t, selfUID, got.UID, "the uid sudo recorded")
+		assert.NotEmpty(t, got.Source, "a target arrived at through SUDO_UID must say so")
 	})
 
 	t.Run("SUDO_UID ignored when not invoking as root", func(t *testing.T) {
 		if selfUID == 0 {
 			t.Skip("test process is already root: can't fake a distinct non-root SUDO_UID")
 		}
-		t.Setenv("SUDO_UID", strconv.Itoa(selfUID))
+		// A SUDO_UID naming somebody else, so honouring it and ignoring it lead
+		// to different answers. Set to the caller's own uid the two are the
+		// same, and the check passes whichever the code does. Root is the one
+		// uid that resolves on every system this runs on.
+		t.Setenv("SUDO_UID", "0")
 		got, err := resolveTargetUser("", paths.Env{UID: selfUID})
-		if err != nil {
-			t.Fatalf("resolveTargetUser: %v", err)
-		}
-		if got.Source != "" {
-			t.Errorf("got %+v, want Source=\"\" (SUDO_UID should be ignored)", got)
-		}
+		require.NoError(t, err, "resolveTargetUser")
+		assert.Equal(t, selfUID, got.UID, "the caller stays the target when they did not come through sudo")
+		assert.Empty(t, got.Source, "SUDO_UID means nothing when the caller is not root")
 	})
 
 	t.Run("malformed SUDO_UID as root errors", func(t *testing.T) {
 		// As root with a non-numeric SUDO_UID, the auto-detect lookup fails and
 		// resolveTargetUser reports it rather than silently falling through.
 		t.Setenv("SUDO_UID", "not-a-uid-xyzzy")
-		if _, err := resolveTargetUser("", paths.Env{UID: 0}); err == nil {
-			t.Error("resolveTargetUser(bad SUDO_UID) = nil error, want a lookup failure")
-		}
+		_, err := resolveTargetUser("", paths.Env{UID: 0})
+		assert.Error(t, err, "a SUDO_UID that resolves to nobody must be reported, not fallen through")
 	})
 }
 
@@ -165,24 +150,14 @@ func TestCrossUserGuard(t *testing.T) {
 	self := targetUser{Source: ""}
 	other := targetUser{Source: "the --user flag", UID: 1000, Username: "alice"}
 
-	if got := crossUserGuard(self, true, false, 0); got != "" {
-		t.Errorf("self, --fix: got %q, want \"\" (nothing cross-user applies)", got)
-	}
-	if got := crossUserGuard(self, false, false, 1000); got != "" {
-		t.Errorf("self, non-root: got %q, want \"\"", got)
-	}
-	if got := crossUserGuard(other, true, false, 0); got == "" {
-		t.Error("other user, --fix, root: want a refusal, got \"\"")
-	}
-	if got := crossUserGuard(other, false, false, 1000); got == "" {
-		t.Error("other user, no --fix, non-root: want a refusal (requires root), got \"\"")
-	}
-	if got := crossUserGuard(other, false, false, 0); got != "" {
-		t.Errorf("other user, no --fix, root: got %q, want \"\" (read-only cross-user is allowed)", got)
-	}
-	if got := crossUserGuard(other, false, true, 0); got == "" {
-		t.Error("other user, --test-backend, root: want a refusal, got \"\"")
-	}
+	// Six independent verdicts; assert throughout so one run names every one
+	// that went the wrong way.
+	assert.Empty(t, crossUserGuard(self, true, false, 0), "acting on your own machine needs no permission")
+	assert.Empty(t, crossUserGuard(self, false, false, 1000), "nor does looking at it")
+	assert.NotEmpty(t, crossUserGuard(other, true, false, 0), "changing another user's setup must be refused")
+	assert.NotEmpty(t, crossUserGuard(other, false, false, 1000), "reading another user's setup takes root")
+	assert.Empty(t, crossUserGuard(other, false, false, 0), "root may look at another user's setup")
+	assert.NotEmpty(t, crossUserGuard(other, false, true, 0), "probing another user's wallet is not looking, it is acting")
 }
 
 // TestAskpassExports pins the exported environment verbatim. Both lines are
@@ -191,12 +166,9 @@ func TestCrossUserGuard(t *testing.T) {
 // beside the binary rather than the binary itself, and REQUIRE=force is what
 // makes ssh consult it at all in a session with no DISPLAY.
 func TestAskpassExports(t *testing.T) {
-	got := askpassExports("/usr/local/bin/sshakku")
 	want := "export SSH_ASKPASS='/usr/local/bin/sshakku-askpass'\n" +
 		"export SSH_ASKPASS_REQUIRE=force\n"
-	if got != want {
-		t.Errorf("askpassExports = %q, want %q", got, want)
-	}
+	assert.Equal(t, want, askpassExports("/usr/local/bin/sshakku"), "the two lines the shell must export, verbatim")
 }
 
 // TestDispatchRoutesOnTheNameItWasRunAs covers the one thing that decides
@@ -219,9 +191,8 @@ func TestDispatchRoutesOnTheNameItWasRunAs(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.invokedAs, func(t *testing.T) {
-			if got := filepath.Base(tc.invokedAs) == askpassProgName; got != tc.want {
-				t.Errorf("invoked as %q: askpass = %v, want %v", tc.invokedAs, got, tc.want)
-			}
+			assert.Equalf(t, tc.want, filepath.Base(tc.invokedAs) == askpassProgName,
+				"whether being run as %q means answering a prompt", tc.invokedAs)
 		})
 	}
 }
@@ -233,19 +204,13 @@ func TestLoadSettingsMergesConfigD(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "config.toml"), "key_lifetime = \"1h\"\nquiet = true\n")
 	confD := filepath.Join(dir, "config.d")
-	if err := os.MkdirAll(confD, 0o755); err != nil {
-		t.Fatalf("MkdirAll: %v", err)
-	}
+	require.NoError(t, os.MkdirAll(confD, 0o755), "create config.d")
 	writeFile(t, filepath.Join(confD, "10-override.toml"), "key_lifetime = \"2h\"\n")
 
 	settings := loadSettings(paths.Layout{ConfigDir: dir}, "test", fakeLogger{})
 
-	if settings.KeyLifetime != 2*time.Hour {
-		t.Errorf("KeyLifetime = %v, want 2h (config.d/10-override.toml must win over config.toml)", settings.KeyLifetime)
-	}
-	if !settings.Quiet {
-		t.Errorf("Quiet = %v, want true (config.toml's own value, untouched by config.d/)", settings.Quiet)
-	}
+	assert.Equal(t, 2*time.Hour, settings.KeyLifetime, "a drop-in must win over config.toml")
+	assert.True(t, settings.Quiet, "a setting no drop-in mentions keeps config.toml's value")
 }
 
 // countingLogger records how many lines were logged, so a test can assert that
@@ -261,14 +226,10 @@ func (c *countingLogger) Log(string, string) error { c.n++; return nil }
 func TestLoadSettingsLogsErrors(t *testing.T) {
 	dir := t.TempDir()
 	// A directory where config.toml should be a file makes config.Load fail.
-	if err := os.Mkdir(filepath.Join(dir, "config.toml"), 0o755); err != nil {
-		t.Fatalf("mkdir config.toml: %v", err)
-	}
+	require.NoError(t, os.Mkdir(filepath.Join(dir, "config.toml"), 0o755), "make config.toml unreadable as a file")
 	// A malformed drop-in makes config.LoadDir report an error.
 	confD := filepath.Join(dir, "config.d")
-	if err := os.MkdirAll(confD, 0o755); err != nil {
-		t.Fatalf("mkdir config.d: %v", err)
-	}
+	require.NoError(t, os.MkdirAll(confD, 0o755), "create config.d")
 	writeFile(t, filepath.Join(confD, "10-bad.toml"), "this is not = valid = toml")
 	// An unparseable env value makes config.Resolve report an error.
 	t.Setenv("SSHAKKU_KEY_LIFETIME", "notaduration")
@@ -276,13 +237,9 @@ func TestLoadSettingsLogsErrors(t *testing.T) {
 	log := &countingLogger{}
 	settings := loadSettings(paths.Layout{ConfigDir: dir}, "test", log)
 
-	if log.n < 3 {
-		t.Errorf("logged %d errors, want at least 3 (config load, config.d, resolve)", log.n)
-	}
+	assert.GreaterOrEqual(t, log.n, 3, "each of the three failures must be logged, not swallowed")
 	// A setting untouched by the errors still resolves to its default.
-	if settings.SecretBackend == "" {
-		t.Error("SecretBackend is empty, want the built-in default despite the load errors")
-	}
+	assert.NotEmpty(t, settings.SecretBackend, "a run that could not read its config still gets working defaults")
 }
 
 func TestTail(t *testing.T) {
@@ -298,30 +255,20 @@ func TestTail(t *testing.T) {
 		{"abcdef", 0, ""},
 	}
 	for _, tc := range tests {
-		if got := tail(tc.s, tc.n); got != tc.want {
-			t.Errorf("tail(%q, %d) = %q, want %q", tc.s, tc.n, got, tc.want)
-		}
+		assert.Equalf(t, tc.want, tail(tc.s, tc.n), "the last %d characters of %q", tc.n, tc.s)
 	}
 }
 
 func TestRandomProbeValue(t *testing.T) {
 	a, err := randomProbeValue()
-	if err != nil {
-		t.Fatalf("randomProbeValue: %v", err)
-	}
-	if len(a) != 32 {
-		t.Errorf("len(randomProbeValue()) = %d, want 32 (16 bytes hex-encoded)", len(a))
-	}
-	if _, err := hex.DecodeString(a); err != nil {
-		t.Errorf("randomProbeValue() = %q, not valid hex: %v", a, err)
-	}
+	require.NoError(t, err, "randomProbeValue")
+	assert.Len(t, a, 32, "sixteen random bytes, hex-encoded")
+	_, decodeErr := hex.DecodeString(a)
+	assert.NoError(t, decodeErr, "the value must be hex all the way through")
+
 	b, err := randomProbeValue()
-	if err != nil {
-		t.Fatalf("randomProbeValue: %v", err)
-	}
-	if a == b {
-		t.Errorf("two calls both returned %q, want distinct random values", a)
-	}
+	require.NoError(t, err, "randomProbeValue")
+	assert.NotEqual(t, a, b, "two probes must not share a value, or one could be mistaken for the other")
 }
 
 // TestAskpassEnvHeadless confirms a session with no display server is wired the
@@ -335,32 +282,25 @@ func TestAskpassEnvHeadless(t *testing.T) {
 	d := realDeps()
 	d.self = func() (string, error) { return "/opt/sshakku/bin/sshakku", nil }
 	var out, errOut bytes.Buffer
-	if got := d.askpassEnv(&out, &errOut); got != 0 {
-		t.Errorf("askpassEnv (headless) = %d, want 0", got)
-	}
-	if got, want := out.String(), askpassExports("/opt/sshakku/bin/sshakku"); got != want {
-		t.Errorf("headless askpassEnv wrote %q to stdout, want %q", got, want)
-	}
+	require.Zero(t, d.askpassEnv(&out, &errOut), "a session with no display is still one the broker serves")
+	assert.Equal(t, askpassExports("/opt/sshakku/bin/sshakku"), out.String(),
+		"the same exports a graphical session gets")
 }
 
 func TestStderrNotifier(t *testing.T) {
 	var buf bytes.Buffer
 	stderrNotifier{w: &buf}.Notify("hello world")
-	if got, want := buf.String(), "sshakku: hello world\n"; got != want {
-		t.Errorf("Notify wrote %q, want %q", got, want)
-	}
+	assert.Equal(t, "sshakku: hello world\n", buf.String(), "a notice must name the tool it came from")
 }
 
 // TestDispatchRoutesToRun covers dispatch's non-askpass branch: run under its
 // own name, it must fall through to normal subcommand dispatch. The askpass
 // branch is exercised via TestAskpassHandoff.
 func TestDispatchRoutesToRun(t *testing.T) {
-	if got := dispatch(realDeps(), io.Discard, io.Discard, "/usr/local/bin/sshakku", []string{"help"}); got != 0 {
-		t.Errorf("dispatch(help) = %d, want 0", got)
-	}
-	if got := dispatch(realDeps(), io.Discard, io.Discard, "/usr/local/bin/sshakku", nil); got != 2 {
-		t.Errorf("dispatch(no args) = %d, want 2 (usage)", got)
-	}
+	assert.Zero(t, dispatch(realDeps(), io.Discard, io.Discard, "/usr/local/bin/sshakku", []string{"help"}),
+		"asking for help is not a failure")
+	assert.Equal(t, 2, dispatch(realDeps(), io.Discard, io.Discard, "/usr/local/bin/sshakku", nil),
+		"running the tool with nothing to do is a usage error")
 }
 
 // TestAskpassHandoff covers the SSH_ASKPASS handoff failure branches: a missing
@@ -374,32 +314,26 @@ func TestAskpassHandoff(t *testing.T) {
 
 	t.Run("missing token", func(t *testing.T) {
 		t.Setenv(keys.EnvPassHandoffToken, "")
-		if got := realDeps().askpassFromHandoff(io.Discard); got != 1 {
-			t.Errorf("askpassFromHandoff (no token) = %d, want 1", got)
-		}
+		assert.Equal(t, 1, realDeps().askpassFromHandoff(io.Discard),
+			"with no token there is no prompt to answer, and that must be reported")
 	})
 
 	t.Run("unresolvable token routed via askpass", func(t *testing.T) {
 		t.Setenv(keys.EnvPassHandoffToken, "sshakku-test-nonexistent-token")
-		if got := realDeps().askpass(io.Discard, nil); got != 1 {
-			t.Errorf("askpass (bogus handoff token) = %d, want 1", got)
-		}
+		assert.Equal(t, 1, realDeps().askpass(io.Discard, nil),
+			"a token that resolves to nothing must be reported, not answered with an empty passphrase")
 	})
 }
 
 func TestKeystateDir(t *testing.T) {
 	got := keystateDir(paths.Layout{AgentSock: "/run/user/1000/sshakku/agent.sock"})
-	if want := "/run/user/1000/sshakku/keystate"; got != want {
-		t.Errorf("keystateDir = %q, want %q", got, want)
-	}
+	assert.Equal(t, "/run/user/1000/sshakku/keystate", got, "the key records sit beside the socket they describe")
 }
 
 func TestCurrentUser(t *testing.T) {
 	t.Run("USER set", func(t *testing.T) {
 		t.Setenv("USER", "sshakku-test-user")
-		if got := currentUser(); got != "sshakku-test-user" {
-			t.Errorf("currentUser = %q, want the $USER value", got)
-		}
+		assert.Equal(t, "sshakku-test-user", currentUser(), "the shell's own answer is taken as given")
 	})
 
 	t.Run("USER empty falls back to a lookup", func(t *testing.T) {
@@ -411,21 +345,15 @@ func TestCurrentUser(t *testing.T) {
 		if err != nil {
 			t.Skipf("user.Current: %v", err)
 		}
-		if got := currentUser(); got != self.Username {
-			t.Errorf("currentUser = %q, want %q from user.Current()", got, self.Username)
-		}
+		assert.Equal(t, self.Username, currentUser(), "with no $USER the process owner is looked up")
 	})
 }
 
 func TestNewHostSource(t *testing.T) {
-	if newHostSource("") == nil {
-		t.Error("newHostSource returned nil, want a diagnose.HostSource for this OS")
-	}
+	assert.NotNil(t, newHostSource(""), "every OS this builds for must have host checks of its own")
 }
 
 func writeFile(t *testing.T, path, content string) {
 	t.Helper()
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatalf("WriteFile(%s): %v", path, err)
-	}
+	require.NoErrorf(t, os.WriteFile(path, []byte(content), 0o644), "write the fixture file %s", path)
 }

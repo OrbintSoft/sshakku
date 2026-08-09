@@ -6,6 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestConfigEditOpensTheUsersOwnFile verifies F36 as a user meets it: with no
@@ -16,39 +19,31 @@ func TestConfigEditOpensTheUsersOwnFile(t *testing.T) {
 	home := tempRuntimeEnv(t)
 	record := useEditor(t, "")
 
-	if out, errOut, code := runConfigEdit(t); code != 0 {
-		t.Fatalf("exit = %d (%s / %s), want 0", code, out, errOut)
-	}
+	out, errOut, code := runConfigEdit(t)
+	require.Zerof(t, code, "editing a configuration that is not there yet must work: %s / %s", out, errOut)
 
 	t.Run("the editor was handed config.toml and nothing else", func(t *testing.T) {
-		opened := strings.Fields(readFile(t, record))
 		want := filepath.Join(home, ".config", "sshakku", "config.toml")
-		if len(opened) != 1 || opened[0] != want {
-			t.Errorf("the editor was handed %v, want %s alone", opened, want)
-		}
+		assert.Equal(t, []string{want}, strings.Fields(readFile(t, record)),
+			"the editor must be handed the user's own file and nothing else")
 	})
 
 	t.Run("the file it was handed lists what can be set", func(t *testing.T) {
 		created := readFile(t, filepath.Join(home, ".config", "sshakku", "config.toml"))
 		for _, key := range []string{"key_lifetime", "secret_backend", "key_patterns"} {
-			if !strings.Contains(created, key) {
-				t.Errorf("the created file does not mention %s", key)
-			}
+			assert.Containsf(t, created, key, "a file to edit must list %s among what can be set", key)
 		}
 	})
 
 	t.Run("what the editor saves is what SSHakku reads", func(t *testing.T) {
 		useEditor(t, "key_lifetime = \"3h\"\n")
-		if _, errOut, code := runConfigEdit(t); code != 0 {
-			t.Fatalf("exit = %d (%s), want 0", code, errOut)
-		}
-		out, _, code := runConfig(t)
-		if code != 0 {
-			t.Fatalf("config exit = %d, want 0", code)
-		}
-		if line := settingLine(t, out, "key_lifetime"); !strings.Contains(line, "3h") {
-			t.Errorf("%q is not what the editor saved", line)
-		}
+		_, editErr, editCode := runConfigEdit(t)
+		require.Zerof(t, editCode, "saving a valid file must work: %s", editErr)
+
+		report, _, reportCode := runConfig(t)
+		require.Zero(t, reportCode, "a report changes nothing and cannot fail")
+		assert.Contains(t, settingLine(t, report, "key_lifetime"), "3h",
+			"what the editor saved must be what SSHakku then reads")
 	})
 }
 
@@ -60,13 +55,13 @@ func TestConfigEditPassesOnTheEditorsOwnArguments(t *testing.T) {
 	record := useEditor(t, "")
 	t.Setenv("EDITOR", editorScript(t)+" --wait --new-window")
 
-	if _, errOut, code := runConfigEdit(t); code != 0 {
-		t.Fatalf("exit = %d (%s), want 0", code, errOut)
-	}
+	_, errOut, code := runConfigEdit(t)
+	require.Zerof(t, code, "an $EDITOR with arguments of its own must still run: %s", errOut)
+
 	opened := strings.Fields(readFile(t, record))
-	if len(opened) != 3 || opened[0] != "--wait" || opened[1] != "--new-window" {
-		t.Errorf("the editor was run as %v, want its own arguments before the path", opened)
-	}
+	require.Len(t, opened, 3, "the editor's own two arguments, then the path")
+	assert.Equal(t, []string{"--wait", "--new-window"}, opened[:2],
+		"an $EDITOR set to a command line must be run as that command line, not as its first word")
 }
 
 // TestConfigEditSaysWhatOverrulesIt verifies the half of F36 that cannot be
@@ -79,16 +74,11 @@ func TestConfigEditSaysWhatOverrulesIt(t *testing.T) {
 	useEditor(t, "key_lifetime = \"3h\"\n")
 
 	out, errOut, code := runConfigEdit(t)
-	if code != 0 {
-		t.Fatalf("exit = %d (%s), want 0: an overruled key is not a failure", code, errOut)
-	}
+	require.Zerof(t, code, "an overruled key is not a failure: %s", errOut)
+
 	said := out + errOut
-	if !strings.Contains(said, "key_lifetime") {
-		t.Errorf("nothing names the key that was overruled:\n%s", said)
-	}
-	if !strings.Contains(said, "50-work.toml") {
-		t.Errorf("nothing names the file that overrules it:\n%s", said)
-	}
+	assert.Contains(t, said, "key_lifetime", "the edit that will have no effect must be named")
+	assert.Contains(t, said, "50-work.toml", "and so must the file that overrules it")
 }
 
 // TestConfigEditReportsAValueThatWillBeIgnored verifies F36 for the file that
@@ -100,13 +90,11 @@ func TestConfigEditReportsAValueThatWillBeIgnored(t *testing.T) {
 	useEditor(t, "key_lifetime = \"eight hours\"\n")
 
 	out, errOut, code := runConfigEdit(t)
-	if code != 0 {
-		t.Fatalf("exit = %d, want 0: the file is readable, one value in it is not usable", code)
-	}
+	require.Zero(t, code, "the file is readable; one value in it is merely not usable")
+
 	said := out + errOut
-	if !strings.Contains(said, "key_lifetime") || !strings.Contains(said, "eight hours") {
-		t.Errorf("nothing says the value will be ignored:\n%s", said)
-	}
+	assert.Contains(t, said, "key_lifetime", "the setting that will be ignored must be named")
+	assert.Contains(t, said, "eight hours", "and the value repeated, so its author can see what they wrote")
 }
 
 // TestConfigEditReportsAFileThatNoLongerParses verifies the other half of F36:
@@ -117,12 +105,8 @@ func TestConfigEditReportsAFileThatNoLongerParses(t *testing.T) {
 	useEditor(t, "key_lifetime = \n")
 
 	out, errOut, code := runConfigEdit(t)
-	if code != 1 {
-		t.Fatalf("exit = %d, want 1 for a file that will be discarded", code)
-	}
-	if !strings.Contains(out+errOut, "config.toml") {
-		t.Errorf("nothing names the file that can no longer be read:\n%s%s", out, errOut)
-	}
+	assert.Equal(t, 1, code, "a file that will be discarded at the next login must not be left to be discovered then")
+	assert.Contains(t, out+errOut, "config.toml", "and the file that can no longer be read must be named")
 }
 
 // TestConfigEditWithNoEditorToRun covers the editor that is not there: naming
@@ -132,12 +116,9 @@ func TestConfigEditWithNoEditorToRun(t *testing.T) {
 	t.Setenv("EDITOR", "sshakku-no-such-editor")
 
 	_, errOut, code := runConfigEdit(t)
-	if code != 1 {
-		t.Fatalf("exit = %d, want 1 when the editor could not be run", code)
-	}
-	if !strings.Contains(errOut, "sshakku-no-such-editor") {
-		t.Errorf("stderr %q does not name the editor it tried to run", errOut)
-	}
+	assert.Equal(t, 1, code, "an editor that could not be run means nothing was edited")
+	assert.Contains(t, errOut, "sshakku-no-such-editor",
+		"$EDITOR is the one thing the user can correct, so it must be named")
 }
 
 // TestConfigEditFallsBackToVisual covers the second variable: a user who set
@@ -149,12 +130,10 @@ func TestConfigEditFallsBackToVisual(t *testing.T) {
 	t.Setenv("EDITOR", "")
 	t.Setenv("VISUAL", editorScript(t))
 
-	if _, errOut, code := runConfigEdit(t); code != 0 {
-		t.Fatalf("exit = %d (%s), want 0", code, errOut)
-	}
-	if got := readFile(t, filepath.Join(home, ".config", "sshakku", "config.toml")); !strings.Contains(got, "max_attempts = 7") {
-		t.Errorf("config.toml = %q, want what $VISUAL saved", got)
-	}
+	_, errOut, code := runConfigEdit(t)
+	require.Zerof(t, code, "a user who set only $VISUAL must still get an editor: %s", errOut)
+	assert.Contains(t, readFile(t, filepath.Join(home, ".config", "sshakku", "config.toml")), "max_attempts = 7",
+		"and what that editor saved must be what is on disk")
 }
 
 // TestConfigEditWithNoEditorNamedAtAll covers the last resort: a user who has
@@ -166,10 +145,8 @@ func TestConfigEditWithNoEditorNamedAtAll(t *testing.T) {
 	t.Setenv("EDITOR", "")
 	t.Setenv("VISUAL", "")
 
-	got := editorCommand()
-	if len(got) != 1 || got[0] != fallbackEditor {
-		t.Errorf("editorCommand() = %v, want the fallback %q alone", got, fallbackEditor)
-	}
+	assert.Equal(t, []string{fallbackEditor}, editorCommand(),
+		"with neither variable set the fallback editor is used, not an error about a variable")
 }
 
 // TestConfigEditCannotMakeTheDirectoryToEditIn covers what happens when there
@@ -180,23 +157,18 @@ func TestConfigEditCannotMakeTheDirectoryToEditIn(t *testing.T) {
 	home := tempRuntimeEnv(t)
 	// A regular file where the configuration directory's parent belongs: no
 	// directory can be made underneath it, whoever is running.
-	if err := os.WriteFile(filepath.Join(home, ".config"), nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".config"), nil, 0o600),
+		"seed a file where the configuration directory's parent belongs")
 	useEditor(t, "")
 
 	_, errOut, code := runConfigEdit(t)
-	if code != 1 {
-		t.Fatalf("exit = %d, want 1 when the directory could not be made", code)
-	}
+	assert.Equal(t, 1, code, "an editor must not open on a file that could never be saved")
 	// The directory is what could not be made, and naming the file inside it
 	// instead would send the user looking at the wrong thing.
-	if !strings.Contains(errOut, filepath.Join(home, ".config", "sshakku")) {
-		t.Errorf("stderr %q does not name the directory that could not be made", errOut)
-	}
-	if strings.Contains(errOut, "config.toml") {
-		t.Errorf("stderr %q blames the file, but it is the directory under it that could not be made", errOut)
-	}
+	assert.Contains(t, errOut, filepath.Join(home, ".config", "sshakku"),
+		"the directory that could not be made must be named")
+	assert.NotContains(t, errOut, "config.toml",
+		"blaming the file sends the user to look at the wrong thing")
 }
 
 // TestConfigEditCannotWriteTheFileToEdit covers the other half of the same
@@ -205,24 +177,17 @@ func TestConfigEditCannotMakeTheDirectoryToEditIn(t *testing.T) {
 func TestConfigEditCannotWriteTheFileToEdit(t *testing.T) {
 	home := tempRuntimeEnv(t)
 	dir := filepath.Join(home, ".config", "sshakku")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(dir, 0o700), "create the configuration directory")
 	// config.toml is a symlink to a path in a directory that is not there: it
 	// is not a file that exists, and it cannot be created either — a failure
 	// that does not depend on who is running the test, unlike a permission.
-	if err := os.Symlink(filepath.Join(dir, "gone", "config.toml"), filepath.Join(dir, "config.toml")); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.Symlink(filepath.Join(dir, "gone", "config.toml"), filepath.Join(dir, "config.toml")),
+		"point config.toml at somewhere it cannot be created")
 	useEditor(t, "")
 
 	_, errOut, code := runConfigEdit(t)
-	if code != 1 {
-		t.Fatalf("exit = %d, want 1 when the file could not be created", code)
-	}
-	if !strings.Contains(errOut, "config.toml") {
-		t.Errorf("stderr %q does not name the file it could not create", errOut)
-	}
+	assert.Equal(t, 1, code, "an editor must not open on a file that could not be created")
+	assert.Contains(t, errOut, "config.toml", "and the file it could not create must be named")
 }
 
 // useEditor points $EDITOR at the stand-in under testdata: a real program,
@@ -242,9 +207,7 @@ func useEditor(t *testing.T, body string) string {
 	t.Setenv("SSHAKKU_TEST_EDITOR_BODY", "")
 	if body != "" {
 		saved := filepath.Join(dir, "saved.toml")
-		if err := os.WriteFile(saved, []byte(body), 0o600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(saved, []byte(body), 0o600), "write what the stand-in editor will save")
 		t.Setenv("SSHAKKU_TEST_EDITOR_BODY", saved)
 	}
 	return record
@@ -255,9 +218,7 @@ func useEditor(t *testing.T, body string) string {
 func editorScript(t *testing.T) string {
 	t.Helper()
 	path, err := filepath.Abs(filepath.Join("testdata", "editor.sh"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err, "resolve the stand-in editor's path")
 	return path
 }
 
@@ -273,8 +234,6 @@ func runConfigEdit(t *testing.T) (string, string, int) {
 func readFile(t *testing.T, path string) string {
 	t.Helper()
 	body, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoErrorf(t, err, "read %s", path)
 	return string(body)
 }

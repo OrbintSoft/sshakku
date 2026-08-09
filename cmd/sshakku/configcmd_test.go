@@ -6,6 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestConfigReportsWhatIsInForce verifies F35 the way a user checks it: a
@@ -23,54 +26,42 @@ func TestConfigReportsWhatIsInForce(t *testing.T) {
 	writeConfig(t, home, "config.d/90-broken.toml", "giveup_ttl = \"one hour\"\n")
 
 	out, errOut, code := runConfig(t)
-	if code != 0 {
-		t.Fatalf("exit = %d (%s), want 0: a report changes nothing and cannot fail", code, errOut)
-	}
+	require.Zerof(t, code, "a report changes nothing and cannot fail: %s", errOut)
 
 	t.Run("the drop-in that overruled config.toml is named", func(t *testing.T) {
 		line := settingLine(t, out, "key_lifetime")
-		if !strings.Contains(line, "2h") {
-			t.Errorf("%q does not show the value in force", line)
-		}
-		if !strings.Contains(line, "50-work.toml") {
-			t.Errorf("%q does not name the file that set it", line)
-		}
+		assert.Contains(t, line, "2h", "the value actually in force")
+		assert.Contains(t, line, "50-work.toml", "the file that set it, which is the only way to know where to edit")
 	})
 
 	t.Run("a value only config.toml set is attributed to config.toml", func(t *testing.T) {
 		line := settingLine(t, out, "max_attempts")
-		if !strings.Contains(line, "5") || !strings.Contains(line, "config.toml") {
-			t.Errorf("%q does not show 5, set by config.toml", line)
-		}
+		assert.Contains(t, line, "5", "the value in force")
+		assert.Contains(t, line, "config.toml", "the file that set it")
 	})
 
 	t.Run("a setting nobody wrote shows its built-in default", func(t *testing.T) {
 		line := settingLine(t, out, "command_timeout")
-		if !strings.Contains(line, "10s") || !strings.Contains(strings.ToLower(line), "default") {
-			t.Errorf("%q does not show the built-in default", line)
-		}
+		assert.Contains(t, line, "10s", "the built-in value")
+		assert.Contains(t, strings.ToLower(line), "default", "and that it is the built-in one, not something a file set")
 	})
 
 	t.Run("a refused value is shown to the person who wrote it", func(t *testing.T) {
 		line := settingLine(t, out, "giveup_ttl")
-		if !strings.Contains(line, "one hour") {
-			t.Errorf("%q does not repeat the value that was refused", line)
-		}
-		if !strings.Contains(line, "90-broken.toml") {
-			t.Errorf("%q does not name the file holding it", line)
-		}
+		assert.Contains(t, line, "one hour", "the value that was refused, repeated back to whoever wrote it")
+		assert.Contains(t, line, "90-broken.toml", "and the file it is still sitting in")
 	})
 
 	t.Run("the files that were read are listed in the order they were read", func(t *testing.T) {
-		first := strings.Index(out, "config.toml")
-		work := strings.Index(out, "50-work.toml")
-		broken := strings.Index(out, "90-broken.toml")
-		if first < 0 || work < 0 || broken < 0 {
-			t.Fatalf("not every file is named in the report:\n%s", out)
-		}
-		if first >= work || work >= broken {
-			t.Errorf("files are not named in reading order:\n%s", out)
-		}
+		require.Contains(t, out, "config.toml", "the base file")
+		require.Contains(t, out, "50-work.toml", "the first drop-in")
+		require.Contains(t, out, "90-broken.toml", "the second drop-in")
+		// Reading order is what tells the user which file overrides which, so
+		// the report has to list them in it.
+		assert.Less(t, strings.Index(out, "config.toml"), strings.Index(out, "50-work.toml"),
+			"config.toml is read before the drop-ins")
+		assert.Less(t, strings.Index(out, "50-work.toml"), strings.Index(out, "90-broken.toml"),
+			"drop-ins are read in filename order")
 	})
 }
 
@@ -83,16 +74,11 @@ func TestConfigLetsTheEnvironmentSpeakForItself(t *testing.T) {
 	t.Setenv("SSHAKKU_KEY_LIFETIME", "30m")
 
 	out, _, code := runConfig(t)
-	if code != 0 {
-		t.Fatalf("exit = %d, want 0", code)
-	}
+	require.Zero(t, code, "a report changes nothing and cannot fail")
 	line := settingLine(t, out, "key_lifetime")
-	if !strings.Contains(line, "30m") {
-		t.Errorf("%q does not show the exported value", line)
-	}
-	if !strings.Contains(line, "SSHAKKU_KEY_LIFETIME") {
-		t.Errorf("%q does not name the variable that set it", line)
-	}
+	assert.Contains(t, line, "30m", "the exported value wins over every file")
+	assert.Contains(t, line, "SSHAKKU_KEY_LIFETIME",
+		"and the report must name the variable, not a file whose value is not in use")
 }
 
 // TestConfigWithNothingConfiguredStillAnswers covers the account that has never
@@ -102,15 +88,9 @@ func TestConfigWithNothingConfiguredStillAnswers(t *testing.T) {
 	tempRuntimeEnv(t)
 
 	out, _, code := runConfig(t)
-	if code != 0 {
-		t.Fatalf("exit = %d, want 0", code)
-	}
-	if line := settingLine(t, out, "key_lifetime"); !strings.Contains(line, "8h") {
-		t.Errorf("%q does not show the built-in default", line)
-	}
-	if !strings.Contains(strings.ToLower(out), "no configuration") {
-		t.Errorf("the report does not say no file was read:\n%s", out)
-	}
+	require.Zero(t, code, "a report changes nothing and cannot fail")
+	assert.Contains(t, settingLine(t, out, "key_lifetime"), "8h", "every setting still has a value in force")
+	assert.Contains(t, strings.ToLower(out), "no configuration", "and the report must say no file was read")
 }
 
 // TestConfigSpellsOutWhatZeroMeans covers the value a report cannot print
@@ -121,12 +101,9 @@ func TestConfigSpellsOutWhatZeroMeans(t *testing.T) {
 	writeConfig(t, home, "config.toml", "key_lifetime = \"0\"\n")
 
 	out, _, code := runConfig(t)
-	if code != 0 {
-		t.Fatalf("exit = %d, want 0", code)
-	}
-	if line := settingLine(t, out, "key_lifetime"); !strings.Contains(line, "no expiry") {
-		t.Errorf("%q does not say what a zero lifetime does", line)
-	}
+	require.Zero(t, code, "a report changes nothing and cannot fail")
+	assert.Contains(t, settingLine(t, out, "key_lifetime"), "no expiry",
+		"a bare 0s reads as expires immediately, which is the opposite of what it does")
 }
 
 // TestConfigRefusesArgumentsItDoesNotKnow keeps a mistyped flag from being read
@@ -136,15 +113,10 @@ func TestConfigRefusesArgumentsItDoesNotKnow(t *testing.T) {
 	tempRuntimeEnv(t)
 
 	var stdout, stderr bytes.Buffer
-	if code := (deps{}).run(&stdout, &stderr, []string{"config", "--sohw"}); code != 2 {
-		t.Errorf("exit = %d, want 2 for an argument config does not know", code)
-	}
-	if !strings.Contains(stderr.String(), "--sohw") {
-		t.Errorf("stderr %q does not name what was typed", stderr.String())
-	}
-	if stdout.Len() != 0 {
-		t.Errorf("stdout = %q, want nothing printed for a usage error", stdout.String())
-	}
+	assert.Equal(t, 2, deps{}.run(&stdout, &stderr, []string{"config", "--sohw"}),
+		"an argument the command does not know is a usage error")
+	assert.Contains(t, stderr.String(), "--sohw", "the answer must name what was actually typed")
+	assert.Empty(t, stdout.String(), "and must not be a report nobody asked for")
 }
 
 // TestConfigNamesAFileItCouldNotRead covers the half of F35 about the files
@@ -158,9 +130,7 @@ func TestConfigNamesAFileItCouldNotRead(t *testing.T) {
 	writeConfig(t, home, "config.d/70-stray.toml", "key_lifetime = \n")
 
 	out, _, code := runConfig(t)
-	if code != 0 {
-		t.Fatalf("exit = %d, want 0: a file that cannot be read is reported, not fatal", code)
-	}
+	require.Zero(t, code, "a file that cannot be read is reported, not fatal")
 
 	listed := ""
 	for _, line := range strings.Split(out, "\n") {
@@ -169,15 +139,10 @@ func TestConfigNamesAFileItCouldNotRead(t *testing.T) {
 			break
 		}
 	}
-	if listed == "" {
-		t.Fatalf("the file that could not be read is not named at all:\n%s", out)
-	}
-	if !strings.Contains(listed, "(") {
-		t.Errorf("%q names the file without saying what was wrong with it", listed)
-	}
-	if line := settingLine(t, out, "key_lifetime"); !strings.Contains(line, "3h") {
-		t.Errorf("%q: the readable file stopped applying because another one could not be read", line)
-	}
+	require.NotEmptyf(t, listed, "the file that could not be read must be named:\n%s", out)
+	assert.Contains(t, listed, "(", "naming the file without saying what was wrong with it leaves the user guessing")
+	assert.Contains(t, settingLine(t, out, "key_lifetime"), "3h",
+		"a file that could not be read must not stop the ones that could from applying")
 }
 
 // TestConfigRelativeKeepsAPathItCannotShorten covers the fallback in the naming
@@ -188,14 +153,12 @@ func TestConfigRelativeKeepsAPathItCannotShorten(t *testing.T) {
 	dir := filepath.Join("home", "someone", ".config", "sshakku")
 
 	inside := filepath.Join(dir, "config.d", "50-work.toml")
-	if got, want := configRelative(dir, inside), filepath.Join("config.d", "50-work.toml"); got != want {
-		t.Errorf("configRelative(inside) = %q, want %q", got, want)
-	}
+	assert.Equal(t, filepath.Join("config.d", "50-work.toml"), configRelative(dir, inside),
+		"a file under the directory is named relative to it")
 
 	outside := filepath.Join("etc", "sshakku", "config.toml")
-	if got := configRelative(dir, outside); got != outside {
-		t.Errorf("configRelative(outside) = %q, want the path itself, %q", got, outside)
-	}
+	assert.Equal(t, outside, configRelative(dir, outside),
+		"a path that is not inside it is printed whole: a relative path climbing out says less")
 }
 
 // TestConfigReportsAFailedWrite covers the report that could not be delivered:
@@ -205,12 +168,9 @@ func TestConfigReportsAFailedWrite(t *testing.T) {
 	tempRuntimeEnv(t)
 
 	var stderr bytes.Buffer
-	if code := (deps{}).config(errWriter{}, &stderr, nil); code != 1 {
-		t.Errorf("exit = %d, want 1 when the report could not be written", code)
-	}
-	if stderr.Len() == 0 {
-		t.Error("nothing was said about the failed write")
-	}
+	assert.Equal(t, 1, deps{}.config(errWriter{}, &stderr, nil),
+		"a report that was never delivered must not exit as though it had been")
+	assert.NotEmpty(t, stderr.String(), "and the failure must be said out loud")
 }
 
 // runConfig runs `sshakku config` against the environment the test set up,
@@ -231,7 +191,7 @@ func settingLine(t *testing.T, report, key string) string {
 			return line
 		}
 	}
-	t.Fatalf("%q is missing from the report:\n%s", key, report)
+	require.FailNowf(t, "a setting the report must carry is missing", "%q is not in:\n%s", key, report)
 	return ""
 }
 
@@ -239,10 +199,6 @@ func settingLine(t *testing.T, report, key string) string {
 func writeConfig(t *testing.T, home, name, body string) {
 	t.Helper()
 	path := filepath.Join(home, ".config", "sshakku", filepath.FromSlash(name))
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700), "create the config directory")
+	require.NoError(t, os.WriteFile(path, []byte(body), 0o600), "write the config file")
 }

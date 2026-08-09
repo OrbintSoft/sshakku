@@ -6,11 +6,12 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/OrbintSoft/sshakku/internal/agent"
 	"github.com/OrbintSoft/sshakku/internal/paths"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // fakeEnsurer stands in for agent.Manager so shell-init/ensure-agent and
@@ -59,53 +60,41 @@ func TestShellInit(t *testing.T) {
 		tempRuntimeEnv(t)
 		d := depsWithEnsurer(fakeEnsurer{res: agent.EnsureResult{LiveSock: "/run/sshakku/agent.sock"}})
 		var out, errOut bytes.Buffer
-		if got := d.shellInit(&out, &errOut); got != 0 {
-			t.Fatalf("shellInit = %d, want 0; stderr=%q", got, errOut.String())
-		}
-		s := out.String()
-		for _, want := range []string{"agent_sock='/run/sshakku/agent.sock'", "agent_lock=", "log_file="} {
-			if !strings.Contains(s, want) {
-				t.Errorf("output %q missing %q", s, want)
-			}
-		}
+		require.Zerof(t, d.shellInit(&out, &errOut), "shellInit must succeed; stderr=%q", errOut.String())
+		// Three assignments the shell needs; assert, so one run names every one
+		// that is missing rather than only the first.
+		assert.Contains(t, out.String(), "agent_sock='/run/sshakku/agent.sock'", "the socket the shell must talk to")
+		assert.Contains(t, out.String(), "agent_lock=", "the lock the shell must take")
+		assert.Contains(t, out.String(), "log_file=", "the log the shell must write to")
 	})
 
 	t.Run("ensure failure propagates the exit code", func(t *testing.T) {
 		tempRuntimeEnv(t)
 		d := depsWithEnsurer(fakeEnsurer{err: errors.New("boom")})
 		var out, errOut bytes.Buffer
-		if got := d.shellInit(&out, &errOut); got != 1 {
-			t.Fatalf("shellInit (ensure fails) = %d, want 1", got)
-		}
-		if out.Len() != 0 {
-			t.Errorf("stdout = %q, want no assignments when ensure fails", out.String())
-		}
+		assert.Equal(t, 1, d.shellInit(&out, &errOut), "an agent that could not be ensured is a failed init")
+		assert.Empty(t, out.String(),
+			"a shell must not be given assignments pointing at an agent that is not there")
 	})
 
 	t.Run("uncreatable layout returns 1", func(t *testing.T) {
 		home := tempRuntimeEnv(t)
 		// A plain file where ~/.config should be a directory makes paths.Ensure
 		// fail to create the config dir.
-		if err := os.WriteFile(filepath.Join(home, ".config"), []byte("not a dir"), 0o600); err != nil {
-			t.Fatalf("seed ~/.config file: %v", err)
-		}
+		require.NoError(t, os.WriteFile(filepath.Join(home, ".config"), []byte("not a dir"), 0o600),
+			"seed a file where the config directory should be")
 		d := depsWithEnsurer(fakeEnsurer{})
 		var out, errOut bytes.Buffer
-		if got := d.shellInit(&out, &errOut); got != 1 {
-			t.Fatalf("shellInit (uncreatable layout) = %d, want 1", got)
-		}
-		if !strings.Contains(errOut.String(), "sshakku:") {
-			t.Errorf("stderr = %q, want a sshakku: error line", errOut.String())
-		}
+		assert.Equal(t, 1, d.shellInit(&out, &errOut), "a layout that could not be created is a failed init")
+		assert.Contains(t, errOut.String(), "sshakku:", "the reason must reach the user, named")
 	})
 
 	t.Run("stdout write error returns 1", func(t *testing.T) {
 		tempRuntimeEnv(t)
 		d := depsWithEnsurer(fakeEnsurer{res: agent.EnsureResult{LiveSock: "/run/sshakku/agent.sock"}})
 		var errOut bytes.Buffer
-		if got := d.shellInit(errWriter{}, &errOut); got != 1 {
-			t.Errorf("shellInit (failing stdout) = %d, want 1", got)
-		}
+		assert.Equal(t, 1, d.shellInit(errWriter{}, &errOut),
+			"assignments the shell never received must not be reported as delivered")
 	})
 }
 
@@ -118,38 +107,31 @@ func TestEnsureAgent(t *testing.T) {
 		tempRuntimeEnv(t)
 		d := depsWithEnsurer(fakeEnsurer{res: agent.EnsureResult{LiveSock: "/run/sshakku/agent.sock"}})
 		var out, errOut bytes.Buffer
-		if got := d.ensureAgent(&out, &errOut); got != 0 {
-			t.Fatalf("ensureAgent = %d, want 0; stderr=%q", got, errOut.String())
-		}
-		if want := "agent_sock='/run/sshakku/agent.sock'\n"; out.String() != want {
-			t.Errorf("output = %q, want %q", out.String(), want)
-		}
+		require.Zerof(t, d.ensureAgent(&out, &errOut), "ensureAgent must succeed; stderr=%q", errOut.String())
+		assert.Equal(t, "agent_sock='/run/sshakku/agent.sock'\n", out.String(),
+			"this command prints the socket and nothing else")
 	})
 
 	t.Run("ensure failure propagates the exit code", func(t *testing.T) {
 		tempRuntimeEnv(t)
 		d := depsWithEnsurer(fakeEnsurer{err: errors.New("boom")})
-		if got := d.ensureAgent(io.Discard, io.Discard); got != 1 {
-			t.Errorf("ensureAgent (ensure fails) = %d, want 1", got)
-		}
+		assert.Equal(t, 1, d.ensureAgent(io.Discard, io.Discard),
+			"an agent that could not be ensured must be reported as such")
 	})
 
 	t.Run("uncreatable layout returns 1", func(t *testing.T) {
 		home := tempRuntimeEnv(t)
-		if err := os.WriteFile(filepath.Join(home, ".config"), []byte("not a dir"), 0o600); err != nil {
-			t.Fatalf("seed ~/.config file: %v", err)
-		}
-		if got := depsWithEnsurer(fakeEnsurer{}).ensureAgent(io.Discard, io.Discard); got != 1 {
-			t.Errorf("ensureAgent (uncreatable layout) = %d, want 1", got)
-		}
+		require.NoError(t, os.WriteFile(filepath.Join(home, ".config"), []byte("not a dir"), 0o600),
+			"seed a file where the config directory should be")
+		assert.Equal(t, 1, depsWithEnsurer(fakeEnsurer{}).ensureAgent(io.Discard, io.Discard),
+			"a layout that could not be created must be reported as such")
 	})
 
 	t.Run("stdout write error returns 1", func(t *testing.T) {
 		tempRuntimeEnv(t)
 		d := depsWithEnsurer(fakeEnsurer{res: agent.EnsureResult{LiveSock: "/run/sshakku/agent.sock"}})
-		if got := d.ensureAgent(errWriter{}, io.Discard); got != 1 {
-			t.Errorf("ensureAgent (failing stdout) = %d, want 1", got)
-		}
+		assert.Equal(t, 1, d.ensureAgent(errWriter{}, io.Discard),
+			"a socket the caller never received must not be reported as delivered")
 	})
 }
 
@@ -168,35 +150,26 @@ func TestRunEnsure(t *testing.T) {
 		d := depsWithEnsurer(fakeEnsurer{res: agent.EnsureResult{LiveSock: "/run/sshakku/agent.sock"}})
 		var errOut bytes.Buffer
 		sock, code := d.runEnsure(&errOut, env, layout)
-		if sock != "/run/sshakku/agent.sock" || code != 0 {
-			t.Fatalf("runEnsure = (%q, %d), want (the live socket, 0)", sock, code)
-		}
-		if errOut.Len() != 0 {
-			t.Errorf("stderr = %q, want nothing on a clean run", errOut.String())
-		}
+		assert.Zero(t, code, "a healthy agent is not a failure")
+		assert.Equal(t, "/run/sshakku/agent.sock", sock, "the socket the agent is live on")
+		assert.Empty(t, errOut.String(), "a clean run has nothing to say")
 	})
 
 	t.Run("anomaly is reported but still succeeds", func(t *testing.T) {
 		d := depsWithEnsurer(fakeEnsurer{res: agent.EnsureResult{LiveSock: "/run/sshakku/agent.sock", Anomaly: "adopted a foreign agent"}})
 		var errOut bytes.Buffer
 		sock, code := d.runEnsure(&errOut, env, layout)
-		if sock != "/run/sshakku/agent.sock" || code != 0 {
-			t.Fatalf("runEnsure = (%q, %d), want (the live socket, 0)", sock, code)
-		}
-		if !strings.Contains(errOut.String(), "adopted a foreign agent") {
-			t.Errorf("stderr = %q, want the anomaly reported", errOut.String())
-		}
+		assert.Zero(t, code, "an anomaly worth mentioning is not a reason to fail the login")
+		assert.Equal(t, "/run/sshakku/agent.sock", sock, "the socket the agent is live on")
+		assert.Contains(t, errOut.String(), "adopted a foreign agent", "but it must still be said out loud")
 	})
 
 	t.Run("ensure error returns 1", func(t *testing.T) {
 		d := depsWithEnsurer(fakeEnsurer{err: errors.New("boom")})
 		var errOut bytes.Buffer
 		sock, code := d.runEnsure(&errOut, env, layout)
-		if sock != "" || code != 1 {
-			t.Fatalf("runEnsure = (%q, %d), want (\"\", 1)", sock, code)
-		}
-		if !strings.Contains(errOut.String(), "boom") {
-			t.Errorf("stderr = %q, want the error reported", errOut.String())
-		}
+		assert.Equal(t, 1, code, "an agent that could not be ensured is a failure")
+		assert.Empty(t, sock, "and no socket may be handed back for one")
+		assert.Contains(t, errOut.String(), "boom", "the reason must reach the user")
 	})
 }
