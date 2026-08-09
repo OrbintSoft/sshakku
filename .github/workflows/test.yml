@@ -31,6 +31,10 @@ env:
   GO_BETTER_HTML_COVERAGE_COMMIT: 02341504e2b24350ec3029fb02144134f292f831
   GO_IGNORE_COV_VERSION: 0.7.1
   GO_IGNORE_COV_COMMIT: 23957747f586d1575f56023ee4eff1a6498df17a
+  # Every suite this workflow runs is asked for under the race detector: a data
+  # race that only shows up once in a hundred runs is worth catching on every
+  # one of them, and nothing here is time-critical enough to mind the cost.
+  SSHAKKU_RACE: "1"
 
 jobs:
   test:
@@ -51,6 +55,13 @@ jobs:
 
       - name: Add Go bin to PATH
         run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      # Before the suite, because it is quick and it fails for a reason no test
+      # failure could be confused with: this machine has neither a Mac nor an
+      # Apple SDK, so it is the one that can tell whether the macOS half of the
+      # tree still builds without them.
+      - name: Build both targets without a C toolchain
+        run: make build-cross
 
       - name: Run make test-json
         run: make test-json
@@ -199,7 +210,7 @@ jobs:
         run: docker build -f ${{ matrix.dockerfile }} -t sshakku-test-${{ matrix.name }} .
 
       - name: Run make test in ${{ matrix.name }}
-        run: docker run --init --rm -v "${{ github.workspace }}":/src:ro -w /src sshakku-test-${{ matrix.name }} make test
+        run: docker run --init --rm -e SSHAKKU_RACE=1 -v "${{ github.workspace }}":/src:ro -w /src sshakku-test-${{ matrix.name }} make test
 
       - name: Run make test-bats in ${{ matrix.name }}
         run: docker run --init --rm -e SSHAKKU_TEST_ALLOW_BATS=1 -v "${{ github.workspace }}":/src:ro -w /src sshakku-test-${{ matrix.name }} make test-bats

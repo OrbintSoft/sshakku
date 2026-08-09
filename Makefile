@@ -56,6 +56,21 @@ GO ?= go
 GO_MAIN = ./cmd/sshakku
 GO_BIN = bin/sshakku
 
+# The race detector is built on cgo, and the binary this project distributes
+# must not need a C toolchain to produce. SSHAKKU_RACE picks between the two:
+# set it to any non-empty value and the test targets run under -race with cgo
+# available; leave it unset and they run without either, which is the
+# configuration the shipped binary is built in. `build` never consults it —
+# there is one product binary, and it is always cgo-free.
+SSHAKKU_RACE ?=
+ifeq ($(SSHAKKU_RACE),)
+GO_RACE =
+GO_ENV = CGO_ENABLED=0
+else
+GO_RACE = -race
+GO_ENV = CGO_ENABLED=1
+endif
+
 # The name ssh is pointed at to have a passphrase prompt answered. It is
 # installed as a link to sshakku, which serves that role when it is run under
 # this name, so there is one binary and no second program to keep in step. The
@@ -209,10 +224,19 @@ install uninstall install-user uninstall-user:
 endif
 
 build:
-	$(GO) build -o $(GO_BIN) $(GO_MAIN)
+	CGO_ENABLED=0 $(GO) build -o $(GO_BIN) $(GO_MAIN)
+
+# Both targets this project supports, built for each other's platform without a
+# C compiler or an SDK for it. It answers one question — can this be built where
+# it is not run — which is what a release has to be able to do, and it is also
+# the only way the macOS-only source in this tree gets compiled from anywhere
+# else.
+build-cross:
+	CGO_ENABLED=0 GOOS=darwin $(GO) build ./...
+	CGO_ENABLED=0 GOOS=linux $(GO) build ./...
 
 test:
-	$(GO) test -race ./...
+	$(GO_ENV) $(GO) test $(GO_RACE) ./...
 
 # CI-only variant of test: same run under gotestsum (nicer condensed CI
 # output; requires it on PATH, unlike plain `test`), capturing the same
@@ -225,7 +249,7 @@ test:
 # if it can't resolve packages (e.g. an unsatisfied local toolchain), never
 # failing the build.
 test-json:
-	gotestsum --jsonfile test.json -- -race -coverprofile=coverage.out ./...
+	$(GO_ENV) gotestsum --jsonfile test.json -- $(GO_RACE) -coverprofile=coverage.out ./...
 	go-ignore-cov --file coverage.out --root .
 
 # Goroutine leak checks. The normal suite already runs every package under
@@ -245,8 +269,13 @@ test-leakprofile:
 # first (test/macos-keychain-setup.sh). The test skips unless
 # SSHAKKU_TEST_ALLOW_REAL_KEYCHAIN is set; -count=1 defeats go's build cache,
 # which has no way to see the keychain's external state.
+#
+# Pinned to CGO_ENABLED=0 rather than following SSHAKKU_RACE: this is the only
+# test that reaches the framework for real, so it is the only one that can catch
+# a wrong signature in the keychain client — and it has to catch it in the
+# configuration the shipped binary is built in.
 test-keychain:
-	SSHAKKU_TEST_ALLOW_REAL_KEYCHAIN=1 $(GO) test -count=1 -run TestDarwinKeychainClientRealRoundTrip ./internal/keys/
+	SSHAKKU_TEST_ALLOW_REAL_KEYCHAIN=1 CGO_ENABLED=0 $(GO) test -count=1 -run TestDarwinKeychainClientRealRoundTrip ./internal/keys/
 
 # Shell-level login-hook and agent-lifecycle regression suite. Requires
 # bats-core; only safe in a disposable environment (the container test suite
@@ -325,5 +354,5 @@ lint-applescript:
 		for f in $(APPLESCRIPTS); do echo "osacompile $$f"; osacompile -o /dev/null "$$f" || exit 1; done; \
 	fi
 
-.PHONY: install uninstall install-user uninstall-user build test test-json test-leakprofile test-keychain test-bats print-paths lint lint-sh lint-zsh lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go lint-docker lint-applescript
+.PHONY: install uninstall install-user uninstall-user build build-cross test test-json test-leakprofile test-keychain test-bats print-paths lint lint-sh lint-zsh lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go lint-docker lint-applescript
 .DEFAULT_GOAL := install
