@@ -6,6 +6,9 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestTheDialogThatFailsIsNamedByItsOwnName verifies the part of F37 that only
@@ -24,23 +27,15 @@ func TestTheDialogThatFailsIsNamedByItsOwnName(t *testing.T) {
 	})
 	prompter := OsascriptPrompter{Runner: wontRun}
 
-	if got := PrompterName(prompter); got != osascriptBin {
-		t.Errorf("PrompterName = %q, want %q — the name gui_prompter accepts", got, osascriptBin)
-	}
+	assert.Equal(t, osascriptBin, PrompterName(prompter),
+		"the name a message uses has to be the one gui_prompter accepts, or it sends the user "+
+			"looking for a program under a name nothing takes")
 
 	log := &fakeLogger{}
 	terminal := &namedFake{answer: "typed on the terminal"}
 	pass, err := FallbackPrompter{Primary: prompter, Fallback: terminal, Log: log}.Prompt("id_rsa")
-	if err != nil || pass != "typed on the terminal" {
-		t.Fatalf("Prompt = (%q, %v), want the terminal's answer", pass, err)
-	}
-	named := false
-	for _, line := range log.lines {
-		if strings.Contains(line, osascriptBin) {
-			named = true
-		}
-	}
-	if !named {
-		t.Errorf("log = %v, want the dialog that could not ask named in it", log.lines)
-	}
+	require.NoError(t, err, "a dialog that could not run must not lose the question")
+	assert.Equal(t, "typed on the terminal", pass, "the user is asked on the terminal instead")
+	assert.Containsf(t, strings.Join(log.lines, "\n"), osascriptBin,
+		"and the log must name the dialog that could not ask: %v", log.lines)
 }

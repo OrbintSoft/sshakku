@@ -5,49 +5,44 @@ package keys
 import (
 	"errors"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestZenityPrompt(t *testing.T) {
 	t.Run("returns the entered passphrase, newline trimmed", func(t *testing.T) {
 		r := newFakeRunner().on("zenity", stdout("typed-pass\n", 0))
 		got, err := ZenityPrompter{Runner: r}.Prompt("id_rsa")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if got != "typed-pass" {
-			t.Fatalf("passphrase = %q, want typed-pass", got)
-		}
-		want := []string{"--password", "--title", "Enter passphrase for id_rsa"}
-		if a := r.calls[0].Args; !equalStrings(a, want) {
-			t.Fatalf("args = %v, want %v", a, want)
-		}
+		require.NoError(t, err, "a dialog the user answered must hand the answer back")
+		assert.Equal(t, "typed-pass", got,
+			"and it must be what they typed: the newline the dialog prints is not part of the passphrase")
+		require.NotEmpty(t, r.calls, "the dialog must actually be run")
+		assert.Equal(t, []string{"--password", "--title", "Enter passphrase for id_rsa"}, r.calls[0].Args,
+			"asked as a password, so the characters do not appear on screen, and naming the key it is for")
 	})
 
 	t.Run("a dismissed dialog is ErrPromptCanceled", func(t *testing.T) {
 		r := newFakeRunner().on("zenity", stdout("", 1))
-		if _, err := (ZenityPrompter{Runner: r}).Prompt("id_rsa"); !errors.Is(err, ErrPromptCanceled) {
-			t.Fatalf("error = %v, want ErrPromptCanceled", err)
-		}
+		_, err := ZenityPrompter{Runner: r}.Prompt("id_rsa")
+		assert.ErrorIs(t, err, ErrPromptCanceled,
+			"closing a dialog is an answer, and must be passed on as one rather than as a failure")
 	})
 
 	t.Run("a failure to start zenity is an error", func(t *testing.T) {
 		wantErr := errors.New("boom")
 		r := newFakeRunner().on("zenity", fails(wantErr))
-		if _, err := (ZenityPrompter{Runner: r}).Prompt("id_rsa"); !errors.Is(err, wantErr) {
-			t.Fatalf("error = %v, want %v", err, wantErr)
-		}
+		_, err := ZenityPrompter{Runner: r}.Prompt("id_rsa")
+		assert.ErrorIs(t, err, wantErr,
+			"a dialog that could not be started must be reported as that, not as one the user dismissed")
 	})
 }
 
 func TestZenityAvailable(t *testing.T) {
 	found := ZenityPrompter{lookPath: func(string) (string, error) { return "/usr/bin/zenity", nil }}
-	if !found.Available() {
-		t.Fatal("Available = false, want true when zenity is on PATH")
-	}
+	assert.True(t, found.Available(), "a dialog that is installed can be asked in")
 	missing := ZenityPrompter{lookPath: func(string) (string, error) { return "", errors.New("not found") }}
-	if missing.Available() {
-		t.Fatal("Available = true, want false when zenity is absent")
-	}
+	assert.False(t, missing.Available(), "and one that is not installed cannot")
 }
 
 // TestZenityAvailableDefaultLookPath covers Available's nil-lookPath branch,

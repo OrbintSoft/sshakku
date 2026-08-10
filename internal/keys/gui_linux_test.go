@@ -5,6 +5,8 @@ package keys
 import (
 	"errors"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestHasGraphicalSession(t *testing.T) {
@@ -27,17 +29,15 @@ func TestHasGraphicalSession(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := HasGraphicalSession(c.env, c.runner); got != c.want {
-				t.Fatalf("HasGraphicalSession = %v, want %v", got, c.want)
+			assert.Equal(t, c.want, HasGraphicalSession(c.env, c.runner),
+				"whether there is a screen decides where the user is asked, and getting it wrong the permissive "+
+					"way is a login shell waiting on a dialog nobody will ever see")
+			if !c.noXcall {
+				return
 			}
-			calledXset := false
 			for _, call := range c.runner.calls {
-				if call.Name == "xset" {
-					calledXset = true
-				}
-			}
-			if c.noXcall && calledXset {
-				t.Fatal("xset was consulted but should have been short-circuited")
+				assert.NotEqual(t, "xset", call.Name,
+					"the answer was already settled, and running an X client to confirm it costs the login a process")
 			}
 		})
 	}

@@ -6,25 +6,20 @@ import (
 	"testing"
 
 	"github.com/OrbintSoft/sshakku/internal/keepassxc"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFileAssociationRoundTrip(t *testing.T) {
 	store := FileAssociationStore{Path: filepath.Join(t.TempDir(), "nested", "assoc.json")}
 	want := keepassxc.Association{ID: "db-1", IDKey: "a-public-key"}
 
-	if err := store.Save(want); err != nil {
-		t.Fatalf("Save: %v", err)
-	}
+	require.NoError(t, store.Save(want),
+		"the approval must be written down, including into a directory that is not there yet")
 	got, found, err := store.Load()
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if !found {
-		t.Fatal("what was saved must be found")
-	}
-	if got != want {
-		t.Errorf("Load = %+v, want %+v", got, want)
-	}
+	require.NoError(t, err, "and read back")
+	require.True(t, found, "an approval that was saved must be found, or the user is asked to grant it again")
+	assert.Equal(t, want, got, "and be the one that was granted: another would not be honoured by KeePassXC")
 }
 
 // TestFileAssociationIsNotWorldReadable checks the permissions rather than
@@ -33,28 +28,19 @@ func TestFileAssociationRoundTrip(t *testing.T) {
 func TestFileAssociationIsNotWorldReadable(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "assoc.json")
 	store := FileAssociationStore{Path: path}
-	if err := store.Save(keepassxc.Association{ID: "db", IDKey: "k"}); err != nil {
-		t.Fatalf("Save: %v", err)
-	}
+	require.NoError(t, store.Save(keepassxc.Association{ID: "db", IDKey: "k"}), "saving the approval must succeed")
 	info, err := os.Stat(path)
-	if err != nil {
-		t.Fatalf("Stat: %v", err)
-	}
-	if perm := info.Mode().Perm(); perm&0o077 != 0 {
-		t.Errorf("mode = %o, want nothing for group or other", perm)
-	}
+	require.NoError(t, err, "and the file must be there")
+	assert.Zero(t, info.Mode().Perm()&0o077,
+		"readable by this user alone: anyone else who could read it could present themselves to KeePassXC as SSHakku")
 }
 
 // TestFileAssociationMissingIsNotAnError covers the state every user starts in.
 func TestFileAssociationMissingIsNotAnError(t *testing.T) {
 	store := FileAssociationStore{Path: filepath.Join(t.TempDir(), "absent.json")}
 	_, found, err := store.Load()
-	if err != nil {
-		t.Fatalf("a missing association must not be an error: %v", err)
-	}
-	if found {
-		t.Error("nothing was saved, so nothing must be found")
-	}
+	require.NoError(t, err, "an approval nobody has granted yet is the state every user starts in, not an error")
+	assert.False(t, found, "and there is none to find")
 }
 
 func TestFileAssociationRejectsUnreadableContent(t *testing.T) {
@@ -70,16 +56,11 @@ func TestFileAssociationRejectsUnreadableContent(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "assoc.json")
-			if err := os.WriteFile(path, []byte(tc.content), 0o600); err != nil {
-				t.Fatalf("writing: %v", err)
-			}
+			require.NoError(t, os.WriteFile(path, []byte(tc.content), 0o600), "seed the stored approval")
 			_, found, err := FileAssociationStore{Path: path}.Load()
-			if err == nil {
-				t.Fatal("an association that cannot be understood must be reported, not silently ignored")
-			}
-			if found {
-				t.Error("nothing usable was read, so found must be false")
-			}
+			assert.Error(t, err,
+				"an approval that cannot be understood must be reported, not read as one nobody ever granted")
+			assert.False(t, found, "and nothing usable was read, so nothing may be reported as found")
 		})
 	}
 }
@@ -88,26 +69,21 @@ func TestFileAssociationReportsAnUnreadableFile(t *testing.T) {
 	dir := t.TempDir()
 	// A directory where the file should be: readable as a path, not as a file.
 	path := filepath.Join(dir, "assoc.json")
-	if err := os.Mkdir(path, 0o700); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
-	if _, _, err := (FileAssociationStore{Path: path}).Load(); err == nil {
-		t.Fatal("a file that cannot be read must be reported")
-	}
+	require.NoError(t, os.Mkdir(path, 0o700), "seed a directory where the file should be")
+	_, _, err := FileAssociationStore{Path: path}.Load()
+	assert.Error(t, err, "an approval that could not be read must be reported, not treated as never granted")
 }
 
 func TestFileAssociationReportsAnUnwritableLocation(t *testing.T) {
 	dir := t.TempDir()
 	blocker := filepath.Join(dir, "blocker")
-	if err := os.WriteFile(blocker, []byte("not a directory"), 0o600); err != nil {
-		t.Fatalf("writing: %v", err)
-	}
+	require.NoError(t, os.WriteFile(blocker, []byte("not a directory"), 0o600),
+		"seed a file where the parent directory should be")
 	// The parent of the target is a regular file, so the directory cannot be
 	// created.
 	store := FileAssociationStore{Path: filepath.Join(blocker, "assoc.json")}
-	if err := store.Save(keepassxc.Association{ID: "db", IDKey: "k"}); err == nil {
-		t.Fatal("an association that could not be written must be reported")
-	}
+	assert.Error(t, store.Save(keepassxc.Association{ID: "db", IDKey: "k"}),
+		"an approval that could not be written must be reported: the next run would raise the dialog again")
 }
 
 func TestFileAssociationReportsAnUnwritableFile(t *testing.T) {
@@ -115,10 +91,7 @@ func TestFileAssociationReportsAnUnwritableFile(t *testing.T) {
 	path := filepath.Join(dir, "assoc.json")
 	// A directory at the target path: the directory creation succeeds, the
 	// file write does not.
-	if err := os.Mkdir(path, 0o700); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
-	if err := (FileAssociationStore{Path: path}).Save(keepassxc.Association{ID: "db", IDKey: "k"}); err == nil {
-		t.Fatal("a write that could not land must be reported")
-	}
+	require.NoError(t, os.Mkdir(path, 0o700), "seed a directory at the path the file should take")
+	assert.Error(t, FileAssociationStore{Path: path}.Save(keepassxc.Association{ID: "db", IDKey: "k"}),
+		"an approval that could not be written must be reported: the next run would raise the dialog again")
 }

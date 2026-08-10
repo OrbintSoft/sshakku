@@ -10,6 +10,9 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestReadTTYLineNoTerminalReturnsPromptly confirms that with no controlling
@@ -42,13 +45,8 @@ func TestReadTTYLineNoTerminalReturnsPromptly(t *testing.T) {
 	err := cmd.Run()
 	elapsed := time.Since(start)
 
-	if ctx.Err() != nil {
-		t.Fatalf("ReadTTYLine blocked instead of failing immediately with no controlling terminal: %v", ctx.Err())
-	}
-	if elapsed > 2*time.Second {
-		t.Errorf("ReadTTYLine took %v to fail with no controlling terminal, want near-instant", elapsed)
-	}
-	if err != nil {
-		t.Fatalf("helper process did not see ErrNoTerminal as expected: %v", err)
-	}
+	require.NoError(t, ctx.Err(),
+		"a session with no terminal must be told so at once; blocking here is a login shell that never returns")
+	assert.Less(t, elapsed, 2*time.Second, "and told at once rather than after waiting anything out")
+	require.NoError(t, err, "and told by the one error its callers fall back from, not by some other failure")
 }

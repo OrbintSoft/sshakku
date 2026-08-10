@@ -4,33 +4,25 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestExecRunnerRun(t *testing.T) {
 	t.Run("captures stdout, stderr, and exit code", func(t *testing.T) {
 		res, err := ExecRunner{}.Run(Cmd{Name: "sh", Args: []string{"-c", "echo out; echo err >&2; exit 3"}})
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if strings.TrimSpace(string(res.Stdout)) != "out" {
-			t.Fatalf("stdout = %q, want %q", res.Stdout, "out")
-		}
-		if strings.TrimSpace(string(res.Stderr)) != "err" {
-			t.Fatalf("stderr = %q, want %q", res.Stderr, "err")
-		}
-		if res.Code != 3 {
-			t.Fatalf("code = %d, want 3", res.Code)
-		}
+		require.NoError(t, err, "a command that ran and exited non-zero is not a failure to run it")
+		assert.Equal(t, "out", strings.TrimSpace(string(res.Stdout)), "what it printed is what a wallet answered")
+		assert.Equal(t, "err", strings.TrimSpace(string(res.Stderr)), "and what it complained is the reason a user reads")
+		assert.Equal(t, 3, res.Code, "the exit code decides whether that was a miss or a refusal")
 	})
 
 	t.Run("zero Timeout does not bound the command", func(t *testing.T) {
 		res, err := ExecRunner{}.Run(Cmd{Name: "sh", Args: []string{"-c", "sleep 0.2; echo done"}})
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if strings.TrimSpace(string(res.Stdout)) != "done" {
-			t.Fatalf("stdout = %q, want %q", res.Stdout, "done")
-		}
+		require.NoError(t, err, "running a command with no deadline must succeed")
+		assert.Equal(t, "done", strings.TrimSpace(string(res.Stdout)),
+			"a caller that named no budget gets none imposed here; the budgets belong to the call sites")
 	})
 
 	t.Run("a positive Timeout kills a command that outlives it", func(t *testing.T) {
@@ -40,24 +32,16 @@ func TestExecRunnerRun(t *testing.T) {
 		// process tree instead of the one under test.
 		start := time.Now()
 		res, err := ExecRunner{}.Run(Cmd{Name: "sleep", Args: []string{"5"}, Timeout: 100 * time.Millisecond})
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if elapsed := time.Since(start); elapsed > 2*time.Second {
-			t.Fatalf("Run took %s, want well under the 5s sleep — Timeout did not bound it", elapsed)
-		}
-		if res.Code == 0 {
-			t.Fatalf("code = 0, want a non-zero (signaled) exit for a killed process")
-		}
+		require.NoError(t, err, "a command that outlived its budget is still a command that ran")
+		assert.Less(t, time.Since(start), 2*time.Second,
+			"and it must be cut short well before its own five seconds, or nothing is waiting on the budget")
+		assert.NotZero(t, res.Code, "a process that was killed did not succeed, and must not be read as having done so")
 	})
 
 	t.Run("a command that finishes within its Timeout completes normally", func(t *testing.T) {
 		res, err := ExecRunner{}.Run(Cmd{Name: "sh", Args: []string{"-c", "echo fast"}, Timeout: 5 * time.Second})
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if strings.TrimSpace(string(res.Stdout)) != "fast" {
-			t.Fatalf("stdout = %q, want %q", res.Stdout, "fast")
-		}
+		require.NoError(t, err, "a command that answered in time must succeed")
+		assert.Equal(t, "fast", strings.TrimSpace(string(res.Stdout)),
+			"and a budget nobody reached must not change what it said")
 	})
 }

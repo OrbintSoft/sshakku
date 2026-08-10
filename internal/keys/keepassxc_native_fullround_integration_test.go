@@ -14,6 +14,8 @@ import (
 
 	"github.com/OrbintSoft/sshakku/internal/keepassxc"
 	"github.com/OrbintSoft/sshakku/internal/keyring"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // This is the user's own scenario against a running KeePassXC, reached over its
@@ -51,19 +53,14 @@ func TestKeePassXCNativeFullRound(t *testing.T) {
 	child := startSSHakkuOnTerminal(t, env, slave, "load-keys")
 
 	seen := readUntil(t, master, ttyPromptLine)
-	if _, err := master.WriteString(passphrase + "\n"); err != nil {
-		t.Fatalf("type the passphrase on the terminal: %v", err)
-	}
+	_, err := master.WriteString(passphrase + "\n")
+	require.NoError(t, err, "the user types their passphrase")
 	seen += drain(t, master)
-	if err := child.Wait(); err != nil {
-		t.Fatalf("first load-keys: %v\nterminal output:\n%q", err, seen)
-	}
-	if got := strings.Count(seen, ttyPromptLine); got != 1 {
-		t.Errorf("the user was asked %d times on first use, want exactly 1; output:\n%q", got, seen)
-	}
-	if strings.Contains(seen, passphrase) {
-		t.Errorf("the passphrase was echoed back onto the terminal; output:\n%q", seen)
-	}
+	require.NoErrorf(t, child.Wait(), "the first use must load the key; terminal output:\n%q", seen)
+	assert.Equalf(t, 1, strings.Count(seen, ttyPromptLine),
+		"they are asked once, and once only, the first time they use the key:\n%q", seen)
+	assert.NotContainsf(t, seen, passphrase,
+		"and it must never be echoed back: that puts it on the screen and in the scrollback:\n%q", seen)
 	assertKeyInAgent(t, env.keyfile, true)
 
 	// F5 — a later login shell. Emptying the agent is what logging out and back
@@ -73,15 +70,11 @@ func TestKeePassXCNativeFullRound(t *testing.T) {
 	master, slave = openPTY(t)
 	child = startSSHakkuOnTerminal(t, env, slave, "load-keys")
 	seen = drain(t, master)
-	if err := child.Wait(); err != nil {
-		t.Fatalf("second load-keys: %v\nterminal output:\n%q", err, seen)
-	}
-	if strings.Contains(seen, ttyPromptLine) {
-		t.Errorf("a later login shell asked for the passphrase again, so the first one was never saved; output:\n%q", seen)
-	}
-	if seen != "" {
-		t.Errorf("a silent load wrote to the terminal: %q", seen)
-	}
+	require.NoErrorf(t, child.Wait(), "a later login shell must load the key; terminal output:\n%q", seen)
+	assert.NotContainsf(t, seen, ttyPromptLine,
+		"and must not ask again: a terminal is attached on purpose, so asking is possible and must not happen:\n%q",
+		seen)
+	assert.Emptyf(t, seen, "the whole promise is that the user notices nothing at all:\n%q", seen)
 	assertKeyInAgent(t, env.keyfile, true)
 
 	// F6 — the key expires while the shell stays open. Waiting for the agent to
@@ -92,38 +85,31 @@ func TestKeePassXCNativeFullRound(t *testing.T) {
 	master, slave = openPTY(t)
 	child = startSSHakkuOnTerminal(t, env, slave, "load-keys")
 	seen = drain(t, master)
-	if err := child.Wait(); err != nil {
-		t.Fatalf("load-keys after expiry: %v\nterminal output:\n%q", err, seen)
-	}
-	if strings.Contains(seen, ttyPromptLine) {
-		t.Errorf("an expired key was asked about again instead of being refilled from the wallet; output:\n%q", seen)
-	}
+	require.NoErrorf(t, child.Wait(), "a key that expired must be loaded again; terminal output:\n%q", seen)
+	assert.NotContainsf(t, seen, ttyPromptLine,
+		"out of the wallet, with nothing typed: the user is in the middle of their day and did not lose the key:\n%q",
+		seen)
 	assertKeyInAgent(t, env.keyfile, true)
 
 	// F9 — forgetting what this wallet gives no way to delete. The promise is
 	// not that it succeeds; it is that it never says the passphrase is gone
 	// while it is still there, and that it tells the user where to find it.
 	out, err := runSSHakku(t, env, "forget", "id_test")
-	if err == nil {
-		t.Error("forget reported success on a wallet that cannot delete, so the passphrase would still be there unannounced")
-	}
-	for _, want := range []string{"id_test", "KeePassXC"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("forget did not name %q, so the user cannot find the entry to remove; output:\n%q", want, out)
-		}
-	}
+	assert.Errorf(t, err,
+		"this wallet gives no way to delete, and claiming success would tell the user a passphrase is gone "+
+			"while it is still sitting in their database:\n%q", out)
+	assert.Containsf(t, out, "id_test", "the entry to remove must be named:\n%q", out)
+	assert.Containsf(t, out, "KeePassXC", "and where to remove it, since the user is the one who has to:\n%q", out)
 
 	// And it really is still there: the next load is still silent.
 	clearAgent(t)
 	master, slave = openPTY(t)
 	child = startSSHakkuOnTerminal(t, env, slave, "load-keys")
 	seen = drain(t, master)
-	if err := child.Wait(); err != nil {
-		t.Fatalf("load-keys after forget: %v\nterminal output:\n%q", err, seen)
-	}
-	if strings.Contains(seen, ttyPromptLine) {
-		t.Error("forget left the wallet without the passphrase after reporting it could not delete it")
-	}
+	require.NoErrorf(t, child.Wait(), "the key must still load; terminal output:\n%q", seen)
+	assert.NotContainsf(t, seen, ttyPromptLine,
+		"silently, because the passphrase really is still there: a forget that reported it could not delete "+
+			"must not have deleted anything:\n%q", seen)
 }
 
 // nativeFullRoundEnv is the staged world the scenario runs in: one throwaway
@@ -151,30 +137,23 @@ func setupNativeFullRound(t *testing.T, passphrase string) nativeFullRoundEnv {
 	// kernel caps well below what a default temp dir costs.
 	root := shortDir(t)
 	home := filepath.Join(root, "home")
-	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
-		t.Fatalf("make the test home: %v", err)
-	}
+	require.NoError(t, os.MkdirAll(filepath.Join(home, ".ssh"), 0o700), "a throwaway account to run in")
 
 	keyfile := filepath.Join(home, ".ssh", "id_test")
-	if out, err := exec.Command("ssh-keygen", "-t", "ed25519", "-N", passphrase, "-f", keyfile, "-q").CombinedOutput(); err != nil {
-		t.Fatalf("ssh-keygen: %v: %s", err, out)
-	}
+	out, err := exec.Command("ssh-keygen", "-t", "ed25519", "-N", passphrase, "-f", keyfile, "-q").CombinedOutput()
+	require.NoErrorf(t, err, "a real passphrase-protected key:\n%s", out)
 
 	binary := filepath.Join(root, "sshakku")
-	if out, err := exec.Command("go", "build", "-o", binary, "github.com/OrbintSoft/sshakku/cmd/sshakku").CombinedOutput(); err != nil {
-		t.Fatalf("build sshakku: %v: %s", err, out)
-	}
+	out, err = exec.Command("go", "build", "-o", binary, "github.com/OrbintSoft/sshakku/cmd/sshakku").CombinedOutput()
+	require.NoErrorf(t, err, "the real sshakku binary is what this scenario drives:\n%s", out)
 	// ssh is handed the helper beside the binary, not the binary itself, so a
 	// build with nothing next to it is a layout no install produces: the key
 	// would never open, however right the passphrase is.
-	if err := os.Symlink(binary, filepath.Join(root, "sshakku-askpass")); err != nil {
-		t.Fatalf("link the askpass helper beside sshakku: %v", err)
-	}
+	require.NoError(t, os.Symlink(binary, filepath.Join(root, "sshakku-askpass")),
+		"laid down beside it under the name an install gives it")
 
 	configDir := filepath.Join(root, "config", "sshakku")
-	if err := os.MkdirAll(configDir, 0o700); err != nil {
-		t.Fatalf("make the config dir: %v", err)
-	}
+	require.NoError(t, os.MkdirAll(configDir, 0o700), "a configuration directory of this account's own")
 	// The terminal is where this scenario watches: F5 and F6 are checked with a
 	// real one attached, so that a regression which starts asking has somewhere
 	// to ask. On a machine with a window server the product would rightly raise
@@ -185,9 +164,8 @@ func setupNativeFullRound(t *testing.T, passphrase string) nativeFullRoundEnv {
 		"keepassxc_route = \"native\"\n" +
 		"gui_prompter = \"none\"\n" +
 		"key_lifetime = \"" + nativeKeyLifetime.String() + "\"\n"
-	if err := os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(config), 0o600); err != nil {
-		t.Fatalf("write config.toml: %v", err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(config), 0o600),
+		"a configuration pinning the route under test")
 
 	stateDir := filepath.Join(root, "state")
 	// Where nothing else provides a running KeePassXC, this test provides one.
@@ -200,9 +178,8 @@ func setupNativeFullRound(t *testing.T, passphrase string) nativeFullRoundEnv {
 
 	sock := filepath.Join(root, "agent.sock")
 	agentCmd := exec.Command("ssh-agent", "-D", "-a", sock)
-	if err := agentCmd.Start(); err != nil {
-		t.Fatalf("start the test's own ssh-agent: %v", err)
-	}
+	require.NoError(t, agentCmd.Start(),
+		"an ssh-agent of this test's own: the surrounding session's keys are not ours to touch")
 	t.Cleanup(func() {
 		_ = agentCmd.Process.Kill()
 		_ = agentCmd.Wait()
@@ -251,9 +228,7 @@ func startSSHakkuOnTerminal(t *testing.T, env nativeFullRoundEnv, slave *os.File
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = slave, slave, slave
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true, Setctty: true, Ctty: 0}
 
-	if err := cmd.Start(); err != nil {
-		t.Fatalf("start %s %v on the terminal: %v", env.binary, args, err)
-	}
+	require.NoErrorf(t, cmd.Start(), "start %s %v on the terminal", env.binary, args)
 	t.Cleanup(func() { _ = cmd.Process.Kill() })
 	// The child owns the slave now; dropping this copy is what makes a read on
 	// the master report end-of-file once the child exits.
@@ -276,9 +251,8 @@ func runSSHakku(t *testing.T, env nativeFullRoundEnv, args ...string) (string, e
 // looks like to everything downstream of it.
 func clearAgent(t *testing.T) {
 	t.Helper()
-	if out, err := exec.Command("ssh-add", "-D").CombinedOutput(); err != nil {
-		t.Fatalf("empty the agent: %v: %s", err, out)
-	}
+	out, err := exec.Command("ssh-add", "-D").CombinedOutput()
+	require.NoErrorf(t, err, "empty the agent, which is what a new login session looks like:\n%s", out)
 }
 
 // waitForAgentToDropKey blocks until the agent itself has let the key go, so
@@ -288,21 +262,16 @@ func waitForAgentToDropKey(t *testing.T, keyfile string) {
 
 	runner := ExecRunner{}
 	fp, err := FileFingerprint(runner, keyfile)
-	if err != nil {
-		t.Fatalf("FileFingerprint: %v", err)
-	}
+	require.NoError(t, err, "reading the key's fingerprint must succeed")
 	deadline := time.Now().Add(nativeKeyLifetime + 15*time.Second)
 	for {
 		loaded, err := AgentFingerprints(runner)
-		if err != nil {
-			t.Fatalf("AgentFingerprints while waiting for the key to expire: %v", err)
-		}
+		require.NoError(t, err, "asking the agent what it holds must keep succeeding")
 		if !loaded[fp] {
 			return
 		}
-		if !time.Now().Before(deadline) {
-			t.Fatal("the key was still in the agent well after its lifetime elapsed, so nothing here would ever be a refill")
-		}
+		require.True(t, time.Now().Before(deadline),
+			"the key is still in the agent well after its lifetime elapsed, so nothing after this would be a refill")
 		time.Sleep(200 * time.Millisecond)
 	}
 }
@@ -326,15 +295,16 @@ func requireEverythingTheRoundDrives(t *testing.T) {
 	t.Helper()
 
 	for _, bin := range []string{"ssh-agent", "ssh-add", "ssh-keygen"} {
-		if _, err := exec.LookPath(bin); err != nil {
-			t.Fatalf("%s is not on PATH, so the round cannot run", bin)
-		}
+		_, err := exec.LookPath(bin)
+		require.NoErrorf(t, err, "%s is not on PATH, so the round cannot run", bin)
 	}
 	// The passphrase reaches a detached ssh-add through the kernel keyring on
 	// Linux; the other platforms hand it over by their own means, which need
 	// nothing arranged here.
-	if runtime.GOOS == "linux" && !keyring.Available() {
-		t.Fatal("the kernel user keyring is not usable here, so nothing could hand a passphrase to ssh-add (a session-keyring link is what a PAM login arranges)")
+	if runtime.GOOS == "linux" {
+		require.True(t, keyring.Available(),
+			"the kernel user keyring is not usable here, so nothing could hand a passphrase to ssh-add "+
+				"(a session-keyring link is what a PAM login arranges)")
 	}
 }
 
@@ -350,5 +320,5 @@ func requireKeePassXCListening(t *testing.T) {
 			return
 		}
 	}
-	t.Fatalf("KeePassXC is not listening on any of %v", candidates)
+	require.FailNowf(t, "KeePassXC is not listening", "tried %v", candidates)
 }

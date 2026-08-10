@@ -4,6 +4,9 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestADialogThatFailsIsNamedByItsOwnName verifies the part of F37 that only
@@ -28,25 +31,17 @@ func TestADialogThatFailsIsNamedByItsOwnName(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := PrompterName(c.prompter); got != c.name {
-				t.Errorf("PrompterName = %q, want %q — the name gui_prompter accepts", got, c.name)
-			}
+			assert.Equal(t, c.name, PrompterName(c.prompter),
+				"the name a message uses has to be the one gui_prompter accepts, or it sends the user "+
+					"looking for a program under a name nothing takes")
 
 			log := &fakeLogger{}
 			terminal := &namedFake{answer: "typed on the terminal"}
 			pass, err := FallbackPrompter{Primary: c.prompter, Fallback: terminal, Log: log}.Prompt("id_rsa")
-			if err != nil || pass != "typed on the terminal" {
-				t.Fatalf("Prompt = (%q, %v), want the terminal's answer", pass, err)
-			}
-			named := false
-			for _, line := range log.lines {
-				if strings.Contains(line, c.name) {
-					named = true
-				}
-			}
-			if !named {
-				t.Errorf("log = %v, want the dialog that could not ask named in it", log.lines)
-			}
+			require.NoError(t, err, "a dialog that could not run must not lose the question")
+			assert.Equal(t, "typed on the terminal", pass, "the user is asked on the terminal instead")
+			assert.Containsf(t, strings.Join(log.lines, "\n"), c.name,
+				"and the log must name the dialog that could not ask: %v", log.lines)
 		})
 	}
 }
