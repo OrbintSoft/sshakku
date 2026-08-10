@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/godbus/dbus/v5"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestSecretServiceAddressesTheConfiguredContainer verifies the Linux half of
@@ -23,16 +25,14 @@ func TestSecretServiceAddressesTheConfiguredContainer(t *testing.T) {
 		c := &fakeSecretServiceClient{collection: col}
 		b := &SecretServiceBackend{Client: c, User: "alice", Container: "my-own-compartment"}
 
-		if _, _, err := b.Lookup("SSHakku-Key-id_rsa"); err != nil {
-			t.Fatalf("Lookup: %v", err)
-		}
-		if len(c.collectionAsked) == 0 {
-			t.Fatal("no collection was addressed at all")
-		}
+		_, _, err := b.Lookup("SSHakku-Key-id_rsa")
+		require.NoError(t, err, "a lookup in the configured compartment must succeed")
+		require.NotEmpty(t, c.collectionAsked, "some compartment must have been addressed")
 		for _, asked := range c.collectionAsked {
-			if asked.alias != "my-own-compartment" || asked.label != "my-own-compartment" {
-				t.Errorf("addressed collection (alias %q, label %q), want both to be the configured name", asked.alias, asked.label)
-			}
+			assert.Equal(t, "my-own-compartment", asked.alias,
+				"a service that supports aliases resolves this one, so it must carry the configured name")
+			assert.Equal(t, "my-own-compartment", asked.label,
+				"and a service that does not falls back to matching the label, so it must carry it too")
 		}
 	})
 
@@ -40,16 +40,13 @@ func TestSecretServiceAddressesTheConfiguredContainer(t *testing.T) {
 		c := &fakeSecretServiceClient{collection: col}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		if _, _, err := b.Lookup("SSHakku-Key-id_rsa"); err != nil {
-			t.Fatalf("Lookup: %v", err)
-		}
-		if len(c.collectionAsked) == 0 {
-			t.Fatal("no collection was addressed at all")
-		}
+		_, _, err := b.Lookup("SSHakku-Key-id_rsa")
+		require.NoError(t, err, "a lookup in SSHakku's own compartment must succeed")
+		require.NotEmpty(t, c.collectionAsked, "some compartment must have been addressed")
 		for _, asked := range c.collectionAsked {
-			if asked.alias != secretServiceAlias || asked.label != secretServiceLabel {
-				t.Errorf("addressed collection (alias %q, label %q), want the default (%q, %q)", asked.alias, asked.label, secretServiceAlias, secretServiceLabel)
-			}
+			assert.Equal(t, secretServiceAlias, asked.alias,
+				"a user who configured nothing must keep the compartment their entries are already in")
+			assert.Equal(t, secretServiceLabel, asked.label, "addressed by its label as well")
 		}
 	})
 
@@ -67,19 +64,16 @@ func TestSecretServiceAddressesTheConfiguredContainer(t *testing.T) {
 		}
 		b := &SecretServiceBackend{Client: c, User: "alice", Container: "my-own-compartment"}
 
-		if err := b.Store("SSHakku-Key-id_rsa", "label", "hunter2"); err != nil {
-			t.Fatalf("Store: %v", err)
-		}
-		if _, err := b.List(); err != nil {
-			t.Fatalf("List: %v", err)
-		}
-		if err := b.Delete("SSHakku-Key-id_rsa"); err != nil {
-			t.Fatalf("Delete: %v", err)
-		}
+		require.NoError(t, b.Store("SSHakku-Key-id_rsa", "label", "hunter2"), "a store must succeed")
+		_, err := b.List()
+		require.NoError(t, err, "a listing must succeed")
+		require.NoError(t, b.Delete("SSHakku-Key-id_rsa"), "a delete must succeed")
+		require.NotEmpty(t, c.collectionAsked, "some compartment must have been addressed")
 		for _, asked := range c.collectionAsked {
-			if asked.alias != "my-own-compartment" || asked.label != "my-own-compartment" {
-				t.Errorf("addressed collection (alias %q, label %q), want the configured name for every operation", asked.alias, asked.label)
-			}
+			assert.Equal(t, "my-own-compartment", asked.alias,
+				"a store that wrote into the configured compartment while a delete emptied the default one "+
+					"would leave the user's passphrases in one place and SSHakku looking in another")
+			assert.Equal(t, "my-own-compartment", asked.label, "addressed by its label as well")
 		}
 	})
 }

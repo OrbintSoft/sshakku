@@ -10,6 +10,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // allowRealOnePasswordEnv opts this test into creating and deleting a real
@@ -64,15 +67,12 @@ func TestOnePasswordBackendRealAccount(t *testing.T) {
 
 	vaultName := "sshakku-integration-test-" + time.Now().UTC().Format("20060102T150405.000000000")
 	createOut, err := opRun(t, "vault", "create", vaultName, "--format", "json")
-	if err != nil {
-		t.Fatalf("op vault create: %v: %s", err, createOut)
-	}
+	require.NoErrorf(t, err, "the throwaway vault this test works in could not be created: %s", createOut)
 	var vault struct {
 		ID string `json:"id"`
 	}
-	if err := json.Unmarshal([]byte(createOut), &vault); err != nil || vault.ID == "" {
-		t.Fatalf("parsing op vault create output: %v: %s", err, createOut)
-	}
+	require.NoErrorf(t, json.Unmarshal([]byte(createOut), &vault), "op vault create answered with: %s", createOut)
+	require.NotEmptyf(t, vault.ID, "op vault create named no vault: %s", createOut)
 	t.Cleanup(func() {
 		if out, err := opRun(t, "vault", "delete", vault.ID); err != nil {
 			t.Logf("cleanup: op vault delete %s failed, remove it by hand: %v: %s", vault.ID, err, out)
@@ -87,37 +87,21 @@ func TestOnePasswordBackendRealAccount(t *testing.T) {
 		testPass    = "probe-passphrase-not-a-real-secret"
 	)
 
-	if err := backend.Store(testService, testLabel, testPass); err != nil {
-		t.Fatalf("Store: %v", err)
-	}
+	require.NoError(t, backend.Store(testService, testLabel, testPass), "saving a passphrase must succeed")
 
 	got, found, err := backend.Lookup(testService)
-	if err != nil {
-		t.Fatalf("Lookup: %v", err)
-	}
-	if !found {
-		t.Fatal("Lookup: not found immediately after Store")
-	}
-	if got != testPass {
-		t.Fatalf("Lookup passphrase = %q, want %q", got, testPass)
-	}
+	require.NoError(t, err, "reading it straight back must succeed")
+	require.True(t, found, "a passphrase just saved must be there")
+	assert.Equal(t, testPass, got, "and be the one that was saved")
 
 	services, err := backend.List()
-	if err != nil {
-		t.Fatalf("List: %v", err)
-	}
-	if !containsString(services, testService) {
-		t.Fatalf("List = %v, want it to contain %q", services, testService)
-	}
+	require.NoError(t, err, "listing the vault must succeed")
+	assert.Contains(t, services, testService, "what SSHakku stored must be reported")
 
-	if err := backend.Delete(testService); err != nil {
-		t.Fatalf("Delete: %v", err)
-	}
-	if _, found, err := backend.Lookup(testService); err != nil {
-		t.Fatalf("Lookup after Delete: %v", err)
-	} else if found {
-		t.Fatal("Lookup after Delete: still found")
-	}
+	require.NoError(t, backend.Delete(testService), "forgetting a passphrase must succeed")
+	_, found, err = backend.Lookup(testService)
+	require.NoError(t, err, "looking for a forgotten passphrase must not be an error")
+	assert.False(t, found, "and it must be gone from the vault")
 }
 
 // opRun runs the op CLI directly (not through a Runner) for test setup and
@@ -129,14 +113,4 @@ func opRun(t *testing.T, args ...string) (string, error) {
 	defer cancel()
 	out, err := exec.CommandContext(ctx, onePasswordBin, args...).CombinedOutput()
 	return string(out), err
-}
-
-// containsString reports whether s is present in list.
-func containsString(list []string, s string) bool {
-	for _, v := range list {
-		if v == s {
-			return true
-		}
-	}
-	return false
 }

@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/OrbintSoft/sshakku/internal/secretservice"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // allowRealSecretServiceEnv opts this test into touching whatever Secret
@@ -53,35 +55,22 @@ func TestSecretServiceBackendRealDaemon(t *testing.T) {
 		testService = "sshakku-integration-test-probe"
 	)
 	backend := &SecretServiceBackend{Client: client, User: testUser}
-	if err := backend.Unlock(); err != nil {
-		t.Fatalf("Unlock: %v", err)
-	}
+	require.NoError(t, backend.Unlock(), "the wallet must open before a batch of work can run under one unlock")
 	// Registered before the Delete cleanup below so it runs last (t.Cleanup
 	// is LIFO): Delete must still run while held unlocked.
 	t.Cleanup(func() { _ = backend.Lock() })
 	t.Cleanup(func() { _ = backend.Delete(testService) })
 
-	if err := backend.Store(testService, "sshakku integration test probe", "probe-passphrase"); err != nil {
-		t.Fatalf("Store: %v", err)
-	}
+	require.NoError(t, backend.Store(testService, "sshakku integration test probe", "probe-passphrase"),
+		"saving a passphrase must succeed")
 
 	got, found, err := backend.Lookup(testService)
-	if err != nil {
-		t.Fatalf("Lookup: %v", err)
-	}
-	if !found {
-		t.Fatal("Lookup: not found immediately after Store")
-	}
-	if got != "probe-passphrase" {
-		t.Fatalf("Lookup passphrase = %q, want %q", got, "probe-passphrase")
-	}
+	require.NoError(t, err, "reading it straight back must succeed")
+	require.True(t, found, "a passphrase just saved must be there")
+	assert.Equal(t, "probe-passphrase", got, "and be the one that was saved")
 
-	if err := backend.Delete(testService); err != nil {
-		t.Fatalf("Delete: %v", err)
-	}
-	if _, found, err := backend.Lookup(testService); err != nil {
-		t.Fatalf("Lookup after Delete: %v", err)
-	} else if found {
-		t.Fatal("Lookup after Delete: still found")
-	}
+	require.NoError(t, backend.Delete(testService), "forgetting a passphrase must succeed")
+	_, found, err = backend.Lookup(testService)
+	require.NoError(t, err, "looking for a forgotten passphrase must not be an error")
+	assert.False(t, found, "and it must be gone from the wallet")
 }

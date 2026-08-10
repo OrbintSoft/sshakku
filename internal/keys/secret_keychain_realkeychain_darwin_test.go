@@ -6,6 +6,9 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // allowRealKeychainEnv opts this test into reading and writing the real macOS
@@ -47,67 +50,53 @@ func TestDarwinKeychainClientRealRoundTrip(t *testing.T) {
 	// leaves them: Delete is idempotent, so this both guarantees a clean start
 	// and guarantees nothing is left behind.
 	clean := func() {
-		if err := c.Delete(account, service); err != nil {
-			t.Errorf("cleanup Delete(%q): %v", service, err)
-		}
-		if err := c.Delete(account, missing); err != nil {
-			t.Errorf("cleanup Delete(%q): %v", missing, err)
-		}
+		assert.NoErrorf(t, c.Delete(account, service), "cleanup Delete(%q)", service)
+		assert.NoErrorf(t, c.Delete(account, missing), "cleanup Delete(%q)", missing)
 	}
 	clean()
 	t.Cleanup(clean)
 
 	// Add then read it straight back.
-	if err := c.Add(account, service, "sshakku integration test", "pass-one"); err != nil {
-		t.Fatalf("Add: %v", err)
-	}
-	if got, found, err := c.Find(account, service); err != nil || !found || got != "pass-one" {
-		t.Fatalf("Find after Add = %q, %v, %v; want \"pass-one\", true, nil", got, found, err)
-	}
+	require.NoError(t, c.Add(account, service, "sshakku integration test", "pass-one"),
+		"adding an item to the keychain must succeed")
+	got, found, err := c.Find(account, service)
+	require.NoError(t, err, "reading it straight back must succeed")
+	require.True(t, found, "an item just added must be there")
+	assert.Equal(t, "pass-one", got, "and hold what was written")
 
 	// List under our account returns exactly the one service we added.
 	services, err := c.List(account)
-	if err != nil {
-		t.Fatalf("List: %v", err)
-	}
-	if len(services) != 1 || services[0] != service {
-		t.Fatalf("List = %v, want [%q]", services, service)
-	}
+	require.NoError(t, err, "listing this account's items must succeed")
+	assert.Equal(t, []string{service}, services, "one item added is one item listed")
 
 	// Adding the same item again is a duplicate the framework rejects — a path
 	// the fake, keyed by a Go map, silently overwrites instead.
-	if err := c.Add(account, service, "sshakku integration test", "pass-dupe"); err == nil {
-		t.Fatal("Add of a duplicate item should fail, got nil")
-	}
+	assert.Error(t, c.Add(account, service, "sshakku integration test", "pass-dupe"),
+		"the framework rejects a duplicate item, and that refusal must be reported")
 	// The failed duplicate Add must not have changed the stored value.
-	if got, _, err := c.Find(account, service); err != nil || got != "pass-one" {
-		t.Fatalf("Find after duplicate Add = %q, %v; want \"pass-one\", nil", got, err)
-	}
+	got, _, err = c.Find(account, service)
+	require.NoError(t, err, "the item must still be readable after the refused add")
+	assert.Equal(t, "pass-one", got, "and hold what it held before: a refused write must change nothing")
 
 	// Update overwrites the passphrase in place.
-	if err := c.Update(account, service, "pass-two"); err != nil {
-		t.Fatalf("Update: %v", err)
-	}
-	if got, found, err := c.Find(account, service); err != nil || !found || got != "pass-two" {
-		t.Fatalf("Find after Update = %q, %v, %v; want \"pass-two\", true, nil", got, found, err)
-	}
+	require.NoError(t, c.Update(account, service, "pass-two"), "updating an item must succeed")
+	got, found, err = c.Find(account, service)
+	require.NoError(t, err, "reading the update back must succeed")
+	assert.True(t, found, "the item is still there")
+	assert.Equal(t, "pass-two", got, "holding the new value, not the one it replaced")
 
 	// Updating an item that was never added is an error, not a silent no-op.
-	if err := c.Update(account, missing, "nope"); err == nil {
-		t.Fatal("Update of a missing item should fail, got nil")
-	}
+	assert.Error(t, c.Update(account, missing, "nope"),
+		"an item that was never added cannot be updated, and saying nothing would report a write that never happened")
 
 	// Delete, then confirm the item is gone and a second Delete is a no-op.
-	if err := c.Delete(account, service); err != nil {
-		t.Fatalf("Delete: %v", err)
-	}
-	if _, found, err := c.Find(account, service); err != nil || found {
-		t.Fatalf("Find after Delete = found=%v, err=%v; want found=false, nil", found, err)
-	}
-	if err := c.Delete(account, service); err != nil {
-		t.Fatalf("second Delete of a missing item should succeed, got %v", err)
-	}
-	if services, err := c.List(account); err != nil || len(services) != 0 {
-		t.Fatalf("List after Delete = %v, %v; want empty, nil", services, err)
-	}
+	require.NoError(t, c.Delete(account, service), "removing an item must succeed")
+	_, found, err = c.Find(account, service)
+	require.NoError(t, err, "looking for a removed item must not be an error")
+	assert.False(t, found, "and it must be gone")
+	assert.NoError(t, c.Delete(account, service),
+		"removing what is already gone is the outcome that was asked for")
+	services, err = c.List(account)
+	require.NoError(t, err, "listing after the removal must succeed")
+	assert.Empty(t, services, "and this account must hold nothing")
 }

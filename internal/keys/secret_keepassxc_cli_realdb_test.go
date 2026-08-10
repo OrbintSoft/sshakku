@@ -7,6 +7,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // This exercises the product against a real KeePassXC database, created by the
@@ -28,9 +31,8 @@ func TestKeePassXCCLIRealDatabase(t *testing.T) {
 	if os.Getenv("SSHAKKU_TEST_ALLOW_REAL_KEEPASSXC") != "1" {
 		t.Skip("skipping: set SSHAKKU_TEST_ALLOW_REAL_KEEPASSXC=1 to run against a real keepassxc-cli and a throwaway database")
 	}
-	if _, err := exec.LookPath(keepassxcCLIBin); err != nil {
-		t.Fatalf("SSHAKKU_TEST_ALLOW_REAL_KEEPASSXC is set but %s is not installed: %v", keepassxcCLIBin, err)
-	}
+	_, err := exec.LookPath(keepassxcCLIBin)
+	require.NoErrorf(t, err, "%s is what this test drives, and it is not installed", keepassxcCLIBin)
 
 	const dbPassword = "throwaway-database-password"
 	const service = defaultServicePrefix + "-id_ed25519"
@@ -47,55 +49,36 @@ func TestKeePassXCCLIRealDatabase(t *testing.T) {
 	}
 
 	// F4: nothing is stored yet, so a lookup misses rather than failing.
-	if _, found, err := b.Lookup(service); err != nil || found {
-		t.Fatalf("a fresh database must hold nothing: found=%v err=%v", found, err)
-	}
+	_, found, err := b.Lookup(service)
+	require.NoError(t, err, "a database with nothing in it is not an error")
+	require.False(t, found, "and a fresh database holds nothing")
 
 	// F4: the passphrase is saved.
-	if err := b.Store(service, service, passphrase); err != nil {
-		t.Fatalf("Store: %v", err)
-	}
+	require.NoError(t, b.Store(service, service, passphrase), "saving a passphrase must succeed")
 
 	// F5/F6: it comes back, unchanged.
 	got, found, err := b.Lookup(service)
-	if err != nil {
-		t.Fatalf("Lookup: %v", err)
-	}
-	if !found {
-		t.Fatal("what was just stored must be found")
-	}
-	if got != passphrase {
-		t.Fatalf("passphrase = %q, want %q", got, passphrase)
-	}
+	require.NoError(t, err, "reading it straight back must succeed")
+	require.True(t, found, "a passphrase just saved must be there")
+	assert.Equal(t, passphrase, got, "and be the one that was saved, byte for byte")
 
 	// Storing again must replace, not accumulate: two entries holding the same
 	// secret is one more copy than the user asked for.
 	const changed = "a-different-passphrase"
-	if err := b.Store(service, service, changed); err != nil {
-		t.Fatalf("Store (replacing): %v", err)
-	}
+	require.NoError(t, b.Store(service, service, changed), "replacing a passphrase must succeed")
 	got, _, err = b.Lookup(service)
-	if err != nil {
-		t.Fatalf("Lookup after replacing: %v", err)
-	}
-	if got != changed {
-		t.Fatalf("passphrase = %q, want the replacement %q", got, changed)
-	}
+	require.NoError(t, err, "reading the replacement back must succeed")
+	assert.Equal(t, changed, got, "and it must be the new passphrase, not the one it replaced")
 	entries, err := b.List()
-	if err != nil {
-		t.Fatalf("List: %v", err)
-	}
-	if len(entries) != 1 || entries[0] != service {
-		t.Fatalf("List = %v, want exactly one entry for %s", entries, service)
-	}
+	require.NoError(t, err, "listing the database must succeed")
+	assert.Equal(t, []string{service}, entries,
+		"one key is one entry: a second holding the same secret is one more copy than the user asked for")
 
 	// F9: forgetting removes it, and the next use finds nothing.
-	if err := b.Delete(service); err != nil {
-		t.Fatalf("Delete: %v", err)
-	}
-	if _, found, err := b.Lookup(service); err != nil || found {
-		t.Fatalf("after forgetting, the entry must be gone: found=%v err=%v", found, err)
-	}
+	require.NoError(t, b.Delete(service), "forgetting a passphrase must succeed")
+	_, found, err = b.Lookup(service)
+	require.NoError(t, err, "looking for a forgotten passphrase must not be an error")
+	assert.False(t, found, "and it must be gone from the database")
 }
 
 // createRealDatabase makes a throwaway .kdbx with the real keepassxc-cli.
@@ -109,10 +92,7 @@ func createRealDatabase(t *testing.T, path, password string) {
 	// db-create asks twice: the password and its confirmation.
 	cmd.Stdin = strings.NewReader(password + "\n" + password + "\n")
 	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("creating a throwaway database failed: %v\n%s", err, out)
-	}
-	if _, statErr := os.Stat(path); statErr != nil {
-		t.Fatalf("keepassxc-cli reported success but wrote no database: %v\n%s", statErr, out)
-	}
+	require.NoErrorf(t, err, "creating a throwaway database failed:\n%s", out)
+	_, statErr := os.Stat(path)
+	require.NoErrorf(t, statErr, "keepassxc-cli reported success but wrote no database:\n%s", out)
 }

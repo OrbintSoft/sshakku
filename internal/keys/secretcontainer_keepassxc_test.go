@@ -2,6 +2,9 @@ package keys
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestKeePassXCCLIUsesTheConfiguredContainer verifies the KeePassXC half of the
@@ -23,18 +26,11 @@ func TestKeePassXCCLIUsesTheConfiguredContainer(t *testing.T) {
 		b := cliBackend(runner, &countingPrompter{password: "db"})
 		b.Group = group
 
-		if err := b.Store(service, "label", "hunter2"); err != nil {
-			t.Fatalf("Store: %v", err)
-		}
-		if len(runner.calls) != 3 {
-			t.Fatalf("ran %d commands, want 3 (lookup, mkdir, add)", len(runner.calls))
-		}
-		if got := lastArg(runner.calls[1].Args); got != group {
-			t.Errorf("created group %q, want %q", got, group)
-		}
-		if got, want := lastArg(runner.calls[2].Args), group+"/"+service; got != want {
-			t.Errorf("filed the entry at %q, want %q", got, want)
-		}
+		require.NoError(t, b.Store(service, "label", "hunter2"), "saving into the configured group must succeed")
+		require.Len(t, runner.calls, 3, "a key with no entry yet is looked up, then its group made, then written")
+		assert.Equal(t, group, lastArg(runner.calls[1].Args), "the group that is made must be the one configured")
+		assert.Equal(t, group+"/"+service, lastArg(runner.calls[2].Args),
+			"and the entry must be filed inside it, not in the group SSHakku would have picked")
 	})
 
 	t.Run("a lookup reads from the configured group", func(t *testing.T) {
@@ -42,12 +38,11 @@ func TestKeePassXCCLIUsesTheConfiguredContainer(t *testing.T) {
 		b := cliBackend(runner, &countingPrompter{password: "db"})
 		b.Group = group
 
-		if _, _, err := b.Lookup(service); err != nil {
-			t.Fatalf("Lookup: %v", err)
-		}
-		if got, want := lastArg(runner.calls[0].Args), group+"/"+service; got != want {
-			t.Errorf("looked up %q, want %q", got, want)
-		}
+		_, _, err := b.Lookup(service)
+		require.NoError(t, err, "reading from the configured group must succeed")
+		require.NotEmpty(t, runner.calls, "the database must actually be asked")
+		assert.Equal(t, group+"/"+service, lastArg(runner.calls[0].Args),
+			"a lookup that read another group would report an empty wallet with the passphrases sitting in the configured one")
 	})
 
 	t.Run("a sweep enumerates the configured group and reports plain names", func(t *testing.T) {
@@ -56,30 +51,25 @@ func TestKeePassXCCLIUsesTheConfiguredContainer(t *testing.T) {
 		b.Group = group
 
 		services, err := b.List()
-		if err != nil {
-			t.Fatalf("List: %v", err)
-		}
-		if got := lastArg(runner.calls[0].Args); got != group {
-			t.Errorf("enumerated group %q, want %q", got, group)
-		}
+		require.NoError(t, err, "enumerating the configured group must succeed")
+		require.NotEmpty(t, runner.calls, "the database must actually be asked")
+		assert.Equal(t, group, lastArg(runner.calls[0].Args), "the group enumerated must be the one configured")
 		// The group name is where the entry lives, not part of what it is
 		// called: a sweep that left it on would hand `forget --all` names no
 		// lookup could ever match.
-		if len(services) != 1 || services[0] != service {
-			t.Errorf("List = %q, want exactly %q", services, []string{service})
-		}
+		assert.Equal(t, []string{service}, services,
+			"the names reported must be the ones a lookup goes by, without the group they happen to live in")
 	})
 
 	t.Run("an unset name keeps the group SSHakku has always used", func(t *testing.T) {
 		runner := &recordingRunner{results: []Result{{Code: 0, Stdout: []byte("hunter2\n")}}}
 		b := cliBackend(runner, &countingPrompter{password: "db"})
 
-		if _, _, err := b.Lookup(service); err != nil {
-			t.Fatalf("Lookup: %v", err)
-		}
-		if got, want := lastArg(runner.calls[0].Args), keepassxcCLIGroup+"/"+service; got != want {
-			t.Errorf("looked up %q, want the default group's %q", got, want)
-		}
+		_, _, err := b.Lookup(service)
+		require.NoError(t, err, "reading from SSHakku's own group must succeed")
+		require.NotEmpty(t, runner.calls, "the database must actually be asked")
+		assert.Equal(t, keepassxcCLIGroup+"/"+service, lastArg(runner.calls[0].Args),
+			"a user who configured nothing must keep the group their entries are already in")
 	})
 }
 
@@ -95,24 +85,17 @@ func TestKeePassXCNativeSendsTheConfiguredGroup(t *testing.T) {
 		b := kp.backendFor(&memoryAssociations{})
 		b.Group = "my-own-compartment"
 
-		if err := b.Store("id_ed25519", "", "secret"); err != nil {
-			t.Fatalf("Store: %v", err)
-		}
-		if kp.lastSet.group != "my-own-compartment" {
-			t.Errorf("group = %q, want the configured name", kp.lastSet.group)
-		}
+		require.NoError(t, b.Store("id_ed25519", "", "secret"), "saving a passphrase must succeed")
+		assert.Equal(t, "my-own-compartment", kp.lastSet.group,
+			"the name that goes on the wire must be the one configured, so a KeePassXC that starts honouring it honours that")
 	})
 
 	t.Run("SSHakku's own when none is configured", func(t *testing.T) {
 		kp := &fakeKeePassXC{}
 		b := kp.backendFor(&memoryAssociations{})
 
-		if err := b.Store("id_ed25519", "", "secret"); err != nil {
-			t.Fatalf("Store: %v", err)
-		}
-		if kp.lastSet.group != keepassxcGroup {
-			t.Errorf("group = %q, want %q", kp.lastSet.group, keepassxcGroup)
-		}
+		require.NoError(t, b.Store("id_ed25519", "", "secret"), "saving a passphrase must succeed")
+		assert.Equal(t, keepassxcGroup, kp.lastSet.group, "and SSHakku's own name when the user configured none")
 	})
 }
 

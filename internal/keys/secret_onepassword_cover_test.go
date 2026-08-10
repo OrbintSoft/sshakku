@@ -3,6 +3,8 @@ package keys
 import (
 	"errors"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestOnePasswordStoreDeleteErrorPropagates(t *testing.T) {
@@ -11,9 +13,8 @@ func TestOnePasswordStoreDeleteErrorPropagates(t *testing.T) {
 		"item get": fails(boom),
 	}))
 	b := &OnePasswordBackend{Runner: r, Vault: "sshakku"}
-	if err := b.Store("svc", "label", "pass"); !errors.Is(err, boom) {
-		t.Fatalf("error = %v, want %v (Store must surface Delete's failure)", err, boom)
-	}
+	assert.ErrorIs(t, b.Store("svc", "label", "pass"), boom,
+		"the old entry has to go before the new one lands, so a removal that failed must stop the write, not be passed over")
 }
 
 func TestOnePasswordStoreMarshalError(t *testing.T) {
@@ -23,9 +24,8 @@ func TestOnePasswordStoreMarshalError(t *testing.T) {
 		"item get": stdout("", 1), // nothing to delete
 	}))
 	b := &OnePasswordBackend{Runner: r, Vault: "sshakku"}
-	if err := b.Store("svc", "label", "pass"); err == nil {
-		t.Fatal("expected an error when the item template cannot be marshaled")
-	}
+	assert.Error(t, b.Store("svc", "label", "pass"),
+		"an item that could not be built must be reported, not sent as whatever it came out as")
 }
 
 func TestOnePasswordStoreCreateRunError(t *testing.T) {
@@ -35,9 +35,8 @@ func TestOnePasswordStoreCreateRunError(t *testing.T) {
 		"item create": fails(boom),
 	}))
 	b := &OnePasswordBackend{Runner: r, Vault: "sshakku"}
-	if err := b.Store("svc", "label", "pass"); !errors.Is(err, boom) {
-		t.Fatalf("error = %v, want %v", err, boom)
-	}
+	assert.ErrorIs(t, b.Store("svc", "label", "pass"), boom,
+		"a write that could not start must be reported, not read as a passphrase saved")
 }
 
 func TestOnePasswordDeleteItemDeleteRunError(t *testing.T) {
@@ -47,9 +46,8 @@ func TestOnePasswordDeleteItemDeleteRunError(t *testing.T) {
 		"item delete": fails(boom),
 	}))
 	b := &OnePasswordBackend{Runner: r, Vault: "sshakku"}
-	if err := b.Delete("svc"); !errors.Is(err, boom) {
-		t.Fatalf("error = %v, want %v", err, boom)
-	}
+	assert.ErrorIs(t, b.Delete("svc"), boom,
+		"a removal that could not start must be reported, not read as a passphrase forgotten")
 }
 
 func TestOnePasswordListErrorBranches(t *testing.T) {
@@ -59,9 +57,8 @@ func TestOnePasswordListErrorBranches(t *testing.T) {
 			"item list": fails(boom),
 		}))
 		b := &OnePasswordBackend{Runner: r, Vault: "sshakku"}
-		if _, err := b.List(); !errors.Is(err, boom) {
-			t.Fatalf("error = %v, want %v", err, boom)
-		}
+		_, err := b.List()
+		assert.ErrorIs(t, err, boom, "an op command that would not run must be reported, not read as an empty vault")
 	})
 
 	t.Run("item list returns unparseable JSON", func(t *testing.T) {
@@ -69,8 +66,7 @@ func TestOnePasswordListErrorBranches(t *testing.T) {
 			"item list": stdout("not json", 0),
 		}))
 		b := &OnePasswordBackend{Runner: r, Vault: "sshakku"}
-		if _, err := b.List(); err == nil {
-			t.Fatal("expected an error when item list returns unparseable JSON")
-		}
+		_, err := b.List()
+		assert.Error(t, err, "an answer that could not be read must be reported, not read as an empty vault")
 	})
 }

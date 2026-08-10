@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/godbus/dbus/v5"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // fakeSecretServiceClient scripts SecretServiceClient for SecretServiceBackend
@@ -132,22 +134,13 @@ func TestSecretServiceLookup(t *testing.T) {
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
 		pass, found, err := b.Lookup(defaultServicePrefix + "-id_rsa")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if !found || pass != "hunter2" {
-			t.Fatalf("Lookup = (%q, %v), want (hunter2, true)", pass, found)
-		}
-		if len(c.unlocked) != 1 || c.unlocked[0] != col {
-			t.Fatalf("unlocked = %v, want [%v]", c.unlocked, col)
-		}
-		if len(c.locked) != 1 || c.locked[0] != col {
-			t.Fatalf("locked = %v, want [%v]", c.locked, col)
-		}
-		want := map[string]string{"service": defaultServicePrefix + "-id_rsa", "username": "alice"}
-		if !equalAttrs(c.searchedAttrs, want) {
-			t.Fatalf("searched attrs = %v, want %v", c.searchedAttrs, want)
-		}
+		require.NoError(t, err, "a stored passphrase must come back")
+		assert.True(t, found, "the item is there, so it must be reported found")
+		assert.Equal(t, "hunter2", pass, "and the passphrase read out must be the one that was stored")
+		assert.Equal(t, []dbus.ObjectPath{col}, c.unlocked, "the collection holding the item is what must be unlocked")
+		assert.Equal(t, []dbus.ObjectPath{col}, c.locked, "and it must be locked again afterwards")
+		assert.Equal(t, map[string]string{"service": defaultServicePrefix + "-id_rsa", "username": "alice"}, c.searchedAttrs,
+			"the search must name both the key and whose passphrase it is")
 	})
 
 	t.Run("miss is found=false, no error, still locks", func(t *testing.T) {
@@ -155,30 +148,20 @@ func TestSecretServiceLookup(t *testing.T) {
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
 		_, found, err := b.Lookup(defaultServicePrefix + "-id_rsa")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if found {
-			t.Fatal("found = true, want false for a miss")
-		}
-		if len(c.locked) != 1 {
-			t.Fatalf("locked = %v, want the collection locked even on a miss", c.locked)
-		}
+		require.NoError(t, err, "a passphrase that was never stored is not an error")
+		assert.False(t, found, "and nothing may be reported found")
+		assert.Len(t, c.locked, 1, "the collection must be locked again even when nothing was there")
 	})
 
 	t.Run("the collection is resolved once and cached", func(t *testing.T) {
 		c := &fakeSecretServiceClient{collection: col}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		if _, _, err := b.Lookup("a"); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if _, _, err := b.Lookup("b"); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if c.collectionCalls != 1 {
-			t.Fatalf("Collection called %d times, want 1", c.collectionCalls)
-		}
+		_, _, err := b.Lookup("a")
+		require.NoError(t, err, "the first lookup must succeed")
+		_, _, err = b.Lookup("b")
+		require.NoError(t, err, "and so must the second")
+		assert.Equal(t, 1, c.collectionCalls, "the collection is the same one; asking the bus for it twice is a round trip nobody needs")
 	})
 
 	t.Run("a collection error is returned, nothing is unlocked", func(t *testing.T) {
@@ -186,12 +169,9 @@ func TestSecretServiceLookup(t *testing.T) {
 		c := &fakeSecretServiceClient{collectionErr: wantErr}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		if _, _, err := b.Lookup("x"); !errors.Is(err, wantErr) {
-			t.Fatalf("error = %v, want %v", err, wantErr)
-		}
-		if len(c.unlocked) != 0 {
-			t.Fatalf("unlocked = %v, want none", c.unlocked)
-		}
+		_, _, err := b.Lookup("x")
+		assert.ErrorIs(t, err, wantErr, "a collection that could not be resolved must be reported as it was refused")
+		assert.Empty(t, c.unlocked, "and nothing may be unlocked on the strength of a collection nobody found")
 	})
 
 	t.Run("an unlock error is returned, the collection is not locked", func(t *testing.T) {
@@ -199,12 +179,9 @@ func TestSecretServiceLookup(t *testing.T) {
 		c := &fakeSecretServiceClient{collection: col, unlockErr: wantErr}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		if _, _, err := b.Lookup("x"); !errors.Is(err, wantErr) {
-			t.Fatalf("error = %v, want %v", err, wantErr)
-		}
-		if len(c.locked) != 0 {
-			t.Fatalf("locked = %v, want none: an unlock failure has nothing to re-lock", c.locked)
-		}
+		_, _, err := b.Lookup("x")
+		assert.ErrorIs(t, err, wantErr, "a user who dismissed the unlock dialog must be told so")
+		assert.Empty(t, c.locked, "and a collection that never opened has nothing to re-lock")
 	})
 
 	t.Run("a search error is returned, the collection is still locked", func(t *testing.T) {
@@ -212,12 +189,9 @@ func TestSecretServiceLookup(t *testing.T) {
 		c := &fakeSecretServiceClient{collection: col, searchErr: wantErr}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		if _, _, err := b.Lookup("x"); !errors.Is(err, wantErr) {
-			t.Fatalf("error = %v, want %v", err, wantErr)
-		}
-		if len(c.locked) != 1 {
-			t.Fatalf("locked = %v, want the collection locked despite the search error", c.locked)
-		}
+		_, _, err := b.Lookup("x")
+		assert.ErrorIs(t, err, wantErr, "a search that failed must be reported, not read as a miss")
+		assert.Len(t, c.locked, 1, "and the collection this opened must not be left open behind the error")
 	})
 
 	t.Run("a get-secret error is returned, the collection is still locked", func(t *testing.T) {
@@ -226,15 +200,9 @@ func TestSecretServiceLookup(t *testing.T) {
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
 		_, found, err := b.Lookup("x")
-		if !errors.Is(err, wantErr) {
-			t.Fatalf("error = %v, want %v", err, wantErr)
-		}
-		if found {
-			t.Fatal("found = true, want false on a get-secret error")
-		}
-		if len(c.locked) != 1 {
-			t.Fatalf("locked = %v, want the collection locked despite the get-secret error", c.locked)
-		}
+		assert.ErrorIs(t, err, wantErr, "a secret that could not be read must be reported as unread")
+		assert.False(t, found, "an item nobody could read out is not a passphrase found")
+		assert.Len(t, c.locked, 1, "and the collection this opened must not be left open behind the error")
 	})
 }
 
@@ -250,36 +218,21 @@ func TestSecretServiceSession(t *testing.T) {
 		}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		if err := b.Unlock(); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if _, _, err := b.Lookup("a"); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if err := b.Store("b", "label", "hunter2"); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if len(c.unlocked) != 1 {
-			t.Fatalf("unlocked = %v, want exactly one explicit unlock shared across calls", c.unlocked)
-		}
-		if len(c.locked) != 0 {
-			t.Fatalf("locked = %v, want none until Lock is called", c.locked)
-		}
+		require.NoError(t, b.Unlock(), "opening the collection for a run of work must succeed")
+		_, _, err := b.Lookup("a")
+		require.NoError(t, err, "a lookup inside the session must succeed")
+		require.NoError(t, b.Store("b", "label", "hunter2"), "and so must a store")
+		assert.Len(t, c.unlocked, 1,
+			"one unlock covers the whole session; unlocking per call is a wallet dialog per key")
+		assert.Empty(t, c.locked, "and nothing may be locked while the session is still open")
 
-		if err := b.Lock(); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if len(c.locked) != 1 {
-			t.Fatalf("locked = %v, want exactly one lock after Lock()", c.locked)
-		}
+		require.NoError(t, b.Lock(), "closing the session must succeed")
+		assert.Len(t, c.locked, 1, "and it must lock the collection exactly once")
 
-		// held is cleared after Lock: a further call unlocks and locks on its own again.
-		if _, _, err := b.Lookup("c"); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if len(c.unlocked) != 2 || len(c.locked) != 2 {
-			t.Fatalf("unlocked=%v locked=%v, want a fresh unlock/lock bracket after Lock()", c.unlocked, c.locked)
-		}
+		_, _, err = b.Lookup("c")
+		require.NoError(t, err, "work after the session must still succeed")
+		assert.Len(t, c.unlocked, 2, "a call outside a session opens the collection itself")
+		assert.Len(t, c.locked, 2, "and closes it again")
 	})
 
 	t.Run("an Unlock collection error leaves held false", func(t *testing.T) {
@@ -287,12 +240,8 @@ func TestSecretServiceSession(t *testing.T) {
 		c := &fakeSecretServiceClient{collectionErr: wantErr}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		if err := b.Unlock(); !errors.Is(err, wantErr) {
-			t.Fatalf("error = %v, want %v", err, wantErr)
-		}
-		if b.held {
-			t.Fatal("held = true after a failed Unlock, want false")
-		}
+		assert.ErrorIs(t, b.Unlock(), wantErr, "a session that could not be opened must say so")
+		assert.False(t, b.held, "and must not believe it holds a collection it never opened")
 	})
 }
 
@@ -303,23 +252,19 @@ func TestSecretServiceStore(t *testing.T) {
 		c := &fakeSecretServiceClient{collection: col}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		if err := b.Store(defaultServicePrefix+"-id_rsa", "SSH Passphrase for id_rsa", "hunter2"); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if len(c.unlocked) != 1 || c.unlocked[0] != col {
-			t.Fatalf("unlocked = %v, want [%v]", c.unlocked, col)
-		}
-		if len(c.locked) != 1 || c.locked[0] != col {
-			t.Fatalf("locked = %v, want [%v]", c.locked, col)
-		}
-		if len(c.createdItems) != 1 {
-			t.Fatalf("createdItems = %v, want exactly one", c.createdItems)
-		}
-		got := c.createdItems[0]
-		wantAttrs := map[string]string{"service": defaultServicePrefix + "-id_rsa", "username": "alice"}
-		if got.collection != col || got.label != "SSH Passphrase for id_rsa" || got.passphrase != "hunter2" || !got.replace || !equalAttrs(got.attrs, wantAttrs) {
-			t.Fatalf("CreateItem call = %+v, want collection=%v label=%q passphrase=hunter2 replace=true attrs=%v", got, col, "SSH Passphrase for id_rsa", wantAttrs)
-		}
+		require.NoError(t, b.Store(defaultServicePrefix+"-id_rsa", "SSH Passphrase for id_rsa", "hunter2"),
+			"saving a passphrase must succeed")
+		assert.Equal(t, []dbus.ObjectPath{col}, c.unlocked, "the collection to write into is what must be unlocked")
+		assert.Equal(t, []dbus.ObjectPath{col}, c.locked, "and it must be locked again afterwards")
+		require.Len(t, c.createdItems, 1, "one passphrase saved is one item written")
+		assert.Equal(t, ssCreateCall{
+			collection: col,
+			label:      "SSH Passphrase for id_rsa",
+			attrs:      map[string]string{"service": defaultServicePrefix + "-id_rsa", "username": "alice"},
+			passphrase: "hunter2",
+			replace:    true,
+		}, c.createdItems[0],
+			"the item must name the key, say whose it is, carry the passphrase, and replace any earlier one")
 	})
 
 	t.Run("a collection error is returned, nothing is unlocked", func(t *testing.T) {
@@ -327,12 +272,9 @@ func TestSecretServiceStore(t *testing.T) {
 		c := &fakeSecretServiceClient{collectionErr: wantErr}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		if err := b.Store("x", "y", "z"); !errors.Is(err, wantErr) {
-			t.Fatalf("error = %v, want %v", err, wantErr)
-		}
-		if len(c.unlocked) != 0 {
-			t.Fatalf("unlocked = %v, want none", c.unlocked)
-		}
+		assert.ErrorIs(t, b.Store("x", "y", "z"), wantErr,
+			"a collection that could not be resolved must be reported as it was refused")
+		assert.Empty(t, c.unlocked, "and nothing may be unlocked on the strength of a collection nobody found")
 	})
 
 	t.Run("an unlock error is returned, the collection is not locked", func(t *testing.T) {
@@ -340,12 +282,8 @@ func TestSecretServiceStore(t *testing.T) {
 		c := &fakeSecretServiceClient{collection: col, unlockErr: wantErr}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		if err := b.Store("x", "y", "z"); !errors.Is(err, wantErr) {
-			t.Fatalf("error = %v, want %v", err, wantErr)
-		}
-		if len(c.locked) != 0 {
-			t.Fatalf("locked = %v, want none: an unlock failure has nothing to re-lock", c.locked)
-		}
+		assert.ErrorIs(t, b.Store("x", "y", "z"), wantErr, "a user who dismissed the unlock dialog must be told so")
+		assert.Empty(t, c.locked, "and a collection that never opened has nothing to re-lock")
 	})
 
 	t.Run("a create-item error is returned, the collection is still locked", func(t *testing.T) {
@@ -353,12 +291,9 @@ func TestSecretServiceStore(t *testing.T) {
 		c := &fakeSecretServiceClient{collection: col, createErr: wantErr}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		if err := b.Store("x", "y", "z"); !errors.Is(err, wantErr) {
-			t.Fatalf("error = %v, want %v", err, wantErr)
-		}
-		if len(c.locked) != 1 {
-			t.Fatalf("locked = %v, want the collection locked despite the create-item error", c.locked)
-		}
+		assert.ErrorIs(t, b.Store("x", "y", "z"), wantErr,
+			"a passphrase the wallet refused to write must not be reported as saved")
+		assert.Len(t, c.locked, 1, "and the collection this opened must not be left open behind the error")
 	})
 }
 
@@ -370,33 +305,21 @@ func TestSecretServiceDelete(t *testing.T) {
 		c := &fakeSecretServiceClient{collection: col, items: []dbus.ObjectPath{item}}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		if err := b.Delete(defaultServicePrefix + "-id_rsa"); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if len(c.unlocked) != 1 || c.unlocked[0] != col {
-			t.Fatalf("unlocked = %v, want [%v]", c.unlocked, col)
-		}
-		if len(c.locked) != 1 || c.locked[0] != col {
-			t.Fatalf("locked = %v, want [%v]", c.locked, col)
-		}
-		if len(c.deletedItems) != 1 || c.deletedItems[0] != item {
-			t.Fatalf("deletedItems = %v, want [%v]", c.deletedItems, item)
-		}
+		require.NoError(t, b.Delete(defaultServicePrefix+"-id_rsa"), "forgetting a passphrase must succeed")
+		assert.Equal(t, []dbus.ObjectPath{col}, c.unlocked, "the collection holding the item is what must be unlocked")
+		assert.Equal(t, []dbus.ObjectPath{col}, c.locked, "and it must be locked again afterwards")
+		assert.Equal(t, []dbus.ObjectPath{item}, c.deletedItems,
+			"exactly the item that was asked about is the one that may be removed")
 	})
 
 	t.Run("a miss is success, no error, still locks, nothing deleted", func(t *testing.T) {
 		c := &fakeSecretServiceClient{collection: col}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		if err := b.Delete(defaultServicePrefix + "-id_rsa"); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if len(c.locked) != 1 {
-			t.Fatalf("locked = %v, want the collection locked even on a miss", c.locked)
-		}
-		if len(c.deletedItems) != 0 {
-			t.Fatalf("deletedItems = %v, want none", c.deletedItems)
-		}
+		require.NoError(t, b.Delete(defaultServicePrefix+"-id_rsa"),
+			"a passphrase that is already not there is the outcome that was asked for")
+		assert.Len(t, c.locked, 1, "the collection must be locked again even when nothing was there")
+		assert.Empty(t, c.deletedItems, "and nothing may be removed when nothing matched")
 	})
 
 	t.Run("a collection error is returned, nothing is unlocked", func(t *testing.T) {
@@ -404,12 +327,9 @@ func TestSecretServiceDelete(t *testing.T) {
 		c := &fakeSecretServiceClient{collectionErr: wantErr}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		if err := b.Delete("x"); !errors.Is(err, wantErr) {
-			t.Fatalf("error = %v, want %v", err, wantErr)
-		}
-		if len(c.unlocked) != 0 {
-			t.Fatalf("unlocked = %v, want none", c.unlocked)
-		}
+		assert.ErrorIs(t, b.Delete("x"), wantErr,
+			"a collection that could not be resolved must be reported as it was refused")
+		assert.Empty(t, c.unlocked, "and nothing may be unlocked on the strength of a collection nobody found")
 	})
 
 	t.Run("an unlock error is returned, the collection is not locked", func(t *testing.T) {
@@ -417,12 +337,8 @@ func TestSecretServiceDelete(t *testing.T) {
 		c := &fakeSecretServiceClient{collection: col, unlockErr: wantErr}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		if err := b.Delete("x"); !errors.Is(err, wantErr) {
-			t.Fatalf("error = %v, want %v", err, wantErr)
-		}
-		if len(c.locked) != 0 {
-			t.Fatalf("locked = %v, want none: an unlock failure has nothing to re-lock", c.locked)
-		}
+		assert.ErrorIs(t, b.Delete("x"), wantErr, "a user who dismissed the unlock dialog must be told so")
+		assert.Empty(t, c.locked, "and a collection that never opened has nothing to re-lock")
 	})
 
 	t.Run("a search error is returned, the collection is still locked", func(t *testing.T) {
@@ -430,12 +346,8 @@ func TestSecretServiceDelete(t *testing.T) {
 		c := &fakeSecretServiceClient{collection: col, searchErr: wantErr}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		if err := b.Delete("x"); !errors.Is(err, wantErr) {
-			t.Fatalf("error = %v, want %v", err, wantErr)
-		}
-		if len(c.locked) != 1 {
-			t.Fatalf("locked = %v, want the collection locked despite the search error", c.locked)
-		}
+		assert.ErrorIs(t, b.Delete("x"), wantErr, "a search that failed must be reported, not read as nothing to remove")
+		assert.Len(t, c.locked, 1, "and the collection this opened must not be left open behind the error")
 	})
 
 	t.Run("a delete-item error is returned, the collection is still locked", func(t *testing.T) {
@@ -443,12 +355,9 @@ func TestSecretServiceDelete(t *testing.T) {
 		c := &fakeSecretServiceClient{collection: col, items: []dbus.ObjectPath{item}, deleteItemErr: wantErr}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		if err := b.Delete("x"); !errors.Is(err, wantErr) {
-			t.Fatalf("error = %v, want %v", err, wantErr)
-		}
-		if len(c.locked) != 1 {
-			t.Fatalf("locked = %v, want the collection locked despite the delete-item error", c.locked)
-		}
+		assert.ErrorIs(t, b.Delete("x"), wantErr,
+			"a passphrase the wallet refused to remove must not be reported as forgotten")
+		assert.Len(t, c.locked, 1, "and the collection this opened must not be left open behind the error")
 	})
 }
 
@@ -469,19 +378,11 @@ func TestSecretServiceList(t *testing.T) {
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
 		got, err := b.List()
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		want := []string{defaultServicePrefix + "-id_rsa", defaultServicePrefix + "-id_ed25519"}
-		if !equalStrings(got, want) {
-			t.Fatalf("List = %v, want %v", got, want)
-		}
-		if len(c.unlocked) != 1 || c.unlocked[0] != col {
-			t.Fatalf("unlocked = %v, want [%v]", c.unlocked, col)
-		}
-		if len(c.locked) != 1 || c.locked[0] != col {
-			t.Fatalf("locked = %v, want [%v]", c.locked, col)
-		}
+		require.NoError(t, err, "listing what the wallet holds must succeed")
+		assert.Equal(t, []string{defaultServicePrefix + "-id_rsa", defaultServicePrefix + "-id_ed25519"}, got,
+			"every item the collection holds must be named, by the key it belongs to")
+		assert.Equal(t, []dbus.ObjectPath{col}, c.unlocked, "the collection being listed is what must be unlocked")
+		assert.Equal(t, []dbus.ObjectPath{col}, c.locked, "and it must be locked again afterwards")
 	})
 
 	t.Run("an empty collection returns none, no error", func(t *testing.T) {
@@ -489,12 +390,8 @@ func TestSecretServiceList(t *testing.T) {
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
 		got, err := b.List()
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if len(got) != 0 {
-			t.Fatalf("List = %v, want none", got)
-		}
+		require.NoError(t, err, "a wallet holding nothing is not an error")
+		assert.Empty(t, got, "and nothing may be listed")
 	})
 
 	t.Run("a collection error is returned, nothing is unlocked", func(t *testing.T) {
@@ -502,12 +399,9 @@ func TestSecretServiceList(t *testing.T) {
 		c := &fakeSecretServiceClient{collectionErr: wantErr}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		if _, err := b.List(); !errors.Is(err, wantErr) {
-			t.Fatalf("error = %v, want %v", err, wantErr)
-		}
-		if len(c.unlocked) != 0 {
-			t.Fatalf("unlocked = %v, want none", c.unlocked)
-		}
+		_, err := b.List()
+		assert.ErrorIs(t, err, wantErr, "a collection that could not be resolved must be reported as it was refused")
+		assert.Empty(t, c.unlocked, "and nothing may be unlocked on the strength of a collection nobody found")
 	})
 
 	t.Run("an unlock error is returned, the collection is not locked", func(t *testing.T) {
@@ -515,12 +409,9 @@ func TestSecretServiceList(t *testing.T) {
 		c := &fakeSecretServiceClient{collection: col, unlockErr: wantErr}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		if _, err := b.List(); !errors.Is(err, wantErr) {
-			t.Fatalf("error = %v, want %v", err, wantErr)
-		}
-		if len(c.locked) != 0 {
-			t.Fatalf("locked = %v, want none: an unlock failure has nothing to re-lock", c.locked)
-		}
+		_, err := b.List()
+		assert.ErrorIs(t, err, wantErr, "a user who dismissed the unlock dialog must be told so")
+		assert.Empty(t, c.locked, "and a collection that never opened has nothing to re-lock")
 	})
 
 	t.Run("an items error is returned, the collection is still locked", func(t *testing.T) {
@@ -528,12 +419,9 @@ func TestSecretServiceList(t *testing.T) {
 		c := &fakeSecretServiceClient{collection: col, itemsErr: wantErr}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		if _, err := b.List(); !errors.Is(err, wantErr) {
-			t.Fatalf("error = %v, want %v", err, wantErr)
-		}
-		if len(c.locked) != 1 {
-			t.Fatalf("locked = %v, want the collection locked despite the items error", c.locked)
-		}
+		_, err := b.List()
+		assert.ErrorIs(t, err, wantErr, "a collection whose contents could not be read must not be listed as empty")
+		assert.Len(t, c.locked, 1, "and the collection this opened must not be left open behind the error")
 	})
 
 	t.Run("an attributes error is returned, the collection is still locked", func(t *testing.T) {
@@ -545,12 +433,9 @@ func TestSecretServiceList(t *testing.T) {
 		}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		if _, err := b.List(); !errors.Is(err, wantErr) {
-			t.Fatalf("error = %v, want %v", err, wantErr)
-		}
-		if len(c.locked) != 1 {
-			t.Fatalf("locked = %v, want the collection locked despite the attributes error", c.locked)
-		}
+		_, err := b.List()
+		assert.ErrorIs(t, err, wantErr, "an item whose attributes could not be read must not be silently dropped")
+		assert.Len(t, c.locked, 1, "and the collection this opened must not be left open behind the error")
 	})
 }
 
@@ -559,9 +444,7 @@ func TestSecretServiceList(t *testing.T) {
 func TestSecretServiceUnlockClientError(t *testing.T) {
 	client := &fakeSecretServiceClient{collection: "/org/collection/sshakku", unlockErr: errors.New("unlock refused")}
 	b := &SecretServiceBackend{Client: client, User: "u"}
-	if err := b.Unlock(); err == nil {
-		t.Fatal("Unlock returned nil, want the client's unlock error")
-	}
+	assert.Error(t, b.Unlock(), "a collection the bus refused to unlock must not be reported as open")
 }
 
 // TestSecretServiceLockCollectionError covers Lock's resolve-failure branch:
@@ -569,22 +452,6 @@ func TestSecretServiceUnlockClientError(t *testing.T) {
 func TestSecretServiceLockCollectionError(t *testing.T) {
 	client := &fakeSecretServiceClient{collectionErr: errors.New("no such collection")}
 	b := &SecretServiceBackend{Client: client, User: "u"}
-	if err := b.Lock(); err == nil {
-		t.Fatal("Lock returned nil, want the collection-resolve error")
-	}
-	if len(client.locked) != 0 {
-		t.Fatalf("Lock must not call the bus when the collection cannot resolve, got %v", client.locked)
-	}
-}
-
-func equalAttrs(a, b map[string]string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for k, v := range a {
-		if b[k] != v {
-			return false
-		}
-	}
-	return true
+	assert.Error(t, b.Lock(), "a collection that could not be resolved cannot be reported as locked")
+	assert.Empty(t, client.locked, "and nothing may be locked on the strength of a collection nobody found")
 }
