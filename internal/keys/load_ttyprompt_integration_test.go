@@ -16,6 +16,8 @@ import (
 
 	"github.com/OrbintSoft/sshakku/internal/giveup"
 	"github.com/OrbintSoft/sshakku/internal/keyring"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Environment the parent hands its re-executed self, which runs the loader
@@ -56,13 +58,10 @@ func buildAskpassHelper(t *testing.T, dir string) string {
 	t.Helper()
 	binary := filepath.Join(dir, "sshakku")
 	build := exec.Command("go", "build", "-o", binary, "github.com/OrbintSoft/sshakku/cmd/sshakku")
-	if out, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build sshakku: %v: %s", err, out)
-	}
+	out, err := build.CombinedOutput()
+	require.NoErrorf(t, err, "the real sshakku binary is what answers the prompt:\n%s", out)
 	helper := filepath.Join(dir, "sshakku-askpass")
-	if err := os.Symlink(binary, helper); err != nil {
-		t.Fatalf("link the askpass helper beside sshakku: %v", err)
-	}
+	require.NoError(t, os.Symlink(binary, helper), "laid down beside it under the name an install gives it")
 	return helper
 }
 
@@ -95,22 +94,19 @@ func TestLoadKeysFirstTimePromptRealTerminal(t *testing.T) {
 	// line discipline echoes what it receives as it receives it, so this is
 	// exactly where a passphrase would become visible on screen.
 	seen := readUntil(t, master, ttyPromptLine)
-	if _, err := master.WriteString(passphrase + "\n"); err != nil {
-		t.Fatalf("type the passphrase on the terminal: %v", err)
-	}
+	_, err := master.WriteString(passphrase + "\n")
+	require.NoError(t, err, "the user types their passphrase")
 	seen += drain(t, master)
 
-	if err := child.Wait(); err != nil {
-		t.Fatalf("helper: %v\nterminal output:\n%q", err, seen)
-	}
-	if strings.Contains(seen, passphrase) {
-		t.Errorf("the passphrase was echoed back onto the terminal; output:\n%q", seen)
-	}
-	if want := vaultStoresMarker + "1"; !strings.Contains(seen, want) {
-		t.Errorf("a freshly prompted passphrase was not stored for next time (want %q); output:\n%q", want, seen)
-	}
-	if entries, err := os.ReadDir(env.giveupDir); err == nil && len(entries) > 0 {
-		t.Errorf("a successful first-time prompt recorded a give-up: %v", entries)
+	require.NoErrorf(t, child.Wait(), "loading the key must succeed; terminal output:\n%q", seen)
+	assert.NotContainsf(t, seen, passphrase,
+		"a passphrase echoed back is on the screen for anyone behind the user, and in the scrollback afterwards:\n%q",
+		seen)
+	assert.Containsf(t, seen, vaultStoresMarker+"1",
+		"and it must be saved for next time, or every login asks again:\n%q", seen)
+	entries, err := os.ReadDir(env.giveupDir)
+	if err == nil {
+		assert.Emptyf(t, entries, "a key that opened must not be given up on: %v", entries)
 	}
 
 	assertKeyInAgent(t, env.keyfile, true)
@@ -141,30 +137,23 @@ func TestLoadKeysWrongPassphraseRealTerminal(t *testing.T) {
 	var seen string
 	for attempt := 1; attempt <= defaultMaxAttempts; attempt++ {
 		seen += readUntil(t, master, ttyPromptLine)
-		if _, err := master.WriteString(wrong + "\n"); err != nil {
-			t.Fatalf("type the wrong passphrase (attempt %d): %v", attempt, err)
-		}
+		_, err := master.WriteString(wrong + "\n")
+		require.NoErrorf(t, err, "the user types a wrong passphrase (attempt %d)", attempt)
 	}
 	seen += drain(t, master)
 
-	if err := child.Wait(); err != nil {
-		t.Fatalf("helper: %v\nterminal output:\n%q", err, seen)
-	}
-	if got := strings.Count(seen, ttyPromptLine); got != defaultMaxAttempts {
-		t.Errorf("the user was asked %d times, want %d; output:\n%q", got, defaultMaxAttempts, seen)
-	}
-	if strings.Contains(seen, wrong) {
-		t.Errorf("the rejected passphrase was echoed back onto the terminal; output:\n%q", seen)
-	}
-	if want := fmt.Sprintf("sshakku: could not load key id_test after %d attempts", defaultMaxAttempts); !strings.Contains(seen, want) {
-		t.Errorf("the user was never told the key could not be loaded (want %q); output:\n%q", want, seen)
-	}
-	if want := vaultStoresMarker + "0"; !strings.Contains(seen, want) {
-		t.Errorf("a rejected passphrase reached the vault (want %q); output:\n%q", want, seen)
-	}
-	if _, err := os.Stat(filepath.Join(env.giveupDir, "id_test")); err != nil {
-		t.Errorf("no give-up recorded after the attempts ran out, so every later shell would prompt again: %v", err)
-	}
+	require.NoErrorf(t, child.Wait(), "a key that never opened must not fail the login; terminal output:\n%q", seen)
+	assert.Equalf(t, defaultMaxAttempts, strings.Count(seen, ttyPromptLine),
+		"the user is asked as often as they allowed and no more:\n%q", seen)
+	assert.NotContainsf(t, seen, wrong,
+		"a passphrase echoed back is on the screen for anyone behind the user, wrong or not:\n%q", seen)
+	assert.Containsf(t, seen, fmt.Sprintf("sshakku: could not load key id_test after %d attempts", defaultMaxAttempts),
+		"and they must be told the key is not loaded, or they find out at the first git push:\n%q", seen)
+	assert.Containsf(t, seen, vaultStoresMarker+"0",
+		"nothing may reach the wallet: a passphrase already known to be wrong would poison every later silent load:\n%q",
+		seen)
+	_, err := os.Stat(filepath.Join(env.giveupDir, "id_test"))
+	assert.NoError(t, err, "and the key must be given up on, or every later shell asks about it again")
 
 	assertKeyInAgent(t, env.keyfile, false)
 }
@@ -194,27 +183,19 @@ func TestLoadKeysEmptyAnswerRealTerminal(t *testing.T) {
 	var seen string
 	for attempt := 1; attempt <= defaultMaxAttempts; attempt++ {
 		seen += readUntil(t, master, ttyPromptLine)
-		if _, err := master.WriteString("\n"); err != nil {
-			t.Fatalf("press Enter (attempt %d): %v", attempt, err)
-		}
+		_, err := master.WriteString("\n")
+		require.NoErrorf(t, err, "the user presses Enter on its own (attempt %d)", attempt)
 	}
 	seen += drain(t, master)
 
-	if err := child.Wait(); err != nil {
-		t.Fatalf("helper: %v\nterminal output:\n%q", err, seen)
-	}
-	if got := strings.Count(seen, ttyPromptLine); got != defaultMaxAttempts {
-		t.Errorf("the user was asked %d times, want %d; output:\n%q", got, defaultMaxAttempts, seen)
-	}
-	if want := fmt.Sprintf("sshakku: could not load key id_test after %d attempts", defaultMaxAttempts); !strings.Contains(seen, want) {
-		t.Errorf("the user was never told the key could not be loaded (want %q); output:\n%q", want, seen)
-	}
-	if want := vaultStoresMarker + "0"; !strings.Contains(seen, want) {
-		t.Errorf("an empty passphrase reached the vault (want %q); output:\n%q", want, seen)
-	}
-	if _, err := os.Stat(filepath.Join(env.giveupDir, "id_test")); err != nil {
-		t.Errorf("no give-up recorded after the attempts ran out, so every later shell would prompt again: %v", err)
-	}
+	require.NoErrorf(t, child.Wait(), "a key that never opened must not fail the login; terminal output:\n%q", seen)
+	assert.Equalf(t, defaultMaxAttempts, strings.Count(seen, ttyPromptLine),
+		"Enter on its own is a wrong answer like any other, so they are asked again:\n%q", seen)
+	assert.Containsf(t, seen, fmt.Sprintf("sshakku: could not load key id_test after %d attempts", defaultMaxAttempts),
+		"and told once at the end, not on the first press:\n%q", seen)
+	assert.Containsf(t, seen, vaultStoresMarker+"0", "nothing may reach the wallet:\n%q", seen)
+	_, err := os.Stat(filepath.Join(env.giveupDir, "id_test"))
+	assert.NoError(t, err, "and the key must be given up on, or every later shell asks about it again")
 
 	assertKeyInAgent(t, env.keyfile, false)
 }
@@ -241,23 +222,18 @@ func TestLoadKeysDismissedOnRealTerminalIsNotAFailure(t *testing.T) {
 	child := startTTYPromptHelper(t, env, slave)
 
 	seen := readUntil(t, master, ttyPromptLine)
-	if _, err := master.Write([]byte{0x04}); err != nil {
-		t.Fatalf("press Ctrl-D: %v", err)
-	}
+	_, err := master.Write([]byte{0x04})
+	require.NoError(t, err, "the user presses Ctrl-D")
 	seen += drain(t, master)
 
-	if err := child.Wait(); err != nil {
-		t.Fatalf("helper: %v\nterminal output:\n%q", err, seen)
-	}
-	if got := strings.Count(seen, ttyPromptLine); got != 1 {
-		t.Errorf("the user was asked %d times, want once: turning the question down is an answer; output:\n%q", got, seen)
-	}
-	if strings.Contains(seen, "could not load key") {
-		t.Errorf("refusing to answer was reported to the user as a failure; output:\n%q", seen)
-	}
-	if _, err := os.Stat(filepath.Join(env.giveupDir, "id_test")); err == nil {
-		t.Error("a key was given up, so a later shell would stay quiet about a key the user never gave up on")
-	}
+	require.NoErrorf(t, child.Wait(), "turning the question down must not fail the login; terminal output:\n%q", seen)
+	assert.Equalf(t, 1, strings.Count(seen, ttyPromptLine),
+		"they are asked once: turning the question down is an answer, not a missing one:\n%q", seen)
+	assert.NotContainsf(t, seen, "could not load key",
+		"and it is not a failure, so nothing may be reported as one:\n%q", seen)
+	_, err = os.Stat(filepath.Join(env.giveupDir, "id_test"))
+	assert.Error(t, err,
+		"nor may the key be given up on: a later shell would then stay quiet about a key they never gave up on")
 
 	assertKeyInAgent(t, env.keyfile, false)
 }
@@ -282,17 +258,14 @@ func setupTTYPromptTest(t *testing.T, passphrase string) ttyPromptEnv {
 	t.Setenv("HOME", dir)
 
 	keyfile := filepath.Join(dir, "id_test")
-	if out, err := exec.Command("ssh-keygen", "-t", "ed25519", "-N", passphrase, "-f", keyfile, "-q").CombinedOutput(); err != nil {
-		t.Fatalf("ssh-keygen: %v: %s", err, out)
-	}
+	out, err := exec.Command("ssh-keygen", "-t", "ed25519", "-N", passphrase, "-f", keyfile, "-q").CombinedOutput()
+	require.NoErrorf(t, err, "a real passphrase-protected key to load:\n%s", out)
 
 	askpass := buildAskpassHelper(t, dir)
 
 	sock := filepath.Join(dir, "agent.sock")
 	agentCmd := exec.Command("ssh-agent", "-D", "-a", sock)
-	if err := agentCmd.Start(); err != nil {
-		t.Fatalf("start ssh-agent: %v", err)
-	}
+	require.NoError(t, agentCmd.Start(), "a real ssh-agent to load it into")
 	t.Cleanup(func() {
 		_ = agentCmd.Process.Kill()
 		_ = agentCmd.Wait()
@@ -332,9 +305,7 @@ func startTTYPromptHelper(t *testing.T, env ttyPromptEnv, slave *os.File) *exec.
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = slave, slave, slave
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true, Setctty: true, Ctty: 0}
 
-	if err := cmd.Start(); err != nil {
-		t.Fatalf("start the helper on the pty: %v", err)
-	}
+	require.NoError(t, cmd.Start(), "the child that owns the terminal is what does the loading")
 	t.Cleanup(func() {
 		_ = cmd.Process.Kill()
 	})
@@ -389,17 +360,13 @@ func readUntil(t *testing.T, master *os.File, want string) string {
 	var seen strings.Builder
 	buf := make([]byte, 512)
 	for {
-		if err := master.SetReadDeadline(deadline); err != nil {
-			t.Fatalf("bound the terminal read: %v", err)
-		}
+		require.NoError(t, master.SetReadDeadline(deadline), "bound the terminal read")
 		n, err := master.Read(buf)
 		seen.Write(buf[:n])
 		if strings.Contains(seen.String(), want) {
 			return seen.String()
 		}
-		if err != nil {
-			t.Fatalf("waiting for %q on the terminal: %v; read so far:\n%q", want, err, seen.String())
-		}
+		require.NoErrorf(t, err, "%q never reached the terminal; read so far:\n%q", want, seen.String())
 	}
 }
 
@@ -413,15 +380,12 @@ func drain(t *testing.T, master *os.File) string {
 	var seen strings.Builder
 	buf := make([]byte, 512)
 	for {
-		if err := master.SetReadDeadline(deadline); err != nil {
-			t.Fatalf("bound the terminal read: %v", err)
-		}
+		require.NoError(t, master.SetReadDeadline(deadline), "bound the terminal read")
 		n, err := master.Read(buf)
 		seen.Write(buf[:n])
 		if err != nil {
-			if os.IsTimeout(err) {
-				t.Fatalf("the helper never finished writing to the terminal; read so far:\n%q", seen.String())
-			}
+			require.Falsef(t, os.IsTimeout(err),
+				"the helper never finished writing to the terminal; read so far:\n%q", seen.String())
 			return seen.String()
 		}
 	}
@@ -434,16 +398,11 @@ func assertKeyInAgent(t *testing.T, keyfile string, want bool) {
 
 	runner := ExecRunner{}
 	fp, err := FileFingerprint(runner, keyfile)
-	if err != nil {
-		t.Fatalf("FileFingerprint: %v", err)
-	}
+	require.NoError(t, err, "reading the key's fingerprint must succeed")
 	loaded, err := AgentFingerprints(runner)
-	if err != nil {
-		t.Fatalf("AgentFingerprints: %v", err)
-	}
-	if got := loaded[fp]; got != want {
-		t.Errorf("key present in the agent = %v, want %v", got, want)
-	}
+	require.NoError(t, err, "asking the agent what it holds must succeed")
+	assert.Equalf(t, want, loaded[fp],
+		"whether the key is in the agent is the whole outcome of what the user just typed: %v", loaded)
 }
 
 // requireUsableHandoff skips the test when this environment cannot carry a

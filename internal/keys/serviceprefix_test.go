@@ -1,6 +1,11 @@
 package keys
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
 
 // TestOwnServicesGoesByThePrefixItIsGiven pins the half of the entry name that
 // says who stored it. The case that matters is the second one: under a
@@ -17,19 +22,14 @@ func TestOwnServicesGoesByThePrefixItIsGiven(t *testing.T) {
 	}
 
 	t.Run("a configured prefix keeps its own entries and no others", func(t *testing.T) {
-		got := ownServices(names, mine)
-		want := []string{mine + "-id_ed25519"}
-		if !equalStrings(got, want) {
-			t.Fatalf("ownServices = %v, want %v", got, want)
-		}
+		assert.Equal(t, []string{mine + "-id_ed25519"}, ownServices(names, mine),
+			"an entry under a different prefix is not this configuration's, not even the default's: "+
+				"nothing this configuration can write would ever have produced it")
 	})
 
 	t.Run("no prefix configured falls back to the default", func(t *testing.T) {
-		got := ownServices(names, "")
-		want := []string{defaultServicePrefix + "-id_rsa"}
-		if !equalStrings(got, want) {
-			t.Fatalf("ownServices = %v, want %v", got, want)
-		}
+		assert.Equal(t, []string{defaultServicePrefix + "-id_rsa"}, ownServices(names, ""),
+			"a user who configured nothing keeps the entries SSHakku already wrote for them")
 	})
 }
 
@@ -37,15 +37,11 @@ func TestOwnServicesGoesByThePrefixItIsGiven(t *testing.T) {
 // prefix means, which is why writing an entry and enumerating one cannot
 // disagree about it.
 func TestServicePrefixOrDefault(t *testing.T) {
-	if got := servicePrefixOrDefault(""); got != defaultServicePrefix {
-		t.Errorf("servicePrefixOrDefault(\"\") = %q, want %q", got, defaultServicePrefix)
-	}
-	if got := servicePrefixOrDefault("chosen"); got != "chosen" {
-		t.Errorf("servicePrefixOrDefault(%q) = %q, want it kept", "chosen", got)
-	}
-	if got := servicePrefixOf(Config{ServicePrefix: "chosen"}); got != "chosen" {
-		t.Errorf("servicePrefixOf = %q, want the config's own prefix", got)
-	}
+	assert.Equal(t, defaultServicePrefix, servicePrefixOrDefault(""),
+		"one place decides what an unset prefix means, so writing an entry and enumerating one cannot disagree")
+	assert.Equal(t, "chosen", servicePrefixOrDefault("chosen"), "and a configured one is kept as written")
+	assert.Equal(t, "chosen", servicePrefixOf(Config{ServicePrefix: "chosen"}),
+		"including when it is read off the configuration")
 }
 
 // TestBitwardenListGoesByTheBackendsOwnPrefix verifies F32 where the vault is
@@ -60,11 +56,8 @@ func TestBitwardenListGoesByTheBackendsOwnPrefix(t *testing.T) {
 	b := &BitwardenBackend{Runner: r, Session: "sess-token", held: true, ServicePrefix: mine}
 
 	got, err := b.List()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	want := []string{mine + "-id_ed25519"}
-	if !equalStrings(got, want) {
-		t.Fatalf("List = %v, want %v", got, want)
-	}
+	require.NoError(t, err, "listing the vault must succeed")
+	assert.Equal(t, []string{mine + "-id_ed25519"}, got,
+		"under this configuration the default prefix is another program's name as much as \"Bank\" is, "+
+			"and what List reports is what forget --all deletes")
 }

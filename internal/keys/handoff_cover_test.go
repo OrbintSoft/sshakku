@@ -6,9 +6,11 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // saveHandoffSocketSeams snapshots the RNG, listen, and chmod seams shared by
@@ -24,24 +26,22 @@ func saveHandoffSocketSeams(t *testing.T) {
 func TestRandomHandoffTokenReadError(t *testing.T) {
 	saveHandoffSocketSeams(t)
 	randRead = func([]byte) (int, error) { return 0, errors.New("rng boom") }
-	if _, err := randomHandoffToken(); err == nil {
-		t.Fatal("randomHandoffToken returned nil error, want the RNG failure")
-	}
+	_, err := randomHandoffToken()
+	assert.Error(t, err,
+		"a token that is not random is one another process can guess, so an RNG that failed must stop the handoff")
 }
 
 // TestFetchHandoffMalformedToken covers FetchHandoff (and its platform
 // fetchPassphrase) rejecting a token it cannot redeem: a non-numeric keyring
 // serial on Linux, an undialable socket path on Darwin.
 func TestFetchHandoffMalformedToken(t *testing.T) {
-	if _, err := FetchHandoff("definitely-not-a-valid-handoff-token"); err == nil {
-		t.Fatal("FetchHandoff returned nil error, want a redemption failure")
-	}
+	_, err := FetchHandoff("definitely-not-a-valid-handoff-token")
+	assert.Error(t, err, "a handle no stash was made under can redeem nothing")
 }
 
 func TestSocketHandoffFetchDialError(t *testing.T) {
-	if _, err := socketHandoffFetch(filepath.Join(t.TempDir(), "nope.sock")); err == nil {
-		t.Fatal("socketHandoffFetch returned nil error, want a dial failure")
-	}
+	_, err := socketHandoffFetch(filepath.Join(t.TempDir(), "nope.sock"))
+	assert.Error(t, err, "a rendezvous that is not there hands back nothing")
 }
 
 // TestSocketHandoffFetchReadError covers the branch where the socket dials
@@ -50,32 +50,26 @@ func TestSocketHandoffFetchReadError(t *testing.T) {
 	saveHandoffSocketSeams(t)
 
 	token, err := socketHandoffStash("s3cr3t", 5*time.Second, fixedBase(shortDir(t)), addrLimit)
-	if err != nil {
-		t.Fatalf("socketHandoffStash: %v", err)
-	}
+	require.NoError(t, err, "putting a passphrase aside must succeed")
 	readAll = func(io.Reader) ([]byte, error) { return nil, errors.New("read boom") }
-	if _, err := socketHandoffFetch(token); err == nil {
-		t.Fatal("socketHandoffFetch returned nil error, want the read failure")
-	}
+	_, err = socketHandoffFetch(token)
+	assert.Error(t, err, "a passphrase that could not be read must be reported, not handed on as an empty one")
 }
 
 func TestSocketHandoffDirErrors(t *testing.T) {
 	t.Run("the base is a file, not a directory", func(t *testing.T) {
 		file := filepath.Join(t.TempDir(), "not-a-dir")
-		if err := os.WriteFile(file, nil, 0o600); err != nil {
-			t.Fatalf("write file: %v", err)
-		}
-		if _, err := socketHandoffDir(file); err == nil {
-			t.Fatal("socketHandoffDir returned nil error, want the mkdir failure under a file")
-		}
+		require.NoError(t, os.WriteFile(file, nil, 0o600), "seed a file where a directory should be")
+		_, err := socketHandoffDir(file)
+		assert.Error(t, err, "there is nowhere to put the rendezvous, and that must be said")
 	})
 
 	t.Run("the directory cannot be made private", func(t *testing.T) {
 		saveHandoffSocketSeams(t)
 		chmodDir = func(string, os.FileMode) error { return errors.New("chmod boom") }
-		if _, err := socketHandoffDir(shortDir(t)); err == nil {
-			t.Fatal("socketHandoffDir returned nil error, want the failure to force 0700")
-		}
+		_, err := socketHandoffDir(shortDir(t))
+		assert.Error(t, err,
+			"a directory that could not be made private must not be used: a passphrase would rendezvous in the open")
 	})
 }
 
@@ -84,16 +78,11 @@ func TestSocketHandoffDirErrors(t *testing.T) {
 // of the process that created it happened to be.
 func TestSocketHandoffDirIsPrivate(t *testing.T) {
 	dir, err := socketHandoffDir(shortDir(t))
-	if err != nil {
-		t.Fatalf("socketHandoffDir: %v", err)
-	}
+	require.NoError(t, err, "making the rendezvous directory must succeed")
 	info, err := os.Stat(dir)
-	if err != nil {
-		t.Fatalf("stat handoff dir: %v", err)
-	}
-	if perm := info.Mode().Perm(); perm != 0o700 {
-		t.Fatalf("handoff directory permissions = %o, want 0700", perm)
-	}
+	require.NoError(t, err, "and it must be there")
+	assert.Equal(t, os.FileMode(0o700), info.Mode().Perm(),
+		"enterable by its owner alone, whatever umask the process that made it happened to have")
 }
 
 // TestSocketHandoffAddressTooLong covers the guard on an address the kernel
@@ -101,14 +90,10 @@ func TestSocketHandoffDirIsPrivate(t *testing.T) {
 // the kernel's own answer ("invalid argument") names neither.
 func TestSocketHandoffAddressTooLong(t *testing.T) {
 	_, err := socketHandoffStash("s", time.Second, fixedBase(shortDir(t)), 20)
-	if err == nil {
-		t.Fatal("socketHandoffStash returned nil error, want the address-too-long failure")
-	}
-	for _, want := range []string{"socket address", "20"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Fatalf("error %q does not mention %q", err, want)
-		}
-	}
+	require.Error(t, err, "an address the kernel would refuse must be caught before it is offered")
+	assert.Contains(t, err.Error(), "socket address",
+		"and say what was too long: the kernel's own answer is \"invalid argument\", which names nothing")
+	assert.Contains(t, err.Error(), "20", "and what the limit was")
 }
 
 // TestChooseSocketBase covers which directory a passphrase rendezvous is
@@ -119,77 +104,68 @@ func TestChooseSocketBase(t *testing.T) {
 
 	t.Run("a private temporary directory is preferred", func(t *testing.T) {
 		got, err := chooseSocketBase("/the/tmp", func(string) bool { return true }, cache)
-		if err != nil || got != "/the/tmp" {
-			t.Fatalf("chooseSocketBase = %q, %v; want the temporary directory", got, err)
-		}
+		require.NoError(t, err, "choosing where the rendezvous goes must succeed")
+		assert.Equal(t, "/the/tmp", got, "a short private directory keeps the socket address inside the kernel's limit")
 	})
 
 	t.Run("a shared temporary directory is refused", func(t *testing.T) {
 		got, err := chooseSocketBase("/the/tmp", func(string) bool { return false }, cache)
-		if err != nil || got != "/the/cache" {
-			t.Fatalf("chooseSocketBase = %q, %v; want the cache directory", got, err)
-		}
+		require.NoError(t, err, "choosing where the rendezvous goes must succeed")
+		assert.Equal(t, "/the/cache", got,
+			"a directory anyone else can reach is no place for a passphrase, however short its name")
 	})
 
 	t.Run("no temporary directory named at all", func(t *testing.T) {
 		got, err := chooseSocketBase("", func(string) bool {
-			t.Fatal("an unnamed directory was inspected")
+			assert.Fail(t, "a directory nobody named was inspected", "there is nothing there to ask about")
 			return true
 		}, cache)
-		if err != nil || got != "/the/cache" {
-			t.Fatalf("chooseSocketBase = %q, %v; want the cache directory", got, err)
-		}
+		require.NoError(t, err, "choosing where the rendezvous goes must succeed")
+		assert.Equal(t, "/the/cache", got, "with no temporary directory named, the user's own cache is where it goes")
 	})
 
 	t.Run("and no cache directory either", func(t *testing.T) {
-		if _, err := chooseSocketBase("", func(string) bool { return true }, func() (string, error) {
+		_, err := chooseSocketBase("", func(string) bool { return true }, func() (string, error) {
 			return "", errors.New("no home")
-		}); err == nil {
-			t.Fatal("chooseSocketBase returned nil error, want the failure from the cache directory")
-		}
+		})
+		assert.Error(t, err, "with nowhere private to put it, the handoff must not happen at all")
 	})
 }
 
 func TestSocketHandoffStashErrors(t *testing.T) {
 	t.Run("the base cannot be resolved at all", func(t *testing.T) {
-		if _, err := socketHandoffStash("s", time.Second, func() (string, error) {
+		_, err := socketHandoffStash("s", time.Second, func() (string, error) {
 			return "", errors.New("no base")
-		}, addrLimit); err == nil {
-			t.Fatal("socketHandoffStash returned nil error, want the failure from resolving a base")
-		}
+		}, addrLimit)
+		assert.Error(t, err, "with nowhere to put the passphrase, it must not be put anywhere")
 	})
 
 	t.Run("the directory cannot be made", func(t *testing.T) {
 		file := filepath.Join(t.TempDir(), "not-a-dir")
-		if err := os.WriteFile(file, nil, 0o600); err != nil {
-			t.Fatalf("write file: %v", err)
-		}
-		if _, err := socketHandoffStash("s", time.Second, fixedBase(file), addrLimit); err == nil {
-			t.Fatal("socketHandoffStash returned nil error, want the dir failure")
-		}
+		require.NoError(t, os.WriteFile(file, nil, 0o600), "seed a file where a directory should be")
+		_, err := socketHandoffStash("s", time.Second, fixedBase(file), addrLimit)
+		assert.Error(t, err, "with nowhere to put the passphrase, it must not be put anywhere")
 	})
 
 	t.Run("token RNG fails", func(t *testing.T) {
 		saveHandoffSocketSeams(t)
 		randRead = func([]byte) (int, error) { return 0, errors.New("rng boom") }
-		if _, err := socketHandoffStash("s", time.Second, fixedBase(shortDir(t)), addrLimit); err == nil {
-			t.Fatal("socketHandoffStash returned nil error, want the RNG failure")
-		}
+		_, err := socketHandoffStash("s", time.Second, fixedBase(shortDir(t)), addrLimit)
+		assert.Error(t, err, "a rendezvous another process could guess the name of must not be opened")
 	})
 
 	t.Run("listen fails", func(t *testing.T) {
 		saveHandoffSocketSeams(t)
 		netListen = func(string, string) (net.Listener, error) { return nil, errors.New("listen boom") }
-		if _, err := socketHandoffStash("s", time.Second, fixedBase(shortDir(t)), addrLimit); err == nil {
-			t.Fatal("socketHandoffStash returned nil error, want the listen failure")
-		}
+		_, err := socketHandoffStash("s", time.Second, fixedBase(shortDir(t)), addrLimit)
+		assert.Error(t, err, "a rendezvous nothing is listening at cannot hand anything over")
 	})
 
 	t.Run("chmod fails and the socket is cleaned up", func(t *testing.T) {
 		saveHandoffSocketSeams(t)
 		chmodSock = func(string, os.FileMode) error { return errors.New("chmod boom") }
-		if _, err := socketHandoffStash("s", time.Second, fixedBase(shortDir(t)), addrLimit); err == nil {
-			t.Fatal("socketHandoffStash returned nil error, want the chmod failure")
-		}
+		_, err := socketHandoffStash("s", time.Second, fixedBase(shortDir(t)), addrLimit)
+		assert.Error(t, err,
+			"a socket that could not be made private must not be left serving: anything that connects gets the passphrase")
 	})
 }

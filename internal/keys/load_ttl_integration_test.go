@@ -11,6 +11,8 @@ import (
 
 	"github.com/OrbintSoft/sshakku/internal/keyring"
 	"github.com/OrbintSoft/sshakku/internal/keystate"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestLoadKeysReloadsAfterRealExpiry is the end-to-end version of the bug
@@ -28,15 +30,12 @@ func TestLoadKeysReloadsAfterRealExpiry(t *testing.T) {
 	dir := t.TempDir()
 	keyfile := filepath.Join(dir, "id_test")
 	const passphrase = "sshakku-reload-test-passphrase"
-	if out, err := exec.Command("ssh-keygen", "-t", "ed25519", "-N", passphrase, "-f", keyfile, "-q").CombinedOutput(); err != nil {
-		t.Fatalf("ssh-keygen: %v: %s", err, out)
-	}
+	out, err := exec.Command("ssh-keygen", "-t", "ed25519", "-N", passphrase, "-f", keyfile, "-q").CombinedOutput()
+	require.NoErrorf(t, err, "a real passphrase-protected key to load:\n%s", out)
 
 	sock := filepath.Join(dir, "agent.sock")
 	agentCmd := exec.Command("ssh-agent", "-D", "-a", sock)
-	if err := agentCmd.Start(); err != nil {
-		t.Fatalf("start ssh-agent: %v", err)
-	}
+	require.NoError(t, agentCmd.Start(), "a real ssh-agent to load it into")
 	t.Cleanup(func() {
 		_ = agentCmd.Process.Kill()
 		_ = agentCmd.Wait()
@@ -46,9 +45,7 @@ func TestLoadKeysReloadsAfterRealExpiry(t *testing.T) {
 
 	askpassScript := filepath.Join(dir, "askpass.sh")
 	script := "#!/bin/sh\nexec keyctl pipe \"$" + EnvPassHandoffToken + "\"\n"
-	if err := os.WriteFile(askpassScript, []byte(script), 0o755); err != nil {
-		t.Fatalf("write askpass helper: %v", err)
-	}
+	require.NoError(t, os.WriteFile(askpassScript, []byte(script), 0o755), "a helper to collect the stashed passphrase")
 
 	const lifetime = 2 * time.Second
 	runner := ExecRunner{}
@@ -64,27 +61,17 @@ func TestLoadKeysReloadsAfterRealExpiry(t *testing.T) {
 		Config:   Config{KeyLifetime: lifetime},
 	}
 
-	if err := loader.LoadKeys(); err != nil {
-		t.Fatalf("first LoadKeys: %v", err)
-	}
+	require.NoError(t, loader.LoadKeys(), "the first login of the day must load the key")
 
 	fp, err := FileFingerprint(runner, keyfile)
-	if err != nil {
-		t.Fatalf("FileFingerprint: %v", err)
-	}
+	require.NoError(t, err, "reading the key's fingerprint must succeed")
 	keyname := filepath.Base(keyfile)
 
 	loaded, err := AgentFingerprints(runner)
-	if err != nil {
-		t.Fatalf("AgentFingerprints (after first load): %v", err)
-	}
-	if !loaded[fp] {
-		t.Fatal("key not present in the agent immediately after the first LoadKeys")
-	}
+	require.NoError(t, err, "asking the agent what it holds must succeed")
+	require.Containsf(t, loaded, fp, "and the key must be in it: %v", loaded)
 	rec1, ok := state.Load(keyname)
-	if !ok {
-		t.Fatal("keystate has no record immediately after the first LoadKeys")
-	}
+	require.True(t, ok, "with a record of when it was added, or nothing knows when it will be gone")
 	firstAddedAt := rec1.AddedAt
 
 	// Wait for the agent to actually drop the key — not just for the record's
@@ -92,39 +79,30 @@ func TestLoadKeysReloadsAfterRealExpiry(t *testing.T) {
 	deadline := time.Now().Add(lifetime + 5*time.Second)
 	for {
 		loaded, err = AgentFingerprints(runner)
-		if err != nil {
-			t.Fatalf("AgentFingerprints (polling for expiry): %v", err)
-		}
+		require.NoError(t, err, "asking the agent what it holds must keep succeeding")
 		if !loaded[fp] {
 			break
 		}
-		if !time.Now().Before(deadline) {
-			t.Fatal("key still present in the agent well after its lifetime elapsed")
-		}
+		require.Truef(t, time.Now().Before(deadline),
+			"the agent never expired the key: it is still held well past the %s lifetime it was added with", lifetime)
 		time.Sleep(200 * time.Millisecond)
 	}
 
 	// Second LoadKeys run: the loader's own fingerprint snapshot must now see
 	// the key as missing (not dedup-skip it) and reload it for real.
-	if err := loader.LoadKeys(); err != nil {
-		t.Fatalf("second LoadKeys: %v", err)
-	}
+	require.NoError(t, loader.LoadKeys(), "a later login must load the key again")
 
 	loaded, err = AgentFingerprints(runner)
-	if err != nil {
-		t.Fatalf("AgentFingerprints (after second load): %v", err)
-	}
-	if !loaded[fp] {
-		t.Fatal("key not present in the agent after the second LoadKeys reloaded it")
-	}
+	require.NoError(t, err, "asking the agent what it holds must succeed")
+	require.Containsf(t, loaded, fp,
+		"the key must be back: an agent that dropped it is an agent whose snapshot no longer names it, "+
+			"and skipping it there is how a key silently stops working mid-day: %v", loaded)
 	rec2, ok := state.Load(keyname)
-	if !ok {
-		t.Fatal("keystate has no record after the second LoadKeys")
-	}
-	if !rec2.AddedAt.After(firstAddedAt) {
-		t.Errorf("keystate AddedAt = %s, want a fresher timestamp than the first load's %s", rec2.AddedAt, firstAddedAt)
-	}
-	if expiresAt, hasExpiry := rec2.ExpiresAt(); !hasExpiry || !expiresAt.After(time.Now()) {
-		t.Errorf("keystate record after reload should expire in the future, got hasExpiry=%v expiresAt=%s", hasExpiry, expiresAt)
-	}
+	require.True(t, ok, "with a record of the reload")
+	assert.Truef(t, rec2.AddedAt.After(firstAddedAt),
+		"stamped now rather than left at the first load's %s, or the doctor reports a key as expired while it works",
+		firstAddedAt)
+	expiresAt, hasExpiry := rec2.ExpiresAt()
+	require.True(t, hasExpiry, "a key added with a lifetime has an expiry")
+	assert.True(t, expiresAt.After(time.Now()), "and this one is ahead, not the one that already went by")
 }
