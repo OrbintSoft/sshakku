@@ -73,3 +73,11 @@ func TestProcfsCgroupCgroup(t *testing.T) {
 	_, ok = ProcfsCgroup{Root: root}.Cgroup(999)
 	assert.False(t, ok, "a process that is not there must not be answered for")
 }
+
+func TestProcfsCgroupReadsTheRealProcfsByDefault(t *testing.T) {
+	assert.Equal(t, "/proc", ProcfsCgroup{}.root(),
+		"nothing configures a procfs in the doctor, so an unset one has to mean the real one, or the doctor "+
+			"reads nobody's cgroup and reports every process as belonging to no unit")
+	assert.Equal(t, "/somewhere/else", ProcfsCgroup{Root: "/somewhere/else"}.root(),
+		"and a caller that names one is taken at its word")
+}
