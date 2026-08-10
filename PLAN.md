@@ -436,6 +436,7 @@ Per-file-type lint decisions (rule 12), current as of the last file type added:
 | All committed files | `editorconfig-checker` (config excludes `LICENSE` verbatim, `*.zsh`, and `*.go` — gofmt owns Go formatting) |
 | Shell — bats tests (`*.bats`) | Deferred until test files enter the repo |
 | Go (`*.go`) | `gofmt -l` + `go vet` + `golangci-lint` (config `.golangci.yml`); `golang.org/x/sys` (BSD-3-Clause) recorded in `COPYRIGHT.md` |
+| Go tests (`*_test.go`) | `testifylint`, with **`require-error` disabled** — see Phase 33 for why that one checker cannot decide `require` vs `assert` for us. Assertions go through `github.com/stretchr/testify` (MIT, recorded in `COPYRIGHT.md`) |
 | TOML (`*.toml`) | `taplo lint` + `taplo format --check`; runtime parser `github.com/BurntSushi/toml` (MIT) recorded in `COPYRIGHT.md` |
 | Dockerfile (`test/containers/*.Dockerfile`) | `hadolint` (config ignores DL3008 — no viable apt-pin story against a rolling suite; the base image tag is the point-in-time anchor) |
 | XML (`internal/*/testdata/*.xml`) | `xmllint --noout` (`lint-xml`) — well-formedness only; the DTD the D-Bus bus configuration names is an `http://` URL and is deliberately not fetched, so `make lint` needs no network. Ubuntu's `libxml2-utils` is installed by the workflow rather than by the pinned tool cache, which a cache hit would skip |
@@ -2028,3 +2029,84 @@ included, from either platform.
 
 → features F4, F5, F6, F9 (unchanged, and the round trip is what says so);
 Phase 6 items 6, 7; Phase 8, which no longer needs a Mac to build for one.
+
+### Phase 33 — The tests that agreed with the code ✅ Done
+
+Every check the suite makes now goes through `github.com/stretchr/testify`:
+2,907 `assert`/`require` calls across 164 test files, and no `t.Errorf` or
+`t.Fatalf` left anywhere as an assertion. Rule 27 records which of the two to
+reach for — `require` where continuing would only panic or report a
+precondition twice, `assert` where several independent checks each want to be
+named, so one run tells you all of them.
+
+**Rule 12 decision.** `testifylint` is enabled in `.golangci.yml` with
+**`require-error` disabled**. That checker demands `require` for *every* error
+assertion, which contradicts the `assert`-for-a-richer-report half of rule 27:
+which of the two a given assertion wants is a judgement about that test, not
+something a checker can read off the call. The rest of `testifylint` is kept
+precisely because it catches assertions that compile, pass, and check nothing —
+`go-require` (a `require` on a goroutine other than the test's calls `FailNow`
+off it, hanging the run instead of failing it), `float-compare`, `formatter`.
+Licences, all permissive and none obstructing relicensing: testify MIT, go-spew
+ISC, go-difflib BSD-3, yaml.v3 MIT + Apache-2.0 — recorded in `COPYRIGHT.md`.
+
+**The conversion was not the point; what it exposed was.** Rewriting an
+assertion means reading what it actually pins, and each package was then put to
+a differential mutation check: the promise is broken in the source, the old
+suite and the new one are both run, and a mutation no test on either side
+notices is a claim nothing was holding. **Forty-five defects were found this
+way, every one of them in a test that was passing.** They fall into a few
+shapes, and the shapes are the reusable part:
+
+- **The subject can be deleted and the test still passes.** A fixture that ran
+  out of input before the check under test was reached; `Ensure` failing on an
+  empty `LogFile` no matter what the symlink guard did; `SUDO_UID` set to the
+  caller's own uid, so honouring it and ignoring it gave the same answer.
+- **An assertion satisfied by the wrong thing.** "An error came back" where the
+  error's identity is the whole point — a prompt that could not be written
+  reported as the user declining, a generic wallet failure taken for a refused
+  alias. `indexOf(a) > indexOf(b)` is false when `a` is missing entirely, so the
+  test passed when the row it was about was not there.
+- **The evidence read off the wrong place.** A summary cell stuck on "n/a"
+  passed because the same number appears again lower down and a bare `Contains`
+  found it there.
+- **Nobody asserted it at all.** `Look.Activatable`; `environmentNames`, the
+  report about *another user's* session; whether the terminal's echo is ever
+  turned off — the tests stub the very ioctl that does it, so a passphrase typed
+  in the clear passed all of them.
+
+Several of those are user-visible on a working machine: a doctor reporting that
+passphrases cannot be saved on an ordinary Wayland desktop, or calling an
+activatable wallet a missing piece; `gui_prompter = "auto"` — the documented way
+to write "choose for me" — read as a dialog's name, matching none, and sending
+every prompt to the terminal; a blank wallet entry handed to `ssh` as a
+passphrase, which opens no key and asks for nothing.
+
+**One change to production code**, and it is a seam, not a fix:
+`ProcfsCgroup.root()` makes the empty-`Root` default to `/proc` a decision that
+can be asserted, rather than one only reachable by reading the real procfs — and
+so only checkable on a machine whose own processes happen to belong to a systemd
+unit. The single production caller constructs `ProcfsCgroup{}`, so that default
+is the one that ships. Nothing else in the tree changed: no behaviour moved, and
+`docs/FEATURES.md` gained nothing.
+
+**What the harness cannot judge**, recorded so it is not mistaken for agreement:
+a mutation that stops the package compiling reports no failing tests, which
+reads exactly like a mutation nothing caught — it was hit some two dozen times
+and every `SURVIVED` has to be diagnosed before it is believed. A mutation
+caught only by `goleak` fails the *package*, with no test name for a
+differential to compare. And one that makes the code hang is reported by the
+run's own deadline, not by a test.
+
+**Verified** (rule 25): `SSHAKKU_RACE=1 make test` green across all thirteen
+packages, `make build-cross`, `CGO_ENABLED=0 GOOS=darwin go vet ./...`, the two
+build-tagged real-daemon files vetted with their tags, and `make lint` clean.
+Per-package coverage is identical to `master`, package by package — this is a
+test-suite change, and a coverage number is exactly the thing it must not move.
+No end-to-end run belongs to this phase: no user-visible behaviour changed, and
+the defects above are described by what a mutation showed, not by a claim that
+each was reproduced against the shipped binary.
+
+→ rules 22, 23, 24, 27; features F5, F6, F25, F29, F30, F37, F42 — all
+unchanged, and that is the point: each was being reported on by at least one
+test that could not have failed.
