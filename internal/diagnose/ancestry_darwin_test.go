@@ -22,13 +22,17 @@ func TestParsePS(t *testing.T) {
 		wantOK   bool
 	}{
 		{"a plain command", " 501 zsh\n", 501, "zsh", true},
-		{"a bundled app, whose comm is a full path", "  1 /Applications/Utilities/Terminal.app/Contents/MacOS/Terminal\n",
-			1, "/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal", true},
+		{
+			"a bundled app, whose comm is a full path", "  1 /Applications/Utilities/Terminal.app/Contents/MacOS/Terminal\n",
+			1, "/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal", true,
+		},
 		// `ps -o comm=` reports the executable path, and an application bundle
 		// may well sit in a directory with a space in it. Splitting on every
 		// space would truncate the name to its first word.
-		{"a path with a space in it", "42 /Applications/Visual Studio Code.app/Contents/MacOS/Electron\n",
-			42, "/Applications/Visual Studio Code.app/Contents/MacOS/Electron", true},
+		{
+			"a path with a space in it", "42 /Applications/Visual Studio Code.app/Contents/MacOS/Electron\n",
+			42, "/Applications/Visual Studio Code.app/Contents/MacOS/Electron", true,
+		},
 		{"no such process", "", 0, "", false},
 		{"a header but no row", "\n", 0, "", false},
 		{"a ppid that is not a number", "notapid zsh\n", 0, "", false},
@@ -117,12 +121,21 @@ func TestStartedByOnDarwin(t *testing.T) {
 		want  string
 		ok    bool
 	}{
-		{"a known launcher deeper up", []ProcInfo{{9, "ssh-agent"}, {8, "somehelper"}, {1, "/sbin/launchd"}},
-			"launchd (the system or per-user manager)", true},
-		{"daemonized, reparented", []ProcInfo{{9, "ssh-agent"}, {1, "launchd"}},
-			"an unknown launcher (daemonized, reparented to launchd)", true},
-		{"nothing recognised falls back to the parent", []ProcInfo{{9, "ssh-agent"}, {8, "weirdlauncher"}},
-			"weirdlauncher", true},
+		{
+			"a known launcher deeper up",
+			[]ProcInfo{{9, "ssh-agent"}, {8, "somehelper"}, {1, "/sbin/launchd"}},
+			"launchd (the system or per-user manager)", true,
+		},
+		{
+			"daemonized, reparented",
+			[]ProcInfo{{9, "ssh-agent"}, {1, "launchd"}},
+			"an unknown launcher (daemonized, reparented to launchd)", true,
+		},
+		{
+			"nothing recognised falls back to the parent",
+			[]ProcInfo{{9, "ssh-agent"}, {8, "weirdlauncher"}},
+			"weirdlauncher", true,
+		},
 		{"too shallow to attribute", []ProcInfo{{9, "ssh-agent"}}, "", false},
 	}
 	for _, c := range cases {

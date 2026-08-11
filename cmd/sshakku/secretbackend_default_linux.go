@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+
 	"github.com/OrbintSoft/sshakku/internal/config"
 
 	"github.com/OrbintSoft/sshakku/internal/keys"

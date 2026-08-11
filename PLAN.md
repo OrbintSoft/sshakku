@@ -433,9 +433,9 @@ Per-file-type lint decisions (rule 12), current as of the last file type added:
 | Markdown (`*.md`) | `markdownlint-cli2` (config `.markdownlint-cli2.yaml`) |
 | Makefile | `checkmake` (config `checkmake.ini`) |
 | YAML / GitHub workflows | `actionlint`; other YAML/INI/JSON has no dedicated linter — `editorconfig-checker` covers charset/EOL/indent/final-newline |
-| All committed files | `editorconfig-checker` (config excludes `LICENSE` verbatim, `*.zsh`, and `*.go` — gofmt owns Go formatting) |
+| All committed files | `editorconfig-checker` (config excludes `LICENSE` verbatim, `*.zsh`, and `*.go` — gofumpt owns Go formatting) |
 | Shell — bats tests (`*.bats`) | Deferred until test files enter the repo |
-| Go (`*.go`) | `gofmt -l` + `go vet` + `golangci-lint` (config `.golangci.yml`); `golang.org/x/sys` (BSD-3-Clause) recorded in `COPYRIGHT.md` |
+| Go (`*.go`) | `golangci-lint fmt --diff` (**gofumpt**) + `go vet` + `golangci-lint run` (config `.golangci.yml`); `golang.org/x/sys` (BSD-3-Clause) recorded in `COPYRIGHT.md` |
 | Go tests (`*_test.go`) | `testifylint`, with **`require-error` disabled** — see Phase 33 for why that one checker cannot decide `require` vs `assert` for us. Assertions go through `github.com/stretchr/testify` (MIT, recorded in `COPYRIGHT.md`) |
 | TOML (`*.toml`) | `taplo lint` + `taplo format --check`; runtime parser `github.com/BurntSushi/toml` (MIT) recorded in `COPYRIGHT.md` |
 | Dockerfile (`test/containers/*.Dockerfile`) | `hadolint` (config ignores DL3008 — no viable apt-pin story against a rolling suite; the base image tag is the point-in-time anchor) |
@@ -1606,7 +1606,7 @@ configuration that includes the shared one; the same "no validator that is not a
 compositor" decision as Phase 22 applies, and the file is exercised on every run.
 **Decision: still no `lint-sway` target.** The uinput pointer tool is Go behind a
 `//go:build ignore` tag: outside the module and the coverage it reports, still
-covered by the `gofmt` sweep `make lint-go` runs, and compiled on its own by the
+covered by the formatting sweep `make lint-go` runs, and compiled on its own by the
 images that need it — so no new linter and no new language.
 
 **Verified by running it** (rule 25): each wallet's round trip driven against its

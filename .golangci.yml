@@ -21,3 +21,13 @@ linters:
         # two a given assertion wants is a judgement about that test, not
         # something a checker can read off the call.
         - require-error
+
+formatters:
+  # gofumpt is gofmt plus the rules gofmt leaves to taste, so it subsumes the
+  # plain `gofmt -l` sweep rather than competing with it. `golangci-lint fmt
+  # --diff` (what `make lint-go` runs) also reaches the files `golangci-lint
+  # run` cannot: run only ever analyses the current GOOS, so the _darwin.go
+  # files and anything behind `//go:build ignore` are formatted-checked here
+  # and nowhere else.
+  enable:
+    - gofumpt

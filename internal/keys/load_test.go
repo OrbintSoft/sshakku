@@ -23,6 +23,7 @@ func assertNothingWentWrong(t *testing.T, log *fakeLogger, why string) {
 // agentEmpty answers `ssh-add -l` as an empty agent; keygen answers `ssh-keygen
 // -lf` with a fingerprint line for a key file.
 func agentEmpty() func(Cmd) (Result, error) { return stdout("The agent has no identities.\n", 1) }
+
 func keygen(fp string) func(Cmd) (Result, error) {
 	return stdout("256 "+fp+" comment (ED25519)\n", 0)
 }

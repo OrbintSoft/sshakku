@@ -6,10 +6,11 @@ package config
 
 import (
 	"fmt"
-	"github.com/OrbintSoft/sshakku/internal/keys"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/OrbintSoft/sshakku/internal/keys"
 )
 
 // DefaultKeyLifetime caps how long an added key stays in the agent before it

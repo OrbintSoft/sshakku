@@ -338,7 +338,7 @@ lint-editorconfig:
 	editorconfig-checker
 
 lint-go:
-	@gofmt_out=$$(gofmt -l .); [ -z "$$gofmt_out" ] || { echo "gofmt needed on:"; echo "$$gofmt_out"; exit 1; }
+	golangci-lint fmt --diff
 	$(GO) vet ./...
 	golangci-lint run
 
