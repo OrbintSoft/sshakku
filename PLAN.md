@@ -2192,4 +2192,80 @@ No end-to-end run belongs to this phase — one user-visible surface changed and
 it changed in text only: two error messages read exactly as before, and what
 moved is what `errors.Is` can find underneath them.
 
+### Phase 35 — Windows, and the shell that cannot eval
+
+Windows is the last and most divergent target (goal 13). This phase does not
+settle open decision 8's port depth: the agent endpoint (a named pipe served by
+a service, not a socket) and the Credential Manager backend stay open. It
+settles what has to be settled before any of that can be attempted — a binary
+that compiles for `GOOS=windows`, a way to answer a shell that cannot `eval` a
+Bourne assignment, and a login hook in the four places PowerShell keeps one.
+
+**The dialect is a parameter, never inferred from the platform.** `shell-init`
+and `askpass-env` take `--shell=posix|powershell`; no flag means posix, so
+Linux and macOS are untouched. The per-dialect quoting stays in Go beside
+`shellSingleQuote`, where a test can reach it, rather than in the hook, which
+stays a single line. Inference would have been the cheaper-looking choice and
+is the wrong one: a Windows binary invoked from Git Bash or MSYS2 wants posix,
+and what shell is asking is not something `GOOS` knows. (The other half of
+that story — `C:\…` against MSYS2's `/c/…` when a path is handed to `ssh` — is
+not answered here.)
+
+**Both PowerShells, both scopes.** Windows PowerShell 5.1 and PowerShell 7 keep
+their profiles in different directories, and system-wide and per-user are
+different files again: four wiring points, chosen by which install target runs
+and by which PowerShell the machine actually has. The hook body is rendered
+once and each point holds one dot-source line, exactly as `install-user-hook.sh`
+already does for bash and zsh.
+
+**No PowerShell module.** It would replace four dot-source lines with four
+`Import-Module` lines, and would itself have to be installed under a
+`$env:PSModulePath` that differs per scope and per version — the multiplicity
+moves rather than goes, and a second artefact has to be installed, versioned
+and removed. A module earns its place when SSHakku has cmdlets to export, not
+as a way to share ten lines.
+
+**A `profile.d` is honoured where the user made one**, on the same terms as
+bash: the directory's existence is the only check, and having made one is taken
+as saying it gets sourced. Not a priority — the marker block in the profile is
+the mechanism that has to work.
+
+- **W1 — a binary that compiles for `GOOS=windows`.** `_windows.go` files
+  (rule 26 — named for the platform, never a negation of another) for what the
+  unix build supplies and Windows does not: `keyring`'s `Add`/`Read`/`Unlink`
+  (no kernel keyring — the `_darwin.go` shape already says this), `paths`'
+  environment and directory-ownership probes and its socket token, `agent`'s
+  `platformAgents`, `keys`' `ErrNoTerminal`, `fetchPassphrase` and
+  `boundToProcessGroup`. That list is the *first* build's answer and will grow:
+  a package whose dependency failed to compile was never type-checked, so
+  `paths`, `diagnose`, `config` and `cmd/sshakku` have not yet been heard from.
+  Nothing here promises new behaviour — where Windows has no equivalent the
+  stub says so and fails explicitly. Closes with `GOOS=windows` in
+  `build-cross`, in `lint-go`'s per-build list, and in CI, so it cannot
+  regress silently.
+- **W2 — `--shell=powershell`.** `$agent_sock = '…'` with PowerShell's doubled
+  apostrophe, and `$env:SSH_ASKPASS` in place of `export`. The promise goes
+  into `docs/FEATURES.md` first (rule 21) and the assertion is watched failing
+  before the emitter exists (rule 23).
+- **W3 — the hook and its wiring.** The four points above; a drop-in
+  `001-sshakku.ps1` where a `profile.d` exists, a marker block in the profile
+  otherwise; `PSScriptAnalyzer` as `lint-ps1` in `make lint` and CI (rule 12;
+  MIT, so rule 16 is satisfied), `.ps1` in `.gitattributes`, and the row in
+  `docs/TEST-MATRIX.md` (rule 19). Two things this step must answer rather than
+  assume. PowerShell runs the profile for *every* session, including
+  `pwsh -Command` and `pwsh -File`, so open decision 3's silence binds harder
+  here than anywhere and the interactivity test that gates `load-keys` has no
+  `$-` to read. And ExecutionPolicy: under `Restricted` the profile is never
+  loaded at all, which the install has to detect and report rather than leave
+  to be discovered at the next login.
+- **W4 — run it** on `windows-*` runners (open decision 9) and on a real
+  desktop session, driving the binary through a user's scenario (rule 25).
+
+**Out of scope here, named so they are not mistaken for oversights**: the agent
+endpoint and its named pipe, Credential Manager and 1Password as Windows
+backends, WSL2 (Linux with an agent story of its own), Cygwin, MSI packaging
+(Phase 8's business), and path translation under MSYS2.
+
+→ goals 13, 16, 17; open decisions 3, 8, 9.
+
 → rules 12, 15, 23, 26; no feature in `docs/FEATURES.md` gained or lost a promise
