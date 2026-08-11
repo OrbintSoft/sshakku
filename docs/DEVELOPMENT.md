@@ -129,6 +129,12 @@ anything itself. `.github/workflows/linting.yml` installs pinned versions of
 all eight before running the same target — check there for the versions this
 project currently lints against.
 
+`lint-go` analyses each build separately — Linux, macOS, and the two
+failure-injection tags — because golangci-lint only ever looks at one. You can
+run all of them from either machine: no macOS host is needed to lint the macOS
+files, and a file that only compiles under a build tag is analysed only if that
+build is in the list.
+
 ## Recommended dev environment
 
 - **Docker**, to run the container test suite above — the plain container
