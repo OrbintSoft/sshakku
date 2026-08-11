@@ -44,6 +44,16 @@ linters:
     # strangers should not rely on a reviewer noticing.
     - bidichk
 
+    # The testing package owns cleanup: t.TempDir and t.Setenv undo themselves
+    # when the test ends, and their os equivalents leave the next test to find
+    # what this one left behind.
+    - usetesting
+
+    # A helper that does not announce itself reports every failure at its own
+    # line, so several tests that fail for different reasons all point at the
+    # same place and none of them points at itself.
+    - thelper
+
     # Every suppression must name the linter it silences and say why, so a
     # nolint stays an argument someone can disagree with rather than a way to
     # make a warning disappear.
@@ -53,6 +63,14 @@ linters:
     nolintlint:
       require-explanation: true
       require-specific: true
+
+    usetesting:
+      # Off by default, and both are worth having. os-setenv reports nothing
+      # today, which is the state worth keeping: an os.Setenv survives the test
+      # that made it. os-temp-dir costs two suppressions, at the one place
+      # where a directory shared between test binaries is the whole point.
+      os-setenv: true
+      os-temp-dir: true
 
     testifylint:
       disable:

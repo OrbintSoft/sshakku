@@ -55,7 +55,7 @@ func makeSocketFile(t *testing.T, path string) {
 // a limit t.TempDir()'s deeper macOS layout routinely exceeds.
 func shortDir(t *testing.T) string {
 	t.Helper()
-	dir, err := os.MkdirTemp("", "sshakku")
+	dir, err := os.MkdirTemp("", "sshakku") //nolint:usetesting // t.TempDir() is the long macOS path the comment above is about
 	require.NoError(t, err, "mkdir temp")
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	return dir

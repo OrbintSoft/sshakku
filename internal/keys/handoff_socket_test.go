@@ -22,7 +22,7 @@ const addrLimit = 103
 // short on both.
 func shortDir(t *testing.T) string {
 	t.Helper()
-	dir, err := os.MkdirTemp("/tmp", "sshakku")
+	dir, err := os.MkdirTemp("/tmp", "sshakku") //nolint:usetesting // t.TempDir() is the long macOS path the comment above is about
 	require.NoError(t, err, "a short directory to put the socket in")
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	return dir
