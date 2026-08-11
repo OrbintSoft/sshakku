@@ -1,6 +1,11 @@
 package config
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
 
 func TestResolveKeePassXCRoute(t *testing.T) {
 	tests := []struct {
@@ -22,24 +27,20 @@ func TestResolveKeePassXCRoute(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := resolveKeePassXCRoute(tc.file)
-			if (err != nil) != tc.wantErr {
-				t.Fatalf("err = %v, wantErr %v", err, tc.wantErr)
+			if tc.wantErr {
+				assert.Error(t, err, "an unrecognised route must be reported")
+			} else {
+				assert.NoError(t, err, "a recognised route must not be reported")
 			}
-			if got != tc.want {
-				t.Errorf("route = %q, want %q", got, tc.want)
-			}
+			assert.Equal(t, tc.want, got, "route")
 		})
 	}
 }
 
 func TestResolveAcceptsKeePassXCAsABackend(t *testing.T) {
 	s, errs := Resolve(File{SecretBackend: ptr(SecretBackendKeePassXC)}, lookupFrom(nil))
-	if len(errs) != 0 {
-		t.Fatalf("unexpected errors: %v", errs)
-	}
-	if s.SecretBackend != SecretBackendKeePassXC {
-		t.Errorf("SecretBackend = %q, want keepassxc — the wallet is named, not the mechanism", s.SecretBackend)
-	}
+	require.Empty(t, errs, "unexpected errors")
+	assert.Equal(t, SecretBackendKeePassXC, s.SecretBackend, "the wallet is named, not the mechanism")
 }
 
 func TestResolveCarriesTheKeePassXCSettings(t *testing.T) {
@@ -49,25 +50,16 @@ func TestResolveCarriesTheKeePassXCSettings(t *testing.T) {
 		KeePassXCDatabase: ptr("/home/someone/secrets.kdbx"),
 		KeePassXCKeyFile:  ptr("/home/someone/secrets.key"),
 	}, lookupFrom(nil))
-	if len(errs) != 0 {
-		t.Fatalf("unexpected errors: %v", errs)
-	}
-	if s.KeePassXCRoute != KeePassXCRouteCLI {
-		t.Errorf("route = %q, want cli", s.KeePassXCRoute)
-	}
-	if s.KeePassXCDatabase != "/home/someone/secrets.kdbx" || s.KeePassXCKeyFile != "/home/someone/secrets.key" {
-		t.Errorf("database/key file = %q/%q, want what the file said", s.KeePassXCDatabase, s.KeePassXCKeyFile)
-	}
+	require.Empty(t, errs, "unexpected errors")
+	assert.Equal(t, KeePassXCRouteCLI, s.KeePassXCRoute, "route")
+	assert.Equal(t, "/home/someone/secrets.kdbx", s.KeePassXCDatabase, "database")
+	assert.Equal(t, "/home/someone/secrets.key", s.KeePassXCKeyFile, "key file")
 }
 
 func TestResolveReportsAnInvalidKeePassXCRoute(t *testing.T) {
 	s, errs := Resolve(File{KeePassXCRoute: ptr("browser")}, lookupFrom(nil))
-	if len(errs) == 0 {
-		t.Fatal("an unrecognised route must be reported")
-	}
-	if s.KeePassXCRoute != KeePassXCRouteAuto {
-		t.Errorf("route = %q, want the fallback", s.KeePassXCRoute)
-	}
+	assert.NotEmpty(t, errs, "an unrecognised route must be reported")
+	assert.Equal(t, KeePassXCRouteAuto, s.KeePassXCRoute, "route must fall back")
 }
 
 func TestMergeOverridesTheKeePassXCSettings(t *testing.T) {
@@ -82,15 +74,9 @@ func TestMergeOverridesTheKeePassXCSettings(t *testing.T) {
 		KeePassXCKeyFile:  ptr("/other.key"),
 	}
 	got := base.Merge(other)
-	if got.KeePassXCRoute == nil || *got.KeePassXCRoute != KeePassXCRouteCLI {
-		t.Errorf("route = %v, want other's", got.KeePassXCRoute)
-	}
-	if got.KeePassXCDatabase == nil || *got.KeePassXCDatabase != "/other.kdbx" {
-		t.Errorf("database = %v, want other's", got.KeePassXCDatabase)
-	}
-	if got.KeePassXCKeyFile == nil || *got.KeePassXCKeyFile != "/other.key" {
-		t.Errorf("key file = %v, want other's", got.KeePassXCKeyFile)
-	}
+	assert.Equal(t, ptr(KeePassXCRouteCLI), got.KeePassXCRoute, "route must be other's")
+	assert.Equal(t, ptr("/other.kdbx"), got.KeePassXCDatabase, "database must be other's")
+	assert.Equal(t, ptr("/other.key"), got.KeePassXCKeyFile, "key file must be other's")
 }
 
 func TestMergeKeepsTheBaseKeePassXCSettingsWhenOtherIsSilent(t *testing.T) {
@@ -100,13 +86,7 @@ func TestMergeKeepsTheBaseKeePassXCSettingsWhenOtherIsSilent(t *testing.T) {
 		KeePassXCKeyFile:  ptr("/base.key"),
 	}
 	got := base.Merge(File{})
-	if got.KeePassXCRoute == nil || *got.KeePassXCRoute != KeePassXCRouteNative {
-		t.Errorf("route = %v, want the base's", got.KeePassXCRoute)
-	}
-	if got.KeePassXCDatabase == nil || *got.KeePassXCDatabase != "/base.kdbx" {
-		t.Errorf("database = %v, want the base's", got.KeePassXCDatabase)
-	}
-	if got.KeePassXCKeyFile == nil || *got.KeePassXCKeyFile != "/base.key" {
-		t.Errorf("key file = %v, want the base's", got.KeePassXCKeyFile)
-	}
+	assert.Equal(t, ptr(KeePassXCRouteNative), got.KeePassXCRoute, "route must be the base's")
+	assert.Equal(t, ptr("/base.kdbx"), got.KeePassXCDatabase, "database must be the base's")
+	assert.Equal(t, ptr("/base.key"), got.KeePassXCKeyFile, "key file must be the base's")
 }

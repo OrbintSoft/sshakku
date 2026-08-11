@@ -3,6 +3,9 @@ package paths
 import (
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestResolveRuntimeDir(t *testing.T) {
@@ -63,15 +66,9 @@ func TestResolveRuntimeDir(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			got := Resolve(tc.env, tc.probe)
-			if got.RuntimeDir != tc.wantBase {
-				t.Errorf("RuntimeDir = %q, want %q", got.RuntimeDir, tc.wantBase)
-			}
-			if want := filepath.Join(tc.wantBase, "agent.sock"); got.AgentSock != want {
-				t.Errorf("AgentSock = %q, want %q", got.AgentSock, want)
-			}
-			if want := filepath.Join(tc.wantBase, ".start.lock"); got.AgentLock != want {
-				t.Errorf("AgentLock = %q, want %q", got.AgentLock, want)
-			}
+			assert.Equal(t, tc.wantBase, got.RuntimeDir, "RuntimeDir")
+			assert.Equal(t, filepath.Join(tc.wantBase, "agent.sock"), got.AgentSock, "AgentSock")
+			assert.Equal(t, filepath.Join(tc.wantBase, ".start.lock"), got.AgentLock, "AgentLock")
 		})
 	}
 }
@@ -79,58 +76,34 @@ func TestResolveRuntimeDir(t *testing.T) {
 func TestWithSocketToken(t *testing.T) {
 	base := Resolve(Env{Home: "/h", RuntimeDir: "/run/user/1", UID: 1},
 		func(p string, _ bool) bool { return p == "/run/user/1" })
-	if base.SocketDir != "/run/user/1/sshakku" {
-		t.Fatalf("base SocketDir = %q", base.SocketDir)
-	}
+	require.Equal(t, "/run/user/1/sshakku", base.SocketDir, "base SocketDir")
 
 	got := base.WithSocketToken("deadbeef")
-	if want := "/run/user/1/sshakku/deadbeef"; got.SocketDir != want {
-		t.Errorf("SocketDir = %q, want %q", got.SocketDir, want)
-	}
-	if want := "/run/user/1/sshakku/deadbeef/agent.sock"; got.AgentSock != want {
-		t.Errorf("AgentSock = %q, want %q", got.AgentSock, want)
-	}
-	if want := "/run/user/1/sshakku/deadbeef/.start.lock"; got.AgentLock != want {
-		t.Errorf("AgentLock = %q, want %q", got.AgentLock, want)
-	}
-	if got.RuntimeDir != base.RuntimeDir {
-		t.Errorf("RuntimeDir changed to %q", got.RuntimeDir)
-	}
-	if base.WithSocketToken("") != base {
-		t.Error("empty token should leave the layout unchanged")
-	}
+	assert.Equal(t, "/run/user/1/sshakku/deadbeef", got.SocketDir, "SocketDir")
+	assert.Equal(t, "/run/user/1/sshakku/deadbeef/agent.sock", got.AgentSock, "AgentSock")
+	assert.Equal(t, "/run/user/1/sshakku/deadbeef/.start.lock", got.AgentLock, "AgentLock")
+	assert.Equal(t, base.RuntimeDir, got.RuntimeDir, "RuntimeDir must not change")
+	assert.Equal(t, base, base.WithSocketToken(""), "an empty token leaves the layout unchanged")
 }
 
 func TestResolveConfigDir(t *testing.T) {
 	noProbe := func(string, bool) bool { return false }
 
 	got := Resolve(Env{Home: "/home/u", UID: 1}, noProbe)
-	if want := "/home/u/.config/sshakku"; got.ConfigDir != want {
-		t.Errorf("ConfigDir = %q, want %q", got.ConfigDir, want)
-	}
+	assert.Equal(t, "/home/u/.config/sshakku", got.ConfigDir, "ConfigDir")
 
 	got = Resolve(Env{Home: "/home/u", ConfigHome: "/cfg", UID: 1}, noProbe)
-	if want := "/cfg/sshakku"; got.ConfigDir != want {
-		t.Errorf("ConfigDir with XDG_CONFIG_HOME = %q, want %q", got.ConfigDir, want)
-	}
+	assert.Equal(t, "/cfg/sshakku", got.ConfigDir, "ConfigDir with XDG_CONFIG_HOME")
 }
 
 func TestResolveStateDir(t *testing.T) {
 	noProbe := func(string, bool) bool { return false }
 
 	got := Resolve(Env{Home: "/home/u", UID: 1}, noProbe)
-	if want := "/home/u/.local/state/sshakku"; got.StateDir != want {
-		t.Errorf("StateDir = %q, want %q", got.StateDir, want)
-	}
-	if want := "/home/u/.local/state/sshakku/sessions.log"; got.LogFile != want {
-		t.Errorf("LogFile = %q, want %q", got.LogFile, want)
-	}
+	assert.Equal(t, "/home/u/.local/state/sshakku", got.StateDir, "StateDir")
+	assert.Equal(t, "/home/u/.local/state/sshakku/sessions.log", got.LogFile, "LogFile")
 
 	got = Resolve(Env{Home: "/home/u", StateHome: "/state", UID: 1}, noProbe)
-	if want := "/state/sshakku"; got.StateDir != want {
-		t.Errorf("StateDir with XDG_STATE_HOME = %q, want %q", got.StateDir, want)
-	}
-	if want := "/state/sshakku/sessions.log"; got.LogFile != want {
-		t.Errorf("LogFile with XDG_STATE_HOME = %q, want %q", got.LogFile, want)
-	}
+	assert.Equal(t, "/state/sshakku", got.StateDir, "StateDir with XDG_STATE_HOME")
+	assert.Equal(t, "/state/sshakku/sessions.log", got.LogFile, "LogFile with XDG_STATE_HOME")
 }

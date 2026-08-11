@@ -4,9 +4,11 @@ import (
 	"errors"
 	"path/filepath"
 	"reflect"
-	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/OrbintSoft/sshakku/internal/keys"
 )
@@ -30,25 +32,21 @@ func TestOverruledNamesWhatDecidesInstead(t *testing.T) {
 		got[o.Key] = o.By
 	}
 
-	if by, ok := got["key_lifetime"]; !ok || by.Kind != OriginFile || by.Name != dropIn {
-		t.Errorf("key_lifetime overruled by %+v (present: %t), want the drop-in applied after it", by, ok)
+	if assert.Contains(t, got, "key_lifetime", "key_lifetime is overruled by the drop-in applied after it") {
+		assert.Equal(t, OriginFile, got["key_lifetime"].Kind, "key_lifetime is overruled by a file")
+		assert.Equal(t, dropIn, got["key_lifetime"].Name, "key_lifetime is overruled by the drop-in")
 	}
-	if by, ok := got["max_attempts"]; !ok || by.Kind != OriginEnv {
-		t.Errorf("max_attempts overruled by %+v (present: %t), want the exported variable", by, ok)
+	if assert.Contains(t, got, "max_attempts", "max_attempts is overruled by the exported variable") {
+		assert.Equal(t, OriginEnv, got["max_attempts"].Kind, "max_attempts is overruled by the environment")
 	}
-	if by, ok := got["quiet"]; ok {
-		t.Errorf("quiet reported as overruled by %+v, want nothing: this file is what decides it", by)
-	}
-	if by, ok := got["giveup_ttl"]; ok {
-		t.Errorf("giveup_ttl reported as overruled by %+v, want nothing: this file does not set it at all", by)
-	}
+	assert.NotContains(t, got, "quiet", "this file is what decides quiet, so nothing overrules it")
+	assert.NotContains(t, got, "giveup_ttl", "this file does not set giveup_ttl at all")
 
 	// The file being edited need not be among the ones SSHakku read: somebody
 	// with no config.toml of their own is given one to write, and nothing in a
 	// file that does not exist yet can be overruled.
-	if o := Overruled(sources, "/etc/sshakku/nowhere.toml", lookup); len(o) != 0 {
-		t.Errorf("Overruled = %+v for a file that was never read, want nothing", o)
-	}
+	assert.Empty(t, Overruled(sources, "/etc/sshakku/nowhere.toml", lookup),
+		"a file that was never read has nothing overruled in it")
 }
 
 // TestTheReportShowsWhatWasWrittenWhereSomethingWasWritten is the other half of
@@ -62,9 +60,7 @@ func TestTheReportShowsWhatWasWrittenWhereSomethingWasWritten(t *testing.T) {
 		KeyPatterns: []string{"work-*", "id_*"},
 	}
 	settings, errs := Resolve(file, func(string) (string, bool) { return "", false })
-	if len(errs) != 0 {
-		t.Fatalf("Resolve reported %v, want the written values accepted", errs)
-	}
+	require.Empty(t, errs, "the written values must be accepted")
 
 	want := map[string]string{
 		"key_lifetime": "3h0m0s",
@@ -74,9 +70,8 @@ func TestTheReportShowsWhatWasWrittenWhereSomethingWasWritten(t *testing.T) {
 	}
 	for _, desc := range settingTable {
 		if expected, ok := want[desc.key]; ok {
-			if got := desc.value(settings); got != expected {
-				t.Errorf("%s reads %q, want %q: the report shows the built-in value where the user wrote one", desc.key, got, expected)
-			}
+			assert.Equalf(t, expected, desc.value(settings),
+				"%s: the report shows the built-in value where the user wrote one", desc.key)
 		}
 	}
 
@@ -88,9 +83,8 @@ func TestTheReportShowsWhatWasWrittenWhereSomethingWasWritten(t *testing.T) {
 		if desc.key != "key_lifetime" {
 			continue
 		}
-		if got := desc.value(zero); !strings.Contains(got, "no expiry") {
-			t.Errorf("key_lifetime of zero reads %q, want what the zero means spelled out", got)
-		}
+		assert.Contains(t, desc.value(zero), "no expiry",
+			"a key_lifetime of zero must spell out what the zero means")
 	}
 }
 
@@ -104,14 +98,11 @@ func TestTheReportShowsWhatWasWrittenWhereSomethingWasWritten(t *testing.T) {
 // built-in ones.
 func TestEverySettingRendersAValueOnAMachineWithNoConfiguration(t *testing.T) {
 	settings, errs := Resolve(File{}, func(string) (string, bool) { return "", false })
-	if len(errs) != 0 {
-		t.Fatalf("resolving an empty configuration reported %v, want none", errs)
-	}
+	require.Empty(t, errs, "resolving an empty configuration must report nothing")
 
 	for _, desc := range settingTable {
-		if got := desc.value(settings); got == "" {
-			t.Errorf("%s renders nothing where nobody has configured anything, want the value in force spelled out", desc.key)
-		}
+		assert.NotEmptyf(t, desc.value(settings),
+			"%s renders nothing where nobody has configured anything, want the value in force spelled out", desc.key)
 	}
 }
 
@@ -126,9 +117,7 @@ func TestKeyDirWrittenAsHome(t *testing.T) {
 		"keys":           home + "/keys",
 		"/absolute/keys": "/absolute/keys",
 	} {
-		if got := (Settings{KeyDir: written}.KeyEnumerator(home).Dir); got != want {
-			t.Errorf("key_dir %q reaches %q, want %q", written, got, want)
-		}
+		assert.Equalf(t, want, Settings{KeyDir: written}.KeyEnumerator(home).Dir, "key_dir %q", written)
 	}
 }
 
@@ -139,12 +128,8 @@ func TestSettingErrorCarriesTheErrorItRefused(t *testing.T) {
 	inner := errors.New("not a duration")
 	var err error = &SettingError{Key: "key_lifetime", Err: inner}
 
-	if !errors.Is(err, inner) {
-		t.Errorf("errors.Is = false for the error the refusal was made of")
-	}
-	if err.Error() != inner.Error() {
-		t.Errorf("Error = %q, want what was actually wrong: %q", err.Error(), inner.Error())
-	}
+	assert.ErrorIs(t, err, inner, "the refusal must be recognisable by the error it was made of")
+	assert.Equal(t, inner.Error(), err.Error(), "the text must say what was actually wrong")
 }
 
 // TestTemplateIsAConfigurationSSHakkuWouldAccept covers what `--edit` puts in
@@ -155,15 +140,10 @@ func TestTemplateIsAConfigurationSSHakkuWouldAccept(t *testing.T) {
 	dir := configDir(t, map[string]string{"config.toml": Template()})
 
 	sources := LoadSources(dir)
-	if len(sources) != 1 {
-		t.Fatalf("the template was read as %d sources, want one file", len(sources))
-	}
-	if sources[0].Err != nil {
-		t.Fatalf("reading the template back: %v", sources[0].Err)
-	}
-	if _, errs := Resolve(Merged(sources), func(string) (string, bool) { return "", false }); len(errs) != 0 {
-		t.Errorf("the template resolves with %v, want a file that is offered to be saved to be one SSHakku accepts", errs)
-	}
+	require.Len(t, sources, 1, "the template must be read as one file")
+	require.NoError(t, sources[0].Err, "reading the template back")
+	_, errs := Resolve(Merged(sources), func(string) (string, bool) { return "", false })
+	assert.Empty(t, errs, "a file that is offered to be saved must be one SSHakku accepts")
 }
 
 // TestOnlyTOMLFilesDirectlyInTheDirectoryAreRead covers what a configuration
@@ -178,11 +158,9 @@ func TestOnlyTOMLFilesDirectlyInTheDirectoryAreRead(t *testing.T) {
 		"config.d/nested/deeper.toml": "key_lifetime = \"77h\"\n",
 	})
 
-	got := sourcePaths(LoadSources(dir))
 	want := []string{filepath.Join(dir, "config.d", "50-work.toml")}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("sources = %v, want only the .toml file directly in the directory: %v", got, want)
-	}
+	assert.Equal(t, want, sourcePaths(LoadSources(dir)),
+		"only the .toml file directly in the directory must be read")
 }
 
 // TestTimeoutsWrittenInAFileAreTheOnesInForce verifies F21's second half: how
@@ -202,15 +180,9 @@ func TestTimeoutsWrittenInAFileAreTheOnesInForce(t *testing.T) {
 	})
 
 	settings, errs := Resolve(Merged(LoadSources(dir)), func(string) (string, bool) { return "", false })
-	if len(errs) != 0 {
-		t.Fatalf("Resolve reported %v, want the written values accepted", errs)
-	}
-	if settings.CommandTimeout != 45*time.Second {
-		t.Errorf("command_timeout = %v, want the 45s written in config.toml", settings.CommandTimeout)
-	}
-	if settings.InteractiveTimeout != 9*time.Minute {
-		t.Errorf("interactive_timeout = %v, want the 9m written in the drop-in", settings.InteractiveTimeout)
-	}
+	require.Empty(t, errs, "the written values must be accepted")
+	assert.Equal(t, 45*time.Second, settings.CommandTimeout, "command_timeout must be the 45s written in config.toml")
+	assert.Equal(t, 9*time.Minute, settings.InteractiveTimeout, "interactive_timeout must be the 9m written in the drop-in")
 
 	// F35: the report exists to end this exact doubt, so a value it shows
 	// against a file has to be the value that file put in force. Naming the
@@ -219,9 +191,8 @@ func TestTimeoutsWrittenInAFileAreTheOnesInForce(t *testing.T) {
 		if s.Key != "command_timeout" {
 			continue
 		}
-		if s.Value != "45s" || s.From.Kind != OriginFile {
-			t.Errorf("the report says command_timeout is %q from kind %d, want 45s from the file that wrote it", s.Value, s.From.Kind)
-		}
+		assert.Equal(t, "45s", s.Value, "the report must show the value the file put in force")
+		assert.Equal(t, OriginFile, s.From.Kind, "the report must name the file that wrote it")
 	}
 }
 
@@ -236,36 +207,30 @@ func TestOnDismissWrittenInAFileIsTheOneInForce(t *testing.T) {
 
 	dir := configDir(t, map[string]string{"config.d/50-work.toml": "on_dismiss = \"retry\"\n"})
 	settings, errs := Resolve(Merged(LoadSources(dir)), noEnv)
-	if len(errs) != 0 {
-		t.Fatalf("Resolve reported %v, want the written value accepted", errs)
-	}
-	if settings.OnDismiss != keys.OnDismissRetry {
-		t.Errorf("on_dismiss = %q, want the %q written in the drop-in", settings.OnDismiss, keys.OnDismissRetry)
-	}
+	require.Empty(t, errs, "the written value must be accepted")
+	assert.Equal(t, keys.OnDismissRetry, settings.OnDismiss, "on_dismiss must be what the drop-in wrote")
 
 	// F35: the report is what ends the doubt about which value is in force, so
 	// it has to name the file that wrote this one.
 	for _, s := range Explain(LoadSources(dir), noEnv) {
-		if s.Key == "on_dismiss" && (s.Value != keys.OnDismissRetry || s.From.Kind != OriginFile) {
-			t.Errorf("the report says on_dismiss is %q from kind %d, want %q from the file that wrote it",
-				s.Value, s.From.Kind, keys.OnDismissRetry)
+		if s.Key != "on_dismiss" {
+			continue
 		}
+		assert.Equal(t, keys.OnDismissRetry, s.Value, "the report must show the value the file put in force")
+		assert.Equal(t, OriginFile, s.From.Kind, "the report must name the file that wrote it")
 	}
 
 	refused := configDir(t, map[string]string{"config.toml": "on_dismiss = \"whenever\"\n"})
 	settings, errs = Resolve(Merged(LoadSources(refused)), noEnv)
-	if settings.OnDismiss != keys.OnDismissStop {
-		t.Errorf("on_dismiss = %q for a value nothing answers to, want %q", settings.OnDismiss, keys.OnDismissStop)
-	}
-	if len(errs) != 1 || !strings.Contains(errs[0].Error(), "whenever") {
-		t.Errorf("errors = %v, want one naming the value that was refused", errs)
-	}
+	assert.Equal(t, keys.OnDismissStop, settings.OnDismiss, "a value nothing answers to must fall back")
+	require.Len(t, errs, 1, "the refused value must be reported once")
+	assert.ErrorContains(t, errs[0], "whenever", "the report must name the value that was refused")
 }
 
 // TestMergeOtherWinsForEveryField sets every field in both base and other to a
 // distinct value, so merging must yield exactly other: it proves other's value
 // overrides base's for each key rather than base surviving because other left it
-// unset. reflect.DeepEqual across the whole struct exercises every field's
+// unset. Comparing the whole struct field by field exercises every field's
 // override branch in one go.
 //
 // The two files are filled by reflection rather than by hand, and a field this
@@ -282,9 +247,8 @@ func TestMergeOtherWinsForEveryField(t *testing.T) {
 	gotV, wantV := reflect.ValueOf(got), reflect.ValueOf(other)
 	for i := range gotV.NumField() {
 		name := gotV.Type().Field(i).Name
-		if !reflect.DeepEqual(gotV.Field(i).Interface(), wantV.Field(i).Interface()) {
-			t.Errorf("%s did not survive the merge: the value written in the later file is not the one in force, and nothing reports that it was dropped", name)
-		}
+		assert.Equalf(t, wantV.Field(i).Interface(), gotV.Field(i).Interface(),
+			"%s did not survive the merge: the value written in the later file is not the one in force, and nothing reports that it was dropped", name)
 	}
 }
 
@@ -309,7 +273,8 @@ func filledFile(t *testing.T, mark string) File {
 		case []string:
 			field.Set(reflect.ValueOf([]string{mark + "_" + name}))
 		default:
-			t.Fatalf("%s is a %s, which this test does not know how to fill: a field it cannot fill is one whose merge nothing here covers", name, field.Type())
+			require.Failf(t, "a field this test cannot fill",
+				"%s is a %s: a field it cannot fill is one whose merge nothing here covers", name, field.Type())
 		}
 	}
 	return f
@@ -324,15 +289,9 @@ func TestDropInDirThatCannotBeRead(t *testing.T) {
 	dir := configDir(t, map[string]string{"config.d": "key_lifetime = \"1h\"\n"})
 
 	sources := LoadSources(dir)
-	if len(sources) != 1 {
-		t.Fatalf("sources = %v, want the unreadable directory reported", sourcePaths(sources))
-	}
-	if sources[0].Err == nil {
-		t.Errorf("%s came back without an error", sources[0].Path)
-	}
-	if !reflect.DeepEqual(Merged(sources), File{}) {
-		t.Error("a directory that could not be read must contribute no settings")
-	}
+	require.Len(t, sources, 1, "the unreadable directory must be reported")
+	assert.Error(t, sources[0].Err, "the unreadable directory must come back with an error")
+	assert.Equal(t, File{}, Merged(sources), "a directory that could not be read must contribute no settings")
 }
 
 // TestResolveMalformedGiveupTTLReportsAndDefaults covers Resolve's error branch
@@ -340,12 +299,8 @@ func TestDropInDirThatCannotBeRead(t *testing.T) {
 // falls back to its default.
 func TestResolveMalformedGiveupTTLReportsAndDefaults(t *testing.T) {
 	s, errs := Resolve(File{}, lookupFrom(map[string]string{"SSHAKKU_GIVEUP_TTL": "banana"}))
-	if len(errs) == 0 {
-		t.Fatal("a malformed give-up TTL must be reported")
-	}
-	if s.GiveupTTL != DefaultGiveupTTL {
-		t.Errorf("GiveupTTL = %v, want the default on a malformed value", s.GiveupTTL)
-	}
+	assert.NotEmpty(t, errs, "a malformed give-up TTL must be reported")
+	assert.Equal(t, DefaultGiveupTTL, s.GiveupTTL, "GiveupTTL must be the default on a malformed value")
 }
 
 // TestResolveMalformedCommandTimeoutReportsAndDefaults covers Resolve's error
@@ -354,12 +309,8 @@ func TestResolveMalformedGiveupTTLReportsAndDefaults(t *testing.T) {
 // error back, and a wrong budget is invisible until something hangs.
 func TestResolveMalformedCommandTimeoutReportsAndDefaults(t *testing.T) {
 	s, errs := Resolve(File{}, lookupFrom(map[string]string{"SSHAKKU_COMMAND_TIMEOUT": "banana"}))
-	if len(errs) == 0 {
-		t.Fatal("a malformed command timeout must be reported")
-	}
-	if s.CommandTimeout != keys.DefaultCommandTimeout {
-		t.Errorf("CommandTimeout = %v, want the default on a malformed value", s.CommandTimeout)
-	}
+	assert.NotEmpty(t, errs, "a malformed command timeout must be reported")
+	assert.Equal(t, keys.DefaultCommandTimeout, s.CommandTimeout, "CommandTimeout must be the default on a malformed value")
 }
 
 // TestResolveMalformedInteractiveTimeoutReportsAndDefaults covers Resolve's
@@ -367,10 +318,6 @@ func TestResolveMalformedCommandTimeoutReportsAndDefaults(t *testing.T) {
 // above.
 func TestResolveMalformedInteractiveTimeoutReportsAndDefaults(t *testing.T) {
 	s, errs := Resolve(File{}, lookupFrom(map[string]string{"SSHAKKU_INTERACTIVE_TIMEOUT": "banana"}))
-	if len(errs) == 0 {
-		t.Fatal("a malformed interactive timeout must be reported")
-	}
-	if s.InteractiveTimeout != keys.DefaultInteractiveTimeout {
-		t.Errorf("InteractiveTimeout = %v, want the default on a malformed value", s.InteractiveTimeout)
-	}
+	assert.NotEmpty(t, errs, "a malformed interactive timeout must be reported")
+	assert.Equal(t, keys.DefaultInteractiveTimeout, s.InteractiveTimeout, "InteractiveTimeout must be the default on a malformed value")
 }

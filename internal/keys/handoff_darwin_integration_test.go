@@ -6,6 +6,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestAddWithAskpassRealBinaryDarwin exercises the full production path on
@@ -25,15 +28,12 @@ func TestAddWithAskpassRealBinaryDarwin(t *testing.T) {
 
 	keyfile := filepath.Join(dir, "id_test")
 	const passphrase = "sshakku-darwin-handoff-test-passphrase"
-	if out, err := exec.Command("ssh-keygen", "-t", "ed25519", "-N", passphrase, "-f", keyfile, "-q").CombinedOutput(); err != nil {
-		t.Fatalf("ssh-keygen: %v: %s", err, out)
-	}
+	out, err := exec.Command("ssh-keygen", "-t", "ed25519", "-N", passphrase, "-f", keyfile, "-q").CombinedOutput()
+	require.NoErrorf(t, err, "a real passphrase-protected key to load:\n%s", out)
 
 	sock := filepath.Join(dir, "agent.sock")
 	agentCmd := exec.Command("ssh-agent", "-D", "-a", sock)
-	if err := agentCmd.Start(); err != nil {
-		t.Fatalf("start ssh-agent: %v", err)
-	}
+	require.NoError(t, agentCmd.Start(), "a real ssh-agent to load it into")
 	t.Cleanup(func() {
 		_ = agentCmd.Process.Kill()
 		_ = agentCmd.Wait()
@@ -44,23 +44,15 @@ func TestAddWithAskpassRealBinaryDarwin(t *testing.T) {
 
 	adder := ExecKeyAdder{AskpassProg: askpass}
 	rc, err := adder.AddWithAskpass(keyfile, passphrase)
-	if err != nil {
-		t.Fatalf("AddWithAskpass: %v", err)
-	}
-	if rc != 0 {
-		t.Fatalf("AddWithAskpass: ssh-add exited %d", rc)
-	}
+	require.NoError(t, err, "loading the key through the real handoff must succeed")
+	require.Zero(t, rc, "and ssh-add must accept the passphrase it collected")
 
 	runner := ExecRunner{}
 	fp, err := FileFingerprint(runner, keyfile)
-	if err != nil {
-		t.Fatalf("FileFingerprint: %v", err)
-	}
+	require.NoError(t, err, "reading the key's fingerprint must succeed")
 	loaded, err := AgentFingerprints(runner)
-	if err != nil {
-		t.Fatalf("AgentFingerprints: %v", err)
-	}
-	if !loaded[fp] {
-		t.Fatal("key not present in the agent after AddWithAskpass via the real sshakku binary")
-	}
+	require.NoError(t, err, "asking the agent what it holds must succeed")
+	assert.Containsf(t, loaded, fp,
+		"the key must be in the agent: the passphrase travelled from here to a detached ssh-add through the "+
+			"real socket rendezvous and back, and nothing but the agent holding the key proves it arrived: %v", loaded)
 }

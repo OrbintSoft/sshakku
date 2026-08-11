@@ -9,6 +9,7 @@ import (
 	"testing"
 	"unsafe"
 
+	"github.com/stretchr/testify/require"
 	"golang.org/x/sys/unix"
 )
 
@@ -33,25 +34,18 @@ func openPTY(t *testing.T) (master, slave *os.File) {
 	master = os.NewFile(uintptr(mfd), "/dev/ptmx")
 	t.Cleanup(func() { _ = master.Close() })
 
-	if err := unix.IoctlSetInt(mfd, unix.TIOCPTYGRANT, 0); err != nil {
-		t.Fatalf("grant pty slave: %v", err)
-	}
-	if err := unix.IoctlSetInt(mfd, unix.TIOCPTYUNLK, 0); err != nil {
-		t.Fatalf("unlock pty slave: %v", err)
-	}
+	require.NoError(t, unix.IoctlSetInt(mfd, unix.TIOCPTYGRANT, 0), "grant the pty slave")
+	require.NoError(t, unix.IoctlSetInt(mfd, unix.TIOCPTYUNLK, 0), "unlock the pty slave")
 
 	// PATH_MAX on Darwin; TIOCPTYGNAME writes a NUL-terminated path into it.
 	var buf [1024]byte
-	if _, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(mfd),
-		uintptr(unix.TIOCPTYGNAME), uintptr(unsafe.Pointer(&buf[0]))); errno != 0 {
-		t.Fatalf("read pty slave name: %v", errno)
-	}
+	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(mfd),
+		uintptr(unix.TIOCPTYGNAME), uintptr(unsafe.Pointer(&buf[0])))
+	require.Zerof(t, errno, "read the pty slave name: %v", errno)
 	name := string(buf[:bytes.IndexByte(buf[:], 0)])
 
 	slave, err = os.OpenFile(name, os.O_RDWR|unix.O_NOCTTY, 0)
-	if err != nil {
-		t.Fatalf("open pty slave %s: %v", name, err)
-	}
+	require.NoErrorf(t, err, "open the pty slave %s", name)
 	t.Cleanup(func() { _ = slave.Close() })
 	return master, slave
 }

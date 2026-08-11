@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"golang.org/x/sys/unix"
 )
 
@@ -41,12 +42,9 @@ func TestEnsureAgentForeignSurveyError(t *testing.T) {
 		Runner:    &recordRunner{},
 		Signaler:  &recordSignaler{},
 	}
-	if _, err := m.EnsureAgent(EnsureConfig{FixedSock: fixed, OurUID: 1000}, nil); err == nil {
-		t.Fatal("want an error when the healthy-agent survey cannot read the process list")
-	}
-	if lister.calls != 2 {
-		t.Errorf("Agents called %d times, want 2 (reap then survey)", lister.calls)
-	}
+	_, err := m.EnsureAgent(EnsureConfig{FixedSock: fixed, OurUID: 1000}, nil)
+	assert.Error(t, err, "a healthy-agent survey that cannot read the process list must be reported")
+	assert.Equal(t, 2, lister.calls, "Agents is called twice: reap then survey")
 }
 
 // TestFlockLockerFlockError covers Lock's fatal branch: a flock failure other than
@@ -57,9 +55,8 @@ func TestFlockLockerFlockError(t *testing.T) {
 	flock = func(int, int) error { return unix.EINVAL }
 
 	path := filepath.Join(t.TempDir(), "agent.lock")
-	if _, err := (FlockLocker{}).Lock(path); err == nil {
-		t.Fatal("want an error on a non-EWOULDBLOCK flock failure")
-	}
+	_, err := (FlockLocker{}).Lock(path)
+	assert.Error(t, err, "a non-EWOULDBLOCK flock failure must be reported")
 }
 
 // TestSocketProberSetDeadlineError covers Reachable's bail-out when the dialed
@@ -71,7 +68,6 @@ func TestSocketProberSetDeadlineError(t *testing.T) {
 	setDeadline = func(net.Conn, time.Time) error { return errors.New("cannot set deadline") }
 
 	sock := fakeAgent(t, replyIdentities(1))
-	if (SocketProber{Timeout: time.Second}).Reachable(sock) {
-		t.Fatal("want unreachable when the connection deadline cannot be set")
-	}
+	assert.False(t, (SocketProber{Timeout: time.Second}).Reachable(sock),
+		"a connection whose deadline cannot be set is unreachable")
 }

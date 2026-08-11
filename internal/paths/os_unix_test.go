@@ -7,6 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestEnsureCreatesLayout(t *testing.T) {
@@ -23,74 +26,57 @@ func TestEnsureCreatesLayout(t *testing.T) {
 		AgentLock:  filepath.Join(runtime, ".start.lock"),
 		LogFile:    filepath.Join(state, "sessions.log"),
 	}
-	if err := Ensure(l); err != nil {
-		t.Fatalf("Ensure: %v", err)
-	}
+	require.NoError(t, Ensure(l), "Ensure")
 	for _, dir := range []string{config, state, runtime} {
 		fi, err := os.Stat(dir)
-		if err != nil {
-			t.Fatalf("stat %s: %v", dir, err)
-		}
-		if perm := fi.Mode().Perm(); perm != 0o700 {
-			t.Errorf("%s perm = %o, want 700", dir, perm)
-		}
+		require.NoErrorf(t, err, "stat %s", dir)
+		assert.Equalf(t, os.FileMode(0o700), fi.Mode().Perm(), "%s permissions", dir)
 	}
 	fi, err := os.Stat(l.LogFile)
-	if err != nil {
-		t.Fatalf("stat log: %v", err)
-	}
-	if perm := fi.Mode().Perm(); perm != 0o600 {
-		t.Errorf("log perm = %o, want 600", perm)
-	}
+	require.NoError(t, err, "stat log")
+	assert.Equal(t, os.FileMode(0o600), fi.Mode().Perm(), "log permissions")
 }
 
 func TestEnsureRejectsSymlinkDir(t *testing.T) {
 	root := t.TempDir()
 	target := filepath.Join(root, "elsewhere")
-	if err := os.Mkdir(target, 0o700); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.Mkdir(target, 0o700))
 	link := filepath.Join(root, "cfg")
-	if err := os.Symlink(target, link); err != nil {
-		t.Fatal(err)
+	require.NoError(t, os.Symlink(target, link))
+	// Every other path is filled in and creatable, so the symlinked ConfigDir is
+	// the only thing Ensure can object to.
+	state := filepath.Join(root, "state")
+	l := Layout{
+		ConfigDir:  link,
+		StateDir:   state,
+		RuntimeDir: filepath.Join(root, "run"),
+		SocketDir:  filepath.Join(root, "run"),
+		LogFile:    filepath.Join(state, "sessions.log"),
 	}
-	l := Layout{ConfigDir: link, RuntimeDir: filepath.Join(root, "run"), SocketDir: filepath.Join(root, "run")}
-	if err := Ensure(l); err == nil {
-		t.Error("Ensure accepted a symlinked leaf directory, want error")
-	}
+	assert.Error(t, Ensure(l), "Ensure must reject a symlinked leaf directory")
 }
 
 func TestCleanupLegacyAgentDir(t *testing.T) {
 	home := t.TempDir()
 	agent := filepath.Join(home, ".ssh", "agent")
-	if err := os.MkdirAll(agent, 0o700); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(agent, 0o700))
 	for _, f := range []string{"ssh-agent.sock", ".start.lock"} {
-		if err := os.WriteFile(filepath.Join(agent, f), nil, 0o600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(filepath.Join(agent, f), nil, 0o600))
 	}
 	CleanupLegacyAgentDir(home)
-	if _, err := os.Stat(agent); !os.IsNotExist(err) {
-		t.Errorf("legacy agent dir still present: %v", err)
-	}
+	_, err := os.Stat(agent)
+	assert.ErrorIs(t, err, os.ErrNotExist, "the legacy agent dir must be gone")
 }
 
 func TestCleanupLegacyAgentDirLeavesForeignFiles(t *testing.T) {
 	home := t.TempDir()
 	agent := filepath.Join(home, ".ssh", "agent")
-	if err := os.MkdirAll(agent, 0o700); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(agent, 0o700))
 	foreign := filepath.Join(agent, "keep-me")
-	if err := os.WriteFile(foreign, nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(foreign, nil, 0o600))
 	CleanupLegacyAgentDir(home)
-	if _, err := os.Stat(foreign); err != nil {
-		t.Errorf("foreign file was removed: %v", err)
-	}
+	_, err := os.Stat(foreign)
+	assert.NoError(t, err, "a file we did not put there must survive")
 }
 
 // TestCleanupLegacyAgentDirEarlyReturns covers the no-op guards: an empty home,
@@ -108,17 +94,12 @@ func TestCleanupLegacyAgentDirEarlyReturns(t *testing.T) {
 	t.Run("agent path is a file", func(t *testing.T) {
 		home := t.TempDir()
 		ssh := filepath.Join(home, ".ssh")
-		if err := os.Mkdir(ssh, 0o700); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.Mkdir(ssh, 0o700))
 		agent := filepath.Join(ssh, "agent")
-		if err := os.WriteFile(agent, nil, 0o600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(agent, nil, 0o600))
 		CleanupLegacyAgentDir(home)
-		if _, err := os.Stat(agent); err != nil {
-			t.Errorf("agent file was removed: %v", err)
-		}
+		_, err := os.Stat(agent)
+		assert.NoError(t, err, "a plain file at that path must survive")
 	})
 }
 
@@ -133,24 +114,12 @@ func TestFromOS(t *testing.T) {
 		t.Setenv("XDG_CACHE_HOME", "/home/alice/.cache")
 
 		env := FromOS()
-		if env.Home != "/home/alice" {
-			t.Errorf("Home = %q, want /home/alice", env.Home)
-		}
-		if env.ConfigHome != "/home/alice/.config" {
-			t.Errorf("ConfigHome = %q", env.ConfigHome)
-		}
-		if env.StateHome != "/home/alice/.local/state" {
-			t.Errorf("StateHome = %q", env.StateHome)
-		}
-		if env.RuntimeDir != "/run/user/1000" {
-			t.Errorf("RuntimeDir = %q", env.RuntimeDir)
-		}
-		if env.CacheHome != "/home/alice/.cache" {
-			t.Errorf("CacheHome = %q", env.CacheHome)
-		}
-		if env.UID != os.Getuid() {
-			t.Errorf("UID = %d, want %d", env.UID, os.Getuid())
-		}
+		assert.Equal(t, "/home/alice", env.Home, "Home")
+		assert.Equal(t, "/home/alice/.config", env.ConfigHome, "ConfigHome")
+		assert.Equal(t, "/home/alice/.local/state", env.StateHome, "StateHome")
+		assert.Equal(t, "/run/user/1000", env.RuntimeDir, "RuntimeDir")
+		assert.Equal(t, "/home/alice/.cache", env.CacheHome, "CacheHome")
+		assert.Equal(t, os.Getuid(), env.UID, "UID")
 	})
 
 	t.Run("empty HOME takes the fallback path", func(t *testing.T) {
@@ -159,9 +128,7 @@ func TestFromOS(t *testing.T) {
 		// yields no home either; the point is that the guarded branch runs
 		// without panicking and leaves Home defined by whatever it resolves to.
 		env := FromOS()
-		if env.UID != os.Getuid() {
-			t.Errorf("UID = %d, want %d", env.UID, os.Getuid())
-		}
+		assert.Equal(t, os.Getuid(), env.UID, "UID")
 	})
 }
 
@@ -177,12 +144,8 @@ func TestFromEnvHomeFallback(t *testing.T) {
 	}
 	homeDir := func() (string, error) { return "/fallback/home", nil }
 	env := fromEnv(getenv, homeDir, func() int { return 4242 }, func(string) bool { return true })
-	if env.Home != "/fallback/home" {
-		t.Errorf("Home = %q, want /fallback/home (from the homeDir fallback)", env.Home)
-	}
-	if env.UID != 4242 {
-		t.Errorf("UID = %d, want 4242", env.UID)
-	}
+	assert.Equal(t, "/fallback/home", env.Home, "Home comes from the homeDir fallback")
+	assert.Equal(t, 4242, env.UID, "UID")
 }
 
 // TestFromEnvTempDir covers the one input that is inspected rather than merely
@@ -200,22 +163,16 @@ func TestFromEnvTempDir(t *testing.T) {
 	uid := func() int { return 1000 }
 
 	env := fromEnv(getenv, homeDir, uid, func(string) bool { return true })
-	if env.TempDir != "/the/tmp" {
-		t.Errorf("TempDir = %q, want /the/tmp (a private one is kept)", env.TempDir)
-	}
+	assert.Equal(t, "/the/tmp", env.TempDir, "a private temporary directory is kept")
 
 	env = fromEnv(getenv, homeDir, uid, func(string) bool { return false })
-	if env.TempDir != "" {
-		t.Errorf("TempDir = %q, want empty (a shared one is dropped)", env.TempDir)
-	}
+	assert.Empty(t, env.TempDir, "a shared temporary directory is dropped")
 
 	env = fromEnv(func(string) string { return "" }, homeDir, uid, func(string) bool {
-		t.Error("a temporary directory that was never named got inspected")
+		assert.Fail(t, "a temporary directory that was never named got inspected")
 		return true
 	})
-	if env.TempDir != "" {
-		t.Errorf("TempDir = %q, want empty (none was named)", env.TempDir)
-	}
+	assert.Empty(t, env.TempDir, "no temporary directory was named")
 }
 
 // TestProbeDir covers the directory/ownership probe: a real directory passes,
@@ -223,32 +180,18 @@ func TestFromEnvTempDir(t *testing.T) {
 func TestProbeDir(t *testing.T) {
 	dir := t.TempDir()
 
-	if !ProbeDir(dir, false) {
-		t.Error("ProbeDir(dir, false) = false, want true")
-	}
-	if !ProbeDir(dir, true) {
-		t.Error("ProbeDir(dir, true) = false, want true (owned by us)")
-	}
+	assert.True(t, ProbeDir(dir, false), "a real directory passes")
+	assert.True(t, ProbeDir(dir, true), "a real directory owned by us passes")
 
 	file := filepath.Join(dir, "f")
-	if err := os.WriteFile(file, nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if ProbeDir(file, false) {
-		t.Error("ProbeDir(file, false) = true, want false (not a directory)")
-	}
-	if ProbeDir(filepath.Join(dir, "missing"), false) {
-		t.Error("ProbeDir(missing) = true, want false")
-	}
+	require.NoError(t, os.WriteFile(file, nil, 0o600))
+	assert.False(t, ProbeDir(file, false), "a plain file is not a directory")
+	assert.False(t, ProbeDir(filepath.Join(dir, "missing"), false), "a missing path fails")
 
 	// A uid that cannot own the temp dir must fail the ownership check.
-	if ProbeDirAs(os.Getuid()+99999)(dir, true) {
-		t.Error("ProbeDirAs(other uid)(dir, true) = true, want false")
-	}
+	assert.False(t, ProbeDirAs(os.Getuid()+99999)(dir, true), "another uid does not own it")
 	// Without requireOwner the same probe ignores ownership.
-	if !ProbeDirAs(os.Getuid()+99999)(dir, false) {
-		t.Error("ProbeDirAs(other uid)(dir, false) = false, want true")
-	}
+	assert.True(t, ProbeDirAs(os.Getuid()+99999)(dir, false), "without requireOwner ownership is ignored")
 }
 
 // TestPrivateDir covers the question asked of a directory somebody else named:
@@ -258,43 +201,23 @@ func TestProbeDir(t *testing.T) {
 // directory is a passphrase waiting to be collected.
 func TestPrivateDir(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.Chmod(dir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if !PrivateDir(dir) {
-		t.Error("PrivateDir(0700 dir of ours) = false, want true")
-	}
+	require.NoError(t, os.Chmod(dir, 0o700))
+	assert.True(t, PrivateDir(dir), "a 0700 directory of ours is private")
 
 	for _, mode := range []os.FileMode{0o770, 0o707, 0o750, 0o705, 0o777} {
-		if err := os.Chmod(dir, mode); err != nil {
-			t.Fatal(err)
-		}
-		if PrivateDir(dir) {
-			t.Errorf("PrivateDir(%o dir) = true, want false", mode)
-		}
+		require.NoError(t, os.Chmod(dir, mode))
+		assert.Falsef(t, PrivateDir(dir), "a %o directory is not private", mode)
 	}
-	if err := os.Chmod(dir, 0o700); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.Chmod(dir, 0o700))
 
 	file := filepath.Join(dir, "f")
-	if err := os.WriteFile(file, nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if PrivateDir(file) {
-		t.Error("PrivateDir(file) = true, want false (not a directory)")
-	}
-	if PrivateDir(filepath.Join(dir, "missing")) {
-		t.Error("PrivateDir(missing) = true, want false")
-	}
+	require.NoError(t, os.WriteFile(file, nil, 0o600))
+	assert.False(t, PrivateDir(file), "a plain file is not a private directory")
+	assert.False(t, PrivateDir(filepath.Join(dir, "missing")), "a missing path is not a private directory")
 
 	link := filepath.Join(t.TempDir(), "link")
-	if err := os.Symlink(dir, link); err != nil {
-		t.Fatal(err)
-	}
-	if PrivateDir(link) {
-		t.Error("PrivateDir(symlink to a private dir) = true, want false")
-	}
+	require.NoError(t, os.Symlink(dir, link))
+	assert.False(t, PrivateDir(link), "a symlink to a private directory is not private")
 }
 
 // TestEnsureDirErrors covers ensureDir's failure branches: a parent that is a
@@ -303,17 +226,11 @@ func TestPrivateDir(t *testing.T) {
 func TestEnsureDirErrors(t *testing.T) {
 	root := t.TempDir()
 	file := filepath.Join(root, "notadir")
-	if err := os.WriteFile(file, nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := ensureDir(filepath.Join(file, "child"), os.Chmod); err == nil {
-		t.Error("ensureDir under a file returned nil, want error")
-	}
+	require.NoError(t, os.WriteFile(file, nil, 0o600))
+	assert.Error(t, ensureDir(filepath.Join(file, "child"), os.Chmod), "ensureDir under a file must fail")
 
 	failChmod := func(string, os.FileMode) error { return errors.New("chmod boom") }
-	if err := ensureDir(filepath.Join(root, "d"), failChmod); err == nil {
-		t.Error("ensureDir with a failing chmod returned nil, want error")
-	}
+	assert.Error(t, ensureDir(filepath.Join(root, "d"), failChmod), "ensureDir with a failing chmod must fail")
 }
 
 // TestEnsureFileErrors covers ensureFile's failure branches: opening a path that
@@ -321,12 +238,8 @@ func TestEnsureDirErrors(t *testing.T) {
 // permission step fail even though the file was created.
 func TestEnsureFileErrors(t *testing.T) {
 	dir := t.TempDir()
-	if err := ensureFile(dir, 0o600, os.Chmod); err == nil {
-		t.Error("ensureFile on a directory returned nil, want error")
-	}
+	assert.Error(t, ensureFile(dir, 0o600, os.Chmod), "ensureFile on a directory must fail")
 
 	failChmod := func(string, os.FileMode) error { return errors.New("chmod boom") }
-	if err := ensureFile(filepath.Join(dir, "f"), 0o600, failChmod); err == nil {
-		t.Error("ensureFile with a failing chmod returned nil, want error")
-	}
+	assert.Error(t, ensureFile(filepath.Join(dir, "f"), 0o600, failChmod), "ensureFile with a failing chmod must fail")
 }

@@ -3,8 +3,9 @@ package diagnose
 import (
 	"bytes"
 	"errors"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // fakeHostSource returns a fixed HostChecks, so Gather's host!=nil branch can be
@@ -18,9 +19,7 @@ func (f fakeHostSource) Checks() HostChecks { return f.hc }
 func TestGatherRunsHostChecks(t *testing.T) {
 	enc := true
 	r := Gather(Inputs{}, fakeSource{}, fakeProber{}, nil, nil, nil, fakeHostSource{hc: HostChecks{DiskEncrypted: &enc}})
-	if r.Host.DiskEncrypted == nil || !*r.Host.DiskEncrypted {
-		t.Errorf("Report.Host.DiskEncrypted = %v, want the host source's true", r.Host.DiskEncrypted)
-	}
+	assert.Equal(t, &enc, r.Host.DiskEncrypted, "the report must carry what the host source answered")
 }
 
 // TestFormatRemainingBranches covers Format's attribution line ("started by …"),
@@ -38,11 +37,11 @@ func TestFormatRemainingBranches(t *testing.T) {
 		KeysErr: errors.New("permission denied"),
 	})
 	out := buf.String()
-	for _, want := range []string{"started by", "could not enumerate", "(not answering)"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("Format output missing %q\n%s", want, out)
-		}
-	}
+	// Three independent things the report has to say; assert so one run names
+	// every one it left out.
+	assert.Contains(t, out, "started by", "the report must say what started the agent")
+	assert.Contains(t, out, "could not enumerate", "the report must say the keys could not be listed")
+	assert.Contains(t, out, "(not answering)", "the report must say the socket in the environment is dead")
 }
 
 // TestHostChecksLineUndeterminedFields covers hostChecksLine's undetermined
@@ -51,13 +50,11 @@ func TestFormatRemainingBranches(t *testing.T) {
 func TestHostChecksLineUndeterminedFields(t *testing.T) {
 	tmpfs := true
 	got := hostChecksLine(HostChecks{TmpTmpfs: &tmpfs})
-	for _, want := range []string{"disk encryption: undetermined", "/tmp: tmpfs, size undetermined", "secure hardware: undetermined"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("hostChecksLine = %q, want it to contain %q", got, want)
-		}
-	}
+	assert.Contains(t, got, "disk encryption: undetermined", "what was not established must be said to be undetermined")
+	assert.Contains(t, got, "/tmp: tmpfs, size undetermined", "a tmpfs of unknown size is still reported as a tmpfs")
+	assert.Contains(t, got, "secure hardware: undetermined", "what was not established must be said to be undetermined")
+
 	enc := true
-	if got := hostChecksLine(HostChecks{DiskEncrypted: &enc}); !strings.Contains(got, "/tmp: undetermined") {
-		t.Errorf("hostChecksLine = %q, want it to contain %q", got, "/tmp: undetermined")
-	}
+	assert.Contains(t, hostChecksLine(HostChecks{DiskEncrypted: &enc}), "/tmp: undetermined",
+		"a /tmp nothing was learned about must be said to be undetermined")
 }

@@ -6,29 +6,25 @@ import (
 	"errors"
 	"net"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/OrbintSoft/sshakku/internal/keepassxc"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestUnavailableBackendFailsEveryOperationWithItsReason(t *testing.T) {
 	reason := errors.New("the secret-service route needs an API this platform has none of")
 	b := UnavailableBackend{Reason: reason}
 
-	if _, _, err := b.Lookup("k"); !errors.Is(err, reason) {
-		t.Errorf("Lookup err = %v, want the reason — a miss would send the loader to prompt with no explanation", err)
-	}
-	if err := b.Store("k", "k", "p"); !errors.Is(err, reason) {
-		t.Errorf("Store err = %v, want the reason", err)
-	}
-	if err := b.Delete("k"); !errors.Is(err, reason) {
-		t.Errorf("Delete err = %v, want the reason", err)
-	}
-	if _, err := b.List(); !errors.Is(err, reason) {
-		t.Errorf("List err = %v, want the reason", err)
-	}
+	_, _, err := b.Lookup("k")
+	assert.ErrorIs(t, err, reason,
+		"a miss would send the loader off to prompt with no explanation of why the wallet was never consulted")
+	assert.ErrorIs(t, b.Store("k", "k", "p"), reason, "and a store must not be reported as having landed anywhere")
+	assert.ErrorIs(t, b.Delete("k"), reason, "nor a removal as having happened")
+	_, err = b.List()
+	assert.ErrorIs(t, err, reason, "nor the wallet as holding nothing")
 }
 
 // TestUnavailableBackendLookupIsNotAMiss states the distinction the type
@@ -36,12 +32,9 @@ func TestUnavailableBackendFailsEveryOperationWithItsReason(t *testing.T) {
 // whatever is really in the wallet.
 func TestUnavailableBackendLookupIsNotAMiss(t *testing.T) {
 	_, found, err := UnavailableBackend{Reason: errors.New("unreachable")}.Lookup("k")
-	if found {
-		t.Error("an unreachable store must not claim to have looked and found nothing")
-	}
-	if err == nil {
-		t.Error("an unreachable store must report why, not stay silent")
-	}
+	assert.False(t, found,
+		"a wallet nobody reached must not claim to have looked: a later store would overwrite what is really in it")
+	assert.Error(t, err, "and must say why it was not reached")
 }
 
 func TestDialKeePassXCNamesEveryPathItTried(t *testing.T) {
@@ -50,16 +43,11 @@ func TestDialKeePassXCNamesEveryPathItTried(t *testing.T) {
 		filepath.Join(shortDir(t), "b"),
 	}
 	_, err := dialKeePassXCAt(absent)
-	if err == nil {
-		t.Fatal("no socket answering must be an error")
-	}
-	if !errors.Is(err, keepassxc.ErrNotRunning) {
-		t.Errorf("err = %v, want ErrNotRunning", err)
-	}
+	require.Error(t, err, "a KeePassXC nothing could reach cannot answer")
+	assert.ErrorIs(t, err, keepassxc.ErrNotRunning, "and it must be said as an app that is not running")
 	for _, path := range absent {
-		if !strings.Contains(err.Error(), path) {
-			t.Errorf("err = %v, want it to name %s — otherwise the user cannot tell where it looked", err, path)
-		}
+		assert.Containsf(t, err.Error(), path,
+			"naming every place it looked, or the user cannot tell where to put the socket they do have")
 	}
 }
 
@@ -67,9 +55,7 @@ func TestDialKeePassXCTakesTheFirstThatAnswers(t *testing.T) {
 	dir := shortDir(t)
 	live := filepath.Join(dir, "live")
 	ln, err := net.Listen("unix", live)
-	if err != nil {
-		t.Fatalf("listening: %v", err)
-	}
+	require.NoError(t, err, "a socket that answers, later in the list than one that does not")
 	t.Cleanup(func() { _ = ln.Close() })
 	go func() {
 		conn, acceptErr := ln.Accept()
@@ -79,22 +65,17 @@ func TestDialKeePassXCTakesTheFirstThatAnswers(t *testing.T) {
 	}()
 
 	conn, err := dialKeePassXCAt([]string{filepath.Join(dir, "absent"), live})
-	if err != nil {
-		t.Fatalf("a later candidate that answers must be used: %v", err)
-	}
+	require.NoError(t, err,
+		"the first candidate not answering must not end the search: KeePassXC's socket moved between versions")
 	_ = conn.Close()
 }
 
 func TestKeePassXCBackendDefaultsToThePlatformPaths(t *testing.T) {
 	b := KeePassXCBackend{}
-	if len(b.socketPaths()) == 0 {
-		t.Fatal("a backend that configured no paths must still have somewhere to look")
-	}
+	assert.NotEmpty(t, b.socketPaths(), "a route that configured no paths must still have the usual places to look")
 	configured := KeePassXCBackend{SocketPaths: []string{"/somewhere/else"}}
-	got := configured.socketPaths()
-	if len(got) != 1 || got[0] != "/somewhere/else" {
-		t.Errorf("socketPaths = %v, want exactly what was configured", got)
-	}
+	assert.Equal(t, []string{"/somewhere/else"}, configured.socketPaths(),
+		"and one that named its own must be looked for there and nowhere else")
 }
 
 // TestKeePassXCConnectReportsAnUnreachableSocket drives the real construction
@@ -104,9 +85,9 @@ func TestKeePassXCConnectReportsAnUnreachableSocket(t *testing.T) {
 		SocketPaths:  []string{filepath.Join(shortDir(t), "absent")},
 		Associations: &memoryAssociations{},
 	}
-	if _, _, err := b.Lookup("id_ed25519"); !errors.Is(err, keepassxc.ErrNotRunning) {
-		t.Fatalf("err = %v, want ErrNotRunning", err)
-	}
+	_, _, err := b.Lookup("id_ed25519")
+	assert.ErrorIs(t, err, keepassxc.ErrNotRunning,
+		"a KeePassXC that is not running must be said so, not read as a database holding nothing")
 }
 
 // TestKeePassXCConnectReportsAFailedHandshake drives the same path against a
@@ -115,9 +96,7 @@ func TestKeePassXCConnectReportsAnUnreachableSocket(t *testing.T) {
 func TestKeePassXCConnectReportsAFailedHandshake(t *testing.T) {
 	path := filepath.Join(shortDir(t), "mute")
 	ln, err := net.Listen("unix", path)
-	if err != nil {
-		t.Fatalf("listening: %v", err)
-	}
+	require.NoError(t, err, "a socket that accepts and then says nothing")
 	t.Cleanup(func() { _ = ln.Close() })
 	go func() {
 		conn, acceptErr := ln.Accept()
@@ -133,27 +112,27 @@ func TestKeePassXCConnectReportsAFailedHandshake(t *testing.T) {
 		Associations: &memoryAssociations{},
 		Timeout:      2 * time.Second,
 	}
-	if _, _, err := b.Lookup("id_ed25519"); err == nil {
-		t.Fatal("a socket that accepts and says nothing must fail the lookup, not hang")
-	}
+	_, _, err = b.Lookup("id_ed25519")
+	assert.Error(t, err,
+		"a socket that accepts and says nothing is not the same as nothing listening, and must not hold the caller")
 }
 
 func TestKeePassXCLookupReportsARevokedAssociation(t *testing.T) {
 	kp := &fakeKeePassXC{testAssociateErr: keepassxc.ErrNotAssociated}
 	b := kp.backendFor(&memoryAssociations{stored: keepassxc.Association{ID: "db", IDKey: "k"}, present: true})
 
-	if _, _, err := b.Lookup("id_ed25519"); !errors.Is(err, keepassxc.ErrNotAssociated) {
-		t.Fatalf("err = %v, want ErrNotAssociated — an approval the user revoked is not a miss", err)
-	}
+	_, _, err := b.Lookup("id_ed25519")
+	assert.ErrorIs(t, err, keepassxc.ErrNotAssociated,
+		"an approval the user revoked must be said so, not read as a database holding nothing")
 }
 
 func TestKeePassXCLookupReportsAFailedSearch(t *testing.T) {
 	kp := &fakeKeePassXC{getLoginsErr: keepassxc.ErrDatabaseLocked}
 	b := kp.backendFor(&memoryAssociations{stored: keepassxc.Association{ID: "db", IDKey: "k"}, present: true})
 
-	if _, _, err := b.Lookup("id_ed25519"); !errors.Is(err, keepassxc.ErrDatabaseLocked) {
-		t.Fatalf("err = %v, want ErrDatabaseLocked — a locked database is not an empty one", err)
-	}
+	_, _, err := b.Lookup("id_ed25519")
+	assert.ErrorIs(t, err, keepassxc.ErrDatabaseLocked,
+		"a locked database is not an empty one, and telling them apart is what sends the user to unlock it")
 }
 
 func TestKeePassXCStoreReportsARefusedApproval(t *testing.T) {
@@ -161,9 +140,8 @@ func TestKeePassXCStoreReportsARefusedApproval(t *testing.T) {
 	kp := &fakeKeePassXC{associateErr: refused}
 	b := kp.backendFor(&memoryAssociations{})
 
-	if err := b.Store("id_ed25519", "", "p"); !errors.Is(err, refused) {
-		t.Fatalf("err = %v, want the refusal", err)
-	}
+	assert.ErrorIs(t, b.Store("id_ed25519", "", "p"), refused,
+		"a user who closed the approval dialog has answered, and must be obeyed rather than worked around")
 }
 
 // TestKeePassXCStoreCreatesWhenTheSearchFails proves a store still lands when
@@ -173,36 +151,27 @@ func TestKeePassXCStoreCreatesWhenTheSearchFails(t *testing.T) {
 	kp := &fakeKeePassXC{getLoginsErr: errors.New("search unavailable")}
 	b := kp.backendFor(&memoryAssociations{stored: keepassxc.Association{ID: "db", IDKey: "k"}, present: true})
 
-	if err := b.Store("id_ed25519", "", "p"); err != nil {
-		t.Fatalf("Store: %v", err)
-	}
-	if !kp.lastSet.called {
-		t.Fatal("the passphrase must still be stored")
-	}
-	if kp.lastSet.uuid != "" {
-		t.Errorf("uuid = %q, want empty so KeePassXC creates the entry", kp.lastSet.uuid)
-	}
+	require.NoError(t, b.Store("id_ed25519", "", "p"),
+		"not knowing whether an entry is already there is no reason to lose the passphrase the user just typed")
+	assert.True(t, kp.lastSet.called, "so it must still be written")
+	assert.Empty(t, kp.lastSet.uuid, "naming no existing entry, so KeePassXC creates one rather than replacing a guess")
 }
 
 func TestKeePassXCStoreReportsAFailedWrite(t *testing.T) {
 	kp := &fakeKeePassXC{setLoginErr: errors.New("read-only database")}
 	b := kp.backendFor(&memoryAssociations{stored: keepassxc.Association{ID: "db", IDKey: "k"}, present: true})
 
-	if err := b.Store("id_ed25519", "", "p"); err == nil {
-		t.Fatal("a passphrase that could not be written must be reported")
-	}
+	assert.Error(t, b.Store("id_ed25519", "", "p"),
+		"a passphrase the database refused to take must not be reported as saved: the next login would expect it there")
 }
 
 func TestKeePassXCStoreEntersTheSSHakkuGroup(t *testing.T) {
 	kp := &fakeKeePassXC{}
 	b := kp.backendFor(&memoryAssociations{stored: keepassxc.Association{ID: "db", IDKey: "k"}, present: true})
 
-	if err := b.Store("id_ed25519", "", "p"); err != nil {
-		t.Fatalf("Store: %v", err)
-	}
-	if kp.lastSet.group != "SSHakku" {
-		t.Errorf("group = %q, want the entries kept together where a user can find them", kp.lastSet.group)
-	}
+	require.NoError(t, b.Store("id_ed25519", "", "p"), "saving a passphrase must succeed")
+	assert.Equal(t, "SSHakku", kp.lastSet.group,
+		"SSHakku's entries belong together, where a person browsing their own database can find them")
 }
 
 // TestKeePassXCConnectSucceedsOverARealSocket drives the production path with
@@ -212,9 +181,7 @@ func TestKeePassXCStoreEntersTheSSHakkuGroup(t *testing.T) {
 func TestKeePassXCConnectSucceedsOverARealSocket(t *testing.T) {
 	path := filepath.Join(shortDir(t), "s")
 	ln, err := net.Listen("unix", path)
-	if err != nil {
-		t.Fatalf("listening: %v", err)
-	}
+	require.NoError(t, err, "a socket that answers the key exchange the way KeePassXC does")
 	t.Cleanup(func() { _ = ln.Close() })
 
 	// A public key of the right width is all the exchange needs to complete.
@@ -249,7 +216,6 @@ func TestKeePassXCConnectSucceedsOverARealSocket(t *testing.T) {
 		Timeout:      5 * time.Second,
 	}
 	_, _, err = b.Lookup("id_ed25519")
-	if !errors.Is(err, keepassxc.ErrNotAssociated) {
-		t.Fatalf("err = %v, want ErrNotAssociated — the session opened, and nothing was ever approved", err)
-	}
+	assert.ErrorIs(t, err, keepassxc.ErrNotAssociated,
+		"the session opened for real over a real socket, and stopped where it should: nothing was ever approved")
 }

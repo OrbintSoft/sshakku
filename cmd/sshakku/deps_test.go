@@ -7,12 +7,13 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 	"testing"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/keys"
 	"github.com/OrbintSoft/sshakku/internal/paths"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // depsReturning builds a deps whose newSecret always yields backend, so a
@@ -64,28 +65,20 @@ func TestTestSecretBackend(t *testing.T) {
 		var out, errOut bytes.Buffer
 		// ConfigDir has no config.toml, so the backend name resolves to the
 		// built-in default; an empty name argument must fall back to it.
-		if got := d.testSecretBackend(&out, &errOut, paths.Layout{ConfigDir: t.TempDir()}, fakeLogger{}, ""); got != 0 {
-			t.Fatalf("testSecretBackend = %d, want 0 (pass); stderr=%q", got, errOut.String())
-		}
-		s := out.String()
-		if !strings.Contains(s, "backend: "+config.DefaultSecretBackend()) {
-			t.Errorf("output = %q, want the default backend name in the header", s)
-		}
-		if !strings.Contains(s, "backend test: PASS") {
-			t.Errorf("output = %q, want an overall PASS", s)
-		}
+		require.Zerof(t, d.testSecretBackend(&out, &errOut, paths.Layout{ConfigDir: t.TempDir()}, fakeLogger{}, ""),
+			"a wallet that stores and reads back must pass; stderr=%q", errOut.String())
+		assert.Contains(t, out.String(), "backend: "+config.DefaultSecretBackend(),
+			"with no name given, the wallet tested is the configured one, and the report says which")
+		assert.Contains(t, out.String(), "backend test: PASS", "and says whether it worked")
 	})
 
 	t.Run("fail when the backend's store fails", func(t *testing.T) {
 		d := depsReturning(&fakeProbeBackend{storeErr: errors.New("boom")})
 		var out, errOut bytes.Buffer
-		if got := d.testSecretBackend(&out, &errOut, paths.Layout{ConfigDir: t.TempDir()}, fakeLogger{}, "keychain"); got != 1 {
-			t.Fatalf("testSecretBackend = %d, want 1 (fail)", got)
-		}
-		s := out.String()
-		if !strings.Contains(s, "backend: keychain") || !strings.Contains(s, "backend test: FAIL") {
-			t.Errorf("output = %q, want a keychain header and an overall FAIL", s)
-		}
+		assert.Equal(t, 1, d.testSecretBackend(&out, &errOut, paths.Layout{ConfigDir: t.TempDir()}, fakeLogger{}, "keychain"),
+			"a wallet that cannot store must not be reported as working")
+		assert.Contains(t, out.String(), "backend: keychain", "the wallet named is the one tested")
+		assert.Contains(t, out.String(), "backend test: FAIL", "and the verdict must be plain")
 	})
 }
 
@@ -103,12 +96,9 @@ func TestAskpassBroker(t *testing.T) {
 	d := depsReturning(&fakeProbeBackend{lookupVal: "wallet-pass", lookupOK: true})
 	var out bytes.Buffer
 	prompt := "Enter passphrase for key '/home/u/.ssh/id_ed25519': "
-	if got := d.askpassBroker(&out, []string{prompt}); got != 0 {
-		t.Fatalf("askpassBroker (wallet hit) = %d, want 0", got)
-	}
-	if got := out.String(); got != "wallet-pass\n" {
-		t.Errorf("askpassBroker wrote %q, want the wallet passphrase with a trailing newline", got)
-	}
+	require.Zero(t, d.askpassBroker(&out, []string{prompt}), "a passphrase the wallet holds must be answered from it")
+	assert.Equal(t, "wallet-pass\n", out.String(),
+		"the stored passphrase, with the newline ssh expects and nothing else")
 }
 
 // TestLoadKeys covers loadKeys' wiring against a fake backend, in a headless
@@ -126,9 +116,7 @@ func TestLoadKeys(t *testing.T) {
 
 		d := depsReturning(newMemoryBackend())
 		var errOut bytes.Buffer
-		if got := d.loadKeys(&errOut); got != 0 {
-			t.Fatalf("loadKeys (no keys) = %d, want 0; stderr=%q", got, errOut.String())
-		}
+		assert.Zerof(t, d.loadKeys(&errOut), "a directory with no key in it is nothing to complain about; stderr=%q", errOut.String())
 	})
 
 	t.Run("enumeration failure returns non-zero", func(t *testing.T) {
@@ -139,15 +127,13 @@ func TestLoadKeys(t *testing.T) {
 		t.Setenv("DISPLAY", "")
 		// A plain file where ~/.ssh should be a directory makes the key
 		// enumeration fail with a non-"not exist" error.
-		if err := os.WriteFile(filepath.Join(tmp, ".ssh"), []byte("not a dir"), 0o600); err != nil {
-			t.Fatalf("seed ~/.ssh file: %v", err)
-		}
+		require.NoError(t, os.WriteFile(filepath.Join(tmp, ".ssh"), []byte("not a dir"), 0o600),
+			"seed a file where ~/.ssh should be a directory")
 
 		d := depsReturning(newMemoryBackend())
 		var errOut bytes.Buffer
-		if got := d.loadKeys(&errOut); got != 1 {
-			t.Errorf("loadKeys (bad ~/.ssh) = %d, want 1", got)
-		}
+		assert.Equal(t, 1, d.loadKeys(&errOut),
+			"a key directory that could not be read is not the same as one holding no keys")
 	})
 }
 
@@ -162,9 +148,8 @@ func TestRunLoadKeys(t *testing.T) {
 	t.Setenv("DISPLAY", "")
 
 	d := depsReturning(newMemoryBackend())
-	if got := d.run(io.Discard, io.Discard, []string{"load-keys"}); got != 0 {
-		t.Errorf("run load-keys (no keys) = %d, want 0", got)
-	}
+	assert.Zero(t, d.run(io.Discard, io.Discard, []string{"load-keys"}),
+		"load-keys with nothing to load is a silent success")
 }
 
 // TestForget covers forget against a fake backend: named keys delete the
@@ -179,12 +164,9 @@ func TestForget(t *testing.T) {
 	t.Run("named key", func(t *testing.T) {
 		d := depsReturning(newMemoryBackend())
 		var out, errOut bytes.Buffer
-		if got := d.forget(&out, &errOut, []string{"id_rsa"}); got != 0 {
-			t.Fatalf("forget id_rsa = %d, want 0; stderr=%q", got, errOut.String())
-		}
-		if want := keys.DefaultServicePrefix + "-id_rsa"; !strings.Contains(out.String(), "forgot "+want) {
-			t.Errorf("output = %q, want a forgot line for %q", out.String(), want)
-		}
+		require.Zerof(t, d.forget(&out, &errOut, []string{"id_rsa"}), "forget id_rsa; stderr=%q", errOut.String())
+		assert.Contains(t, out.String(), "forgot "+keys.DefaultServicePrefix+"-id_rsa",
+			"the entry that was removed must be named, under the prefix it was stored with")
 	})
 
 	t.Run("--all lists then deletes every managed entry", func(t *testing.T) {
@@ -193,19 +175,14 @@ func TestForget(t *testing.T) {
 		backend.stored[keys.DefaultServicePrefix+"-b"] = "y"
 		d := depsReturning(backend)
 		var out, errOut bytes.Buffer
-		if got := d.forget(&out, &errOut, []string{"--all"}); got != 0 {
-			t.Fatalf("forget --all = %d, want 0; stderr=%q", got, errOut.String())
-		}
-		if len(backend.stored) != 0 {
-			t.Errorf("stored = %v, want every entry deleted", backend.stored)
-		}
+		require.Zerof(t, d.forget(&out, &errOut, []string{"--all"}), "forget --all; stderr=%q", errOut.String())
+		assert.Empty(t, backend.stored, "--all must leave nothing of ours behind in the wallet")
 	})
 
 	t.Run("delete failure returns non-zero", func(t *testing.T) {
 		d := depsReturning(&fakeProbeBackend{deleteErr: errors.New("boom")})
 		var out, errOut bytes.Buffer
-		if got := d.forget(&out, &errOut, []string{"id_rsa"}); got != 1 {
-			t.Errorf("forget with a failing delete = %d, want 1", got)
-		}
+		assert.Equal(t, 1, d.forget(&out, &errOut, []string{"id_rsa"}),
+			"a passphrase still in the wallet must not be reported as forgotten")
 	})
 }

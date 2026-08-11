@@ -4,8 +4,10 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestLoadSourcesReadsWhatALoginShellReads covers the list of files behind the
@@ -20,23 +22,18 @@ func TestLoadSourcesReadsWhatALoginShellReads(t *testing.T) {
 			"config.d/50-work.toml":  "key_lifetime = \"2h\"\n",
 			"config.d/10-first.toml": "key_lifetime = \"3h\"\n",
 		})
-		got := sourcePaths(LoadSources(dir))
 		want := []string{
 			filepath.Join(dir, "config.toml"),
 			filepath.Join(dir, "config.d", "10-first.toml"),
 			filepath.Join(dir, "config.d", "50-work.toml"),
 		}
-		if strings.Join(got, "\n") != strings.Join(want, "\n") {
-			t.Errorf("sources =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
-		}
+		assert.Equal(t, want, sourcePaths(LoadSources(dir)), "sources, in the order they were read")
 	})
 
 	// A file that is not there was not read, and naming it would say SSHakku
 	// consulted something it never opened.
 	t.Run("a configuration nobody wrote reads nothing", func(t *testing.T) {
-		if got := LoadSources(configDir(t, nil)); len(got) != 0 {
-			t.Errorf("sources = %v, want none", sourcePaths(got))
-		}
+		assert.Empty(t, LoadSources(configDir(t, nil)), "sources")
 	})
 
 	t.Run("a file that cannot be parsed is listed with its error", func(t *testing.T) {
@@ -45,15 +42,9 @@ func TestLoadSourcesReadsWhatALoginShellReads(t *testing.T) {
 			"config.d/50-work.toml": "key_lifetime = \"2h\"\n",
 		})
 		sources := LoadSources(dir)
-		if len(sources) != 2 {
-			t.Fatalf("sources = %v, want both files listed", sourcePaths(sources))
-		}
-		if sources[0].Err == nil {
-			t.Error("the malformed file came back without an error")
-		}
-		if sources[1].Err != nil {
-			t.Errorf("the readable file carries %v, want no error", sources[1].Err)
-		}
+		require.Len(t, sources, 2, "both files must be listed")
+		assert.Error(t, sources[0].Err, "the malformed file must come back with an error")
+		assert.NoError(t, sources[1].Err, "the readable file must carry no error")
 	})
 }
 
@@ -63,23 +54,16 @@ func TestLoadSourcesReadsWhatALoginShellReads(t *testing.T) {
 func TestExplainNamesWhereEachValueCameFrom(t *testing.T) {
 	t.Run("a setting nobody wrote is the built-in default", func(t *testing.T) {
 		s := explained(t, nil, nil, "key_lifetime")
-		if s.From.Kind != OriginDefault {
-			t.Errorf("origin = %v, want the built-in default", s.From)
-		}
-		if s.Value != DefaultKeyLifetime.String() {
-			t.Errorf("value = %q, want %q", s.Value, DefaultKeyLifetime)
-		}
+		assert.Equal(t, OriginDefault, s.From.Kind, "origin must be the built-in default")
+		assert.Equal(t, DefaultKeyLifetime.String(), s.Value, "value")
 	})
 
 	t.Run("a value in config.toml names config.toml", func(t *testing.T) {
 		dir := configDir(t, map[string]string{"config.toml": "key_lifetime = \"1h\"\n"})
 		s := explained(t, LoadSources(dir), nil, "key_lifetime")
-		if s.From.Kind != OriginFile || s.From.Name != filepath.Join(dir, "config.toml") {
-			t.Errorf("origin = %v, want config.toml", s.From)
-		}
-		if s.Value != "1h0m0s" {
-			t.Errorf("value = %q, want the file's own", s.Value)
-		}
+		assert.Equal(t, OriginFile, s.From.Kind, "origin kind")
+		assert.Equal(t, filepath.Join(dir, "config.toml"), s.From.Name, "origin name")
+		assert.Equal(t, "1h0m0s", s.Value, "value must be the file's own")
 	})
 
 	// The whole reason this exists: which of several files won is not something
@@ -90,12 +74,9 @@ func TestExplainNamesWhereEachValueCameFrom(t *testing.T) {
 			"config.d/50-work.toml": "key_lifetime = \"2h\"\n",
 		})
 		s := explained(t, LoadSources(dir), nil, "key_lifetime")
-		if s.From.Name != filepath.Join(dir, "config.d", "50-work.toml") {
-			t.Errorf("origin = %v, want the drop-in that overruled the file", s.From)
-		}
-		if s.Value != "2h0m0s" {
-			t.Errorf("value = %q, want the drop-in's own", s.Value)
-		}
+		assert.Equal(t, filepath.Join(dir, "config.d", "50-work.toml"), s.From.Name,
+			"origin must be the drop-in that overruled the file")
+		assert.Equal(t, "2h0m0s", s.Value, "value must be the drop-in's own")
 	})
 
 	t.Run("an exported variable overrules every file and is named", func(t *testing.T) {
@@ -105,12 +86,9 @@ func TestExplainNamesWhereEachValueCameFrom(t *testing.T) {
 		})
 		env := map[string]string{"SSHAKKU_KEY_LIFETIME": "30m"}
 		s := explained(t, LoadSources(dir), env, "key_lifetime")
-		if s.From.Kind != OriginEnv || s.From.Name != "SSHAKKU_KEY_LIFETIME" {
-			t.Errorf("origin = %v, want the environment variable", s.From)
-		}
-		if s.Value != "30m0s" {
-			t.Errorf("value = %q, want the exported one", s.Value)
-		}
+		assert.Equal(t, OriginEnv, s.From.Kind, "origin kind")
+		assert.Equal(t, "SSHAKKU_KEY_LIFETIME", s.From.Name, "origin name")
+		assert.Equal(t, "30m0s", s.Value, "value must be the exported one")
 	})
 
 	// A setting with no environment variable must never be attributed to one,
@@ -120,12 +98,8 @@ func TestExplainNamesWhereEachValueCameFrom(t *testing.T) {
 		dir := configDir(t, map[string]string{"config.toml": "wallet_store_mode = \"exclude\"\n"})
 		env := map[string]string{"SSHAKKU_WALLET_STORE_MODE": "all"}
 		s := explained(t, LoadSources(dir), env, "wallet_store_mode")
-		if s.From.Kind != OriginFile {
-			t.Errorf("origin = %v, want the file, which is the only place this can be set", s.From)
-		}
-		if s.Value != WalletStoreModeExclude {
-			t.Errorf("value = %q, want the file's own", s.Value)
-		}
+		assert.Equal(t, OriginFile, s.From.Kind, "origin must be the file, which is the only place this can be set")
+		assert.Equal(t, WalletStoreModeExclude, s.Value, "value must be the file's own")
 	})
 
 	// Saying a refused value is in force would be the very lie this report
@@ -135,18 +109,12 @@ func TestExplainNamesWhereEachValueCameFrom(t *testing.T) {
 			"config.d/50-work.toml": "key_lifetime = \"eight hours\"\n",
 		})
 		s := explained(t, LoadSources(dir), nil, "key_lifetime")
-		if s.From.Kind != OriginDefault || s.Value != DefaultKeyLifetime.String() {
-			t.Errorf("value/origin = %q/%v, want the default in force", s.Value, s.From)
-		}
-		if s.Refused == nil {
-			t.Fatal("nothing says the value was refused")
-		}
-		if s.Refused.From.Name != filepath.Join(dir, "config.d", "50-work.toml") {
-			t.Errorf("refused by %v, want the file that stated it", s.Refused.From)
-		}
-		if !strings.Contains(s.Refused.Err.Error(), "eight hours") {
-			t.Errorf("refusal %v does not quote the value that was refused", s.Refused.Err)
-		}
+		assert.Equal(t, OriginDefault, s.From.Kind, "the default must be in force")
+		assert.Equal(t, DefaultKeyLifetime.String(), s.Value, "value")
+		require.NotNil(t, s.Refused, "something must say the value was refused")
+		assert.Equal(t, filepath.Join(dir, "config.d", "50-work.toml"), s.Refused.From.Name,
+			"the refusal must name the file that stated it")
+		assert.ErrorContains(t, s.Refused.Err, "eight hours", "the refusal must quote the value that was refused")
 	})
 }
 
@@ -157,9 +125,7 @@ func TestExplainNamesWhereEachValueCameFrom(t *testing.T) {
 func TestEverySettingIsExplained(t *testing.T) {
 	reported := map[string]bool{}
 	for _, s := range Explain(nil, lookupFrom(nil)) {
-		if reported[s.Key] {
-			t.Errorf("%s is reported twice", s.Key)
-		}
+		assert.Falsef(t, reported[s.Key], "%s is reported twice", s.Key)
 		reported[s.Key] = true
 	}
 
@@ -167,16 +133,16 @@ func TestEverySettingIsExplained(t *testing.T) {
 	for i := range fields.NumField() {
 		key := fields.Field(i).Tag.Get("toml")
 		if key == "" {
-			t.Errorf("%s has no toml tag, so no user can set it and no report can name it", fields.Field(i).Name)
+			assert.Failf(t, "a setting nobody can name",
+				"%s has no toml tag, so no user can set it and no report can name it", fields.Field(i).Name)
 			continue
 		}
-		if !reported[key] {
-			t.Errorf("%s can be configured but is not in the report", key)
-		}
+		assert.Truef(t, reported[key], "%s can be configured but is not in the report", key)
 		delete(reported, key)
 	}
 	for key := range reported {
-		t.Errorf("the report names %q, which is not a setting anybody can write", key)
+		assert.Failf(t, "a report line nobody can write",
+			"the report names %q, which is not a setting anybody can write", key)
 	}
 }
 
@@ -188,7 +154,7 @@ func explained(t *testing.T, sources []Source, env map[string]string, key string
 			return s
 		}
 	}
-	t.Fatalf("%q is missing from the report", key)
+	require.Failf(t, "missing from the report", "%q", key)
 	return Setting{}
 }
 
@@ -199,12 +165,8 @@ func configDir(t *testing.T, files map[string]string) string {
 	dir := t.TempDir()
 	for name, body := range files {
 		path := filepath.Join(dir, filepath.FromSlash(name))
-		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+		require.NoError(t, os.WriteFile(path, []byte(body), 0o600))
 	}
 	return dir
 }

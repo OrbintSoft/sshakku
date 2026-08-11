@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/OrbintSoft/sshakku/internal/agent"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // fakeSource returns a fixed set of agent processes and an optional error.
@@ -28,6 +30,16 @@ const (
 	fixed  = "/run/user/1000/sshakku/tok/agent.sock"
 	legacy = "/home/u/.ssh/agent"
 )
+
+// settled fails the test when a check was left undetermined, and returns the
+// answer it reached. nil and false are different answers — "nobody could tell"
+// and "no" — and the report says different things about them, so a test that
+// let one stand in for the other would agree with the wrong one.
+func settled(t *testing.T, got *bool, what string) bool {
+	t.Helper()
+	require.NotNilf(t, got, "%s must be settled, not left undetermined", what)
+	return *got
+}
 
 // hasFinding reports whether any finding contains sub.
 func hasFinding(r Report, sub string) bool {
@@ -56,22 +68,13 @@ func TestGatherHealthy(t *testing.T) {
 		EnvAskpassRequire: "force",
 	}, src, prober, nil, nil, nil, nil)
 
-	if len(r.Agents) != 1 {
-		t.Fatalf("got %d agents, want 1", len(r.Agents))
-	}
+	require.Len(t, r.Agents, 1, "the one agent that was running")
 	a := r.Agents[0]
-	if a.Kind != agent.KindOurs || !a.Reachable {
-		t.Errorf("agent: kind=%v reachable=%v, want ours/reachable", a.Kind, a.Reachable)
-	}
-	if !r.EnvReachable {
-		t.Error("EnvReachable = false, want true")
-	}
-	if r.State != StateOursHealthy {
-		t.Errorf("State = %v, want StateOursHealthy", r.State)
-	}
-	if !hasFinding(r, "no problems detected") {
-		t.Errorf("findings = %v, want a clean bill", r.Findings)
-	}
+	assert.Equal(t, agent.KindOurs, a.Kind, "an agent on our fixed socket is ours")
+	assert.True(t, a.Reachable, "the agent answers on its socket")
+	assert.True(t, r.EnvReachable, "the socket the shell exported answers too")
+	assert.Equal(t, StateOursHealthy, r.State, "one healthy agent of ours and nothing else")
+	assert.Truef(t, hasFinding(r, "no problems detected"), "a healthy machine must be reported clean: %v", r.Findings)
 }
 
 func TestGatherEnvUnset(t *testing.T) {
@@ -81,9 +84,13 @@ func TestGatherEnvUnset(t *testing.T) {
 	prober := fakeProber{up: map[string]bool{fixed: true}}
 
 	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, src, prober, nil, nil, nil, nil)
-	if !hasFinding(r, "SSH_AUTH_SOCK is unset") {
-		t.Errorf("findings = %v, want an unset-env finding", r.Findings)
-	}
+	assert.Truef(t, hasFinding(r, "SSH_AUTH_SOCK is unset"),
+		"a shell that exported no socket must be told so: %v", r.Findings)
+	// The clean bill is what a user reads first. It is added only when nothing
+	// else was found, and a report carrying it alongside a problem would say
+	// both things at once.
+	assert.Falsef(t, hasFinding(r, "no problems detected"),
+		"a report that found something must not also call the machine clean: %v", r.Findings)
 }
 
 func TestGatherEnvNotAnswering(t *testing.T) {
@@ -91,15 +98,11 @@ func TestGatherEnvNotAnswering(t *testing.T) {
 	prober := fakeProber{} // nothing up
 	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000}, src, prober, nil, nil, nil, nil)
 
-	if r.EnvReachable {
-		t.Error("EnvReachable = true, want false")
-	}
-	if !hasFinding(r, "not answering") {
-		t.Errorf("findings = %v, want a not-answering finding", r.Findings)
-	}
-	if !hasFinding(r, "no ssh-agent is answering") {
-		t.Errorf("findings = %v, want a no-agent finding", r.Findings)
-	}
+	assert.False(t, r.EnvReachable, "nothing answers on the socket the shell exported")
+	assert.Truef(t, hasFinding(r, "not answering"),
+		"the report must say the exported socket is dead: %v", r.Findings)
+	assert.Truef(t, hasFinding(r, "no ssh-agent is answering"),
+		"the report must say there is no agent at all: %v", r.Findings)
 }
 
 func TestGatherEnvMismatch(t *testing.T) {
@@ -110,9 +113,8 @@ func TestGatherEnvMismatch(t *testing.T) {
 	prober := fakeProber{up: map[string]bool{other: true}}
 	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: other, OurUID: 1000}, src, prober, nil, nil, nil, nil)
 
-	if !hasFinding(r, "not our fixed socket") {
-		t.Errorf("findings = %v, want a mismatch finding", r.Findings)
-	}
+	assert.Truef(t, hasFinding(r, "not our fixed socket"),
+		"a shell pointed at somebody else's agent must be told so: %v", r.Findings)
 }
 
 func TestGatherMultipleAndDead(t *testing.T) {
@@ -125,20 +127,17 @@ func TestGatherMultipleAndDead(t *testing.T) {
 	prober := fakeProber{up: map[string]bool{fixed: true, foreign: true}}
 	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000}, src, prober, nil, nil, nil, nil)
 
-	if !hasFinding(r, "2 agents are answering") {
-		t.Errorf("findings = %v, want a multiple-agents finding", r.Findings)
-	}
-	if !hasFinding(r, "1 dead ssh-agent") {
-		t.Errorf("findings = %v, want a dead-agent finding", r.Findings)
-	}
+	assert.Truef(t, hasFinding(r, "2 agents are answering"),
+		"the report must count the agents that answer: %v", r.Findings)
+	assert.Truef(t, hasFinding(r, "1 dead ssh-agent"),
+		"the report must count the ones that do not: %v", r.Findings)
 
 	kinds := map[int]agent.ProcKind{}
 	for _, a := range r.Agents {
 		kinds[a.PID] = a.Kind
 	}
-	if kinds[200] != agent.KindForeign || kinds[300] != agent.KindLegacy {
-		t.Errorf("classification: 200=%v 300=%v", kinds[200], kinds[300])
-	}
+	assert.Equal(t, agent.KindForeign, kinds[200], "an agent on a socket of its own is somebody else's")
+	assert.Equal(t, agent.KindLegacy, kinds[300], "an agent under the legacy directory is a leftover of ours")
 }
 
 func TestGatherDifferentUserAgent(t *testing.T) {
@@ -149,15 +148,29 @@ func TestGatherDifferentUserAgent(t *testing.T) {
 	prober := fakeProber{up: map[string]bool{other: true}}
 	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 0}, src, prober, nil, nil, nil, nil)
 
-	if r.State != StateClean {
-		t.Errorf("State = %v, want StateClean: a different user's agent isn't serving this account", r.State)
-	}
-	if hasFinding(r, "foreign ssh-agent") || hasFinding(r, "dead ssh-agent") {
-		t.Errorf("findings = %v, want no foreign/dead wording for a different user's agent", r.Findings)
-	}
-	if !hasFinding(r, "belong to a different user account") {
-		t.Errorf("findings = %v, want a different-user finding", r.Findings)
-	}
+	assert.Equal(t, StateClean, r.State, "another user's agent is not serving this account")
+	assert.Falsef(t, hasFinding(r, "foreign ssh-agent"),
+		"another user's agent is not a foreign agent on this account: %v", r.Findings)
+	assert.Falsef(t, hasFinding(r, "dead ssh-agent"),
+		"another user's agent is not this account's leftover: %v", r.Findings)
+	assert.Truef(t, hasFinding(r, "belong to a different user account"),
+		"the report must say whose the agent is: %v", r.Findings)
+}
+
+// TestGatherAnotherUsersForeignAgentIsNotThisAccountsProblem pins the other
+// half of the different-user rule: an agent on a socket that is nobody's
+// business of ours is still not reported as serving this account when it
+// belongs to somebody else. It is named as another user's and nothing more.
+func TestGatherAnotherUsersForeignAgentIsNotThisAccountsProblem(t *testing.T) {
+	const theirs = "/tmp/theirs.sock"
+	src := fakeSource{procs: []agent.AgentProc{{PID: 200, UID: 1000, Socket: theirs}}}
+	prober := fakeProber{up: map[string]bool{theirs: true}}
+	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 0}, src, prober, nil, nil, nil, nil)
+
+	assert.Falsef(t, hasFinding(r, "foreign ssh-agent"),
+		"an agent belonging to another account is not a foreign agent serving this one: %v", r.Findings)
+	assert.Truef(t, hasFinding(r, "belong to a different user account"),
+		"the report must still account for it: %v", r.Findings)
 }
 
 func TestGatherOrphanedOursAgent(t *testing.T) {
@@ -171,12 +184,10 @@ func TestGatherOrphanedOursAgent(t *testing.T) {
 	prober := fakeProber{up: map[string]bool{orphan: true}}
 	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, src, prober, nil, nil, nil, nil)
 
-	if !hasFinding(r, "looks like a previous sshakku-managed agent") {
-		t.Errorf("findings = %v, want the orphaned-ours wording", r.Findings)
-	}
-	if hasFinding(r, "an unknown launcher") {
-		t.Errorf("findings = %v, want no generic foreign-launcher wording for a same-shape socket", r.Findings)
-	}
+	assert.Truef(t, hasFinding(r, "looks like a previous sshakku-managed agent"),
+		"an agent on a socket of our own shape is one of ours left behind: %v", r.Findings)
+	assert.Falsef(t, hasFinding(r, "an unknown launcher"),
+		"an agent we can account for must not be reported as unexplained: %v", r.Findings)
 }
 
 func TestLooksLikeOrphanedOurs(t *testing.T) {
@@ -188,15 +199,16 @@ func TestLooksLikeOrphanedOurs(t *testing.T) {
 		{"/home/u/.cache/sshakku/00112233445566778899aabbccddeeff/agent.sock", true},
 		{"/run/user/1000/sshakku/agent.sock", false},                                    // tokenless layout, no hex dir
 		{"/run/user/1000/sshakku/TooShortHex/agent.sock", false},                        // wrong length
+		{"/run/user/1000/sshakku/abc123/agent.sock", false},                             // lower hex, but not a token's worth
+		{"/run/user/1000/sshakku/00112233445566778899aabbccddeeff/other.sock", false},   // right place, not our socket
 		{"/run/user/1000/sshakku/00112233445566778899AABBCCDDEEFF/agent.sock", false},   // uppercase
 		{"/run/user/1000/other-app/00112233445566778899aabbccddeeff/agent.sock", false}, // not sshakku
 		{"/tmp/foreign.sock", false},
 		{"", false},
 	}
 	for _, c := range cases {
-		if got := looksLikeOrphanedOurs(c.socket); got != c.want {
-			t.Errorf("looksLikeOrphanedOurs(%q) = %v, want %v", c.socket, got, c.want)
-		}
+		assert.Equalf(t, c.want, looksLikeOrphanedOurs(c.socket),
+			"whether %q is the shape our own agent's socket has", c.socket)
 	}
 }
 
@@ -211,14 +223,14 @@ func TestKnownForeignShape(t *testing.T) {
 		{"/run/user/1000/ssh-agent.socket", true},
 		{"/run/user/1000/gnupg/S.gpg-agent", false}, // the main agent socket, not the ssh one
 		{"/run/user/1000/keyring/pkcs11", false},    // a real gnome-keyring socket, wrong one
+		{"/run/user/1000/elsewhere/ssh", false},     // the right name in the wrong place
 		{"/tmp/keyring/ssh-agent.socket", true},     // basename alone identifies the systemd unit
 		{"/tmp/foreign.sock", false},
 		{"", false},
 	}
 	for _, c := range cases {
-		if _, ok := knownForeignShape(c.socket); ok != c.want {
-			t.Errorf("knownForeignShape(%q) = %v, want %v", c.socket, ok, c.want)
-		}
+		_, ok := knownForeignShape(c.socket)
+		assert.Equalf(t, c.want, ok, "whether %q is a socket shape the report can name", c.socket)
 	}
 }
 
@@ -227,41 +239,32 @@ func TestGatherEnvSockKnownForeignShape(t *testing.T) {
 	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: gpgSSH, OurUID: 1000},
 		fakeSource{}, fakeProber{up: map[string]bool{gpgSSH: true}}, nil, nil, nil, nil)
 
-	if !hasFinding(r, "gpg-agent, with ssh support enabled") {
-		t.Errorf("findings = %v, want the gpg-agent shape identified", r.Findings)
-	}
+	assert.Truef(t, hasFinding(r, "gpg-agent, with ssh support enabled"),
+		"a socket shape the report knows must be named rather than called foreign: %v", r.Findings)
 }
 
 func TestGatherInspectError(t *testing.T) {
 	src := fakeSource{err: errors.New("boom")}
 	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000},
 		src, fakeProber{up: map[string]bool{fixed: true}}, nil, nil, nil, nil)
-	if r.InspectErr == nil {
-		t.Fatal("InspectErr = nil, want the enumeration error")
-	}
-	if !hasFinding(r, "could not enumerate processes") {
-		t.Errorf("findings = %v, want an enumerate-error finding", r.Findings)
-	}
+	assert.Error(t, r.InspectErr, "processes that could not be listed must be reported")
+	assert.Truef(t, hasFinding(r, "could not enumerate processes"),
+		"the user must be told the scan did not happen: %v", r.Findings)
 }
 
 func TestGatherRecordedPID(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "agent.state")
-	if err := agent.WriteState(statePath, agent.State{PID: 4242, Socket: fixed}); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, agent.WriteState(statePath, agent.State{PID: 4242, Socket: fixed}), "seed the state file")
 	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, StatePath: statePath, OurUID: 1000},
 		fakeSource{}, fakeProber{up: map[string]bool{fixed: true}}, nil, nil, nil, nil)
-	if r.RecordedPID != 4242 {
-		t.Errorf("RecordedPID = %d, want 4242", r.RecordedPID)
-	}
+	assert.Equal(t, 4242, r.RecordedPID, "the pid the state file recorded")
 }
 
 func TestGatherAskpassNotWired(t *testing.T) {
 	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000},
 		fakeSource{}, fakeProber{up: map[string]bool{fixed: true}}, nil, nil, nil, nil)
-	if !hasFinding(r, "SSH_ASKPASS is not wired") {
-		t.Errorf("findings = %v, want an askpass-not-wired finding", r.Findings)
-	}
+	assert.Truef(t, hasFinding(r, "SSH_ASKPASS is not wired"),
+		"a shell with no askpass wired must be told so: %v", r.Findings)
 }
 
 func TestGatherAskpassPartiallyWired(t *testing.T) {
@@ -269,9 +272,8 @@ func TestGatherAskpassPartiallyWired(t *testing.T) {
 		FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000,
 		EnvAskpass: "/usr/bin/sshakku",
 	}, fakeSource{}, fakeProber{up: map[string]bool{fixed: true}}, nil, nil, nil, nil)
-	if !hasFinding(r, "SSH_ASKPASS is not wired") {
-		t.Errorf("findings = %v, want an askpass-not-wired finding when REQUIRE is missing", r.Findings)
-	}
+	assert.Truef(t, hasFinding(r, "SSH_ASKPASS is not wired"),
+		"an askpass OpenSSH may ignore is not wired: %v", r.Findings)
 }
 
 func TestGatherAskpassWired(t *testing.T) {
@@ -282,12 +284,10 @@ func TestGatherAskpassWired(t *testing.T) {
 		FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000,
 		EnvAskpass: "/usr/bin/sshakku", EnvAskpassRequire: "force",
 	}, src, fakeProber{up: map[string]bool{fixed: true}}, nil, nil, nil, nil)
-	if hasFinding(r, "SSH_ASKPASS is not wired") {
-		t.Errorf("findings = %v, want no askpass finding when fully wired", r.Findings)
-	}
-	if !hasFinding(r, "no problems detected") {
-		t.Errorf("findings = %v, want a clean bill", r.Findings)
-	}
+	assert.Falsef(t, hasFinding(r, "SSH_ASKPASS is not wired"),
+		"a shell with the askpass wired must not be told otherwise: %v", r.Findings)
+	assert.Truef(t, hasFinding(r, "no problems detected"),
+		"a healthy machine must be reported clean: %v", r.Findings)
 }
 
 // TestGatherAskpassNotWiredHeadless covers the session that needs the finding
@@ -298,101 +298,74 @@ func TestGatherAskpassNotWiredHeadless(t *testing.T) {
 	t.Setenv("WAYLAND_DISPLAY", "")
 	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000},
 		fakeSource{}, fakeProber{up: map[string]bool{fixed: true}}, nil, nil, nil, nil)
-	if !hasFinding(r, "SSH_ASKPASS is not wired") {
-		t.Errorf("findings = %v, want an askpass-not-wired finding in a headless session too", r.Findings)
-	}
+	assert.Truef(t, hasFinding(r, "SSH_ASKPASS is not wired"),
+		"a session with no display is the one that most needs to be told: %v", r.Findings)
 }
 
 func TestTailLines(t *testing.T) {
 	dir := t.TempDir()
 
-	if got := tailLines(filepath.Join(dir, "missing.log"), 5); got != nil {
-		t.Errorf("missing file: got %v, want nil", got)
-	}
+	assert.Nil(t, tailLines(filepath.Join(dir, "missing.log"), 5), "a log that is not there has no tail")
 
 	empty := filepath.Join(dir, "empty.log")
-	if err := os.WriteFile(empty, []byte("\n\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if got := tailLines(empty, 5); got != nil {
-		t.Errorf("empty file: got %v, want nil", got)
-	}
+	require.NoError(t, os.WriteFile(empty, []byte("\n\n"), 0o600), "write the empty log")
+	assert.Nil(t, tailLines(empty, 5), "a log of blank lines has no tail either")
 
 	full := filepath.Join(dir, "full.log")
-	if err := os.WriteFile(full, []byte("l1\nl2\nl3\nl4\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	got := tailLines(full, 2)
-	if len(got) != 2 || got[0] != "l3" || got[1] != "l4" {
-		t.Errorf("tailLines = %v, want [l3 l4]", got)
-	}
-	if got := tailLines(full, 10); len(got) != 4 {
-		t.Errorf("tailLines(all) = %v, want 4 lines", got)
-	}
+	require.NoError(t, os.WriteFile(full, []byte("l1\nl2\nl3\nl4\n"), 0o600), "write the log")
+	assert.Equal(t, []string{"l3", "l4"}, tailLines(full, 2), "the last two lines, in the order they were written")
+	assert.Len(t, tailLines(full, 10), 4, "asking for more lines than there are yields all of them")
 }
 
 func TestHostFindings(t *testing.T) {
 	no, yes := false, true
 
-	if got := hostFindings(HostChecks{}); got != nil {
-		t.Errorf("zero-value HostChecks: got %v, want no findings", got)
-	}
+	// Eight independent questions about one report; assert throughout, and
+	// only look inside a finding once there is exactly one to look inside.
+	assert.Empty(t, hostFindings(HostChecks{}), "a host nothing was established about yields nothing to report")
 
 	got := hostFindings(HostChecks{DiskEncrypted: &no})
-	if len(got) != 1 || !strings.Contains(got[0], "not appear to be encrypted") {
-		t.Errorf("unencrypted disk: got %v", got)
+	if assert.Len(t, got, 1, "an unencrypted disk is one finding") {
+		assert.Contains(t, got[0], "not appear to be encrypted", "the finding must say the disk is not encrypted")
 	}
 
-	got = hostFindings(HostChecks{DiskEncrypted: &yes})
-	if len(got) != 0 {
-		t.Errorf("encrypted disk: got %v, want no findings", got)
-	}
+	assert.Empty(t, hostFindings(HostChecks{DiskEncrypted: &yes}), "an encrypted disk is nothing to report")
 
 	got = hostFindings(HostChecks{TmpTmpfs: &no})
-	if len(got) != 1 || !strings.Contains(got[0], "not a dedicated tmpfs mount") {
-		t.Errorf("non-tmpfs /tmp: got %v", got)
+	if assert.Len(t, got, 1, "a /tmp that is not a tmpfs is one finding") {
+		assert.Contains(t, got[0], "not a dedicated tmpfs mount", "the finding must say what /tmp is not")
 	}
 
 	got = hostFindings(HostChecks{TmpTmpfs: &yes, TmpSizeBytes: 64 * 1024 * 1024})
-	if len(got) != 1 || !strings.Contains(got[0], "too small") {
-		t.Errorf("undersized tmpfs /tmp: got %v", got)
+	if assert.Len(t, got, 1, "a tmpfs too small to be useful is one finding") {
+		assert.Contains(t, got[0], "too small", "the finding must say the tmpfs is undersized")
 	}
 
-	got = hostFindings(HostChecks{TmpTmpfs: &yes, TmpSizeBytes: 2 * 1024 * 1024 * 1024})
-	if len(got) != 0 {
-		t.Errorf("adequately sized tmpfs /tmp: got %v, want no findings", got)
-	}
+	assert.Empty(t, hostFindings(HostChecks{TmpTmpfs: &yes, TmpSizeBytes: 2 * 1024 * 1024 * 1024}),
+		"a tmpfs of adequate size is nothing to report")
 
 	got = hostFindings(HostChecks{SecureHardwarePresent: &no})
-	if len(got) != 1 || !strings.Contains(got[0], "no TPM or Secure Enclave detected") {
-		t.Errorf("no secure hardware: got %v", got)
+	if assert.Len(t, got, 1, "a machine with no secure hardware is one finding") {
+		assert.Contains(t, got[0], "no TPM or Secure Enclave detected", "the finding must say none was found")
 	}
 
-	got = hostFindings(HostChecks{SecureHardwarePresent: &yes, SecureHardwareKind: "TPM 2.0"})
-	if len(got) != 0 {
-		t.Errorf("secure hardware present: got %v, want no findings", got)
-	}
+	assert.Empty(t, hostFindings(HostChecks{SecureHardwarePresent: &yes, SecureHardwareKind: "TPM 2.0"}),
+		"secure hardware that is present is nothing to report")
 }
 
 func TestHostChecksLine(t *testing.T) {
 	no, yes := false, true
 
-	if got := hostChecksLine(HostChecks{}); got != "" {
-		t.Errorf("zero-value HostChecks: got %q, want empty (Gather called with nil HostSource)", got)
-	}
+	assert.Empty(t, hostChecksLine(HostChecks{}), "a host that was never looked at has no line to print")
 
 	got := hostChecksLine(HostChecks{DiskEncrypted: &yes, TmpTmpfs: &yes, TmpSizeBytes: 1024 * 1024 * 1024, SecureHardwarePresent: &yes, SecureHardwareKind: "TPM 2.0"})
 	for _, want := range []string{"disk encryption: yes", "/tmp: tmpfs, 1.0 GiB", "secure hardware: present (TPM 2.0)"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("hostChecksLine = %q, want it to contain %q", got, want)
-		}
+		assert.Containsf(t, got, want, "the line must say %q", want)
 	}
 
 	got = hostChecksLine(HostChecks{DiskEncrypted: &no, TmpTmpfs: &no, SecureHardwarePresent: &no})
 	for _, want := range []string{"disk encryption: no", "/tmp: not tmpfs", "secure hardware: not detected"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("hostChecksLine = %q, want it to contain %q", got, want)
-		}
+		assert.Containsf(t, got, want, "the line must say %q", want)
 	}
 }
 
@@ -404,9 +377,7 @@ func TestHumanBytes(t *testing.T) {
 		1024 * 1024 * 1024: "1.0 GiB",
 	}
 	for n, want := range cases {
-		if got := humanBytes(n); got != want {
-			t.Errorf("humanBytes(%d) = %q, want %q", n, got, want)
-		}
+		assert.Equalf(t, want, humanBytes(n), "how %d bytes is written for a person", n)
 	}
 }
 
@@ -420,18 +391,16 @@ func TestFormatIncludesEnvironmentSection(t *testing.T) {
 	var buf bytes.Buffer
 	Format(&buf, r)
 	out := buf.String()
-	if !strings.Contains(out, "environment:") || !strings.Contains(out, "disk encryption: yes") {
-		t.Errorf("Format output missing environment section:\n%s", out)
-	}
+	assert.Contains(t, out, "environment:", "the report must have a section for the host")
+	assert.Contains(t, out, "disk encryption: yes", "the section must carry what was established")
 }
 
 func TestFormatOmitsEnvironmentSectionWhenUngathered(t *testing.T) {
 	r := Report{FixedSock: fixed, Findings: []string{"no problems detected"}}
 	var buf bytes.Buffer
 	Format(&buf, r)
-	if strings.Contains(buf.String(), "environment:") {
-		t.Errorf("Format output should omit the environment section when Host was never gathered:\n%s", buf.String())
-	}
+	assert.NotContains(t, buf.String(), "environment:",
+		"the report must leave out a section nothing was gathered for")
 }
 
 func TestFormat(t *testing.T) {
@@ -471,8 +440,6 @@ func TestFormat(t *testing.T) {
 		"recent log:",
 		"INFO started",
 	} {
-		if !strings.Contains(out, want) {
-			t.Errorf("Format output missing %q\n---\n%s", want, out)
-		}
+		assert.Containsf(t, out, want, "the report must say %q", want)
 	}
 }

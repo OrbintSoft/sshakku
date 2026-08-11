@@ -3,6 +3,9 @@ package main
 import (
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseCoverageProfileTotalAndPerPackage(t *testing.T) {
@@ -14,24 +17,15 @@ func TestParseCoverageProfileTotalAndPerPackage(t *testing.T) {
 	)
 
 	total, perPackage, err := parseCoverageProfile(strings.NewReader(in))
-	if err != nil {
-		t.Fatalf("parseCoverageProfile: %v", err)
-	}
+	require.NoError(t, err, "parseCoverageProfile")
 
 	// keys: 3 of 5 statements covered = 60%; config: 5 of 5 = 100%.
 	// total: 8 of 10 statements covered = 80%.
-	if total != 80.0 {
-		t.Fatalf("total = %v, want 80.0", total)
-	}
-	if len(perPackage) != 2 {
-		t.Fatalf("len(perPackage) = %d, want 2", len(perPackage))
-	}
-	if perPackage[0].Package != "sshakku/internal/config" || perPackage[0].Percent != 100.0 {
-		t.Fatalf("perPackage[0] = %+v, want {sshakku/internal/config 100}", perPackage[0])
-	}
-	if perPackage[1].Package != "sshakku/internal/keys" || perPackage[1].Percent != 60.0 {
-		t.Fatalf("perPackage[1] = %+v, want {sshakku/internal/keys 60}", perPackage[1])
-	}
+	assert.InDelta(t, 80.0, total, floatTolerance, "the whole profile's statements, not the average of the packages")
+	assert.Equal(t, []PackageCoverage{
+		{Package: "sshakku/internal/config", Percent: 100.0},
+		{Package: "sshakku/internal/keys", Percent: 60.0},
+	}, perPackage, "one row per package, in the order the table prints them")
 }
 
 func TestParseCoverageProfileRejectsMalformedInput(t *testing.T) {
@@ -39,21 +33,14 @@ func TestParseCoverageProfileRejectsMalformedInput(t *testing.T) {
 		`mode: set`,
 		`not a valid coverage line`,
 	)
-	if _, _, err := parseCoverageProfile(strings.NewReader(in)); err == nil {
-		t.Fatal("parseCoverageProfile accepted malformed input, want an error")
-	}
+	_, _, err := parseCoverageProfile(strings.NewReader(in))
+	assert.Error(t, err, "a profile that could not be read must be reported, not counted as zero")
 }
 
 func TestParseCoverageProfileEmptyIsZero(t *testing.T) {
 	in := fixture(`mode: set`)
 	total, perPackage, err := parseCoverageProfile(strings.NewReader(in))
-	if err != nil {
-		t.Fatalf("parseCoverageProfile: %v", err)
-	}
-	if total != 0 {
-		t.Fatalf("total = %v, want 0", total)
-	}
-	if len(perPackage) != 0 {
-		t.Fatalf("len(perPackage) = %d, want 0", len(perPackage))
-	}
+	require.NoError(t, err, "parseCoverageProfile")
+	assert.Zero(t, total, "a profile with no statements in it covers nothing")
+	assert.Empty(t, perPackage, "and names no package")
 }

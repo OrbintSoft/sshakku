@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/OrbintSoft/sshakku/internal/keyring"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestLoadKeysHeadlessVaultHit confirms the full proactive path — a real
@@ -30,15 +32,12 @@ func TestLoadKeysHeadlessVaultHit(t *testing.T) {
 	dir := t.TempDir()
 	keyfile := filepath.Join(dir, "id_test")
 	const passphrase = "sshakku-headless-vault-test-passphrase"
-	if out, err := exec.Command("ssh-keygen", "-t", "ed25519", "-N", passphrase, "-f", keyfile, "-q").CombinedOutput(); err != nil {
-		t.Fatalf("ssh-keygen: %v: %s", err, out)
-	}
+	out, err := exec.Command("ssh-keygen", "-t", "ed25519", "-N", passphrase, "-f", keyfile, "-q").CombinedOutput()
+	require.NoErrorf(t, err, "a real passphrase-protected key to load:\n%s", out)
 
 	sock := filepath.Join(dir, "agent.sock")
 	agentCmd := exec.Command("ssh-agent", "-D", "-a", sock)
-	if err := agentCmd.Start(); err != nil {
-		t.Fatalf("start ssh-agent: %v", err)
-	}
+	require.NoError(t, agentCmd.Start(), "a real ssh-agent to load it into")
 	t.Cleanup(func() {
 		_ = agentCmd.Process.Kill()
 		_ = agentCmd.Wait()
@@ -48,9 +47,7 @@ func TestLoadKeysHeadlessVaultHit(t *testing.T) {
 
 	askpassScript := filepath.Join(dir, "askpass.sh")
 	script := "#!/bin/sh\nexec keyctl pipe \"$" + EnvPassHandoffToken + "\"\n"
-	if err := os.WriteFile(askpassScript, []byte(script), 0o755); err != nil {
-		t.Fatalf("write askpass helper: %v", err)
-	}
+	require.NoError(t, os.WriteFile(askpassScript, []byte(script), 0o755), "a helper to collect the stashed passphrase")
 
 	loader := Loader{
 		Keys:   fakeLister{paths: []string{keyfile}},
@@ -60,22 +57,16 @@ func TestLoadKeysHeadlessVaultHit(t *testing.T) {
 		Adder:  ExecKeyAdder{AskpassProg: askpassScript},
 		Log:    &fakeLogger{},
 	}
-	if err := loader.LoadKeys(); err != nil {
-		t.Fatalf("LoadKeys: %v", err)
-	}
+	require.NoError(t, loader.LoadKeys(), "a login with a stored passphrase must load the key")
 
 	runner := ExecRunner{}
 	fp, err := FileFingerprint(runner, keyfile)
-	if err != nil {
-		t.Fatalf("FileFingerprint: %v", err)
-	}
+	require.NoError(t, err, "reading the key's fingerprint must succeed")
 	loaded, err := AgentFingerprints(runner)
-	if err != nil {
-		t.Fatalf("AgentFingerprints: %v", err)
-	}
-	if !loaded[fp] {
-		t.Fatal("key not present in the agent after a headless vault-hit LoadKeys")
-	}
+	require.NoError(t, err, "asking the agent what it holds must succeed")
+	assert.Containsf(t, loaded, fp,
+		"the key must be in the agent, and it got there with no dialog anywhere: a session with no screen "+
+			"still has a wallet, and the prompter here fails the test if it is reached at all: %v", loaded)
 }
 
 // TestLoadKeysNoTerminalReturnsPromptly confirms that with no stored
@@ -95,15 +86,12 @@ func TestLoadKeysNoTerminalReturnsPromptly(t *testing.T) {
 	dir := t.TempDir()
 	keyfile := filepath.Join(dir, "id_test")
 	const passphrase = "sshakku-no-terminal-test-passphrase"
-	if out, err := exec.Command("ssh-keygen", "-t", "ed25519", "-N", passphrase, "-f", keyfile, "-q").CombinedOutput(); err != nil {
-		t.Fatalf("ssh-keygen: %v: %s", err, out)
-	}
+	genOut, err := exec.Command("ssh-keygen", "-t", "ed25519", "-N", passphrase, "-f", keyfile, "-q").CombinedOutput()
+	require.NoErrorf(t, err, "a real passphrase-protected key to load:\n%s", genOut)
 
 	sock := filepath.Join(dir, "agent.sock")
 	agentCmd := exec.Command("ssh-agent", "-D", "-a", sock)
-	if err := agentCmd.Start(); err != nil {
-		t.Fatalf("start ssh-agent: %v", err)
-	}
+	require.NoError(t, agentCmd.Start(), "a real ssh-agent to load it into")
 	t.Cleanup(func() {
 		_ = agentCmd.Process.Kill()
 		_ = agentCmd.Wait()
@@ -125,15 +113,12 @@ func TestLoadKeysNoTerminalReturnsPromptly(t *testing.T) {
 	out, err := cmd.CombinedOutput()
 	elapsed := time.Since(start)
 
-	if ctx.Err() != nil {
-		t.Fatalf("LoadKeys blocked instead of returning promptly with no controlling terminal: %v\noutput:\n%s", ctx.Err(), out)
-	}
-	if elapsed > 5*time.Second {
-		t.Errorf("LoadKeys took %v with no controlling terminal, want near-instant; output:\n%s", elapsed, out)
-	}
-	if err != nil {
-		t.Fatalf("helper process did not confirm the key stayed unloaded: %v\noutput:\n%s", err, out)
-	}
+	require.NoErrorf(t, ctx.Err(),
+		"a login with nowhere to ask must come back at once; blocking here is a shell that never returns:\n%s", out)
+	assert.Lessf(t, elapsed, 5*time.Second,
+		"and it must come back at once rather than waiting anything out:\n%s", out)
+	require.NoErrorf(t, err,
+		"with no stored passphrase and no terminal, the key must simply stay unloaded:\n%s", out)
 }
 
 // runLoadKeysNoTerminalHelper is the detached child of

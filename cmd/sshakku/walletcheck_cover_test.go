@@ -2,11 +2,12 @@ package main
 
 import (
 	"errors"
-	"strings"
 	"testing"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/diagnose"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // probeWith builds a walletProbe answering exactly what a case describes, so
@@ -53,7 +54,7 @@ func requirement(t *testing.T, view diagnose.WalletView, name string) diagnose.R
 			return req
 		}
 	}
-	t.Fatalf("no requirement named %q in %+v", name, view.Requirements)
+	require.FailNowf(t, "the report is missing a requirement it must carry", "no %q in %+v", name, view.Requirements)
 	return diagnose.Requirement{}
 }
 
@@ -163,25 +164,15 @@ func TestWalletViewPerBackend(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			view := walletView(tc.settings, tc.probe)
-			if view.Backend != tc.wantBackend {
-				t.Errorf("backend = %q, want %q", view.Backend, tc.wantBackend)
-			}
-			if view.Route != tc.wantRoute {
-				t.Errorf("route = %q, want %q", view.Route, tc.wantRoute)
-			}
+			assert.Equal(t, tc.wantBackend, view.Backend, "the wallet the report names")
+			assert.Equal(t, tc.wantRoute, view.Route, "and how it would be reached")
 			if tc.wantReq == "" {
-				if len(view.Requirements) != 0 {
-					t.Errorf("requirements = %+v, want none", view.Requirements)
-				}
+				assert.Empty(t, view.Requirements, "a wallet with nothing to check needs nothing listed")
 				return
 			}
 			req := requirement(t, view, tc.wantReq)
-			if req.Present != tc.wantPresent {
-				t.Errorf("%s present = %v, want %v (detail %q)", req.Name, req.Present, tc.wantPresent, req.Detail)
-			}
-			if !strings.Contains(req.Detail, tc.wantDetail) {
-				t.Errorf("%s detail = %q, want it to contain %q", req.Name, req.Detail, tc.wantDetail)
-			}
+			assert.Equalf(t, tc.wantPresent, req.Present, "whether %s is there (detail %q)", req.Name, req.Detail)
+			assert.Containsf(t, req.Detail, tc.wantDetail, "what the report says about %s", req.Name)
 		})
 	}
 }
@@ -196,43 +187,52 @@ func TestSecretServiceRequirementsFromALook(t *testing.T) {
 		look             secretServiceLook
 		hasScreen        bool
 		wantService      string // a fragment of the secret service detail
+		wantServiceThere bool   // whether the wallet counts as reachable
 		wantPresent      bool   // whether the compartment is there
 		wantFixable      bool   // whether this session could go and make one
 		wantUndetermined bool
 		wantCompartment  string // a fragment of the compartment detail
 	}{
 		{
-			name:            "a wallet is answering and the compartment is there",
-			look:            secretServiceLook{running: true, collectionFound: true},
-			wantService:     "answering",
-			wantPresent:     true,
-			wantCompartment: "sshakku",
+			name:             "a wallet is answering and the compartment is there",
+			look:             secretServiceLook{running: true, collectionFound: true},
+			wantService:      "answering",
+			wantServiceThere: true,
+			wantPresent:      true,
+			wantCompartment:  "sshakku",
 		},
 		{
-			name:            "no compartment, but a screen to make one on",
-			look:            secretServiceLook{running: true},
-			hasScreen:       true,
-			wantService:     "answering",
-			wantFixable:     true,
-			wantCompartment: "the first passphrase saved creates it",
+			name:             "no compartment, but a screen to make one on",
+			look:             secretServiceLook{running: true},
+			hasScreen:        true,
+			wantService:      "answering",
+			wantServiceThere: true,
+			wantFixable:      true,
+			wantCompartment:  "the first passphrase saved creates it",
 		},
 		{
-			name:            "no compartment and no screen: nothing can ever be saved",
-			look:            secretServiceLook{running: true},
-			wantService:     "answering",
-			wantCompartment: "no screen to create it on",
+			name:             "no compartment and no screen: nothing can ever be saved",
+			look:             secretServiceLook{running: true},
+			wantService:      "answering",
+			wantServiceThere: true,
+			wantCompartment:  "no screen to create it on",
 		},
 		{
 			name:             "a wallet that did not answer is not a wallet that is empty",
 			look:             secretServiceLook{running: true, askFailed: true},
 			wantService:      "answering",
+			wantServiceThere: true,
 			wantUndetermined: true,
 			wantCompartment:  "did not answer",
 		},
 		{
-			name:             "a wallet that is not running yet is started when needed",
-			look:             secretServiceLook{activatable: true},
+			name: "a wallet that is not running yet is started when needed",
+			look: secretServiceLook{activatable: true},
+			// Nothing has asked for it yet, so nothing is missing: reported as
+			// a missing piece it becomes a finding telling the user something
+			// is wrong with a machine that is working.
 			wantService:      "not running",
+			wantServiceThere: true,
 			wantUndetermined: true,
 			wantCompartment:  "no wallet was answering",
 		},
@@ -255,26 +255,18 @@ func TestSecretServiceRequirementsFromALook(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			service := serviceRequirement(tc.look)
-			if !strings.Contains(service.Detail, tc.wantService) {
-				t.Errorf("secret service detail = %q, want it to contain %q", service.Detail, tc.wantService)
-			}
+			assert.Contains(t, service.Detail, tc.wantService, "what the report says about the wallet itself")
+			assert.Equalf(t, tc.wantServiceThere, service.Present,
+				"whether the wallet counts as reachable (detail %q)", service.Detail)
 
+			// Four separate claims about one requirement — there, fixable,
+			// undetermined, and what it says — each worth naming on its own.
 			compartment := compartmentRequirement("sshakku", tc.look, tc.hasScreen)
-			if compartment.Present != tc.wantPresent {
-				t.Errorf("compartment present = %v, want %v (detail %q)",
-					compartment.Present, tc.wantPresent, compartment.Detail)
-			}
-			if compartment.Fixable != tc.wantFixable {
-				t.Errorf("compartment fixable = %v, want %v (detail %q)",
-					compartment.Fixable, tc.wantFixable, compartment.Detail)
-			}
-			if compartment.Undetermined != tc.wantUndetermined {
-				t.Errorf("compartment undetermined = %v, want %v (detail %q)",
-					compartment.Undetermined, tc.wantUndetermined, compartment.Detail)
-			}
-			if !strings.Contains(compartment.Detail, tc.wantCompartment) {
-				t.Errorf("compartment detail = %q, want it to contain %q", compartment.Detail, tc.wantCompartment)
-			}
+			assert.Equalf(t, tc.wantPresent, compartment.Present, "compartment present (detail %q)", compartment.Detail)
+			assert.Equalf(t, tc.wantFixable, compartment.Fixable, "compartment fixable (detail %q)", compartment.Detail)
+			assert.Equalf(t, tc.wantUndetermined, compartment.Undetermined,
+				"compartment undetermined (detail %q)", compartment.Detail)
+			assert.Contains(t, compartment.Detail, tc.wantCompartment, "what the report says about the compartment")
 		})
 	}
 }
@@ -294,9 +286,8 @@ func TestAnUndeterminedRequirementIsNotAFinding(t *testing.T) {
 		},
 	}
 
-	if findings := diagnose.WalletFindings(view); len(findings) != 0 {
-		t.Errorf("findings = %q, want none for a requirement nobody could settle", findings)
-	}
+	assert.Empty(t, diagnose.WalletFindings(view),
+		"findings are what the user is told is wrong, and what nobody established is not wrong")
 }
 
 // realWalletProbe reads the machine rather than a fixture, so all that can be
@@ -304,19 +295,38 @@ func TestAnUndeterminedRequirementIsNotAFinding(t *testing.T) {
 // make every check silently answer "missing".
 func TestRealWalletProbeIsWired(t *testing.T) {
 	probe := realWalletProbe()
-	if probe.onPath == nil || probe.exists == nil {
-		t.Fatal("realWalletProbe must supply both lookups")
-	}
-	if probe.goos == "" {
-		t.Error("realWalletProbe must name the platform")
-	}
-	if len(probe.listening) == 0 {
-		t.Error("realWalletProbe must know where KeePassXC would listen")
-	}
-	if _, err := probe.onPath("a-command-that-does-not-exist"); err == nil {
-		t.Error("onPath must report a command that is nowhere")
-	}
-	if probe.exists("/nonexistent/for/sure") {
-		t.Error("exists must report a path that is not there")
-	}
+	// An unwired field would make every check silently answer "missing", which
+	// reads exactly like a machine with nothing installed on it.
+	require.NotNil(t, probe.onPath, "the probe must be able to look on PATH")
+	require.NotNil(t, probe.exists, "and to look for a file")
+	assert.NotEmpty(t, probe.goos, "the probe must name the platform it is on")
+	assert.NotEmpty(t, probe.listening, "and know where KeePassXC would listen")
+
+	_, err := probe.onPath("a-command-that-does-not-exist")
+	assert.Error(t, err, "a command that is nowhere must be reported as nowhere")
+	assert.False(t, probe.exists("/nonexistent/for/sure"), "and a path that is not there as not there")
+}
+
+// TestRealWalletProbeSeesEitherKindOfScreen covers what the answer decides: a
+// session with no screen is told passphrases cannot be saved on it at all. Read
+// from X11 alone, an ordinary Wayland desktop is that session — which is what
+// the report would then say about a machine that works perfectly.
+func TestRealWalletProbeSeesEitherKindOfScreen(t *testing.T) {
+	t.Run("X11", func(t *testing.T) {
+		t.Setenv("DISPLAY", ":0")
+		t.Setenv("WAYLAND_DISPLAY", "")
+		assert.True(t, realWalletProbe().hasScreen, "an X11 session has a screen")
+	})
+
+	t.Run("Wayland", func(t *testing.T) {
+		t.Setenv("DISPLAY", "")
+		t.Setenv("WAYLAND_DISPLAY", "wayland-0")
+		assert.True(t, realWalletProbe().hasScreen, "so does a Wayland session, with no X11 to show for it")
+	})
+
+	t.Run("neither", func(t *testing.T) {
+		t.Setenv("DISPLAY", "")
+		t.Setenv("WAYLAND_DISPLAY", "")
+		assert.False(t, realWalletProbe().hasScreen, "and a session reached over ssh has neither")
+	})
 }

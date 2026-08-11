@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // These verify F29 on macOS: asked in a dialog where the session can show one,
@@ -22,9 +24,7 @@ import (
 func fakeTool(t *testing.T, dir, name, out string) {
 	t.Helper()
 	script := "#!/bin/sh\nprintf '%s\\n' " + "'" + out + "'\n"
-	if err := os.WriteFile(filepath.Join(dir, name), []byte(script), 0o755); err != nil {
-		t.Fatalf("writing a fake %s: %v", name, err)
-	}
+	require.NoErrorf(t, os.WriteFile(filepath.Join(dir, name), []byte(script), 0o755), "writing a fake %s", name)
 }
 
 // TestGraphicalPrompterInAGraphicalSession is the case macOS has never had: a
@@ -36,9 +36,8 @@ func TestGraphicalPrompterInAGraphicalSession(t *testing.T) {
 	fakeTool(t, dir, "osascript", "")
 	t.Setenv("PATH", dir)
 
-	if p := newGraphicalPrompter(config.Settings{}, nil); p == nil {
-		t.Error("newGraphicalPrompter = nil in an Aqua session, want the dialog")
-	}
+	assert.NotNil(t, newGraphicalPrompter(config.Settings{}, nil),
+		"a login at the machine's own screen can be shown a dialog")
 }
 
 // TestNoGraphicalPrompterOutsideAGraphicalSession covers the answer that keeps
@@ -53,9 +52,8 @@ func TestNoGraphicalPrompterOutsideAGraphicalSession(t *testing.T) {
 			fakeTool(t, dir, "osascript", "")
 			t.Setenv("PATH", dir)
 
-			if p := newGraphicalPrompter(config.Settings{}, nil); p != nil {
-				t.Errorf("newGraphicalPrompter = %T in a %s session, want nil", p, manager)
-			}
+			assert.Nilf(t, newGraphicalPrompter(config.Settings{}, nil),
+				"a %s session has no window server, so there is nowhere to draw a dialog", manager)
 		})
 	}
 }
@@ -68,9 +66,8 @@ func TestNoGraphicalPrompterWithNothingToDrawWith(t *testing.T) {
 	fakeTool(t, dir, "launchctl", "Aqua")
 	t.Setenv("PATH", dir)
 
-	if p := newGraphicalPrompter(config.Settings{}, nil); p != nil {
-		t.Errorf("newGraphicalPrompter = %T with no osascript on PATH, want nil", p)
-	}
+	assert.Nil(t, newGraphicalPrompter(config.Settings{}, nil),
+		"a session that could show a dialog still needs something installed to draw one")
 }
 
 // TestNoGraphicalPrompterWhenTheUserRefusedOne verifies F37 on macOS: refusing
@@ -83,7 +80,6 @@ func TestNoGraphicalPrompterWhenTheUserRefusedOne(t *testing.T) {
 	t.Setenv("PATH", dir)
 
 	settings := config.Settings{GUIPrompter: config.GUIPrompterNone}
-	if p := newGraphicalPrompter(settings, nil); p != nil {
-		t.Errorf("newGraphicalPrompter = %T with gui_prompter = %q, want no dialog at all", p, config.GUIPrompterNone)
-	}
+	assert.Nil(t, newGraphicalPrompter(settings, nil),
+		"refusing a dialog is the user's to write, and it holds where one could have been shown")
 }

@@ -5,6 +5,8 @@ package keys
 import (
 	"errors"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // TestSecretToolStoreNonZeroExit covers Store's non-zero-exit branch: a failing
@@ -14,9 +16,8 @@ func TestSecretToolStoreNonZeroExit(t *testing.T) {
 		return Result{Code: 1, Stderr: []byte("store denied")}, nil
 	})
 	b := SecretToolBackend{Runner: r, User: "u"}
-	if err := b.Store("svc", "label", "pass"); err == nil {
-		t.Fatal("Store returned nil, want an error on a non-zero secret-tool exit")
-	}
+	assert.Error(t, b.Store("svc", "label", "pass"),
+		"a passphrase the wallet refused to write must not be reported as saved")
 }
 
 // TestSecretToolStoreRunError covers Store's start-failure branch: secret-tool
@@ -25,7 +26,6 @@ func TestSecretToolStoreRunError(t *testing.T) {
 	boom := errors.New("secret-tool exec boom")
 	r := newFakeRunner().on("secret-tool", fails(boom))
 	b := SecretToolBackend{Runner: r, User: "u"}
-	if err := b.Store("svc", "label", "pass"); !errors.Is(err, boom) {
-		t.Fatalf("error = %v, want %v", err, boom)
-	}
+	assert.ErrorIs(t, b.Store("svc", "label", "pass"), boom,
+		"a wallet tool that would not run must be reported, not read as a passphrase saved")
 }

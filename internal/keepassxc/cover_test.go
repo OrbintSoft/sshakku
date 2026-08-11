@@ -4,9 +4,11 @@ import (
 	"errors"
 	"io"
 	"net"
-	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // failingReader stands in for an entropy source that cannot deliver. The real
@@ -53,36 +55,32 @@ func TestConnectReportsAFailureGeneratingItsClientId(t *testing.T) {
 	s := newFakeServer(t)
 	// One draw succeeds — the session key pair — and the client id's fails.
 	swapEntropy(t, &exhaustibleReader{left: 1})
-	if _, err := Connect(s.dial(), time.Second, time.Second); err == nil {
-		t.Fatal("Connect must fail when it cannot generate its client id")
-	}
+	_, err := Connect(s.dial(), time.Second, time.Second)
+	assert.Error(t, err, "Connect must fail when it cannot generate its client id")
 }
 
 func TestConnectReportsAFailureGeneratingTheExchangeNonce(t *testing.T) {
 	s := newFakeServer(t)
 	// The key pair and the client id succeed; the key exchange's nonce fails.
 	swapEntropy(t, &exhaustibleReader{left: 2})
-	if _, err := Connect(s.dial(), time.Second, time.Second); err == nil {
-		t.Fatal("Connect must fail when it cannot generate the exchange nonce")
-	}
+	_, err := Connect(s.dial(), time.Second, time.Second)
+	assert.Error(t, err, "Connect must fail when it cannot generate the exchange nonce")
 }
 
 func TestARequestThatCannotGenerateANonceIsRefused(t *testing.T) {
 	s := newFakeServer(t)
 	c := s.connect()
 	withoutEntropy(t)
-	if _, err := c.GetLogins("ssh://k", Association{ID: "db", IDKey: "key"}); err == nil {
-		t.Fatal("a request with no nonce must not be sent — the nonce is what ties the reply to it")
-	}
+	_, err := c.GetLogins("ssh://k", Association{ID: "db", IDKey: "key"})
+	assert.Error(t, err, "a request with no nonce must not be sent — the nonce is what ties the reply to it")
 }
 
 func TestARequestThatCannotBeEncodedIsRefused(t *testing.T) {
 	s := newFakeServer(t)
 	c := s.connect()
 	// A channel has no JSON form, so sealing it cannot succeed.
-	if err := c.request(actionGetLogins, make(chan int), &getLoginsReply{}); err == nil {
-		t.Fatal("a request that cannot be encoded must be reported")
-	}
+	err := c.request(actionGetLogins, make(chan int), &getLoginsReply{})
+	assert.Error(t, err, "a request that cannot be encoded must be reported")
 }
 
 func TestAServerThatHangsUpMidRequestIsReported(t *testing.T) {
@@ -90,43 +88,35 @@ func TestAServerThatHangsUpMidRequestIsReported(t *testing.T) {
 	s.hangUpOn = actionGetLogins
 	c := s.connect()
 	_, err := c.GetLogins("ssh://k", Association{ID: "db", IDKey: "key"})
-	if err == nil {
-		t.Fatal("a peer that goes away after accepting the request must fail the call, not hang")
-	}
-	if !strings.Contains(err.Error(), "reading the reply") {
-		t.Errorf("error = %v, want it to say the reply could not be read", err)
-	}
+	require.Error(t, err, "a peer that goes away after accepting the request must fail the call, not hang")
+	assert.ErrorContains(t, err, "reading the reply", "the error must say the reply could not be read")
 }
 
 func TestNewNonceReportsAnEntropyFailure(t *testing.T) {
 	withoutEntropy(t)
-	if _, err := newNonce(); err == nil {
-		t.Fatal("a nonce that could not be generated must be reported, not returned as zeroes")
-	}
+	_, err := newNonce()
+	assert.Error(t, err, "a nonce that could not be generated must be reported, not returned as zeroes")
 }
 
 func TestNewKeyPairReportsAnEntropyFailure(t *testing.T) {
 	withoutEntropy(t)
-	if _, err := newKeyPair(); err == nil {
-		t.Fatal("a key pair that could not be generated must be reported")
-	}
+	_, err := newKeyPair()
+	assert.Error(t, err, "a key pair that could not be generated must be reported")
 }
 
 func TestConnectReportsAnEntropyFailure(t *testing.T) {
 	s := newFakeServer(t)
 	withoutEntropy(t)
-	if _, err := Connect(s.dial(), time.Second, time.Second); err == nil {
-		t.Fatal("Connect must fail when it cannot generate its session key")
-	}
+	_, err := Connect(s.dial(), time.Second, time.Second)
+	assert.Error(t, err, "Connect must fail when it cannot generate its session key")
 }
 
 func TestAssociateReportsAnEntropyFailure(t *testing.T) {
 	s := newFakeServer(t)
 	c := s.connect()
 	withoutEntropy(t)
-	if _, err := c.Associate(); err == nil {
-		t.Fatal("Associate must fail when it cannot generate its identification key")
-	}
+	_, err := c.Associate()
+	assert.Error(t, err, "Associate must fail when it cannot generate its identification key")
 }
 
 func TestSetLoginReportsAnEntropyFailure(t *testing.T) {
@@ -134,67 +124,50 @@ func TestSetLoginReportsAnEntropyFailure(t *testing.T) {
 	c := s.connect()
 	withoutEntropy(t)
 	err := c.SetLogin("ssh://k", "k", "p", "", "", Association{ID: "db", IDKey: "key"})
-	if err == nil {
-		t.Fatal("SetLogin must fail when it cannot generate its nonce")
-	}
+	assert.Error(t, err, "SetLogin must fail when it cannot generate its nonce")
 }
 
 func TestCloseReleasesTheConnection(t *testing.T) {
 	s := newFakeServer(t)
 	c := s.connect()
-	if err := c.Close(); err != nil {
-		t.Fatalf("Close: %v", err)
-	}
+	require.NoError(t, c.Close(), "Close")
 	// A second request must not succeed on a released connection.
-	if _, err := c.GetLogins("ssh://k", Association{ID: "db", IDKey: "key"}); err == nil {
-		t.Error("a request after Close must fail")
-	}
+	_, err := c.GetLogins("ssh://k", Association{ID: "db", IDKey: "key"})
+	assert.Error(t, err, "a request after Close must fail")
 }
 
 func TestDecodeKeyRejectsWhatIsNotBase64(t *testing.T) {
-	if _, err := decodeKey("not base64!!"); err == nil {
-		t.Fatal("a key that is not base64 must be refused")
-	}
+	_, err := decodeKey("not base64!!")
+	assert.Error(t, err, "a key that is not base64 must be refused")
 }
 
 func TestSealReportsAPayloadItCannotEncode(t *testing.T) {
 	keys, err := newKeyPair()
-	if err != nil {
-		t.Fatalf("newKeyPair: %v", err)
-	}
+	require.NoError(t, err, "newKeyPair")
 	var nonce [nonceLen]byte
 	// A channel has no JSON form, so this is a payload that cannot be encoded.
-	if _, err := seal(make(chan int), nonce, keys.public, keys.secret); err == nil {
-		t.Fatal("a payload that cannot be encoded must be reported")
-	}
+	_, err = seal(make(chan int), nonce, keys.public, keys.secret)
+	assert.Error(t, err, "a payload that cannot be encoded must be reported")
 }
 
 func TestOpenRejectsWhatIsNotBase64(t *testing.T) {
 	keys, err := newKeyPair()
-	if err != nil {
-		t.Fatalf("newKeyPair: %v", err)
-	}
+	require.NoError(t, err, "newKeyPair")
 	var nonce [nonceLen]byte
 	var out map[string]any
-	if err := open("not base64!!", nonce, keys.public, keys.secret, &out); err == nil {
-		t.Fatal("a message that is not base64 must be refused")
-	}
+	assert.Error(t, open("not base64!!", nonce, keys.public, keys.secret, &out),
+		"a message that is not base64 must be refused")
 }
 
 func TestOpenRejectsAPayloadOfTheWrongShape(t *testing.T) {
 	keys, err := newKeyPair()
-	if err != nil {
-		t.Fatalf("newKeyPair: %v", err)
-	}
+	require.NoError(t, err, "newKeyPair")
 	var nonce [nonceLen]byte
 	sealed, err := seal("a bare string", nonce, keys.public, keys.secret)
-	if err != nil {
-		t.Fatalf("seal: %v", err)
-	}
+	require.NoError(t, err, "seal")
 	var out map[string]any
-	if err := open(sealed, nonce, keys.public, keys.secret, &out); err == nil {
-		t.Fatal("a payload that decrypts but does not fit must be reported")
-	}
+	assert.Error(t, open(sealed, nonce, keys.public, keys.secret, &out),
+		"a payload that decrypts but does not fit must be reported")
 }
 
 func TestKeyExchangeWithNoKeyIsAnError(t *testing.T) {
@@ -204,12 +177,8 @@ func TestKeyExchangeWithNoKeyIsAnError(t *testing.T) {
 		Success: "true",
 	}}
 	_, err := Connect(s.dial(), time.Second, time.Second)
-	if err == nil {
-		t.Fatal("a key exchange that returned no key must not be treated as done")
-	}
-	if !strings.Contains(err.Error(), "no public key") {
-		t.Errorf("error = %v, want it to say the key was missing", err)
-	}
+	require.Error(t, err, "a key exchange that returned no key must not be treated as done")
+	assert.ErrorContains(t, err, "no public key", "the error must say the key was missing")
 }
 
 func TestReplyWithNoMessageIsAnError(t *testing.T) {
@@ -220,12 +189,8 @@ func TestReplyWithNoMessageIsAnError(t *testing.T) {
 	}}
 	c := s.connect()
 	_, err := c.GetLogins("ssh://k", Association{ID: "db", IDKey: "key"})
-	if err == nil {
-		t.Fatal("a reply carrying nothing to decrypt must be an error")
-	}
-	if !strings.Contains(err.Error(), "no message") {
-		t.Errorf("error = %v, want it to say the message was missing", err)
-	}
+	require.Error(t, err, "a reply carrying nothing to decrypt must be an error")
+	assert.ErrorContains(t, err, "no message", "the error must say the message was missing")
 }
 
 func TestNamedFailureIsReportedAsGiven(t *testing.T) {
@@ -233,9 +198,7 @@ func TestNamedFailureIsReportedAsGiven(t *testing.T) {
 	s.failWith[actionGetLogins] = envelope{Success: "false", Error: "something specific"}
 	c := s.connect()
 	_, err := c.GetLogins("ssh://k", Association{ID: "db", IDKey: "key"})
-	if err == nil || !strings.Contains(err.Error(), "something specific") {
-		t.Fatalf("err = %v, want KeePassXC's own words passed through", err)
-	}
+	assert.ErrorContains(t, err, "something specific", "KeePassXC's own words must be passed through")
 }
 
 func TestUnnamedFailureStillReportsTheAction(t *testing.T) {
@@ -248,9 +211,7 @@ func TestUnnamedFailureStillReportsTheAction(t *testing.T) {
 	}
 	c := s.connect()
 	_, err := c.GetLogins("ssh://k", Association{ID: "db", IDKey: "key"})
-	if err == nil || !strings.Contains(err.Error(), actionGetLogins) {
-		t.Fatalf("err = %v, want the failing action named", err)
-	}
+	assert.ErrorContains(t, err, actionGetLogins, "the failing action must be named")
 }
 
 // brokenConn fails the transport operation the test is interested in. It is a
@@ -279,17 +240,19 @@ func (c *brokenConn) Write(p []byte) (int, error) {
 func TestADeadlineThatCannotBeSetIsReported(t *testing.T) {
 	s := newFakeServer(t)
 	conn := &brokenConn{Conn: s.dial(), failDeadline: true}
-	if _, err := Connect(conn, time.Second, time.Second); err == nil {
-		t.Fatal("a deadline that cannot be set must not be ignored — it is what bounds the wait")
-	}
+	_, err := Connect(conn, time.Second, time.Second)
+	assert.Error(t, err, "a deadline that cannot be set must not be ignored — it is what bounds the wait")
 }
 
 func TestAWriteThatFailsIsReported(t *testing.T) {
 	s := newFakeServer(t)
 	conn := &brokenConn{Conn: s.dial(), failWrite: true}
-	if _, err := Connect(conn, time.Second, time.Second); err == nil {
-		t.Fatal("a request that could not be sent must be reported")
-	}
+	_, err := Connect(conn, time.Second, time.Second)
+	require.Error(t, err, "a request that could not be sent must be reported")
+	// Naming the send is what distinguishes this from the failure that arrives
+	// anyway when the write is ignored: the reply never comes, and the deadline
+	// reports that instead — a whole timeout later, about the wrong thing.
+	assert.ErrorContains(t, err, "sending", "the error must say the request could not be sent")
 }
 
 func TestAServerThatHangsUpIsReported(t *testing.T) {
@@ -297,26 +260,17 @@ func TestAServerThatHangsUpIsReported(t *testing.T) {
 	c := s.connect()
 	// Closing the listener's connection from our side is the closest a test
 	// gets to KeePassXC exiting mid-session.
-	if err := c.conn.Close(); err != nil {
-		t.Fatalf("closing: %v", err)
-	}
-	if _, err := c.GetLogins("ssh://k", Association{ID: "db", IDKey: "key"}); err == nil {
-		t.Fatal("a session whose peer went away must fail, not wait")
-	}
+	require.NoError(t, c.conn.Close(), "closing")
+	_, err := c.GetLogins("ssh://k", Association{ID: "db", IDKey: "key"})
+	assert.Error(t, err, "a session whose peer went away must fail, not wait")
 }
 
 func TestConnectDefaultsItsTimeouts(t *testing.T) {
 	s := newFakeServer(t)
 	c, err := Connect(s.dial(), 0, 0)
-	if err != nil {
-		t.Fatalf("Connect: %v", err)
-	}
-	if c.timeout != DefaultTimeout {
-		t.Errorf("timeout = %v, want DefaultTimeout for a caller that named none", c.timeout)
-	}
-	if c.interactive != DefaultInteractiveTimeout {
-		t.Errorf("interactive = %v, want DefaultInteractiveTimeout for a caller that named none", c.interactive)
-	}
+	require.NoError(t, err, "Connect")
+	assert.Equal(t, DefaultTimeout, c.timeout, "a caller that named no timeout gets DefaultTimeout")
+	assert.Equal(t, DefaultInteractiveTimeout, c.interactive, "a caller that named none gets DefaultInteractiveTimeout")
 }
 
 // TestAssociateWaitsLongerThanAnOrdinaryExchange pins the distinction the two
@@ -335,16 +289,12 @@ func TestAssociateWaitsLongerThanAnOrdinaryExchange(t *testing.T) {
 		return map[string]any{"success": "true", "id": "db"}
 	}
 	c, err := Connect(s.dial(), 30*time.Millisecond, 5*time.Second)
-	if err != nil {
-		t.Fatalf("Connect: %v", err)
-	}
+	require.NoError(t, err, "Connect")
 
-	if _, err := c.Associate(); err != nil {
-		t.Errorf("Associate = %v, want the slower budget to have been used", err)
-	}
-	if _, err := c.GetLogins("sshakku://k", Association{ID: "db", IDKey: "key"}); err == nil {
-		t.Error("an ordinary exchange must still be held to the ordinary budget")
-	}
+	_, err = c.Associate()
+	assert.NoError(t, err, "Associate must have used the slower budget")
+	_, err = c.GetLogins("sshakku://k", Association{ID: "db", IDKey: "key"})
+	assert.Error(t, err, "an ordinary exchange must still be held to the ordinary budget")
 }
 
 func TestSocketPaths(t *testing.T) {
@@ -393,15 +343,7 @@ func TestSocketPaths(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := socketPaths(tc.goos, tc.tempDir, tc.runtimeDir)
-			if len(got) != len(tc.want) {
-				t.Fatalf("got %v, want %v", got, tc.want)
-			}
-			for i := range got {
-				if got[i] != tc.want[i] {
-					t.Errorf("path %d = %q, want %q", i, got[i], tc.want[i])
-				}
-			}
+			assert.Equal(t, tc.want, socketPaths(tc.goos, tc.tempDir, tc.runtimeDir), "socketPaths")
 		})
 	}
 }
@@ -410,11 +352,6 @@ func TestSocketPaths(t *testing.T) {
 // consults the environment rather than returning a fixed list.
 func TestSocketPathsUsesTheRunningPlatform(t *testing.T) {
 	paths := SocketPaths()
-	if len(paths) == 0 {
-		t.Fatal("SocketPaths must always offer at least the fallback")
-	}
-	last := paths[len(paths)-1]
-	if last != "/tmp/"+socketName {
-		t.Errorf("the last candidate is %q, want the /tmp fallback", last)
-	}
+	require.NotEmpty(t, paths, "SocketPaths must always offer at least the fallback")
+	assert.Equal(t, "/tmp/"+socketName, paths[len(paths)-1], "the last candidate must be the /tmp fallback")
 }

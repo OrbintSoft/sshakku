@@ -6,6 +6,9 @@ import (
 	"runtime/pprof"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // waitGone polls until path is removed or the deadline passes, so the test
@@ -19,7 +22,8 @@ func waitGone(t *testing.T, path string) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	t.Fatalf("socket %s was never cleaned up", path)
+	require.FailNowf(t, "a rendezvous was never cleaned up",
+		"the socket %s is still there, so the passphrase sits where anything that can reach it could take it", path)
 }
 
 // TestSocketHandoffNoGoroutineLeak exercises the passphrase-handoff server on
@@ -44,28 +48,21 @@ func TestSocketHandoffNoGoroutineLeak(t *testing.T) {
 	// Unclaimed stash: the server must time out and exit, never blocking on
 	// Accept for a connection that never comes.
 	unclaimed, err := socketHandoffStash("s3cr3t", 100*time.Millisecond, fixedBase(base), addrLimit)
-	if err != nil {
-		t.Fatalf("socketHandoffStash (unclaimed): %v", err)
-	}
+	require.NoError(t, err, "putting a passphrase aside must succeed")
 	waitGone(t, unclaimed)
 
 	// Claimed stash: the server must exit right after serving the one fetch.
 	claimed, err := socketHandoffStash("s3cr3t", 5*time.Second, fixedBase(base), addrLimit)
-	if err != nil {
-		t.Fatalf("socketHandoffStash (claimed): %v", err)
-	}
-	if _, err := socketHandoffFetch(claimed); err != nil {
-		t.Fatalf("socketHandoffFetch: %v", err)
-	}
+	require.NoError(t, err, "putting a second passphrase aside must succeed")
+	_, err = socketHandoffFetch(claimed)
+	require.NoError(t, err, "and the helper that was meant to have it must get it")
 	waitGone(t, claimed)
 
 	// WriteTo runs the leak-detection GC and emits the stacks of any goroutine
 	// found leaked; Count then reports how many there are.
 	var buf bytes.Buffer
-	if err := prof.WriteTo(&buf, 1); err != nil {
-		t.Fatalf("write goroutineleak profile: %v", err)
-	}
-	if n := prof.Count(); n != 0 {
-		t.Fatalf("goroutine leak detector found %d leaked goroutine(s):\n%s", n, buf.String())
-	}
+	require.NoError(t, prof.WriteTo(&buf, 1), "run the leak-detection GC")
+	assert.Zerof(t, prof.Count(),
+		"a handoff server left blocked on Accept holds a passphrase and a goroutine for the life of the process:\n%s",
+		buf.String())
 }

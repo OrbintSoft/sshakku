@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/stretchr/testify/assert"
 )
 
 // recordingTTY is a terminal that answers, and remembers being asked. The answer
@@ -60,21 +61,13 @@ func TestUnknownCommandIsNotASecretRequest(t *testing.T) {
 			var stdout, stderr bytes.Buffer
 			code := dispatch(d, &stdout, &stderr, "/usr/local/bin/sshakku", args)
 
-			if len(tty.asked) != 0 {
-				t.Errorf("the terminal was read %d time(s), for %q; a command SSHakku does not know is not a question to put to the user", len(tty.asked), tty.asked)
-			}
-			if stdout.Len() != 0 {
-				t.Errorf("stdout = %q, want nothing; whatever is written there is read by ssh as a secret", stdout.String())
-			}
-			if code != 2 {
-				t.Errorf("exit = %d, want 2 (usage error)", code)
-			}
-			if !strings.Contains(stderr.String(), args[0]) {
-				t.Errorf("stderr = %q, want the command that was not recognised named in it", stderr.String())
-			}
-			if !strings.Contains(stderr.String(), "usage: sshakku") {
-				t.Errorf("stderr = %q, want the usage, so the user can see what the commands are", stderr.String())
-			}
+			assert.Emptyf(t, tty.asked,
+				"a command SSHakku does not know is not a question to put to the user: %q", tty.asked)
+			assert.Empty(t, stdout.String(),
+				"and whatever is written there is read by ssh as a secret")
+			assert.Equal(t, 2, code, "an unrecognised command is a usage error")
+			assert.Contains(t, stderr.String(), args[0], "the answer must name what was actually typed")
+			assert.Contains(t, stderr.String(), "usage: sshakku", "and show what the commands are")
 		})
 	}
 }

@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"errors"
 	"io"
-	"strings"
 	"testing"
 
 	"github.com/OrbintSoft/sshakku/internal/agent"
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/keys"
 	"github.com/OrbintSoft/sshakku/internal/paths"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // fakeTTY stands in for the /dev/tty prompter so the broker's terminal-fallback
@@ -39,30 +40,26 @@ func TestForgetSession(t *testing.T) {
 		backend := &fakeProbeBackend{}
 		d := depsReturning(fakeProbeSession{backend})
 		var out, errOut bytes.Buffer
-		if got := d.forget(&out, &errOut, []string{"id_rsa"}); got != 0 {
-			t.Fatalf("forget = %d, want 0; stderr=%q", got, errOut.String())
-		}
+		assert.Zerof(t, d.forget(&out, &errOut, []string{"id_rsa"}),
+			"a wallet that opens and closes cleanly is swept without complaint; stderr=%q", errOut.String())
 	})
 
 	t.Run("unlock failure still sweeps", func(t *testing.T) {
 		backend := &fakeProbeBackend{unlockErr: errors.New("locked")}
 		d := depsReturning(fakeProbeSession{backend})
 		var out, errOut bytes.Buffer
-		if got := d.forget(&out, &errOut, []string{"id_rsa"}); got != 0 {
-			t.Fatalf("forget (unlock fails) = %d, want 0; stderr=%q", got, errOut.String())
-		}
-		if !strings.Contains(out.String(), "forgot ") {
-			t.Errorf("output = %q, want the delete to still run after an unlock failure", out.String())
-		}
+		require.Zerof(t, d.forget(&out, &errOut, []string{"id_rsa"}),
+			"a wallet that would not open may still let the entry go; stderr=%q", errOut.String())
+		assert.Contains(t, out.String(), "forgot ",
+			"so the sweep must be attempted rather than abandoned at the unlock")
 	})
 
 	t.Run("lock failure on exit is tolerated", func(t *testing.T) {
 		backend := &fakeProbeBackend{lockErr: errors.New("stuck")}
 		d := depsReturning(fakeProbeSession{backend})
 		var out, errOut bytes.Buffer
-		if got := d.forget(&out, &errOut, []string{"id_rsa"}); got != 0 {
-			t.Fatalf("forget (lock fails) = %d, want 0; stderr=%q", got, errOut.String())
-		}
+		assert.Zerof(t, d.forget(&out, &errOut, []string{"id_rsa"}),
+			"a wallet that would not close again does not un-forget what was removed; stderr=%q", errOut.String())
 	})
 }
 
@@ -78,34 +75,26 @@ func TestForgetErrors(t *testing.T) {
 	t.Run("--all with names is a usage error", func(t *testing.T) {
 		d := depsReturning(newMemoryBackend())
 		var out, errOut bytes.Buffer
-		if got := d.forget(&out, &errOut, []string{"--all", "id_rsa"}); got != 2 {
-			t.Fatalf("forget --all id_rsa = %d, want 2", got)
-		}
-		if !strings.Contains(errOut.String(), "cannot be combined") {
-			t.Errorf("stderr = %q, want the combine rejection", errOut.String())
-		}
+		assert.Equal(t, 2, d.forget(&out, &errOut, []string{"--all", "id_rsa"}),
+			"everything and one thing are different requests, and guessing between them is not on")
+		assert.Contains(t, errOut.String(), "cannot be combined", "and the refusal must say why")
 	})
 
 	t.Run("--all with an unsupported List reports the hint", func(t *testing.T) {
 		d := depsReturning(&fakeProbeBackend{listErr: keys.ErrListUnsupported})
 		var out, errOut bytes.Buffer
-		if got := d.forget(&out, &errOut, []string{"--all"}); got != 1 {
-			t.Fatalf("forget --all (list unsupported) = %d, want 1", got)
-		}
-		if !strings.Contains(errOut.String(), "native Secret Service backend") {
-			t.Errorf("stderr = %q, want the backend hint", errOut.String())
-		}
+		assert.Equal(t, 1, d.forget(&out, &errOut, []string{"--all"}),
+			"a wallet that cannot be listed cannot be swept, and must not be reported as swept")
+		assert.Contains(t, errOut.String(), "native Secret Service backend",
+			"and the user must be told what would let them do it")
 	})
 
 	t.Run("--all with a failing List reports the error", func(t *testing.T) {
 		d := depsReturning(&fakeProbeBackend{listErr: errors.New("boom")})
 		var out, errOut bytes.Buffer
-		if got := d.forget(&out, &errOut, []string{"--all"}); got != 1 {
-			t.Fatalf("forget --all (list fails) = %d, want 1", got)
-		}
-		if !strings.Contains(errOut.String(), "boom") {
-			t.Errorf("stderr = %q, want the raw list error", errOut.String())
-		}
+		assert.Equal(t, 1, d.forget(&out, &errOut, []string{"--all"}),
+			"a wallet that could not be read must not be reported as emptied")
+		assert.Contains(t, errOut.String(), "boom", "and the reason must reach the user unaltered")
 	})
 }
 
@@ -117,21 +106,17 @@ func TestProbeSecretBackendLookupErrors(t *testing.T) {
 	t.Run("lookup error is reported", func(t *testing.T) {
 		backend := &fakeProbeBackend{lookupErr: errors.New("boom")}
 		var buf bytes.Buffer
-		if got := probeSecretBackend(&buf, fakeLogger{}, backend, "probe"); got != 1 {
-			t.Fatalf("probeSecretBackend (lookup errors) = %d, want 1", got)
-		}
-		if !strings.Contains(buf.String(), "lookup: FAILED") {
-			t.Errorf("output = %q, want a lookup failure", buf.String())
-		}
+		assert.Equal(t, 1, probeSecretBackend(&buf, fakeLogger{}, backend, "probe"),
+			"a wallet that errors when read has failed the probe")
+		assert.Contains(t, buf.String(), "lookup: FAILED", "and the step that failed must be named")
 	})
 
 	t.Run("lock failure on exit is logged", func(t *testing.T) {
 		backend := &fakeProbeBackend{lookupVal: "probe", lookupOK: true, lockErr: errors.New("stuck")}
 		session := fakeProbeSession{backend}
 		var buf bytes.Buffer
-		if got := probeSecretBackend(&buf, fakeLogger{}, session, "probe"); got != 0 {
-			t.Fatalf("probeSecretBackend (lock fails on exit) = %d, want 0 (probe still passed)", got)
-		}
+		assert.Zero(t, probeSecretBackend(&buf, fakeLogger{}, session, "probe"),
+			"the round trip worked; a wallet that would not lock again does not undo that")
 	})
 }
 
@@ -148,12 +133,9 @@ func TestDispatchRoutesToAskpass(t *testing.T) {
 	d := depsReturning(&fakeProbeBackend{lookupVal: "wallet-pass", lookupOK: true})
 	prompt := "Enter passphrase for key '/home/u/.ssh/id_ed25519': "
 	var out bytes.Buffer
-	if got := dispatch(d, &out, io.Discard, "/usr/local/bin/"+askpassProgName, []string{prompt}); got != 0 {
-		t.Fatalf("dispatch(askpass) = %d, want 0", got)
-	}
-	if out.String() != "wallet-pass\n" {
-		t.Errorf("output = %q, want the wallet passphrase", out.String())
-	}
+	require.Zero(t, dispatch(d, &out, io.Discard, "/usr/local/bin/"+askpassProgName, []string{prompt}),
+		"run under the helper's name, arguments are a prompt to answer")
+	assert.Equal(t, "wallet-pass\n", out.String(), "answered from the wallet, not from a terminal")
 }
 
 // TestRunHelpAndUnknown covers run's remaining terminal cases: help prints the
@@ -164,22 +146,14 @@ func TestRunHelpAndUnknown(t *testing.T) {
 
 	t.Run("help prints usage", func(t *testing.T) {
 		var out, errOut bytes.Buffer
-		if got := d.run(&out, &errOut, []string{"help"}); got != 0 {
-			t.Fatalf("run help = %d, want 0", got)
-		}
-		if !strings.Contains(out.String(), "usage: sshakku") {
-			t.Errorf("output = %q, want the usage text", out.String())
-		}
+		require.Zero(t, d.run(&out, &errOut, []string{"help"}), "asking for help is not a failure")
+		assert.Contains(t, out.String(), "usage: sshakku", "and help is what must be printed")
 	})
 
 	t.Run("unknown command returns 2", func(t *testing.T) {
 		var out, errOut bytes.Buffer
-		if got := d.run(&out, &errOut, []string{"bogus"}); got != 2 {
-			t.Fatalf("run bogus = %d, want 2", got)
-		}
-		if !strings.Contains(errOut.String(), "unknown command") {
-			t.Errorf("stderr = %q, want an unknown-command diagnostic", errOut.String())
-		}
+		assert.Equal(t, 2, d.run(&out, &errOut, []string{"bogus"}), "a command that does not exist is a usage error")
+		assert.Contains(t, errOut.String(), "unknown command", "and the user must be told that is what happened")
 	})
 }
 
@@ -191,17 +165,15 @@ func TestRunDispatch(t *testing.T) {
 	t.Run("shell-init", func(t *testing.T) {
 		tempRuntimeEnv(t)
 		d := depsWithEnsurer(fakeEnsurer{res: agent.EnsureResult{LiveSock: "/run/sshakku/agent.sock"}})
-		if got := d.run(io.Discard, io.Discard, []string{"shell-init"}); got != 0 {
-			t.Errorf("run shell-init = %d, want 0", got)
-		}
+		assert.Zero(t, d.run(io.Discard, io.Discard, []string{"shell-init"}),
+			"shell-init must reach the same healthy agent through dispatch as it does directly")
 	})
 
 	t.Run("ensure-agent", func(t *testing.T) {
 		tempRuntimeEnv(t)
 		d := depsWithEnsurer(fakeEnsurer{res: agent.EnsureResult{LiveSock: "/run/sshakku/agent.sock"}})
-		if got := d.run(io.Discard, io.Discard, []string{"ensure-agent"}); got != 0 {
-			t.Errorf("run ensure-agent = %d, want 0", got)
-		}
+		assert.Zero(t, d.run(io.Discard, io.Discard, []string{"ensure-agent"}),
+			"and so must ensure-agent")
 	})
 
 	// A session with no graphical prompter must still get the exports: reading
@@ -213,12 +185,10 @@ func TestRunDispatch(t *testing.T) {
 		d.graphicalPrompter = func(config.Settings, keys.Logger) keys.Prompter { return nil }
 		d.self = func() (string, error) { return "/opt/sshakku/bin/sshakku", nil }
 		var out, errOut bytes.Buffer
-		if got := d.run(&out, &errOut, []string{"askpass-env"}); got != 0 {
-			t.Fatalf("run askpass-env (headless) = %d, want 0; stderr=%q", got, errOut.String())
-		}
-		if out.String() != askpassExports("/opt/sshakku/bin/sshakku") {
-			t.Errorf("stdout = %q, want the same exports a graphical session gets", out.String())
-		}
+		require.Zerof(t, d.run(&out, &errOut, []string{"askpass-env"}),
+			"a session with no dialog is still one the broker serves; stderr=%q", errOut.String())
+		assert.Equal(t, askpassExports("/opt/sshakku/bin/sshakku"), out.String(),
+			"and it gets the same exports a graphical session does")
 	})
 }
 
@@ -235,17 +205,15 @@ func TestAskpassBrokerTerminal(t *testing.T) {
 
 	t.Run("write error on a wallet hit returns 1", func(t *testing.T) {
 		d := depsReturning(&fakeProbeBackend{lookupVal: "wallet-pass", lookupOK: true})
-		if got := d.askpassBroker(errWriter{}, []string{prompt}); got != 1 {
-			t.Errorf("askpassBroker (failing stdout) = %d, want 1", got)
-		}
+		assert.Equal(t, 1, d.askpassBroker(errWriter{}, []string{prompt}),
+			"a passphrase ssh never received must not be reported as given")
 	})
 
 	t.Run("wallet miss with no terminal declines", func(t *testing.T) {
 		d := depsReturning(&fakeProbeBackend{lookupOK: false})
 		d.tty = fakeTTY{err: keys.ErrNoTerminal}
-		if got := d.askpassBroker(io.Discard, []string{prompt}); got != 1 {
-			t.Errorf("askpassBroker (wallet miss, no tty) = %d, want 1", got)
-		}
+		assert.Equal(t, 1, d.askpassBroker(io.Discard, []string{prompt}),
+			"with nothing in the wallet and nowhere to ask, the prompt is declined rather than answered blank")
 	})
 }
 
@@ -258,21 +226,17 @@ func TestRandomProbeValueError(t *testing.T) {
 	randRead = func([]byte) (int, error) { return 0, errors.New("no entropy") }
 
 	t.Run("randomProbeValue reports it", func(t *testing.T) {
-		if _, err := randomProbeValue(); err == nil {
-			t.Error("randomProbeValue() = nil error, want the RNG failure")
-		}
+		_, err := randomProbeValue()
+		assert.Error(t, err, "a probe value that is not random is not a probe value")
 	})
 
 	t.Run("testSecretBackend fails before touching the backend", func(t *testing.T) {
 		tmp := t.TempDir()
 		d := depsReturning(newMemoryBackend())
 		var out, errOut bytes.Buffer
-		if got := d.testSecretBackend(&out, &errOut, paths.Layout{ConfigDir: tmp}, fakeLogger{}, "keychain"); got != 1 {
-			t.Fatalf("testSecretBackend (RNG fails) = %d, want 1", got)
-		}
-		if !strings.Contains(errOut.String(), "no entropy") {
-			t.Errorf("stderr = %q, want the RNG failure", errOut.String())
-		}
+		assert.Equal(t, 1, d.testSecretBackend(&out, &errOut, paths.Layout{ConfigDir: tmp}, fakeLogger{}, "keychain"),
+			"a probe that could not be composed must not be reported as a wallet that failed")
+		assert.Contains(t, errOut.String(), "no entropy", "and the real reason must reach the user")
 	})
 }
 
@@ -286,12 +250,9 @@ func TestLoadKeysSeams(t *testing.T) {
 		d := depsReturning(newMemoryBackend())
 		d.self = func() (string, error) { return "", errors.New("no exe") }
 		var errOut bytes.Buffer
-		if got := d.loadKeys(&errOut); got != 1 {
-			t.Fatalf("loadKeys (self fails) = %d, want 1", got)
-		}
-		if !strings.Contains(errOut.String(), "no exe") {
-			t.Errorf("stderr = %q, want the lookup error", errOut.String())
-		}
+		assert.Equal(t, 1, d.loadKeys(&errOut),
+			"without a path to itself there is no askpass to hand ssh, and loading must not pretend otherwise")
+		assert.Contains(t, errOut.String(), "no exe", "and the reason must reach the user")
 	})
 
 	t.Run("a platform with a dialog selects it over the terminal", func(t *testing.T) {
@@ -299,8 +260,7 @@ func TestLoadKeysSeams(t *testing.T) {
 		d := depsReturning(newMemoryBackend())
 		d.graphicalPrompter = func(config.Settings, keys.Logger) keys.Prompter { return fixedPrompter{answer: "from the dialog"} }
 		var errOut bytes.Buffer
-		if got := d.loadKeys(&errOut); got != 0 {
-			t.Fatalf("loadKeys (GUI, no keys) = %d, want 0; stderr=%q", got, errOut.String())
-		}
+		assert.Zerof(t, d.loadKeys(&errOut),
+			"a session with a dialog loads no differently from one without; stderr=%q", errOut.String())
 	})
 }

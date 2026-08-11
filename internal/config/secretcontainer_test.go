@@ -4,6 +4,9 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestResolveSecretContainer covers the setting that names the compartment
@@ -18,23 +21,15 @@ import (
 func TestResolveSecretContainer(t *testing.T) {
 	t.Run("a chosen name is used as given", func(t *testing.T) {
 		s, errs := Resolve(File{SecretContainer: ptr("my-own-compartment")}, lookupFrom(nil))
-		if len(errs) != 0 {
-			t.Fatalf("unexpected errors: %v", errs)
-		}
-		if s.SecretContainer != "my-own-compartment" {
-			t.Errorf("SecretContainer = %q, want the file's own value", s.SecretContainer)
-		}
+		require.Empty(t, errs, "unexpected errors")
+		assert.Equal(t, "my-own-compartment", s.SecretContainer, "SecretContainer must be the file's own value")
 	})
 
 	t.Run("absent or empty leaves each backend its own default", func(t *testing.T) {
 		for _, file := range []File{{}, {SecretContainer: ptr("")}} {
 			s, errs := Resolve(file, lookupFrom(nil))
-			if len(errs) != 0 {
-				t.Fatalf("unexpected errors for %+v: %v", file, errs)
-			}
-			if s.SecretContainer != "" {
-				t.Errorf("SecretContainer = %q for %+v, want it left unset", s.SecretContainer, file)
-			}
+			require.Emptyf(t, errs, "unexpected errors for %+v", file)
+			assert.Emptyf(t, s.SecretContainer, "SecretContainer for %+v must be left unset", file)
 		}
 	})
 
@@ -65,16 +60,12 @@ func TestResolveSecretContainer(t *testing.T) {
 func assertRefused(t *testing.T, bad string) {
 	t.Helper()
 	s, errs := Resolve(File{SecretContainer: ptr(bad)}, lookupFrom(nil))
-	if s.SecretContainer != "" {
-		t.Errorf("SecretContainer = %q for %q, want it left unset", s.SecretContainer, bad)
-	}
+	assert.Emptyf(t, s.SecretContainer, "SecretContainer for %q must be left unset", bad)
 	var named bool
 	for _, err := range errs {
 		if strings.Contains(err.Error(), strconv.Quote(bad)) {
 			named = true
 		}
 	}
-	if !named {
-		t.Errorf("errors for %q = %v, want one quoting the rejected value", bad, errs)
-	}
+	assert.Truef(t, named, "errors for %q = %v, want one quoting the rejected value", bad, errs)
 }

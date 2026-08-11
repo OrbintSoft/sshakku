@@ -3,9 +3,11 @@
 package keys
 
 import (
-	"errors"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // blockingKeychainClient is a keychain that neither answers nor fails: every
@@ -73,11 +75,12 @@ func TestKeychainGivesUpOnAKeychainThatNeverAnswers(t *testing.T) {
 			// ends at all, not how punctually.
 			select {
 			case err := <-done:
-				if !errors.Is(err, ErrTimedOut) {
-					t.Fatalf("%s = %v; a keychain that never answered must be reported as not having answered", op.name, err)
-				}
+				assert.ErrorIsf(t, err, ErrTimedOut,
+					"%s against a keychain that never answered must be reported as not having answered", op.name)
 			case <-time.After(2 * time.Second):
-				t.Fatalf("%s never returned: a keychain that neither answers nor fails holds the shell for as long as it likes", op.name)
+				require.FailNowf(t, "the wait never ended",
+					"%s never returned: a keychain that neither answers nor fails holds the shell for as long as it likes",
+					op.name)
 			}
 		})
 	}

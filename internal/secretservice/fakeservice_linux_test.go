@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/godbus/dbus/v5"
+	"github.com/stretchr/testify/require"
 )
 
 // propsIface is the standard D-Bus interface GetProperty calls land on;
@@ -62,6 +63,12 @@ type fakeService struct {
 	collections map[dbus.ObjectPath]*fakeCollection
 	nextID      int
 	lastPrompt  *fakePrompt
+	// createCalls counts every CreateCollection that reached the service,
+	// including the ones it refused. How many times a client asked is the only
+	// evidence of what it made of a refusal: a wallet that rejects the alias is
+	// meant to be asked again without one, and a wallet that failed for any
+	// other reason is not.
+	createCalls int
 }
 
 // hangOn arms the ReadAlias block with ch, under the lock since the exported
@@ -84,19 +91,11 @@ func startFakeSecretService(t *testing.T, conn *dbus.Conn, behavior string) *fak
 		aliases:     map[string]dbus.ObjectPath{},
 		collections: map[dbus.ObjectPath]*fakeCollection{},
 	}
-	if err := conn.Export(svc, rootPath, serviceIface); err != nil {
-		t.Fatalf("export fake service: %v", err)
-	}
-	if err := conn.Export(svc, rootPath, propsIface); err != nil {
-		t.Fatalf("export fake service properties: %v", err)
-	}
+	require.NoError(t, conn.Export(svc, rootPath, serviceIface), "export fake service")
+	require.NoError(t, conn.Export(svc, rootPath, propsIface), "export fake service properties")
 	reply, err := conn.RequestName(busName, dbus.NameFlagDoNotQueue)
-	if err != nil {
-		t.Fatalf("request name %s: %v", busName, err)
-	}
-	if reply != dbus.RequestNameReplyPrimaryOwner {
-		t.Fatalf("request name %s: reply = %v, want PrimaryOwner", busName, reply)
-	}
+	require.NoErrorf(t, err, "request name %s", busName)
+	require.Equalf(t, dbus.RequestNameReplyPrimaryOwner, reply, "request name %s", busName)
 	return svc
 }
 
@@ -183,6 +182,7 @@ func (s *fakeService) Get(iface, prop string) (dbus.Variant, *dbus.Error) {
 
 func (s *fakeService) CreateCollection(props map[string]dbus.Variant, alias string) (dbus.ObjectPath, dbus.ObjectPath, *dbus.Error) {
 	s.mu.Lock()
+	s.createCalls++
 	failGeneric := s.failCreateCollection
 	s.mu.Unlock()
 	if failGeneric {

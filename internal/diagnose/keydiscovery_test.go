@@ -4,6 +4,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // TestReportNamesTheKeyDirectoryItRead covers the part of F34 that makes the
@@ -17,20 +19,14 @@ func TestReportNamesTheKeyDirectoryItRead(t *testing.T) {
 	t.Run("the heading names the directory", func(t *testing.T) {
 		ks := &KeySource{Dir: dir, Lister: fakeKeyLister{paths: []string{dir + "/work-github"}}}
 		out := formatGathered(t, ks)
-		if !strings.Contains(out, dir) {
-			t.Errorf("report does not name the directory it read, got:\n%s", out)
-		}
-		if strings.Contains(out, "~/.ssh") {
-			t.Errorf("report names ~/.ssh, which is not where it looked, got:\n%s", out)
-		}
+		assert.Contains(t, out, dir, "the report must name the directory it read")
+		assert.NotContains(t, out, "~/.ssh", "the report must not name a directory it never looked in")
 	})
 
 	t.Run("a directory that could not be read is named too", func(t *testing.T) {
 		ks := &KeySource{Dir: dir, Lister: fakeKeyLister{err: errors.New("no such directory")}}
 		out := formatGathered(t, ks)
-		if !strings.Contains(out, dir) {
-			t.Errorf("failure line does not name the directory, got:\n%s", out)
-		}
+		assert.Contains(t, out, dir, "the failure line must name the directory that could not be read")
 	})
 }
 

@@ -2,8 +2,10 @@ package keys
 
 import (
 	"path/filepath"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestEnumeratorHonoursPatterns covers the half of F34 that decides which names
@@ -58,20 +60,15 @@ func TestEnumeratorMissingConfiguredDir(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "no-such-dir")
 
 	_, err := Enumerator{Dir: missing, MustExist: true}.Keys()
-	if err == nil {
-		t.Fatal("error = nil, want a directory the user named to be reported when it is absent")
-	}
-	if !strings.Contains(err.Error(), missing) {
-		t.Errorf("error = %v, want it to name the directory that is not there", err)
-	}
+	require.Error(t, err,
+		"a directory the user named and that is not there is a mistake, not an account with no keys")
+	assert.Contains(t, err.Error(), missing, "and the report must name the directory that is not there")
 }
 
 func mustKeys(t *testing.T, e Enumerator) []string {
 	t.Helper()
 	got, err := e.Keys()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, err, "listing a key directory must succeed")
 	return got
 }
 
@@ -81,7 +78,5 @@ func assertNames(t *testing.T, paths []string, want ...string) {
 	for _, p := range paths {
 		got = append(got, filepath.Base(p))
 	}
-	if strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Errorf("keys = %v, want exactly %v", got, want)
-	}
+	assert.Equal(t, want, got, "exactly these files are keys, in this order")
 }

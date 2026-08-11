@@ -9,6 +9,9 @@ import (
 
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/OrbintSoft/sshakku/internal/paths"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // keepassxcSettings names the wallet and pins the route.
@@ -27,9 +30,8 @@ func TestKeePassXCPinnedNativeRouteIsUsedEverywhere(t *testing.T) {
 	backend, closeFn := newSecretBackend("alice", fakeLogger{}, keepassxcSettings(config.KeePassXCRouteNative))
 	defer closeFn()
 
-	if _, ok := backend.(keys.KeePassXCBackend); !ok {
-		t.Fatalf("backend = %T, want the native KeePassXC backend on %s", backend, runtime.GOOS)
-	}
+	assert.IsTypef(t, keys.KeePassXCBackend{}, backend,
+		"a route pinned by the user must be taken at their word on %s too", runtime.GOOS)
 }
 
 // TestKeePassXCPinnedSecretServiceRouteOffLinuxSaysWhichRouteFailed is the
@@ -42,20 +44,15 @@ func TestKeePassXCPinnedSecretServiceRouteIsHonoured(t *testing.T) {
 
 	if runtime.GOOS != "linux" {
 		unavailable, ok := backend.(keys.UnavailableBackend)
-		if !ok {
-			t.Fatalf("backend = %T, want an unavailable backend where the API does not exist", backend)
-		}
-		if !strings.Contains(unavailable.Reason.Error(), "secret-service") {
-			t.Errorf("reason = %v, want it to name the route that failed", unavailable.Reason)
-		}
-		if _, _, err := backend.Lookup("id_ed25519"); err == nil {
-			t.Error("an unavailable route must fail rather than report an empty wallet")
-		}
+		require.Truef(t, ok, "a route that cannot work here must say so, got %T", backend)
+		assert.ErrorContains(t, unavailable.Reason, "secret-service",
+			"the reason must name the route the user asked for, not another one")
+		_, _, err := backend.Lookup("id_ed25519")
+		assert.Error(t, err, "an unavailable route must fail rather than report an empty wallet")
 		return
 	}
-	if _, isNative := backend.(keys.KeePassXCBackend); isNative {
-		t.Error("pinning secret-service must not hand back the native route")
-	}
+	_, isNative := backend.(keys.KeePassXCBackend)
+	assert.False(t, isNative, "pinning secret-service must not quietly hand back the native route")
 }
 
 // TestKeePassXCSecretServiceRouteHandsOffToTheDefaultBackend states what that
@@ -75,12 +72,10 @@ func TestKeePassXCSecretServiceRouteHandsOffToTheDefaultBackend(t *testing.T) {
 	want, closeWant := newDefaultSecretBackend("alice", fakeLogger{}, settings)
 	defer closeWant()
 
-	if fmt.Sprintf("%T", got) != fmt.Sprintf("%T", want) {
-		t.Errorf("backend = %T, want the same %T the default route opens", got, want)
-	}
-	if _, isKeePassXC := got.(keys.KeePassXCBackend); isKeePassXC {
-		t.Error("the secret-service route opened KeePassXC's own protocol instead of the API it shares with every other wallet")
-	}
+	assert.Equal(t, fmt.Sprintf("%T", want), fmt.Sprintf("%T", got),
+		"reaching KeePassXC through the Secret Service is reaching any other wallet behind that API")
+	_, isKeePassXC := got.(keys.KeePassXCBackend)
+	assert.False(t, isKeePassXC, "it must not open KeePassXC's own protocol instead of the shared API")
 }
 
 // TestKeePassXCAutoRouteFollowsThePlatform covers the one value that chooses.
@@ -97,9 +92,7 @@ func TestKeePassXCAutoRouteFollowsThePlatform(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.goos, func(t *testing.T) {
-			if got := keepassxcRouteFor(tc.goos); got != tc.want {
-				t.Errorf("route on %s = %q, want %q", tc.goos, got, tc.want)
-			}
+			assert.Equalf(t, tc.want, keepassxcRouteFor(tc.goos), "the route chosen on %s", tc.goos)
 		})
 	}
 }
@@ -108,22 +101,18 @@ func TestKeePassXCAutoRouteFollowsThePlatform(t *testing.T) {
 // Secret Service is platform-bound, because it is an API macOS does not have;
 // the rest are available wherever they can run.
 func TestKeePassXCRouteAvailability(t *testing.T) {
-	if err := keepassxcRouteUnavailable(config.KeePassXCRouteSecretService, "linux", ""); err != nil {
-		t.Errorf("the Secret Service exists on Linux, got %v", err)
-	}
+	assert.NoError(t, keepassxcRouteUnavailable(config.KeePassXCRouteSecretService, "linux", ""),
+		"the Secret Service exists on Linux")
+
 	err := keepassxcRouteUnavailable(config.KeePassXCRouteSecretService, "darwin", "")
-	if err == nil {
-		t.Fatal("macOS has no Secret Service, so pinning it must be reported")
-	}
-	if !strings.Contains(err.Error(), "secret-service") || !strings.Contains(err.Error(), "darwin") {
-		t.Errorf("reason = %v, want it to name the route and the platform", err)
-	}
-	if err := keepassxcRouteUnavailable(config.KeePassXCRouteNative, "darwin", ""); err != nil {
-		t.Errorf("the native route runs anywhere, got %v", err)
-	}
-	if err := keepassxcRouteUnavailable(config.KeePassXCRouteNative, "linux", ""); err != nil {
-		t.Errorf("the native route is not Linux-forbidden, got %v", err)
-	}
+	require.Error(t, err, "macOS has no Secret Service, so pinning it must be reported")
+	assert.ErrorContains(t, err, "secret-service", "the reason must name the route")
+	assert.ErrorContains(t, err, "darwin", "and the platform it cannot work on")
+
+	assert.NoError(t, keepassxcRouteUnavailable(config.KeePassXCRouteNative, "darwin", ""),
+		"the native route runs anywhere")
+	assert.NoError(t, keepassxcRouteUnavailable(config.KeePassXCRouteNative, "linux", ""),
+		"including where another route would have been chosen for you")
 }
 
 // TestKeePassXCCLIRouteNeedsADatabase states what the CLI route is bound to.
@@ -131,27 +120,29 @@ func TestKeePassXCRouteAvailability(t *testing.T) {
 // running KeePassXC knows what it has open, so the user has to say which one.
 func TestKeePassXCCLIRouteNeedsADatabase(t *testing.T) {
 	err := keepassxcRouteUnavailable(config.KeePassXCRouteCLI, "linux", "")
-	if err == nil {
-		t.Fatal("the cli route with no database named must be reported")
-	}
-	if !strings.Contains(err.Error(), "keepassxc_database") {
-		t.Errorf("reason = %v, want it to name the setting that is missing", err)
-	}
+	require.Error(t, err, "the cli route with no database named must be reported")
+	assert.ErrorContains(t, err, "keepassxc_database", "the reason must name the setting the user has to write")
+
 	for _, goos := range []string{"linux", "darwin", "freebsd"} {
-		if err := keepassxcRouteUnavailable(config.KeePassXCRouteCLI, goos, "/secrets.kdbx"); err != nil {
-			t.Errorf("the cli route runs on %s too, got %v", goos, err)
-		}
+		assert.NoErrorf(t, keepassxcRouteUnavailable(config.KeePassXCRouteCLI, goos, "/secrets.kdbx"),
+			"a named database is all the cli route needs, on %s as anywhere", goos)
 	}
 }
 
 // TestKeePassXCEmptyRouteIsTheAutomaticOne guards the default a user gets by
-// naming only the wallet.
+// naming only the wallet: not merely that something opens, but that it is the
+// route this platform would have chosen. Both spellings of "choose for me" —
+// the empty string and the word — have to arrive at the same place, and the
+// platform is passed in so both answers are checkable from either machine.
 func TestKeePassXCEmptyRouteIsTheAutomaticOne(t *testing.T) {
-	backend, closeFn := newSecretBackend("alice", fakeLogger{}, keepassxcSettings(""))
-	defer closeFn()
+	for _, route := range []string{"", config.KeePassXCRouteAuto} {
+		t.Run("route "+route, func(t *testing.T) {
+			backend, closeFn := newKeePassXCBackend("darwin", "alice", fakeLogger{}, keepassxcSettings(route))
+			defer closeFn()
 
-	if backend == nil {
-		t.Fatal("naming the wallet alone must still produce a backend")
+			assert.IsType(t, keys.KeePassXCBackend{}, backend,
+				"a platform with no Secret Service must land on the native route, not fall through to it")
+		})
 	}
 }
 
@@ -163,15 +154,10 @@ func TestKeePassXCPinnedCLIRouteIsBuiltWhenItHasADatabase(t *testing.T) {
 	defer closeFn()
 
 	cli, ok := backend.(*keys.KeePassXCCLIBackend)
-	if !ok {
-		t.Fatalf("backend = %T, want the CLI KeePassXC backend", backend)
-	}
-	if cli.Database != "/somewhere/secrets.kdbx" || cli.KeyFile != "/somewhere/secrets.key" {
-		t.Errorf("database/key file = %q/%q, want what was configured", cli.Database, cli.KeyFile)
-	}
-	if cli.Prompter == nil {
-		t.Error("the CLI route has to ask for the database password, so it needs a prompter")
-	}
+	require.Truef(t, ok, "the route pinned must be the one built, got %T", backend)
+	assert.Equal(t, "/somewhere/secrets.kdbx", cli.Database, "the database the configuration named")
+	assert.Equal(t, "/somewhere/secrets.key", cli.KeyFile, "the key file the configuration named")
+	assert.NotNil(t, cli.Prompter, "this route has to ask for the database password, so it needs something to ask with")
 }
 
 func TestKeePassXCPinnedCLIRouteWithNoDatabaseReportsItself(t *testing.T) {
@@ -179,24 +165,24 @@ func TestKeePassXCPinnedCLIRouteWithNoDatabaseReportsItself(t *testing.T) {
 	defer closeFn()
 
 	unavailable, ok := backend.(keys.UnavailableBackend)
-	if !ok {
-		t.Fatalf("backend = %T, want an unavailable backend", backend)
-	}
-	if !strings.Contains(unavailable.Reason.Error(), "keepassxc_database") {
-		t.Errorf("reason = %v, want it to name what is missing", unavailable.Reason)
-	}
+	require.Truef(t, ok, "a route missing what it needs must say so, got %T", backend)
+	assert.ErrorContains(t, unavailable.Reason, "keepassxc_database", "the reason must name what is missing")
 }
 
 // TestKeePassXCAssociationPathIsUnderTheStateDirectory keeps the approval out
 // of the config directory, which a user may well keep in version control.
 func TestKeePassXCAssociationPathIsUnderTheStateDirectory(t *testing.T) {
+	tempRuntimeEnv(t)
+	layout := paths.Resolve(paths.FromOS(), paths.ProbeDir)
+
 	path := keepassxcAssociationPath()
-	if path == "" {
-		t.Fatal("the association must have somewhere to live")
-	}
-	if !strings.HasSuffix(path, "keepassxc-association.json") {
-		t.Errorf("path = %q, want it to name the association file", path)
-	}
+	require.NotEmpty(t, path, "the association must have somewhere to live")
+	assert.True(t, strings.HasSuffix(path, "keepassxc-association.json"),
+		"the file must be named for what it holds")
+	assert.True(t, strings.HasPrefix(path, layout.StateDir),
+		"an approval this machine gave belongs with the rest of this machine's state")
+	assert.False(t, strings.HasPrefix(path, layout.ConfigDir),
+		"and not in a directory a user may well keep in version control")
 }
 
 // TestKeePassXCNativeBackendCarriesItsAssociationStore proves the backend is
@@ -205,19 +191,12 @@ func TestKeePassXCAssociationPathIsUnderTheStateDirectory(t *testing.T) {
 func TestKeePassXCNativeBackendCarriesItsAssociationStore(t *testing.T) {
 	backend := newKeePassXCNativeRoute(keepassxcSettings(config.KeePassXCRouteNative))
 	native, ok := backend.(keys.KeePassXCBackend)
-	if !ok {
-		t.Fatalf("backend = %T, want the native KeePassXC backend", backend)
-	}
-	if native.Associations == nil {
-		t.Fatal("the native route must be able to remember its approval")
-	}
+	require.Truef(t, ok, "the native route must build the native backend, got %T", backend)
+	require.NotNil(t, native.Associations,
+		"without somewhere to remember its approval the user approves a dialog on every run")
 	store, ok := native.Associations.(keys.FileAssociationStore)
-	if !ok {
-		t.Fatalf("association store = %T, want the file-backed one", native.Associations)
-	}
-	if store.Path == "" {
-		t.Error("the association store must know where to write")
-	}
+	require.Truef(t, ok, "the approval must outlive the process, got %T", native.Associations)
+	assert.NotEmpty(t, store.Path, "and the store must know where to write it")
 }
 
 // TestForgetOnAWalletThatCannotDeleteTellsTheUserWhatToDo verifies F9's second
@@ -234,17 +213,9 @@ func TestForgetOnAWalletThatCannotDeleteTellsTheUserWhatToDo(t *testing.T) {
 
 	code := d.forget(&stdout, &stderr, []string{"id_ed25519"})
 
-	if code == 0 {
-		t.Error("forget must not report success when nothing was removed")
-	}
-	if strings.Contains(stdout.String(), "forgot") {
-		t.Errorf("stdout = %q, want no claim that the passphrase is gone", stdout.String())
-	}
-	msg := stderr.String()
-	if !strings.Contains(msg, "KeePassXC") {
-		t.Errorf("stderr = %q, want it to say where the entry still is", msg)
-	}
-	if !strings.Contains(msg, keys.DefaultServicePrefix+"-id_ed25519") {
-		t.Errorf("stderr = %q, want it to name the entry to remove by hand", msg)
-	}
+	assert.NotZero(t, code, "nothing was removed, so this did not succeed")
+	assert.NotContains(t, stdout.String(), "forgot", "and nothing may claim the passphrase is gone")
+	assert.Contains(t, stderr.String(), "KeePassXC", "the user must be told where the entry still is")
+	assert.Contains(t, stderr.String(), keys.DefaultServicePrefix+"-id_ed25519",
+		"and which entry to remove by hand")
 }

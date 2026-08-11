@@ -7,6 +7,9 @@ import (
 	"os/exec"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // allowRealBitwardenEnv opts this test into driving a real bw CLI through
@@ -73,59 +76,35 @@ func TestBitwardenBackendRealAccount(t *testing.T) {
 	// same standalone bracket the reactive askpass-broker path uses — so
 	// this also proves a *repeated* fresh master-password prompt/unlock
 	// works against a real daemon, not just once.
-	if err := backend.Store(testService, testLabel, testPass); err != nil {
-		t.Fatalf("Store: %v", err)
-	}
+	require.NoError(t, backend.Store(testService, testLabel, testPass), "saving a passphrase must succeed")
 
 	got, found, err := backend.Lookup(testService)
-	if err != nil {
-		t.Fatalf("Lookup: %v", err)
-	}
-	if !found {
-		t.Fatal("Lookup: not found immediately after Store")
-	}
-	if got != testPass {
-		t.Fatalf("Lookup passphrase = %q, want %q", got, testPass)
-	}
+	require.NoError(t, err, "reading it straight back must succeed")
+	require.True(t, found, "a passphrase just saved must be there")
+	assert.Equal(t, testPass, got, "and be the one that was saved")
 
 	// F27, against the real CLI: `bw list items` answers with the whole vault,
 	// so an item sshakku did not store has to be dropped before List returns —
 	// whatever List reports is what `forget --all` goes on to delete.
-	if err := backend.Store(foreignService, "not sshakku's", "someone-elses-password"); err != nil {
-		t.Fatalf("Store (foreign item): %v", err)
-	}
+	require.NoError(t, backend.Store(foreignService, "not sshakku's", "someone-elses-password"),
+		"the vault must be made to hold something that is not SSHakku's, or there is nothing to leave alone")
 
 	services, err := backend.List()
-	if err != nil {
-		t.Fatalf("List: %v", err)
-	}
-	if !containsString(services, testService) {
-		t.Fatalf("List = %v, want it to contain %q", services, testService)
-	}
-	if containsString(services, foreignService) {
-		t.Fatalf("List reported %q, which sshakku did not store", foreignService)
-	}
+	require.NoError(t, err, "listing the vault must succeed")
+	assert.Contains(t, services, testService, "what SSHakku stored must be reported")
+	assert.NotContains(t, services, foreignService,
+		"and what it did not must not be: whatever is listed here is what forget --all goes on to delete")
 
-	if err := backend.Delete(foreignService); err != nil {
-		t.Fatalf("Delete (foreign item): %v", err)
-	}
+	require.NoError(t, backend.Delete(foreignService), "the foreign item must be cleaned up")
 
 	const updatedPass = "probe-passphrase-updated-not-a-real-secret"
-	if err := backend.Store(testService, testLabel, updatedPass); err != nil {
-		t.Fatalf("Store (update): %v", err)
-	}
-	if got, _, err := backend.Lookup(testService); err != nil {
-		t.Fatalf("Lookup after update: %v", err)
-	} else if got != updatedPass {
-		t.Fatalf("Lookup after update = %q, want %q", got, updatedPass)
-	}
+	require.NoError(t, backend.Store(testService, testLabel, updatedPass), "replacing a passphrase must succeed")
+	got, _, err = backend.Lookup(testService)
+	require.NoError(t, err, "reading the replacement back must succeed")
+	assert.Equal(t, updatedPass, got, "and it must be the new passphrase, not the one it replaced")
 
-	if err := backend.Delete(testService); err != nil {
-		t.Fatalf("Delete: %v", err)
-	}
-	if _, found, err := backend.Lookup(testService); err != nil {
-		t.Fatalf("Lookup after Delete: %v", err)
-	} else if found {
-		t.Fatal("Lookup after Delete: still found")
-	}
+	require.NoError(t, backend.Delete(testService), "forgetting a passphrase must succeed")
+	_, found, err = backend.Lookup(testService)
+	require.NoError(t, err, "looking for a forgotten passphrase must not be an error")
+	assert.False(t, found, "and it must be gone from the vault")
 }

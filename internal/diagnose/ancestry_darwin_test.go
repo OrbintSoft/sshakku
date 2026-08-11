@@ -4,8 +4,9 @@ package diagnose
 
 import (
 	"errors"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // These verify F13 for the half of it macOS could not answer at all: until
@@ -41,10 +42,9 @@ func TestParsePS(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			ppid, name, ok := parsePS([]byte(c.out))
-			if ok != c.wantOK || ppid != c.wantPPID || name != c.wantName {
-				t.Errorf("parsePS(%q) = (%d,%q,%v), want (%d,%q,%v)",
-					c.out, ppid, name, ok, c.wantPPID, c.wantName, c.wantOK)
-			}
+			assert.Equal(t, c.wantOK, ok, "whether this output could be read at all")
+			assert.Equal(t, c.wantPPID, ppid, "the parent pid read out of it")
+			assert.Equal(t, c.wantName, name, "the command name read out of it")
 		})
 	}
 }
@@ -57,16 +57,14 @@ func TestPSAncestryParent(t *testing.T) {
 		restore := psParent
 		defer func() { psParent = restore }()
 		psParent = func(pid int) ([]byte, error) {
-			if pid != 4242 {
-				t.Errorf("asked about pid %d, want 4242", pid)
-			}
+			assert.Equal(t, 4242, pid, "the pid asked about must be the one the caller named")
 			return []byte(" 1 /sbin/launchd\n"), nil
 		}
 
 		ppid, name, ok := PSAncestry{}.Parent(4242)
-		if !ok || ppid != 1 || name != "/sbin/launchd" {
-			t.Errorf("Parent = (%d,%q,%v), want (1,\"/sbin/launchd\",true)", ppid, name, ok)
-		}
+		assert.True(t, ok, "an answer that was read must be reported as one")
+		assert.Equal(t, 1, ppid, "the parent pid in the answer")
+		assert.Equal(t, "/sbin/launchd", name, "the command name in the answer")
 	})
 
 	t.Run("a failed read is an unknown parent, not a crash", func(t *testing.T) {
@@ -74,30 +72,28 @@ func TestPSAncestryParent(t *testing.T) {
 		defer func() { psParent = restore }()
 		psParent = func(int) ([]byte, error) { return nil, errors.New("ps: no such process") }
 
-		if _, _, ok := (PSAncestry{}).Parent(4242); ok {
-			t.Error("a ps that failed must report the parent as unknown")
-		}
+		_, _, ok := PSAncestry{}.Parent(4242)
+		assert.False(t, ok, "a ps that failed must leave the parent unknown, not invent one")
 	})
 }
 
 func TestLauncherLabel(t *testing.T) {
-	if _, ok := launcherLabel("nope"); ok {
-		t.Error("launcherLabel(nope) reported known")
-	}
+	_, ok := launcherLabel("nope")
+	assert.False(t, ok, "a name the table does not carry must not be claimed as known")
+
 	for _, comm := range []string{"/sbin/launchd", "launchd", "/usr/libexec/loginwindow", "sshd", "login", "zsh"} {
-		if _, ok := launcherLabel(comm); !ok {
-			t.Errorf("launcherLabel(%q) not recognised", comm)
-		}
+		_, ok := launcherLabel(comm)
+		assert.Truef(t, ok, "%s is a launcher the report must recognise", comm)
 	}
-	if got, _ := launcherLabel("zsh"); !strings.Contains(got, "zsh") {
-		t.Errorf("login-shell label = %q, want it to name zsh", got)
-	}
+
+	shell, _ := launcherLabel("zsh")
+	assert.Contains(t, shell, "zsh", "the label for a login shell must name the shell it was")
+
 	// Matched by suffix, because what `ps` reports is wherever the bundle is
 	// installed, which is not always /Applications.
 	got, ok := launcherLabel("/Users/someone/Applications/iTerm.app/Contents/MacOS/iTerm2")
-	if !ok || got != "iTerm2" {
-		t.Errorf("a bundle outside /Applications = (%q,%v), want iTerm2", got, ok)
-	}
+	assert.True(t, ok, "a bundle installed outside /Applications is still that application")
+	assert.Equal(t, "iTerm2", got, "the application the bundle path names")
 }
 
 // TestReparentedLabel pins what can be said when the trail ends: on macOS
@@ -106,15 +102,10 @@ func TestLauncherLabel(t *testing.T) {
 // the shared wording used to do on every platform.
 func TestReparentedLabel(t *testing.T) {
 	got := reparentedLabel("")
-	if !strings.Contains(got, "launchd") {
-		t.Errorf("reparented label = %q, want it to name launchd", got)
-	}
-	if strings.Contains(got, "systemd") {
-		t.Errorf("reparented label = %q, want no mention of systemd on macOS", got)
-	}
-	if reparentedLabel("app-something.service") != got {
-		t.Error("there is no cgroup on macOS, so a unit name must change nothing")
-	}
+	assert.Contains(t, got, "launchd", "on macOS the trail ends at launchd, and the report says so")
+	assert.NotContains(t, got, "systemd", "macOS runs no systemd, so the report must not name one")
+	assert.Equal(t, got, reparentedLabel("app-something.service"),
+		"there are no control groups here, so a unit name is nothing to go on")
 }
 
 // TestStartedByOnDarwin checks the shared attribution walk against this
@@ -137,15 +128,14 @@ func TestStartedByOnDarwin(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			got, ok := startedBy(c.chain, "")
-			if ok != c.ok || got != c.want {
-				t.Errorf("startedBy(%v) = (%q,%v), want (%q,%v)", c.chain, got, ok, c.want, c.ok)
-			}
+			assert.Equal(t, c.ok, ok, "whether anything could be said about who started it")
+			assert.Equal(t, c.want, got, "what the report says started it")
 		})
 	}
 }
 
 func TestNoCgroupsReportsNothing(t *testing.T) {
-	if unit, ok := (NoCgroups{}).Cgroup(1); ok || unit != "" {
-		t.Errorf("Cgroup = (%q,%v), want nothing on a system with no control groups", unit, ok)
-	}
+	unit, ok := NoCgroups{}.Cgroup(1)
+	assert.False(t, ok, "a system with no control groups can answer for no process")
+	assert.Empty(t, unit, "there is no unit to name")
 }

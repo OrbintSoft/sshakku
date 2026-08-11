@@ -3,3 +3,21 @@ version: "2"
 # Standard set: errcheck, govet, ineffassign, staticcheck, unused.
 linters:
   default: standard
+  enable:
+    # Assertions are where a test says what it is for, and testify makes them
+    # easy to write in a way that compiles, passes, and checks nothing: the
+    # arguments the wrong way round, an error asserted present when absent was
+    # meant, a require inside a goroutine — which calls FailNow off the test's
+    # own goroutine and leaves the run hanging instead of failing.
+    - testifylint
+
+  settings:
+    testifylint:
+      disable:
+        # require-error wants every error assertion to stop the test. Several
+        # tests here check a handful of independent operations in a row — three
+        # calls that must all be no-ops, say — and one report naming every one
+        # that failed is worth more than a report naming the first. Which of the
+        # two a given assertion wants is a judgement about that test, not
+        # something a checker can read off the call.
+        - require-error

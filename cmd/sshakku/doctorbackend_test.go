@@ -3,10 +3,11 @@ package main
 import (
 	"bytes"
 	"errors"
-	"strings"
 	"testing"
 
 	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // fakeLogger discards every line; tests only care about probeSecretBackend's
@@ -48,15 +49,12 @@ func TestProbeSecretBackendPass(t *testing.T) {
 	backend := &fakeProbeBackend{lookupVal: "probe-value", lookupOK: true}
 	var buf bytes.Buffer
 
-	got := probeSecretBackend(&buf, fakeLogger{}, backend, "probe-value")
-	if got != 0 {
-		t.Fatalf("probeSecretBackend = %d, want 0 (pass)", got)
-	}
-	out := buf.String()
+	require.Zero(t, probeSecretBackend(&buf, fakeLogger{}, backend, "probe-value"),
+		"a wallet that stores, reads back and deletes has passed")
+	// Each step is reported on its own, so a reader can see which one a
+	// failure would have been.
 	for _, want := range []string{"store: ok", "lookup: ok", "delete: ok", "backend test: PASS"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("output missing %q:\n%s", want, out)
-		}
+		assert.Containsf(t, buf.String(), want, "the report must say %q", want)
 	}
 }
 
@@ -64,60 +62,45 @@ func TestProbeSecretBackendStoreFails(t *testing.T) {
 	backend := &fakeProbeBackend{storeErr: errors.New("boom")}
 	var buf bytes.Buffer
 
-	got := probeSecretBackend(&buf, fakeLogger{}, backend, "probe-value")
-	if got != 1 {
-		t.Fatalf("probeSecretBackend = %d, want 1 (fail)", got)
-	}
+	assert.Equal(t, 1, probeSecretBackend(&buf, fakeLogger{}, backend, "probe-value"),
+		"a wallet that cannot store has failed")
 	out := buf.String()
-	if !strings.Contains(out, "store: FAILED") || !strings.Contains(out, "delete: ok") || !strings.Contains(out, "backend test: FAIL") {
-		t.Errorf("output = %q, want a store failure, an attempted delete, and an overall FAIL", out)
-	}
-	if strings.Contains(out, "lookup:") {
-		t.Errorf("output = %q, want lookup skipped after a store failure", out)
-	}
+	assert.Contains(t, out, "store: FAILED", "the step that failed must be named")
+	assert.Contains(t, out, "delete: ok", "and the probe entry cleared away regardless")
+	assert.Contains(t, out, "backend test: FAIL", "and the verdict must be plain")
+	assert.NotContains(t, out, "lookup:",
+		"reading back something that was never stored would report a second failure about the first")
 }
 
 func TestProbeSecretBackendLookupMismatch(t *testing.T) {
 	backend := &fakeProbeBackend{lookupVal: "wrong-value", lookupOK: true}
 	var buf bytes.Buffer
 
-	got := probeSecretBackend(&buf, fakeLogger{}, backend, "probe-value")
-	if got != 1 {
-		t.Fatalf("probeSecretBackend = %d, want 1 (fail)", got)
-	}
+	assert.Equal(t, 1, probeSecretBackend(&buf, fakeLogger{}, backend, "probe-value"),
+		"a wallet that reads back something else has failed")
 	out := buf.String()
-	if !strings.Contains(out, "lookup: FAILED") || !strings.Contains(out, "does not match") {
-		t.Errorf("output = %q, want a value-mismatch failure", out)
-	}
-	if !strings.Contains(out, "delete: ok") {
-		t.Errorf("output = %q, want delete still attempted after a lookup mismatch", out)
-	}
+	assert.Contains(t, out, "lookup: FAILED", "the step that failed must be named")
+	assert.Contains(t, out, "does not match", "and it must say the value came back different, not missing")
+	assert.Contains(t, out, "delete: ok", "the probe entry is cleared away regardless")
 }
 
 func TestProbeSecretBackendLookupMiss(t *testing.T) {
 	backend := &fakeProbeBackend{lookupOK: false}
 	var buf bytes.Buffer
 
-	got := probeSecretBackend(&buf, fakeLogger{}, backend, "probe-value")
-	if got != 1 {
-		t.Fatalf("probeSecretBackend = %d, want 1 (fail)", got)
-	}
-	if !strings.Contains(buf.String(), "not found after storing it") {
-		t.Errorf("output = %q, want a not-found failure", buf.String())
-	}
+	assert.Equal(t, 1, probeSecretBackend(&buf, fakeLogger{}, backend, "probe-value"),
+		"a wallet that loses what it was given has failed")
+	assert.Contains(t, buf.String(), "not found after storing it",
+		"and it must say the entry was gone, not that it came back wrong")
 }
 
 func TestProbeSecretBackendDeleteFails(t *testing.T) {
 	backend := &fakeProbeBackend{lookupVal: "probe-value", lookupOK: true, deleteErr: errors.New("boom")}
 	var buf bytes.Buffer
 
-	got := probeSecretBackend(&buf, fakeLogger{}, backend, "probe-value")
-	if got != 1 {
-		t.Fatalf("probeSecretBackend = %d, want 1 (fail)", got)
-	}
-	if !strings.Contains(buf.String(), "delete: FAILED") {
-		t.Errorf("output = %q, want a delete failure", buf.String())
-	}
+	assert.Equal(t, 1, probeSecretBackend(&buf, fakeLogger{}, backend, "probe-value"),
+		"a probe entry left behind in the wallet is not a clean run")
+	assert.Contains(t, buf.String(), "delete: FAILED", "and the step that failed must be named")
 }
 
 func TestProbeSecretBackendUnlockFails(t *testing.T) {
@@ -125,17 +108,12 @@ func TestProbeSecretBackendUnlockFails(t *testing.T) {
 	session := fakeProbeSession{backend}
 	var buf bytes.Buffer
 
-	got := probeSecretBackend(&buf, fakeLogger{}, session, "probe-value")
-	if got != 1 {
-		t.Fatalf("probeSecretBackend = %d, want 1 (fail)", got)
-	}
+	assert.Equal(t, 1, probeSecretBackend(&buf, fakeLogger{}, session, "probe-value"),
+		"a wallet that would not unlock has failed")
 	out := buf.String()
-	if !strings.Contains(out, "unlock: FAILED") {
-		t.Errorf("output = %q, want an unlock failure", out)
-	}
-	if strings.Contains(out, "store:") {
-		t.Errorf("output = %q, want store skipped after an unlock failure", out)
-	}
+	assert.Contains(t, out, "unlock: FAILED", "the step that failed must be named")
+	assert.NotContains(t, out, "store:",
+		"storing into a wallet that never opened would report a second failure about the first")
 }
 
 func TestProbeSecretBackendUnlocksAndLocks(t *testing.T) {
@@ -143,15 +121,11 @@ func TestProbeSecretBackendUnlocksAndLocks(t *testing.T) {
 	session := fakeProbeSession{backend}
 	var buf bytes.Buffer
 
-	if got := probeSecretBackend(&buf, fakeLogger{}, session, "probe-value"); got != 0 {
-		t.Fatalf("probeSecretBackend = %d, want 0 (pass)", got)
-	}
-	if !strings.Contains(buf.String(), "unlock: ok") {
-		t.Errorf("output = %q, want an unlock: ok line", buf.String())
-	}
-	if backend.lockCalls != 1 {
-		t.Errorf("lockCalls = %d, want 1 (Lock deferred after a successful Unlock)", backend.lockCalls)
-	}
+	require.Zero(t, probeSecretBackend(&buf, fakeLogger{}, session, "probe-value"),
+		"a wallet that opens and does its work has passed")
+	assert.Contains(t, buf.String(), "unlock: ok", "the report must say the wallet was opened")
+	assert.Equal(t, 1, backend.lockCalls,
+		"a wallet this probe opened must be left locked again, exactly once")
 }
 
 // keysSecretBackendAssertion pins probeSecretBackend's parameter type against

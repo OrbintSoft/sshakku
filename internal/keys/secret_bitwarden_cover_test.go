@@ -3,6 +3,9 @@ package keys
 import (
 	"errors"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // saveJSONMarshal snapshots the jsonMarshal seam and restores it when the
@@ -22,9 +25,8 @@ func TestBitwardenUnlockErrorBranches(t *testing.T) {
 			"login --check": fails(boom),
 		}))
 		b := &BitwardenBackend{Runner: r, Prompter: &fakePrompter{pass: "m"}}
-		if err := b.Unlock(); !errors.Is(err, boom) {
-			t.Fatalf("error = %v, want %v", err, boom)
-		}
+		assert.ErrorIs(t, b.Unlock(), boom,
+			"a bw command that would not run must be reported as it failed, not read as a vault that opened")
 	})
 
 	t.Run("config server fails to run", func(t *testing.T) {
@@ -33,9 +35,8 @@ func TestBitwardenUnlockErrorBranches(t *testing.T) {
 			"config server": fails(boom),
 		}))
 		b := &BitwardenBackend{Runner: r, Prompter: &fakePrompter{pass: "m"}, Server: "https://vault.invalid"}
-		if err := b.Unlock(); !errors.Is(err, boom) {
-			t.Fatalf("error = %v, want %v", err, boom)
-		}
+		assert.ErrorIs(t, b.Unlock(), boom,
+			"a bw command that would not run must be reported as it failed, not read as a vault that opened")
 	})
 
 	t.Run("config server exits non-zero", func(t *testing.T) {
@@ -44,9 +45,8 @@ func TestBitwardenUnlockErrorBranches(t *testing.T) {
 			"config server": func(Cmd) (Result, error) { return Result{Stderr: []byte("nope"), Code: 1}, nil },
 		}))
 		b := &BitwardenBackend{Runner: r, Prompter: &fakePrompter{pass: "m"}, Server: "https://vault.invalid"}
-		if err := b.Unlock(); err == nil {
-			t.Fatal("expected an error on a non-zero config-server exit")
-		}
+		assert.Error(t, b.Unlock(),
+			"a server the CLI would not accept must be reported: logging in would reach the wrong vault")
 	})
 
 	t.Run("login fails to run", func(t *testing.T) {
@@ -55,9 +55,8 @@ func TestBitwardenUnlockErrorBranches(t *testing.T) {
 			"login":         fails(boom),
 		}))
 		b := &BitwardenBackend{Runner: r, Prompter: &fakePrompter{pass: "m"}, Email: "u@invalid"}
-		if err := b.Unlock(); !errors.Is(err, boom) {
-			t.Fatalf("error = %v, want %v", err, boom)
-		}
+		assert.ErrorIs(t, b.Unlock(), boom,
+			"a bw command that would not run must be reported as it failed, not read as a vault that opened")
 	})
 
 	t.Run("login exits non-zero", func(t *testing.T) {
@@ -66,9 +65,7 @@ func TestBitwardenUnlockErrorBranches(t *testing.T) {
 			"login":         func(Cmd) (Result, error) { return Result{Stderr: []byte("bad creds"), Code: 1}, nil },
 		}))
 		b := &BitwardenBackend{Runner: r, Prompter: &fakePrompter{pass: "m"}, Email: "u@invalid"}
-		if err := b.Unlock(); err == nil {
-			t.Fatal("expected an error on a non-zero login exit")
-		}
+		assert.Error(t, b.Unlock(), "an account that could not be logged into must be reported, not unlocked past")
 	})
 
 	t.Run("unlock fails to run", func(t *testing.T) {
@@ -77,9 +74,8 @@ func TestBitwardenUnlockErrorBranches(t *testing.T) {
 			"unlock --passwordenv": fails(boom),
 		}))
 		b := &BitwardenBackend{Runner: r, Prompter: &fakePrompter{pass: "m"}}
-		if err := b.Unlock(); !errors.Is(err, boom) {
-			t.Fatalf("error = %v, want %v", err, boom)
-		}
+		assert.ErrorIs(t, b.Unlock(), boom,
+			"a bw command that would not run must be reported as it failed, not read as a vault that opened")
 	})
 }
 
@@ -88,12 +84,10 @@ func TestBitwardenLockErrorBranches(t *testing.T) {
 		boom := errors.New("bw exec boom")
 		r := newFakeRunner().on(bitwardenBin, fails(boom))
 		b := &BitwardenBackend{Runner: r, Session: "sess", held: true}
-		if err := b.Lock(); !errors.Is(err, boom) {
-			t.Fatalf("error = %v, want %v", err, boom)
-		}
-		if b.Session != "" || b.held {
-			t.Fatal("Lock must forget the session even when the lock command fails")
-		}
+		assert.ErrorIs(t, b.Lock(), boom, "a lock command that would not run must be reported")
+		assert.Empty(t, b.Session,
+			"and the session must be forgotten even so: keeping a key to a vault that may still be open is the worse half")
+		assert.False(t, b.held, "nor may the vault be believed open afterwards")
 	})
 
 	t.Run("lock exits non-zero", func(t *testing.T) {
@@ -101,9 +95,7 @@ func TestBitwardenLockErrorBranches(t *testing.T) {
 			return Result{Stderr: []byte("cannot lock"), Code: 1}, nil
 		})
 		b := &BitwardenBackend{Runner: r, Session: "sess", held: true}
-		if err := b.Lock(); err == nil {
-			t.Fatal("expected an error on a non-zero lock exit")
-		}
+		assert.Error(t, b.Lock(), "a vault that refused to lock must be reported, not left believed closed")
 	})
 }
 
@@ -114,9 +106,8 @@ func TestBitwardenFindItemIDErrorBranches(t *testing.T) {
 			"get item": fails(boom),
 		}))
 		b := &BitwardenBackend{Runner: r, Session: "sess", held: true}
-		if err := b.Store("svc", "label", "pass"); !errors.Is(err, boom) {
-			t.Fatalf("error = %v, want %v", err, boom)
-		}
+		assert.ErrorIs(t, b.Store("svc", "label", "pass"), boom,
+			"a bw command that would not run must be reported, not read as a passphrase saved")
 	})
 
 	t.Run("get item returns unparseable JSON", func(t *testing.T) {
@@ -124,9 +115,8 @@ func TestBitwardenFindItemIDErrorBranches(t *testing.T) {
 			"get item": stdout("this is not json", 0),
 		}))
 		b := &BitwardenBackend{Runner: r, Session: "sess", held: true}
-		if err := b.Store("svc", "label", "pass"); err == nil {
-			t.Fatal("expected an error when get item returns unparseable JSON")
-		}
+		assert.Error(t, b.Store("svc", "label", "pass"),
+			"an answer that could not be read must be reported: writing on top of it could overwrite the wrong entry")
 	})
 }
 
@@ -137,9 +127,8 @@ func TestBitwardenStoreMarshalError(t *testing.T) {
 		"get item": stdout("Not found.", 1),
 	}))
 	b := &BitwardenBackend{Runner: r, Session: "sess", held: true}
-	if err := b.Store("svc", "label", "pass"); err == nil {
-		t.Fatal("expected an error when the item template cannot be marshaled")
-	}
+	assert.Error(t, b.Store("svc", "label", "pass"),
+		"an item that could not be built must be reported, not sent as whatever it came out as")
 }
 
 func TestBitwardenStoreCreateRunError(t *testing.T) {
@@ -149,9 +138,8 @@ func TestBitwardenStoreCreateRunError(t *testing.T) {
 		"create item": fails(boom),
 	}))
 	b := &BitwardenBackend{Runner: r, Session: "sess", held: true}
-	if err := b.Store("svc", "label", "pass"); !errors.Is(err, boom) {
-		t.Fatalf("error = %v, want %v", err, boom)
-	}
+	assert.ErrorIs(t, b.Store("svc", "label", "pass"), boom,
+		"a write that could not start must be reported, not read as a passphrase saved")
 }
 
 func TestBitwardenDeleteRunErrors(t *testing.T) {
@@ -162,9 +150,8 @@ func TestBitwardenDeleteRunErrors(t *testing.T) {
 			"get item": fails(boom),
 		}))
 		b := &BitwardenBackend{Runner: r, Session: "sess", held: true}
-		if err := b.Delete("svc"); !errors.Is(err, boom) {
-			t.Fatalf("error = %v, want %v", err, boom)
-		}
+		assert.ErrorIs(t, b.Delete("svc"), boom,
+			"a bw command that would not run must be reported, not read as a passphrase forgotten")
 	})
 
 	t.Run("delete item fails to run", func(t *testing.T) {
@@ -173,9 +160,8 @@ func TestBitwardenDeleteRunErrors(t *testing.T) {
 			"delete item": fails(boom),
 		}))
 		b := &BitwardenBackend{Runner: r, Session: "sess", held: true}
-		if err := b.Delete("svc"); !errors.Is(err, boom) {
-			t.Fatalf("error = %v, want %v", err, boom)
-		}
+		assert.ErrorIs(t, b.Delete("svc"), boom,
+			"a bw command that would not run must be reported, not read as a passphrase forgotten")
 	})
 }
 
@@ -184,17 +170,15 @@ func TestBitwardenListErrorBranches(t *testing.T) {
 		boom := errors.New("bw exec boom")
 		r := newFakeRunner().on(bitwardenBin, fails(boom))
 		b := &BitwardenBackend{Runner: r, Session: "sess", held: true}
-		if _, err := b.List(); !errors.Is(err, boom) {
-			t.Fatalf("error = %v, want %v", err, boom)
-		}
+		_, err := b.List()
+		assert.ErrorIs(t, err, boom, "a bw command that would not run must be reported, not read as an empty vault")
 	})
 
 	t.Run("list items returns unparseable JSON", func(t *testing.T) {
 		r := newFakeRunner().on(bitwardenBin, stdout("not json", 0))
 		b := &BitwardenBackend{Runner: r, Session: "sess", held: true}
-		if _, err := b.List(); err == nil {
-			t.Fatal("expected an error when list items returns unparseable JSON")
-		}
+		_, err := b.List()
+		assert.Error(t, err, "an answer that could not be read must be reported, not read as an empty vault")
 	})
 }
 
@@ -225,12 +209,9 @@ func TestBitwardenStandaloneBracketAllMethods(t *testing.T) {
 			"create item": stdout(`{"id":"x"}`, 0),
 		})))
 		b := &BitwardenBackend{Runner: r, Prompter: &fakePrompter{pass: "m"}}
-		if err := b.Store("svc", "label", "pass"); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if b.held || b.Session != "" {
-			t.Fatal("expected the session locked and forgotten after a standalone Store")
-		}
+		require.NoError(t, b.Store("svc", "label", "pass"), "a store on a locked vault must open it and save")
+		assert.False(t, b.held, "a vault opened for one call must not be left open")
+		assert.Empty(t, b.Session, "nor its session key kept, which would reopen it without asking anyone")
 	})
 
 	t.Run("Delete unlocks and locks", func(t *testing.T) {
@@ -238,12 +219,8 @@ func TestBitwardenStandaloneBracketAllMethods(t *testing.T) {
 			"get item": stdout("Not found.", 1),
 		})))
 		b := &BitwardenBackend{Runner: r, Prompter: &fakePrompter{pass: "m"}}
-		if err := b.Delete("svc"); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if b.held {
-			t.Fatal("expected the session locked after a standalone Delete")
-		}
+		require.NoError(t, b.Delete("svc"), "a delete on a locked vault must open it and act")
+		assert.False(t, b.held, "and a vault opened for one call must not be left open")
 	})
 
 	t.Run("List unlocks and locks", func(t *testing.T) {
@@ -251,12 +228,9 @@ func TestBitwardenStandaloneBracketAllMethods(t *testing.T) {
 			"list items": stdout("[]", 0),
 		})))
 		b := &BitwardenBackend{Runner: r, Prompter: &fakePrompter{pass: "m"}}
-		if _, err := b.List(); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if b.held {
-			t.Fatal("expected the session locked after a standalone List")
-		}
+		_, err := b.List()
+		require.NoError(t, err, "a listing on a locked vault must open it and answer")
+		assert.False(t, b.held, "and a vault opened for one call must not be left open")
 	})
 
 	t.Run("a failed Unlock short-circuits each method", func(t *testing.T) {
@@ -272,9 +246,7 @@ func TestBitwardenStandaloneBracketAllMethods(t *testing.T) {
 			case "list":
 				_, err = b.List()
 			}
-			if err == nil {
-				t.Fatalf("%s: expected an error when Unlock fails", name)
-			}
+			assert.Errorf(t, err, "%s on a vault that would not open must be reported, not carried out blind", name)
 		}
 	})
 }

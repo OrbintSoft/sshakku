@@ -8,75 +8,51 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestLogAppends(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sessions.log")
 	lg := New(path)
-	if err := lg.Log("INFO", "first"); err != nil {
-		t.Fatal(err)
-	}
-	if err := lg.Log("ERROR", "second"); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, lg.Log("INFO", "first"))
+	require.NoError(t, lg.Log("ERROR", "second"))
 	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	got := string(data)
-	if !strings.Contains(got, "[INFO] first") || !strings.Contains(got, "[ERROR] second") {
-		t.Errorf("log missing entries:\n%s", got)
-	}
-	if n := strings.Count(got, "\n"); n != 2 {
-		t.Errorf("newline count = %d, want 2", n)
-	}
+	assert.Contains(t, got, "[INFO] first")
+	assert.Contains(t, got, "[ERROR] second")
+	assert.Equal(t, 2, strings.Count(got, "\n"), "one newline per entry")
 }
 
 func TestLogPerm(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sessions.log")
-	if err := New(path).Log("INFO", "x"); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, New(path).Log("INFO", "x"))
 	fi, err := os.Stat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if perm := fi.Mode().Perm(); perm != 0o600 {
-		t.Errorf("perm = %o, want 600", perm)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), fi.Mode().Perm(), "log permissions")
 }
 
 func TestLogTrims(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sessions.log")
 	lg := &Logger{path: path, maxLines: 3}
 	for i := 0; i < 10; i++ {
-		if err := lg.Log("INFO", fmt.Sprintf("line-%d", i)); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, lg.Log("INFO", fmt.Sprintf("line-%d", i)))
 	}
 	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
-	if len(lines) != 3 {
-		t.Fatalf("kept %d lines, want 3", len(lines))
-	}
-	if !strings.Contains(lines[0], "line-7") {
-		t.Errorf("first kept line = %q, want line-7", lines[0])
-	}
-	if !strings.Contains(lines[2], "line-9") {
-		t.Errorf("last line = %q, want line-9", lines[2])
-	}
+	require.Len(t, lines, 3, "kept lines")
+	assert.Contains(t, lines[0], "line-7", "first kept line")
+	assert.Contains(t, lines[2], "line-9", "last kept line")
 }
 
 // TestLogOpenError covers the branch where the log file cannot be opened: a
 // parent directory that does not exist makes os.OpenFile fail.
 func TestLogOpenError(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "missing-dir", "sessions.log")
-	if err := New(path).Log("INFO", "x"); err == nil {
-		t.Error("Log into a missing directory returned nil, want error")
-	}
+	assert.Error(t, New(path).Log("INFO", "x"), "Log into a missing directory must fail")
 }
 
 // errWriteCloser is an injected log file whose Write and/or Close fail on demand,
@@ -106,12 +82,8 @@ func TestLogWriteError(t *testing.T) {
 		maxLines: DefaultMaxLines,
 		open:     func(string, int, os.FileMode) (io.WriteCloser, error) { return wc, nil },
 	}
-	if err := lg.Log("INFO", "x"); err == nil {
-		t.Error("Log with a failing Write returned nil, want error")
-	}
-	if !wc.closed {
-		t.Error("Log did not close the file after a write failure")
-	}
+	assert.Error(t, lg.Log("INFO", "x"), "Log with a failing Write must fail")
+	assert.True(t, wc.closed, "Log must close the file after a write failure")
 }
 
 func TestLogCloseError(t *testing.T) {
@@ -121,16 +93,12 @@ func TestLogCloseError(t *testing.T) {
 		maxLines: DefaultMaxLines,
 		open:     func(string, int, os.FileMode) (io.WriteCloser, error) { return wc, nil },
 	}
-	if err := lg.Log("INFO", "x"); err == nil {
-		t.Error("Log with a failing Close returned nil, want error")
-	}
+	assert.Error(t, lg.Log("INFO", "x"), "Log with a failing Close must fail")
 }
 
 // TestTrimReadError covers trim's read-failure branch: a path that is a
 // directory cannot be read as a file.
 func TestTrimReadError(t *testing.T) {
 	lg := &Logger{path: t.TempDir(), maxLines: 3}
-	if err := lg.trim(); err == nil {
-		t.Error("trim on a directory path returned nil, want error")
-	}
+	assert.Error(t, lg.trim(), "trim on a directory path must fail")
 }

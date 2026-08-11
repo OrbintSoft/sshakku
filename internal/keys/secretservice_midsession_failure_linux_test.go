@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/OrbintSoft/sshakku/internal/secretservice"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestSecretServiceMidSessionFailure exercises what happens to a live
@@ -44,15 +46,11 @@ func TestSecretServiceMidSessionFailure(t *testing.T) {
 		}
 		backend := establishLiveSession(t)
 
-		if err := killProcessByComm("gnome-keyring-d"); err != nil {
-			t.Fatalf("killing the Secret Service daemon: %v", err)
-		}
+		require.NoError(t, killProcessByComm("gnome-keyring-d"),
+			"killing the Secret Service daemon is what this case is about")
 
-		err := lookupWithinTimeout(t, backend)
-		if err == nil {
-			t.Fatal("Lookup succeeded after the daemon was killed; a dead backend must surface an error, not a stale hit")
-		}
-		t.Logf("post-crash Lookup returned the expected error: %v", err)
+		assert.Error(t, lookupWithinTimeout(t, backend),
+			"a wallet whose daemon died must surface an error the caller can fall back from, never a stale hit")
 	})
 
 	// Killing the bus itself pulls the transport out from under the client's
@@ -61,15 +59,10 @@ func TestSecretServiceMidSessionFailure(t *testing.T) {
 	t.Run("session bus unreachable mid-session", func(t *testing.T) {
 		backend := establishLiveSession(t)
 
-		if err := killProcessByComm("dbus-daemon"); err != nil {
-			t.Fatalf("killing the D-Bus session bus: %v", err)
-		}
+		require.NoError(t, killProcessByComm("dbus-daemon"), "killing the session bus is what this case is about")
 
-		err := lookupWithinTimeout(t, backend)
-		if err == nil {
-			t.Fatal("Lookup succeeded after the session bus was killed; a severed connection must surface an error")
-		}
-		t.Logf("post-bus-loss Lookup returned the expected error: %v", err)
+		assert.Error(t, lookupWithinTimeout(t, backend),
+			"a connection pulled out from under the client must surface an error, not an answer nothing sent")
 	})
 }
 
@@ -92,18 +85,15 @@ func establishLiveSession(t *testing.T) *SecretServiceBackend {
 	t.Cleanup(func() { _ = client.Close() })
 
 	backend := &SecretServiceBackend{Client: client, User: midSessionUser}
-	if err := backend.Unlock(); err != nil {
-		t.Fatalf("Unlock: %v", err)
-	}
+	require.NoError(t, backend.Unlock(), "the wallet must open before anything can be broken underneath it")
 	t.Cleanup(func() { _ = backend.Delete(midSessionService) })
 
-	if err := backend.Store(midSessionService, "sshakku mid-session failure probe", "probe-passphrase"); err != nil {
-		t.Fatalf("Store: %v", err)
-	}
+	require.NoError(t, backend.Store(midSessionService, "sshakku mid-session failure probe", "probe-passphrase"),
+		"the wallet must genuinely work before it is broken, or the later failure proves nothing")
 	got, found, err := backend.Lookup(midSessionService)
-	if err != nil || !found || got != "probe-passphrase" {
-		t.Fatalf("pre-failure Lookup = (%q, %v, %v), want (%q, true, nil)", got, found, err, "probe-passphrase")
-	}
+	require.NoError(t, err, "and a passphrase just written must read back")
+	require.True(t, found, "the entry is there, so it must be reported found")
+	require.Equal(t, "probe-passphrase", got, "and it must be the one that was written")
 	return backend
 }
 
@@ -126,7 +116,8 @@ func lookupWithinTimeout(t *testing.T, backend *SecretServiceBackend) error {
 	case r := <-done:
 		return r.err
 	case <-time.After(15 * time.Second):
-		t.Fatal("Lookup did not return within 15s after the backend was killed; it is hanging")
+		require.FailNow(t, "a lookup against a collapsed wallet is hanging",
+			"it did not return within 15s, so the shell waiting on it never comes back")
 		return nil
 	}
 }

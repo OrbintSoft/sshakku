@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/OrbintSoft/sshakku/internal/keyring"
+	"github.com/stretchr/testify/require"
 )
 
 // requireRealSSHBinaries skips the test when the real ssh-agent/ssh-add/
@@ -51,15 +52,12 @@ func TestAddWithAskpassAppliesKeyLifetime(t *testing.T) {
 	keyfile := filepath.Join(dir, "id_test")
 	const passphrase = "sshakku-ttl-test-passphrase"
 
-	if out, err := exec.Command("ssh-keygen", "-t", "ed25519", "-N", passphrase, "-f", keyfile, "-q").CombinedOutput(); err != nil {
-		t.Fatalf("ssh-keygen: %v: %s", err, out)
-	}
+	out, err := exec.Command("ssh-keygen", "-t", "ed25519", "-N", passphrase, "-f", keyfile, "-q").CombinedOutput()
+	require.NoErrorf(t, err, "a real passphrase-protected key to load:\n%s", out)
 
 	sock := filepath.Join(dir, "agent.sock")
 	agentCmd := exec.Command("ssh-agent", "-D", "-a", sock)
-	if err := agentCmd.Start(); err != nil {
-		t.Fatalf("start ssh-agent: %v", err)
-	}
+	require.NoError(t, agentCmd.Start(), "a real ssh-agent to load it into")
 	t.Cleanup(func() {
 		_ = agentCmd.Process.Kill()
 		_ = agentCmd.Wait()
@@ -71,46 +69,34 @@ func TestAddWithAskpassAppliesKeyLifetime(t *testing.T) {
 	// print the payload AddWithAskpass stashed under $SSHAKKU_HANDOFF_TOKEN.
 	askpassScript := filepath.Join(dir, "askpass.sh")
 	script := "#!/bin/sh\nexec keyctl pipe \"$" + EnvPassHandoffToken + "\"\n"
-	if err := os.WriteFile(askpassScript, []byte(script), 0o755); err != nil {
-		t.Fatalf("write askpass helper: %v", err)
-	}
+	require.NoError(t, os.WriteFile(askpassScript, []byte(script), 0o755), "a helper to collect the stashed passphrase")
 
 	const lifetime = 2 * time.Second
 	adder := ExecKeyAdder{AskpassProg: askpassScript, KeyLifetime: lifetime}
 	rc, err := adder.AddWithAskpass(keyfile, passphrase)
-	if err != nil {
-		t.Fatalf("AddWithAskpass: %v", err)
-	}
-	if rc != 0 {
-		t.Fatalf("AddWithAskpass: ssh-add exited %d", rc)
-	}
+	require.NoError(t, err, "loading the key through the real handoff must succeed")
+	require.Zero(t, rc, "and ssh-add must accept the passphrase it collected")
 
 	runner := ExecRunner{}
 	fp, err := FileFingerprint(runner, keyfile)
-	if err != nil {
-		t.Fatalf("FileFingerprint: %v", err)
-	}
+	require.NoError(t, err, "reading the key's fingerprint must succeed")
 
 	loaded, err := AgentFingerprints(runner)
-	if err != nil {
-		t.Fatalf("AgentFingerprints (immediately after add): %v", err)
-	}
-	if !loaded[fp] {
-		t.Fatal("key not present in the agent immediately after AddWithAskpass")
-	}
+	require.NoError(t, err, "asking the agent what it holds must succeed")
+	require.Containsf(t, loaded, fp, "the key must be in the agent before there is any expiry to wait for: %v", loaded)
 
 	deadline := time.Now().Add(lifetime + 5*time.Second)
 	for time.Now().Before(deadline) {
 		loaded, err = AgentFingerprints(runner)
-		if err != nil {
-			t.Fatalf("AgentFingerprints (polling for expiry): %v", err)
-		}
+		require.NoError(t, err, "asking the agent what it holds must keep succeeding")
 		if !loaded[fp] {
 			return // expired as expected
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
-	t.Fatalf("key still present in the agent %s after AddWithAskpass with KeyLifetime=%s — the agent never expired it", time.Since(deadline.Add(-lifetime-5*time.Second)), lifetime)
+	require.FailNowf(t, "the agent never expired the key",
+		"it is still held well past the %s lifetime it was added with, so a passphrase the user typed once "+
+			"stays usable for as long as the agent lives", lifetime)
 }
 
 // waitForSocket polls until path exists or t fails.
@@ -123,5 +109,5 @@ func waitForSocket(t *testing.T, path string) {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	t.Fatalf("ssh-agent never created %s", path)
+	require.FailNowf(t, "ssh-agent never came up", "it created no socket at %s", path)
 }

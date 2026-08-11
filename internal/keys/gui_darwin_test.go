@@ -5,6 +5,8 @@ package keys
 import (
 	"errors"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // TestGraphicalSession verifies the half of F29 that decides where the asking
@@ -32,15 +34,14 @@ func TestGraphicalSession(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			r := newFakeRunner().on(launchctlBin, func(cmd Cmd) (Result, error) {
-				if len(cmd.Args) != 1 || cmd.Args[0] != "managername" {
-					t.Errorf("args = %v, want [managername]", cmd.Args)
-				}
+				assert.Equal(t, []string{"managername"}, cmd.Args,
+					"what kind of session this is is the only thing launchctl is being asked")
 				return Result{Stdout: []byte(c.out), Code: c.code}, c.err
 			})
-			if got := GraphicalSession(r); got != c.want {
-				t.Errorf("GraphicalSession with %q (code %d, err %v) = %v, want %v",
-					c.out, c.code, c.err, got, c.want)
-			}
+			assert.Equalf(t, c.want, GraphicalSession(r),
+				"being on a Mac is not the condition; every answer that is not plainly \"there is a screen\" must "+
+					"be read as there being none, and %q (code %d, err %v) is what was said",
+				c.out, c.code, c.err)
 		})
 	}
 }

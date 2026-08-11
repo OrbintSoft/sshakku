@@ -3,12 +3,13 @@
 package main
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/diagnose"
 	"github.com/OrbintSoft/sshakku/internal/paths"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestDoctorReportOnAnUnconfiguredMachine verifies F25 and F26 for the Linux
@@ -24,13 +25,11 @@ func TestDoctorReportOnAnUnconfiguredMachine(t *testing.T) {
 
 	view := walletView(settings, probeWith("linux", nil, nil, "unix:path=/run/bus", nil))
 
-	if view.Backend != config.SecretBackendSecretService {
-		t.Errorf("doctor names %q as the wallet, want %q", view.Backend, config.SecretBackendSecretService)
-	}
+	assert.Equal(t, config.SecretBackendSecretService, view.Backend,
+		"an unconfigured Linux machine uses the freedesktop Secret Service")
 	req := requirement(t, view, "session bus")
-	if !req.Present || req.Detail != "unix:path=/run/bus" {
-		t.Errorf("session bus = %+v, want the address the shell has", req)
-	}
+	assert.True(t, req.Present, "the bus the shell exported is there")
+	assert.Equal(t, "unix:path=/run/bus", req.Detail, "and the report names the address it found")
 }
 
 // TestDoctorReportsAMissingSessionBus covers the other answer: the wallet is
@@ -42,12 +41,9 @@ func TestDoctorReportsAMissingSessionBus(t *testing.T) {
 	view := walletView(settings, probeWith("linux", nil, nil, "", nil))
 
 	req := requirement(t, view, "session bus")
-	if req.Present {
-		t.Error("a session bus must not be reported as present when the address is unset")
-	}
-	if !strings.Contains(req.Detail, "DBUS_SESSION_BUS_ADDRESS is unset") {
-		t.Errorf("detail = %q, want it to name what is unset", req.Detail)
-	}
+	assert.False(t, req.Present, "a bus whose address is unset is not one that is there")
+	assert.Contains(t, req.Detail, "DBUS_SESSION_BUS_ADDRESS is unset",
+		"and the report must name what the user has to set")
 }
 
 // TestKeePassXCOverTheSecretServiceOnLinux is the route rather than the wallet:
@@ -61,13 +57,10 @@ func TestKeePassXCOverTheSecretServiceOnLinux(t *testing.T) {
 
 	view := walletView(settings, probeWith("linux", nil, nil, "unix:path=/run/bus", nil))
 
-	if view.Route != config.KeePassXCRouteSecretService {
-		t.Errorf("route = %q, want the secret service, which is what Linux picks", view.Route)
-	}
+	assert.Equal(t, config.KeePassXCRouteSecretService, view.Route, "the route Linux picks on its own")
 	req := requirement(t, view, "session bus")
-	if !req.Present || req.Detail != "unix:path=/run/bus" {
-		t.Errorf("session bus = %+v, want the address the shell has", req)
-	}
+	assert.True(t, req.Present, "reaching it that way needs the bus, and the bus is there")
+	assert.Equal(t, "unix:path=/run/bus", req.Detail, "and the report names the address it found")
 }
 
 // TestDoctorReportsAWalletThatCanHoldNothingHere verifies F25 end of the wiring:
@@ -83,13 +76,12 @@ func TestDoctorReportsAWalletThatCanHoldNothingHere(t *testing.T) {
 	view := walletView(settings, probe)
 
 	req := requirement(t, view, "compartment")
-	if req.Present || req.Undetermined {
-		t.Errorf("compartment = %+v, want a piece that is missing", req)
-	}
+	assert.False(t, req.Present, "a compartment that cannot be created is not one that is there")
+	assert.False(t, req.Undetermined, "and the wallet was reachable, so this is known rather than unasked")
+
 	findings := diagnose.WalletFindings(view)
-	if len(findings) != 1 || !strings.Contains(findings[0], "compartment") {
-		t.Errorf("findings = %q, want one naming the compartment", findings)
-	}
+	require.Len(t, findings, 1, "a wallet that can hold nothing is one thing wrong, and it must reach the findings")
+	assert.Contains(t, findings[0], "compartment", "the finding must name the piece that is missing")
 }
 
 // TestDoctorSaysACompartmentItCanMakeIsNotThereYet verifies F42 where the
@@ -105,15 +97,10 @@ func TestDoctorSaysACompartmentItCanMakeIsNotThereYet(t *testing.T) {
 	view := walletView(settings, probe)
 
 	req := requirement(t, view, "compartment")
-	if req.Present {
-		t.Errorf("compartment = %+v, want a piece that is not there yet", req)
-	}
-	if !req.Fixable {
-		t.Errorf("compartment = %+v, want one this session can go and provide", req)
-	}
-	if findings := diagnose.WalletFindings(view); len(findings) != 0 {
-		t.Errorf("findings = %q, want none: a compartment this session can make is not a fault to report", findings)
-	}
+	assert.False(t, req.Present, "one that would appear at the first passphrase saved is still not there yet")
+	assert.True(t, req.Fixable, "but this session can go and provide it")
+	assert.Empty(t, diagnose.WalletFindings(view),
+		"and something the machine can put right by itself is not a fault to report")
 }
 
 // TestDoctorReportsTheCompartmentTheSettingsName covers the other half of that:
@@ -129,9 +116,8 @@ func TestDoctorReportsTheCompartmentTheSettingsName(t *testing.T) {
 
 	req := requirement(t, walletView(settings, probe), "compartment")
 
-	if !strings.Contains(req.Detail, "my-own") {
-		t.Errorf("compartment detail = %q, want it to name the configured compartment", req.Detail)
-	}
+	assert.Contains(t, req.Detail, "my-own",
+		"the compartment described must be the one entries would go into, which the user named")
 }
 
 // TestKeePassXCOverTheSecretServiceSeesAnEmptyBus is the route rather than the
@@ -148,13 +134,11 @@ func TestKeePassXCOverTheSecretServiceSeesAnEmptyBus(t *testing.T) {
 
 	view := walletView(settings, probe)
 
-	if req := requirement(t, view, "secret service"); req.Present {
-		t.Errorf("secret service = %+v, want it reported missing on a bus with nothing on it", req)
-	}
+	assert.False(t, requirement(t, view, "secret service").Present,
+		"a bus with nothing answering on it has no wallet on it")
 	for _, req := range view.Requirements {
-		if req.Name == "compartment" {
-			t.Error("this route's entries live in a database the user opened; the desktop has no compartment to describe")
-		}
+		assert.NotEqual(t, "compartment", req.Name,
+			"this route's entries live in a database the user opened, so the desktop has no compartment to describe")
 	}
 }
 
@@ -167,12 +151,11 @@ func TestALookThatCouldNotBeTakenSaysSo(t *testing.T) {
 
 	look := realSecretServiceLook("sshakku", "sshakku")
 
-	if !look.lookFailed {
-		t.Error("a look that never reached a bus must say it failed")
-	}
-	if req := serviceRequirement(look); !req.Undetermined || req.Present {
-		t.Errorf("secret service = %+v, want it undetermined rather than declared absent", req)
-	}
+	assert.True(t, look.lookFailed, "a look that never reached a bus must say it failed")
+
+	req := serviceRequirement(look)
+	assert.True(t, req.Undetermined, "never having managed to ask is not an answer")
+	assert.False(t, req.Present, "and it is certainly not a yes")
 }
 
 // TestMakingACompartmentWithNoWalletToMakeItIn verifies F42 where it is easiest
@@ -184,12 +167,8 @@ func TestMakingACompartmentWithNoWalletToMakeItIn(t *testing.T) {
 
 	made, err := realMakeCompartment(config.Settings{})
 
-	if err == nil {
-		t.Fatalf("realMakeCompartment = %q with no bus to reach, want an error", made)
-	}
-	if made != "" {
-		t.Errorf("realMakeCompartment named %q while failing; nothing was made", made)
-	}
+	assert.Error(t, err, "a repair that could not be performed must say so, or the next login finds out")
+	assert.Empty(t, made, "and nothing may be named as made when nothing was")
 }
 
 // TestPlatformWalletViewNamesWhateverItIsGiven covers the fallback beside the
@@ -200,12 +179,9 @@ func TestMakingACompartmentWithNoWalletToMakeItIn(t *testing.T) {
 func TestPlatformWalletViewNamesWhateverItIsGiven(t *testing.T) {
 	view := probeWith("linux", nil, nil, "", nil).platformWalletView(config.Settings{}, "something-else")
 
-	if view.Backend != "something-else" {
-		t.Errorf("backend = %q, want the name it was given back", view.Backend)
-	}
-	if len(view.Requirements) != 0 {
-		t.Errorf("requirements = %+v, want none for a wallet nothing is known about", view.Requirements)
-	}
+	assert.Equal(t, "something-else", view.Backend,
+		"naming back what was asked for is still an answer to which wallet would be used")
+	assert.Empty(t, view.Requirements, "but inventing requirements for a wallet nothing is known about would not be")
 }
 
 // discardLogger is the session log a test has no use for.

@@ -21,15 +21,22 @@ type ProcfsCgroup struct {
 // init, so it can still name the systemd unit (service or transient scope)
 // that launched a process ancestry alone can no longer attribute.
 func (c ProcfsCgroup) Cgroup(pid int) (string, bool) {
-	root := c.Root
-	if root == "" {
-		root = "/proc"
-	}
-	b, err := os.ReadFile(filepath.Join(root, strconv.Itoa(pid), "cgroup"))
+	b, err := os.ReadFile(filepath.Join(c.root(), strconv.Itoa(pid), "cgroup"))
 	if err != nil {
 		return "", false
 	}
 	return parseCgroupUnit(b)
+}
+
+// root is the procfs directory to read the cgroup files from: the real one
+// unless a caller points it elsewhere. It is a method rather than an inline
+// default so that the choice itself can be asserted on a machine whose own
+// processes happen to belong to no systemd unit.
+func (c ProcfsCgroup) root() string {
+	if c.Root == "" {
+		return "/proc"
+	}
+	return c.Root
 }
 
 // parseCgroupUnit extracts the innermost systemd unit from a /proc/<pid>/cgroup

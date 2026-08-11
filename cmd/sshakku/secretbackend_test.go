@@ -5,6 +5,8 @@ import (
 
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestNewSecretBackend covers the CLI-backed backend branches, whose
@@ -22,12 +24,8 @@ func TestNewSecretBackend(t *testing.T) {
 		backend, closeFn := newSecretBackend("alice", fakeLogger{}, s)
 		defer closeFn()
 		op, ok := backend.(*keys.OnePasswordBackend)
-		if !ok {
-			t.Fatalf("backend = %T, want *keys.OnePasswordBackend", backend)
-		}
-		if op.Vault != "sshakku-vault" {
-			t.Errorf("Vault = %q, want %q", op.Vault, "sshakku-vault")
-		}
+		require.Truef(t, ok, "the wallet chosen must be the one built, got %T", backend)
+		assert.Equal(t, "sshakku-vault", op.Vault, "the vault the configuration named")
 	})
 
 	t.Run("bitwarden", func(t *testing.T) {
@@ -39,15 +37,10 @@ func TestNewSecretBackend(t *testing.T) {
 		backend, closeFn := newSecretBackend("alice", fakeLogger{}, s)
 		defer closeFn()
 		bw, ok := backend.(*keys.BitwardenBackend)
-		if !ok {
-			t.Fatalf("backend = %T, want *keys.BitwardenBackend", backend)
-		}
-		if bw.Email != "alice@example.com" || bw.Server != "https://vault.example" {
-			t.Errorf("Email/Server = %q/%q, want alice@example.com/https://vault.example", bw.Email, bw.Server)
-		}
-		if bw.Prompter == nil {
-			t.Error("Prompter = nil, want a bitwarden master prompter")
-		}
+		require.Truef(t, ok, "the wallet chosen must be the one built, got %T", backend)
+		assert.Equal(t, "alice@example.com", bw.Email, "the account the configuration named")
+		assert.Equal(t, "https://vault.example", bw.Server, "the server the configuration named")
+		assert.NotNil(t, bw.Prompter, "a wallet that needs a master password must have something to ask with")
 	})
 
 	// The wallet the operating system provides itself has no case of its own
@@ -66,15 +59,9 @@ func TestBitwardenMasterPrompterGUI(t *testing.T) {
 	p := walletPasswordPrompter{graphical: fixedPrompter{answer: "master-pass"}}
 
 	got, err := p.Prompt("Bitwarden master password")
-	if err != nil {
-		t.Fatalf("Prompt: %v", err)
-	}
-	if got != "master-pass" {
-		t.Errorf("Prompt = %q, want %q, the answer the dialog gave", got, "master-pass")
-	}
-	if !p.Available() {
-		t.Error("Available() = false, want true")
-	}
+	require.NoError(t, err, "Prompt")
+	assert.Equal(t, "master-pass", got, "the answer the dialog gave, with nothing added to it")
+	assert.True(t, p.Available(), "a prompter with a dialog behind it is always available")
 }
 
 // fixedPrompter is a dialog that always answers, standing in for whichever one

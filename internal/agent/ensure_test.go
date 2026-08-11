@@ -6,6 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // fakeLogger records the level-tagged lines EnsureAgent emits.
@@ -53,15 +56,10 @@ func TestEnsureAgentHealthy(t *testing.T) {
 
 	m := Manager{Prober: mapProber{fixed: true}, Runner: runner, Signaler: &recordSignaler{}}
 	res, err := m.EnsureAgent(EnsureConfig{FixedSock: fixed, StatePath: filepath.Join(dir, "st"), OurUID: 1000}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Situation != SituationHealthy || res.LiveSock != fixed {
-		t.Fatalf("got %+v, want healthy on %s", res, fixed)
-	}
-	if runner.started != "" {
-		t.Errorf("healthy path must not start an agent, started %q", runner.started)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, SituationHealthy, res.Situation, "situation")
+	assert.Equal(t, fixed, res.LiveSock, "the live socket is the fixed one")
+	assert.Empty(t, runner.started, "the healthy path must not start an agent")
 }
 
 func TestEnsureAgentClean(t *testing.T) {
@@ -77,18 +75,15 @@ func TestEnsureAgentClean(t *testing.T) {
 		Signaler:  &recordSignaler{},
 	}
 	res, err := m.EnsureAgent(EnsureConfig{FixedSock: fixed, StatePath: state, OurUID: 1000}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Situation != SituationClean || res.LiveSock != fixed || res.Started != 4242 {
-		t.Fatalf("got %+v, want clean start pid 4242", res)
-	}
-	if runner.started != fixed {
-		t.Errorf("started %q, want %q", runner.started, fixed)
-	}
-	if st, err := ReadState(state); err != nil || st.PID != 4242 {
-		t.Errorf("state = %+v, err = %v", st, err)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, SituationClean, res.Situation, "situation")
+	assert.Equal(t, fixed, res.LiveSock, "the live socket is the fixed one")
+	assert.Equal(t, 4242, res.Started, "the pid started")
+	assert.Equal(t, fixed, runner.started, "the socket the agent was started on")
+
+	st, err := ReadState(state)
+	require.NoError(t, err, "ReadState")
+	assert.Equal(t, 4242, st.PID, "the state records the started pid")
 }
 
 func TestEnsureAgentZombie(t *testing.T) {
@@ -106,21 +101,11 @@ func TestEnsureAgentZombie(t *testing.T) {
 	log := &fakeLogger{}
 
 	res, err := m.EnsureAgent(EnsureConfig{FixedSock: fixed, StatePath: state, OurUID: 1000}, log)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Situation != SituationZombie {
-		t.Fatalf("situation = %v, want zombie", res.Situation)
-	}
-	if !contains(sig.killed, 200) {
-		t.Errorf("killed %v, want dead-ours 200 reaped", sig.killed)
-	}
-	if runner.started != fixed {
-		t.Errorf("should restart ours on %q, started %q", fixed, runner.started)
-	}
-	if !log.hasLevel("INFO") {
-		t.Error("expected an INFO line for the reap and restart")
-	}
+	require.NoError(t, err)
+	assert.Equal(t, SituationZombie, res.Situation, "situation")
+	assert.Contains(t, sig.killed, 200, "the dead agent of ours must be reaped")
+	assert.Equal(t, fixed, runner.started, "ours must be restarted on the fixed socket")
+	assert.True(t, log.hasLevel("INFO"), "the reap and restart must be logged at INFO")
 }
 
 func TestEnsureAgentForeign(t *testing.T) {
@@ -142,27 +127,18 @@ func TestEnsureAgentForeign(t *testing.T) {
 
 	cfg := EnsureConfig{FixedSock: fixed, LegacyDir: "/nope", StatePath: filepath.Join(dir, "st"), OurUID: 1000}
 	res, err := m.EnsureAgent(cfg, log)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Situation != SituationForeign {
-		t.Fatalf("situation = %v, want foreign", res.Situation)
-	}
-	if res.Adopted == nil || res.Adopted.PID != 300 {
-		t.Fatalf("adopted = %+v, want pid 300", res.Adopted)
-	}
-	if res.Anomaly == "" || !log.hasLevel("WARN") {
-		t.Error("foreign adoption must report an anomaly at WARN")
-	}
-	if runner.started != "" {
-		t.Error("adoption must not start a new agent")
-	}
-	if res.LiveSock != fixed {
-		t.Errorf("live sock = %q, want fixed %q", res.LiveSock, fixed)
-	}
-	if target, err := os.Readlink(fixed); err != nil || target != foreignSock {
-		t.Errorf("readlink(fixed) = %q, %v; want %q", target, err, foreignSock)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, SituationForeign, res.Situation, "situation")
+	require.NotNil(t, res.Adopted, "an agent must have been adopted")
+	assert.Equal(t, 300, res.Adopted.PID, "the adopted pid")
+	assert.NotEmpty(t, res.Anomaly, "foreign adoption must report an anomaly")
+	assert.True(t, log.hasLevel("WARN"), "the anomaly must be logged at WARN")
+	assert.Empty(t, runner.started, "adoption must not start a new agent")
+	assert.Equal(t, fixed, res.LiveSock, "the live socket is still the fixed one")
+
+	target, err := os.Readlink(fixed)
+	require.NoError(t, err, "readlink(fixed)")
+	assert.Equal(t, foreignSock, target, "the fixed path must point at the adopted socket")
 }
 
 func TestEnsureAgentDisasterMultiple(t *testing.T) {
@@ -182,21 +158,14 @@ func TestEnsureAgentDisasterMultiple(t *testing.T) {
 		Signaler:  &recordSignaler{},
 	}
 	res, err := m.EnsureAgent(EnsureConfig{FixedSock: fixed, OurUID: 1000}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Situation != SituationDisaster {
-		t.Fatalf("situation = %v, want disaster", res.Situation)
-	}
-	if res.Adopted == nil || res.Adopted.PID != 300 {
-		t.Fatalf("adopted = %+v, want lowest pid 300", res.Adopted)
-	}
-	if !strings.Contains(res.Anomaly, "2 healthy agents") {
-		t.Errorf("anomaly should note multiple agents, got %q", res.Anomaly)
-	}
-	if target, _ := os.Readlink(fixed); target != f1 {
-		t.Errorf("readlink = %q, want %q (lowest pid's socket)", target, f1)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, SituationDisaster, res.Situation, "situation")
+	require.NotNil(t, res.Adopted, "an agent must have been adopted")
+	assert.Equal(t, 300, res.Adopted.PID, "the lowest pid is adopted")
+	assert.Contains(t, res.Anomaly, "2 healthy agents", "the anomaly must note how many were found")
+
+	target, _ := os.Readlink(fixed)
+	assert.Equal(t, f1, target, "the fixed path must point at the lowest pid's socket")
 }
 
 func TestEnsureAgentDisasterReapAndAdopt(t *testing.T) {
@@ -217,21 +186,14 @@ func TestEnsureAgentDisasterReapAndAdopt(t *testing.T) {
 		Signaler:  sig,
 	}
 	res, err := m.EnsureAgent(EnsureConfig{FixedSock: fixed, OurUID: 1000}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Situation != SituationDisaster {
-		t.Fatalf("situation = %v, want disaster", res.Situation)
-	}
-	if !contains(sig.killed, 200) {
-		t.Errorf("should reap dead-ours 200, killed %v", sig.killed)
-	}
-	if res.Adopted == nil || res.Adopted.PID != 300 {
-		t.Fatalf("adopted = %+v, want 300", res.Adopted)
-	}
-	if target, _ := os.Readlink(fixed); target != foreignSock {
-		t.Errorf("readlink = %q, want %q", target, foreignSock)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, SituationDisaster, res.Situation, "situation")
+	assert.Contains(t, sig.killed, 200, "the dead agent of ours must be reaped")
+	require.NotNil(t, res.Adopted, "an agent must have been adopted")
+	assert.Equal(t, 300, res.Adopted.PID, "the healthy foreign agent is adopted")
+
+	target, _ := os.Readlink(fixed)
+	assert.Equal(t, foreignSock, target, "the fixed path must point at the adopted socket")
 }
 
 func TestClearStalePath(t *testing.T) {
@@ -239,38 +201,23 @@ func TestClearStalePath(t *testing.T) {
 
 	sock := filepath.Join(dir, "a.sock")
 	makeSocketFile(t, sock)
-	if !clearStalePath(sock) {
-		t.Error("clearStalePath(socket) = false, want true")
-	}
-	if _, err := os.Lstat(sock); !os.IsNotExist(err) {
-		t.Errorf("socket should be cleared, lstat err = %v", err)
-	}
+	assert.True(t, clearStalePath(sock), "a socket must be cleared")
+	_, err := os.Lstat(sock)
+	assert.ErrorIs(t, err, os.ErrNotExist, "the socket must be gone")
 
 	link := filepath.Join(dir, "link")
-	if err := os.Symlink("/dangling", link); err != nil {
-		t.Fatal(err)
-	}
-	if !clearStalePath(link) {
-		t.Error("clearStalePath(symlink) = false, want true")
-	}
-	if _, err := os.Lstat(link); !os.IsNotExist(err) {
-		t.Errorf("symlink should be cleared, lstat err = %v", err)
-	}
+	require.NoError(t, os.Symlink("/dangling", link))
+	assert.True(t, clearStalePath(link), "a symlink must be cleared")
+	_, err = os.Lstat(link)
+	assert.ErrorIs(t, err, os.ErrNotExist, "the symlink must be gone")
 
 	reg := filepath.Join(dir, "regular")
-	if err := os.WriteFile(reg, []byte("x"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if clearStalePath(reg) {
-		t.Error("clearStalePath(regular file) = true, want false")
-	}
-	if _, err := os.Lstat(reg); err != nil {
-		t.Errorf("regular file must survive clearStalePath, err = %v", err)
-	}
+	require.NoError(t, os.WriteFile(reg, []byte("x"), 0o600))
+	assert.False(t, clearStalePath(reg), "a regular file must not be cleared")
+	_, err = os.Lstat(reg)
+	assert.NoError(t, err, "the regular file must survive")
 
-	if clearStalePath(filepath.Join(dir, "missing")) {
-		t.Error("clearStalePath(missing path) = true, want false")
-	}
+	assert.False(t, clearStalePath(filepath.Join(dir, "missing")), "a missing path reports false")
 }
 
 func TestEnsureAgentFastPathSkipsLock(t *testing.T) {
@@ -280,15 +227,9 @@ func TestEnsureAgentFastPathSkipsLock(t *testing.T) {
 
 	m := Manager{Prober: mapProber{fixed: true}, Runner: &recordRunner{}, Signaler: &recordSignaler{}, Locker: lk}
 	res, err := m.EnsureAgent(EnsureConfig{FixedSock: fixed, LockPath: filepath.Join(dir, "lock"), OurUID: 1000}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Situation != SituationHealthy {
-		t.Fatalf("situation = %v, want healthy", res.Situation)
-	}
-	if len(lk.locked) != 0 {
-		t.Errorf("the healthy fast path must not lock, locked %v", lk.locked)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, SituationHealthy, res.Situation, "situation")
+	assert.Empty(t, lk.locked, "the healthy fast path must not lock")
 }
 
 func TestEnsureAgentLocksMutatePath(t *testing.T) {
@@ -306,18 +247,11 @@ func TestEnsureAgentLocksMutatePath(t *testing.T) {
 		Locker:    lk,
 	}
 	res, err := m.EnsureAgent(EnsureConfig{FixedSock: fixed, StatePath: filepath.Join(dir, "st"), LockPath: lock, OurUID: 1000}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Situation != SituationClean || runner.started != fixed {
-		t.Fatalf("got %+v, started %q; want a clean start", res, runner.started)
-	}
-	if len(lk.locked) != 1 || lk.locked[0] != lock {
-		t.Errorf("locked %v, want a single lock on %q", lk.locked, lock)
-	}
-	if lk.unlocked != 1 {
-		t.Errorf("unlocked %d times, want exactly 1 (deferred release)", lk.unlocked)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, SituationClean, res.Situation, "situation")
+	assert.Equal(t, fixed, runner.started, "the socket the agent was started on")
+	assert.Equal(t, []string{lock}, lk.locked, "a single lock, on the configured path")
+	assert.Equal(t, 1, lk.unlocked, "released exactly once, by the deferred release")
 }
 
 func TestEnsureAgentDoubleCheckUnderLock(t *testing.T) {
@@ -333,21 +267,12 @@ func TestEnsureAgentDoubleCheckUnderLock(t *testing.T) {
 	m := Manager{Prober: prober, Inspector: Inspector{ProcRoot: shortDir(t)}, Runner: runner, Signaler: sig, Locker: lk}
 
 	res, err := m.EnsureAgent(EnsureConfig{FixedSock: fixed, StatePath: filepath.Join(dir, "st"), LockPath: filepath.Join(dir, "lock"), OurUID: 1000}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Situation != SituationHealthy || res.LiveSock != fixed {
-		t.Fatalf("got %+v, want healthy after the under-lock re-check", res)
-	}
-	if runner.started != "" {
-		t.Errorf("re-check found ours healthy; must not start, started %q", runner.started)
-	}
-	if len(sig.killed) != 0 {
-		t.Errorf("re-check found ours healthy; must not reap, killed %v", sig.killed)
-	}
-	if lk.unlocked != 1 {
-		t.Errorf("the lock must be released even on the healthy re-check, unlocked %d", lk.unlocked)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, SituationHealthy, res.Situation, "the under-lock re-check must find ours healthy")
+	assert.Equal(t, fixed, res.LiveSock, "the live socket is the fixed one")
+	assert.Empty(t, runner.started, "the re-check found ours healthy, so nothing must be started")
+	assert.Empty(t, sig.killed, "the re-check found ours healthy, so nothing must be reaped")
+	assert.Equal(t, 1, lk.unlocked, "the lock must be released even on the healthy re-check")
 }
 
 func TestEnsureAgentLockError(t *testing.T) {
@@ -357,12 +282,9 @@ func TestEnsureAgentLockError(t *testing.T) {
 	lk := &fakeLocker{err: errors.New("cannot open lock")}
 
 	m := Manager{Prober: mapProber{}, Inspector: Inspector{ProcRoot: shortDir(t)}, Runner: runner, Signaler: &recordSignaler{}, Locker: lk}
-	if _, err := m.EnsureAgent(EnsureConfig{FixedSock: fixed, LockPath: filepath.Join(dir, "lock"), OurUID: 1000}, nil); err == nil {
-		t.Fatal("want an error when the lock cannot be acquired")
-	}
-	if runner.started != "" {
-		t.Errorf("must not start after a lock failure, started %q", runner.started)
-	}
+	_, err := m.EnsureAgent(EnsureConfig{FixedSock: fixed, LockPath: filepath.Join(dir, "lock"), OurUID: 1000}, nil)
+	assert.Error(t, err, "a lock that cannot be acquired must be reported")
+	assert.Empty(t, runner.started, "nothing must be started after a lock failure")
 }
 
 func TestSituationString(t *testing.T) {
@@ -373,8 +295,6 @@ func TestSituationString(t *testing.T) {
 		SituationForeign:  "foreign",
 		SituationDisaster: "disaster",
 	} {
-		if got := s.String(); got != want {
-			t.Errorf("Situation(%d).String() = %q, want %q", s, got, want)
-		}
+		assert.Equalf(t, want, s.String(), "Situation(%d).String()", s)
 	}
 }

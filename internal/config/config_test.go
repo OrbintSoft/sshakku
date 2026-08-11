@@ -1,9 +1,12 @@
 package config
 
 import (
-	"github.com/OrbintSoft/sshakku/internal/keys"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+
+	"github.com/OrbintSoft/sshakku/internal/keys"
 )
 
 func TestKeyLifetime(t *testing.T) {
@@ -23,12 +26,12 @@ func TestKeyLifetime(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := KeyLifetime(tc.raw)
-			if (err != nil) != tc.wantErr {
-				t.Fatalf("KeyLifetime(%q) err = %v, wantErr %v", tc.raw, err, tc.wantErr)
+			if tc.wantErr {
+				assert.Errorf(t, err, "KeyLifetime(%q) must be reported", tc.raw)
+			} else {
+				assert.NoErrorf(t, err, "KeyLifetime(%q)", tc.raw)
 			}
-			if got != tc.want {
-				t.Errorf("KeyLifetime(%q) = %v, want %v", tc.raw, got, tc.want)
-			}
+			assert.Equalf(t, tc.want, got, "KeyLifetime(%q)", tc.raw)
 		})
 	}
 }
@@ -49,12 +52,12 @@ func TestGiveupTTL(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := GiveupTTL(tc.raw)
-			if (err != nil) != tc.wantErr {
-				t.Fatalf("GiveupTTL(%q) err = %v, wantErr %v", tc.raw, err, tc.wantErr)
+			if tc.wantErr {
+				assert.Errorf(t, err, "GiveupTTL(%q) must be reported", tc.raw)
+			} else {
+				assert.NoErrorf(t, err, "GiveupTTL(%q)", tc.raw)
 			}
-			if got != tc.want {
-				t.Errorf("GiveupTTL(%q) = %v, want %v", tc.raw, got, tc.want)
-			}
+			assert.Equalf(t, tc.want, got, "GiveupTTL(%q)", tc.raw)
 		})
 	}
 }
@@ -72,24 +75,18 @@ func TestEnvInt(t *testing.T) {
 		{"banana", 0},
 	}
 	for _, tc := range tests {
-		if got := EnvInt(tc.raw); got != tc.want {
-			t.Errorf("EnvInt(%q) = %d, want %d", tc.raw, got, tc.want)
-		}
+		assert.Equalf(t, tc.want, EnvInt(tc.raw), "EnvInt(%q)", tc.raw)
 	}
 }
 
 func TestIsTruthy(t *testing.T) {
 	truthy := []string{"1", "true", "yes", "on", "TRUE", " On "}
 	for _, raw := range truthy {
-		if !IsTruthy(raw) {
-			t.Errorf("IsTruthy(%q) = false, want true", raw)
-		}
+		assert.Truef(t, IsTruthy(raw), "IsTruthy(%q)", raw)
 	}
 	falsy := []string{"", "0", "false", "no", "off", "banana"}
 	for _, raw := range falsy {
-		if IsTruthy(raw) {
-			t.Errorf("IsTruthy(%q) = true, want false", raw)
-		}
+		assert.Falsef(t, IsTruthy(raw), "IsTruthy(%q)", raw)
 	}
 }
 
@@ -114,24 +111,26 @@ func TestCommandTimeout(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := CommandTimeout(tc.raw)
-			if got != tc.want {
-				t.Errorf("CommandTimeout(%q) = %v, want %v", tc.raw, got, tc.want)
-			}
-			if (err != nil) != tc.wantErr {
-				t.Errorf("CommandTimeout(%q) error = %v, want error: %v", tc.raw, err, tc.wantErr)
+			assert.Equalf(t, tc.want, got, "CommandTimeout(%q)", tc.raw)
+			if tc.wantErr {
+				assert.Errorf(t, err, "CommandTimeout(%q) must be reported", tc.raw)
+			} else {
+				assert.NoErrorf(t, err, "CommandTimeout(%q)", tc.raw)
 			}
 		})
 	}
 }
 
 func TestInteractiveTimeout(t *testing.T) {
-	if got, err := InteractiveTimeout(""); got != keys.DefaultInteractiveTimeout || err != nil {
-		t.Errorf("InteractiveTimeout(\"\") = %v, %v, want %v, nil", got, err, keys.DefaultInteractiveTimeout)
-	}
-	if got, err := InteractiveTimeout("90s"); got != 90*time.Second || err != nil {
-		t.Errorf("InteractiveTimeout(\"90s\") = %v, %v, want 90s, nil", got, err)
-	}
-	if got, err := InteractiveTimeout("0"); got != keys.DefaultInteractiveTimeout || err == nil {
-		t.Errorf("InteractiveTimeout(\"0\") = %v, %v, want the default and an error", got, err)
-	}
+	got, err := InteractiveTimeout("")
+	assert.NoError(t, err, `InteractiveTimeout("")`)
+	assert.Equal(t, keys.DefaultInteractiveTimeout, got, `InteractiveTimeout("")`)
+
+	got, err = InteractiveTimeout("90s")
+	assert.NoError(t, err, `InteractiveTimeout("90s")`)
+	assert.Equal(t, 90*time.Second, got, `InteractiveTimeout("90s")`)
+
+	got, err = InteractiveTimeout("0")
+	assert.Error(t, err, `InteractiveTimeout("0") must be refused`)
+	assert.Equal(t, keys.DefaultInteractiveTimeout, got, `InteractiveTimeout("0") must fall back to the default`)
 }

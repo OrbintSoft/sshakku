@@ -5,6 +5,9 @@ package keys
 import (
 	"os/exec"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestBoundToProcessGroupCancelBeforeStart drives the deadline against a command
@@ -21,10 +24,8 @@ func TestBoundToProcessGroupCancelBeforeStart(t *testing.T) {
 	cmd := exec.Command("true")
 	boundToProcessGroup(cmd)
 
-	if cmd.Cancel == nil {
-		t.Fatal("boundToProcessGroup must install a Cancel for the deadline to call")
-	}
-	if err := cmd.Cancel(); err != nil {
-		t.Fatalf("Cancel() on an unstarted command = %v, want nil", err)
-	}
+	require.NotNil(t, cmd.Cancel, "the deadline has to have something to call when it fires")
+	assert.NoError(t, cmd.Cancel(),
+		"and cancelling a command that never started must simply do nothing: os/exec runs this on a goroutine "+
+			"that recovers from nothing, so a panic here takes the whole program down")
 }

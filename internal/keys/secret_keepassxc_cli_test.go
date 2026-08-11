@@ -4,6 +4,9 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // recordingRunner records every command it was asked to run and answers from a
@@ -59,21 +62,33 @@ func TestKeePassXCCLIPasswordNeverReachesArgv(t *testing.T) {
 	runner := &recordingRunner{results: []Result{{Code: 0, Stdout: []byte("passphrase\n")}}}
 	b := cliBackend(runner, &countingPrompter{password: password})
 
-	if _, _, err := b.Lookup(defaultServicePrefix + "-id_ed25519"); err != nil {
-		t.Fatalf("Lookup: %v", err)
-	}
-	if len(runner.calls) != 1 {
-		t.Fatalf("ran %d commands, want 1", len(runner.calls))
-	}
+	_, _, err := b.Lookup(defaultServicePrefix + "-id_ed25519")
+	require.NoError(t, err, "reading an entry out of the database must succeed")
+	require.Len(t, runner.calls, 1, "one lookup is one command")
 	call := runner.calls[0]
 	for _, arg := range call.Args {
-		if strings.Contains(arg, password) {
-			t.Fatalf("the database password appeared in argv: %v", call.Args)
-		}
+		assert.NotContains(t, arg, password,
+			"argv is world-readable on this machine: a database password there is readable by every other user")
 	}
-	if !strings.Contains(call.Stdin, password) {
-		t.Error("the database password must be fed on standard input, or the command cannot open the database")
-	}
+	assert.Contains(t, call.Stdin, password,
+		"the database password must be fed on standard input, or the command cannot open the database")
+}
+
+// TestKeePassXCCLILookupReturnsWhatWasStored is what the whole route exists to
+// do, and what every other case here takes for granted while asserting around
+// it: the passphrase handed back is the one keepassxc-cli printed, with the
+// newline the command appends to its output removed. A passphrase carrying that
+// newline is not the passphrase, and the key it was saved for stops opening.
+func TestKeePassXCCLILookupReturnsWhatWasStored(t *testing.T) {
+	const passphrase = "the-stored-passphrase"
+	runner := &recordingRunner{results: []Result{{Code: 0, Stdout: []byte(passphrase + "\n")}}}
+	b := cliBackend(runner, &countingPrompter{password: "p"})
+
+	got, found, err := b.Lookup(defaultServicePrefix + "-id_ed25519")
+	require.NoError(t, err, "reading a stored passphrase must succeed")
+	assert.True(t, found, "the entry is in the database, so it must be reported found")
+	assert.Equal(t, passphrase, got,
+		"the passphrase must be exactly what was stored: keepassxc-cli's trailing newline is not part of it")
 }
 
 // TestKeePassXCCLIStoreKeepsThePassphraseOffArgvToo covers the second secret
@@ -89,38 +104,28 @@ func TestKeePassXCCLIStoreKeepsThePassphraseOffArgvToo(t *testing.T) {
 	}}
 	b := cliBackend(runner, &countingPrompter{password: dbPassword})
 
-	if err := b.Store(defaultServicePrefix+"-id_ed25519", "", passphrase); err != nil {
-		t.Fatalf("Store: %v", err)
-	}
-	if len(runner.calls) != 3 {
-		t.Fatalf("ran %d commands, want a lookup, the group, then a write", len(runner.calls))
-	}
+	require.NoError(t, b.Store(defaultServicePrefix+"-id_ed25519", "", passphrase), "saving a passphrase must succeed")
+	require.Len(t, runner.calls, 3, "a key with no entry yet is looked up, then its group made, then written")
 	write := runner.calls[2]
 	for _, arg := range write.Args {
-		if strings.Contains(arg, passphrase) || strings.Contains(arg, dbPassword) {
-			t.Fatalf("a secret appeared in argv: %v", write.Args)
-		}
+		assert.NotContains(t, arg, passphrase,
+			"argv is world-readable on this machine: a passphrase there is readable by every other user")
+		assert.NotContains(t, arg, dbPassword, "and so would a database password be")
 	}
-	if write.Stdin != dbPassword+"\n"+passphrase+"\n" {
-		t.Errorf("stdin = %q, want the database password then the passphrase, in the order asked for", write.Stdin)
-	}
+	assert.Equal(t, dbPassword+"\n"+passphrase+"\n", write.Stdin,
+		"the database password comes first and the passphrase second, in the order keepassxc-cli asks for them")
 }
 
 func TestKeePassXCCLIStoreAddsThenEdits(t *testing.T) {
 	t.Run("a key with no entry yet is added, into a group that is made first", func(t *testing.T) {
 		runner := &recordingRunner{results: []Result{{Code: 1}, {Code: 0}, {Code: 0}}}
 		b := cliBackend(runner, &countingPrompter{password: "p"})
-		if err := b.Store(defaultServicePrefix+"-new", "", "x"); err != nil {
-			t.Fatalf("Store: %v", err)
-		}
+		require.NoError(t, b.Store(defaultServicePrefix+"-new", "", "x"), "saving a passphrase must succeed")
+		require.Len(t, runner.calls, 3, "a key with no entry yet is looked up, then its group made, then written")
 		// A real keepassxc-cli refuses to add an entry to a group that does
 		// not exist, and a fresh database has none.
-		if runner.calls[1].Args[0] != "mkdir" {
-			t.Errorf("second verb = %q, want mkdir", runner.calls[1].Args[0])
-		}
-		if runner.calls[2].Args[0] != "add" {
-			t.Errorf("verb = %q, want add", runner.calls[2].Args[0])
-		}
+		assert.Equal(t, "mkdir", runner.calls[1].Args[0], "the group must be made before anything can be put in it")
+		assert.Equal(t, "add", runner.calls[2].Args[0], "and a key with no entry yet is added")
 	})
 
 	t.Run("a key already stored is edited in place", func(t *testing.T) {
@@ -129,13 +134,11 @@ func TestKeePassXCCLIStoreAddsThenEdits(t *testing.T) {
 			{Code: 0},
 		}}
 		b := cliBackend(runner, &countingPrompter{password: "p"})
-		if err := b.Store(defaultServicePrefix+"-existing", "", "x"); err != nil {
-			t.Fatalf("Store: %v", err)
-		}
+		require.NoError(t, b.Store(defaultServicePrefix+"-existing", "", "x"), "replacing a passphrase must succeed")
 		// The group is already there, so an edit goes straight to the write.
-		if runner.calls[1].Args[0] != "edit" {
-			t.Errorf("verb = %q, want edit — adding again would leave a second copy of the secret", runner.calls[1].Args[0])
-		}
+		require.Len(t, runner.calls, 2, "a key that is already stored is looked up, then written")
+		assert.Equal(t, "edit", runner.calls[1].Args[0],
+			"an entry that is there must be edited; adding again leaves a second copy of the secret in the database")
 	})
 }
 
@@ -149,15 +152,12 @@ func TestKeePassXCCLIAsksForThePasswordOnlyOnce(t *testing.T) {
 	prompter := &countingPrompter{password: "p"}
 	b := cliBackend(runner, prompter)
 
-	if _, _, err := b.Lookup(defaultServicePrefix + "-one"); err != nil {
-		t.Fatalf("Lookup: %v", err)
-	}
-	if _, _, err := b.Lookup(defaultServicePrefix + "-two"); err != nil {
-		t.Fatalf("Lookup: %v", err)
-	}
-	if prompter.asked != 1 {
-		t.Errorf("asked %d times, want once for the whole process", prompter.asked)
-	}
+	_, _, err := b.Lookup(defaultServicePrefix + "-one")
+	require.NoError(t, err, "the first lookup must succeed")
+	_, _, err = b.Lookup(defaultServicePrefix + "-two")
+	require.NoError(t, err, "and so must the second")
+	assert.Equal(t, 1, prompter.asked,
+		"the database password is asked for once for the whole process, not once per key")
 }
 
 func TestKeePassXCCLILookupOfAnAbsentEntryIsAMiss(t *testing.T) {
@@ -165,12 +165,8 @@ func TestKeePassXCCLILookupOfAnAbsentEntryIsAMiss(t *testing.T) {
 	b := cliBackend(runner, &countingPrompter{password: "p"})
 
 	_, found, err := b.Lookup(defaultServicePrefix + "-absent")
-	if err != nil {
-		t.Fatalf("a miss must not be an error: %v", err)
-	}
-	if found {
-		t.Error("nothing stored means nothing found")
-	}
+	require.NoError(t, err, "a passphrase that was never stored is not an error")
+	assert.False(t, found, "and nothing may be reported found")
 }
 
 // TestKeePassXCCLIReportsARefusedPassword covers the case this route was
@@ -184,9 +180,9 @@ func TestKeePassXCCLIReportsARefusedPassword(t *testing.T) {
 	}}}
 	b := cliBackend(runner, &countingPrompter{password: "p"})
 
-	if _, _, err := b.Lookup(defaultServicePrefix + "-id_ed25519"); !errors.Is(err, ErrPasswordNotAccepted) {
-		t.Fatalf("err = %v, want ErrPasswordNotAccepted — a refused interface is not an empty wallet", err)
-	}
+	_, _, err := b.Lookup(defaultServicePrefix + "-id_ed25519")
+	assert.ErrorIs(t, err, ErrPasswordNotAccepted,
+		"a database that would not take the password must be said so: a refused interface is not an empty wallet")
 }
 
 // TestKeePassXCCLICanDelete is the difference from the local-protocol route,
@@ -195,24 +191,19 @@ func TestKeePassXCCLICanDelete(t *testing.T) {
 	runner := &recordingRunner{results: []Result{{Code: 0}}}
 	b := cliBackend(runner, &countingPrompter{password: "p"})
 
-	if err := b.Delete(defaultServicePrefix + "-id_ed25519"); err != nil {
-		t.Fatalf("Delete: %v", err)
-	}
-	if runner.calls[0].Args[0] != "rm" {
-		t.Errorf("verb = %q, want rm", runner.calls[0].Args[0])
-	}
-	if !strings.Contains(strings.Join(runner.calls[0].Args, " "), "SSHakku/"+defaultServicePrefix+"-id_ed25519") {
-		t.Errorf("args = %v, want the entry path inside the SSHakku group", runner.calls[0].Args)
-	}
+	require.NoError(t, b.Delete(defaultServicePrefix+"-id_ed25519"), "forgetting a passphrase must succeed")
+	require.NotEmpty(t, runner.calls, "the database must actually be asked")
+	assert.Equal(t, "rm", runner.calls[0].Args[0], "and asked to remove the entry")
+	assert.Contains(t, strings.Join(runner.calls[0].Args, " "), "SSHakku/"+defaultServicePrefix+"-id_ed25519",
+		"exactly the entry inside SSHakku's own group, not one of the user's own elsewhere in the database")
 }
 
 func TestKeePassXCCLIDeleteOfAnAbsentEntryIsSuccess(t *testing.T) {
 	runner := &recordingRunner{results: []Result{{Code: 1, Stderr: []byte("Entry not found\n")}}}
 	b := cliBackend(runner, &countingPrompter{password: "p"})
 
-	if err := b.Delete(defaultServicePrefix + "-gone"); err != nil {
-		t.Fatalf("forgetting an already-forgotten key must succeed: %v", err)
-	}
+	require.NoError(t, b.Delete(defaultServicePrefix+"-gone"),
+		"a passphrase that is already not there is the outcome that was asked for")
 }
 
 func TestKeePassXCCLIListsWhatItStored(t *testing.T) {
@@ -223,25 +214,16 @@ func TestKeePassXCCLIListsWhatItStored(t *testing.T) {
 	b := cliBackend(runner, &countingPrompter{password: "p"})
 
 	got, err := b.List()
-	if err != nil {
-		t.Fatalf("List: %v", err)
-	}
-	want := []string{defaultServicePrefix + "-id_ed25519", defaultServicePrefix + "-id_rsa"}
-	if len(got) != len(want) {
-		t.Fatalf("List = %v, want %v — a trailing slash marks a group, not an entry", got, want)
-	}
-	for i := range got {
-		if got[i] != want[i] {
-			t.Errorf("entry %d = %q, want %q", i, got[i], want[i])
-		}
-	}
+	require.NoError(t, err, "listing what the database holds must succeed")
+	assert.Equal(t, []string{defaultServicePrefix + "-id_ed25519", defaultServicePrefix + "-id_rsa"}, got,
+		"every entry must be named, and a trailing slash marks a group rather than an entry")
 }
 
 func TestKeePassXCCLIWithNoDatabaseSaysSo(t *testing.T) {
 	b := &KeePassXCCLIBackend{Runner: &recordingRunner{}, Prompter: &countingPrompter{password: "p"}}
-	if _, _, err := b.Lookup(defaultServicePrefix + "-id_ed25519"); !errors.Is(err, ErrNoDatabase) {
-		t.Fatalf("err = %v, want ErrNoDatabase", err)
-	}
+	_, _, err := b.Lookup(defaultServicePrefix + "-id_ed25519")
+	assert.ErrorIs(t, err, ErrNoDatabase,
+		"a route with no database configured must say which piece is missing, not fail as an empty wallet")
 }
 
 func TestKeePassXCCLIPassesTheKeyFileWhenConfigured(t *testing.T) {
@@ -249,22 +231,19 @@ func TestKeePassXCCLIPassesTheKeyFileWhenConfigured(t *testing.T) {
 	b := cliBackend(runner, &countingPrompter{password: "p"})
 	b.KeyFile = "/db.key"
 
-	if _, _, err := b.Lookup(defaultServicePrefix + "-id_ed25519"); err != nil {
-		t.Fatalf("Lookup: %v", err)
-	}
-	joined := strings.Join(runner.calls[0].Args, " ")
-	if !strings.Contains(joined, "--key-file /db.key") {
-		t.Errorf("args = %v, want the key file passed through", runner.calls[0].Args)
-	}
+	_, _, err := b.Lookup(defaultServicePrefix + "-id_ed25519")
+	require.NoError(t, err, "reading an entry out of a key-file-protected database must succeed")
+	require.NotEmpty(t, runner.calls, "the database must actually be asked")
+	assert.Contains(t, strings.Join(runner.calls[0].Args, " "), "--key-file /db.key",
+		"a database that also needs a key file cannot be opened without one")
 }
 
 func TestKeePassXCCLIReportsARefusedPrompt(t *testing.T) {
 	refused := errors.New("the user dismissed the dialog")
 	b := cliBackend(&recordingRunner{}, &countingPrompter{err: refused})
 
-	if _, _, err := b.Lookup(defaultServicePrefix + "-id_ed25519"); !errors.Is(err, refused) {
-		t.Fatalf("err = %v, want the refusal", err)
-	}
+	_, _, err := b.Lookup(defaultServicePrefix + "-id_ed25519")
+	assert.ErrorIs(t, err, refused, "a user who dismissed the prompt has answered, and must be obeyed")
 }
 
 // runnerErr is a runner that cannot start the command at all — keepassxc-cli
@@ -289,9 +268,7 @@ func TestKeePassXCCLIReportsACommandThatCannotRun(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			b := cliBackend(runnerErr(3), &countingPrompter{password: "p"})
-			if err := tc.call(b); err == nil {
-				t.Fatal("a command that could not run must be reported, not read as an empty wallet")
-			}
+			assert.Error(t, tc.call(b), "a command that could not run must be reported, not read as an empty wallet")
 		})
 	}
 }
@@ -305,15 +282,11 @@ func TestKeePassXCCLIStoreReportsAFailureItCannotName(t *testing.T) {
 	b := cliBackend(runner, &countingPrompter{password: "p"})
 
 	err := b.Store(defaultServicePrefix+"-k", "", "x")
-	if err == nil {
-		t.Fatal("a write that failed must be reported")
-	}
-	if !strings.Contains(err.Error(), "Group SSHakku not found") {
-		t.Errorf("err = %v, want KeePassXC's own words", err)
-	}
-	if strings.Contains(err.Error(), "second line") {
-		t.Errorf("err = %v, want a single line", err)
-	}
+	require.Error(t, err, "a write that failed must be reported, not passed over")
+	assert.Contains(t, err.Error(), "Group SSHakku not found",
+		"and it must carry KeePassXC's own words, which are the only account of what went wrong")
+	assert.NotContains(t, err.Error(), "second line",
+		"one line of it, so the reason fits where a user reads it")
 }
 
 func TestKeePassXCCLIReportsARefusedPasswordOnEveryOperation(t *testing.T) {
@@ -324,23 +297,21 @@ func TestKeePassXCCLIReportsARefusedPasswordOnEveryOperation(t *testing.T) {
 		// is what is refused.
 		runner := &recordingRunner{results: []Result{{Code: 1}, {Code: 0}, refusal}}
 		b := cliBackend(runner, &countingPrompter{password: "p"})
-		if err := b.Store(defaultServicePrefix+"-k", "", "x"); !errors.Is(err, ErrPasswordNotAccepted) {
-			t.Fatalf("err = %v, want ErrPasswordNotAccepted", err)
-		}
+		assert.ErrorIs(t, b.Store(defaultServicePrefix+"-k", "", "x"), ErrPasswordNotAccepted,
+			"a database that would not take the password must be said so")
 	})
 
 	t.Run("delete", func(t *testing.T) {
 		b := cliBackend(&recordingRunner{results: []Result{refusal}}, &countingPrompter{password: "p"})
-		if err := b.Delete(defaultServicePrefix + "-k"); !errors.Is(err, ErrPasswordNotAccepted) {
-			t.Fatalf("err = %v, want ErrPasswordNotAccepted — otherwise forget would claim success", err)
-		}
+		assert.ErrorIs(t, b.Delete(defaultServicePrefix+"-k"), ErrPasswordNotAccepted,
+			"a database that would not take the password must be said so, or forget claims to have removed nothing")
 	})
 
 	t.Run("list", func(t *testing.T) {
 		b := cliBackend(&recordingRunner{results: []Result{refusal}}, &countingPrompter{password: "p"})
-		if _, err := b.List(); !errors.Is(err, ErrPasswordNotAccepted) {
-			t.Fatalf("err = %v, want ErrPasswordNotAccepted", err)
-		}
+		_, err := b.List()
+		assert.ErrorIs(t, err, ErrPasswordNotAccepted,
+			"a database that would not take the password must be said so, not listed as empty")
 	})
 }
 
@@ -349,12 +320,8 @@ func TestKeePassXCCLIListOfAnAbsentGroupIsEmpty(t *testing.T) {
 	b := cliBackend(runner, &countingPrompter{password: "p"})
 
 	got, err := b.List()
-	if err != nil {
-		t.Fatalf("nothing stored yet must not be an error: %v", err)
-	}
-	if len(got) != 0 {
-		t.Errorf("List = %v, want nothing", got)
-	}
+	require.NoError(t, err, "a database SSHakku has never written to is not an error")
+	assert.Empty(t, got, "and nothing may be listed")
 }
 
 func TestFirstLine(t *testing.T) {
@@ -370,9 +337,7 @@ func TestFirstLine(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := firstLine([]byte(tc.in)); got != tc.want {
-				t.Errorf("firstLine(%q) = %q, want %q", tc.in, got, tc.want)
-			}
+			assert.Equalf(t, tc.want, firstLine([]byte(tc.in)), "firstLine(%q)", tc.in)
 		})
 	}
 }
@@ -386,9 +351,8 @@ func TestKeePassXCCLIStoreReportsAWriteThatCannotRun(t *testing.T) {
 	}
 	b := cliBackend(runner, &countingPrompter{password: "p"})
 
-	if err := b.Store(defaultServicePrefix+"-k", "", "x"); err == nil {
-		t.Fatal("a write that could not start must be reported")
-	}
+	assert.Error(t, b.Store(defaultServicePrefix+"-k", "", "x"),
+		"a write that could not start must be reported, not read as saved")
 }
 
 // TestKeePassXCCLIStoreReportsAGroupThatCannotBeMade covers the step a real
@@ -400,7 +364,6 @@ func TestKeePassXCCLIStoreReportsAGroupThatCannotBeMade(t *testing.T) {
 	}
 	b := cliBackend(runner, &countingPrompter{password: "p"})
 
-	if err := b.Store(defaultServicePrefix+"-k", "", "x"); err == nil {
-		t.Fatal("a group that could not be created must be reported")
-	}
+	assert.Error(t, b.Store(defaultServicePrefix+"-k", "", "x"),
+		"a group that could not be made must be reported: nothing can be written into it")
 }

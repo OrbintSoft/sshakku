@@ -308,8 +308,9 @@ ZSH_SCRIPTS = $(wildcard *.zsh)
 DOCKERFILES = $(wildcard test/containers/*.Dockerfile)
 
 APPLESCRIPTS = $(wildcard internal/keys/*.applescript)
+XML_FILES = $(wildcard internal/*/testdata/*.xml)
 
-lint: lint-sh lint-zsh lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go lint-docker lint-applescript
+lint: lint-sh lint-zsh lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go lint-docker lint-applescript lint-xml
 
 lint-sh:
 	shellcheck $(SH_SCRIPTS)
@@ -354,5 +355,10 @@ lint-applescript:
 		for f in $(APPLESCRIPTS); do echo "osacompile $$f"; osacompile -o /dev/null "$$f" || exit 1; done; \
 	fi
 
-.PHONY: install uninstall install-user uninstall-user build build-cross test test-json test-leakprofile test-keychain test-bats print-paths lint lint-sh lint-zsh lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go lint-docker lint-applescript
+# Well-formedness only: the DTD these files name lives at an http:// URL, and
+# xmllint is not asked to fetch it, so the check stays offline.
+lint-xml:
+	xmllint --noout $(XML_FILES)
+
+.PHONY: install uninstall install-user uninstall-user build build-cross test test-json test-leakprofile test-keychain test-bats print-paths lint lint-sh lint-zsh lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go lint-docker lint-applescript lint-xml
 .DEFAULT_GOAL := install

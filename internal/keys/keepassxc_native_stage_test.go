@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/OrbintSoft/sshakku/internal/keepassxc"
+	"github.com/stretchr/testify/require"
 )
 
 // Staging a KeePassXC for the full round to talk to, where nothing else
@@ -54,18 +55,13 @@ const stagedPassword = "sshakku-native-full-round-database"
 func stageKeePassXC(t *testing.T, app, root, stateDir string) {
 	t.Helper()
 
-	if _, err := exec.LookPath("keepassxc-cli"); err != nil {
-		t.Fatal("keepassxc-cli is not on PATH, so no database can be made for the app to open")
-	}
+	_, err := exec.LookPath("keepassxc-cli")
+	require.NoError(t, err, "keepassxc-cli makes the database the app is to open")
 
 	settings := filepath.Join(root, "keepassxc.ini")
 	fragment, err := os.ReadFile(browserSettings)
-	if err != nil {
-		t.Fatalf("read the browser settings: %v", err)
-	}
-	if err := os.WriteFile(settings, fragment, 0o600); err != nil {
-		t.Fatalf("write the settings for the staged app: %v", err)
-	}
+	require.NoError(t, err, "the settings fragment that turns the local protocol on")
+	require.NoError(t, os.WriteFile(settings, fragment, 0o600), "write the settings for the staged app")
 
 	database := stageDatabase(t, root, stateDir)
 
@@ -79,20 +75,15 @@ func stageKeePassXC(t *testing.T, app, root, stateDir string) {
 	said := &lockedBuffer{}
 	cmd.Stdout, cmd.Stderr = said, said
 	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		t.Fatalf("open the staged app's stdin: %v", err)
-	}
-	if err := cmd.Start(); err != nil {
-		t.Fatalf("start KeePassXC at %s: %v", app, err)
-	}
+	require.NoError(t, err, "the password reaches the app on its standard input")
+	require.NoErrorf(t, cmd.Start(), "start KeePassXC at %s", app)
 	t.Cleanup(func() {
 		_ = stdin.Close()
 		_ = cmd.Process.Kill()
 		_ = cmd.Wait()
 	})
-	if _, err := io.WriteString(stdin, stagedPassword+"\n"); err != nil {
-		t.Fatalf("hand the password to the staged app: %v", err)
-	}
+	_, err = io.WriteString(stdin, stagedPassword+"\n")
+	require.NoError(t, err, "hand the password to the staged app")
 	// stdin stays open on purpose; see above.
 
 	waitForOpenDatabase(t, cmd, said)
@@ -128,9 +119,8 @@ func stageDatabase(t *testing.T, root, stateDir string) string {
 	exported := keepassxcCLI(t, stagedPassword+"\n", "export", "-f", "xml", plain)
 
 	var key [32]byte
-	if _, err := rand.Read(key[:]); err != nil {
-		t.Fatalf("make an identification key: %v", err)
-	}
+	_, err := rand.Read(key[:])
+	require.NoError(t, err, "make an identification key")
 	const name = "sshakku-full-round"
 	idKey := base64.StdEncoding.EncodeToString(key[:])
 
@@ -138,29 +128,21 @@ func stageDatabase(t *testing.T, root, stateDir string) string {
 	// carry their own come after it.
 	const anchor = "<CustomData>"
 	at := strings.Index(exported, anchor)
-	if at < 0 {
-		t.Fatal("the exported database has no CustomData to put an association in")
-	}
+	require.GreaterOrEqual(t, at, 0, "the exported database has no CustomData to put an association in")
 	at += len(anchor)
 	item := fmt.Sprintf("<Item><Key>KPXC_BROWSER_%s</Key><Value>%s</Value></Item>", name, idKey)
 	withAssociation := filepath.Join(root, "seeded.xml")
-	if err := os.WriteFile(withAssociation, []byte(exported[:at]+item+exported[at:]), 0o600); err != nil {
-		t.Fatalf("write the database with the association in it: %v", err)
-	}
+	require.NoError(t, os.WriteFile(withAssociation, []byte(exported[:at]+item+exported[at:]), 0o600),
+		"write the database with the association in it")
 
 	database := filepath.Join(root, "wallet.kdbx")
 	keepassxcCLI(t, stagedPassword+"\n"+stagedPassword+"\n", "import", "-p", withAssociation, database)
 
-	if err := os.MkdirAll(stateDir, 0o700); err != nil {
-		t.Fatalf("make the state dir: %v", err)
-	}
+	require.NoError(t, os.MkdirAll(stateDir, 0o700), "make the state dir")
 	stored, err := json.Marshal(map[string]any{"version": 1, "id": name, "idKey": idKey})
-	if err != nil {
-		t.Fatalf("encode the association: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(stateDir, "keepassxc-association.json"), stored, 0o600); err != nil {
-		t.Fatalf("write the association SSHakku will load: %v", err)
-	}
+	require.NoError(t, err, "encode the association")
+	require.NoError(t, os.WriteFile(filepath.Join(stateDir, "keepassxc-association.json"), stored, 0o600),
+		"write the association SSHakku will load")
 	return database
 }
 
@@ -174,9 +156,7 @@ func keepassxcCLI(t *testing.T, stdin string, args ...string) string {
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
-	if err != nil {
-		t.Fatalf("keepassxc-cli %v: %v: %s", args, err, stderr.String())
-	}
+	require.NoErrorf(t, err, "keepassxc-cli %v: %s", args, stderr.String())
 	return string(out)
 }
 
@@ -221,6 +201,6 @@ func waitForOpenDatabase(t *testing.T, app *exec.Cmd, said *lockedBuffer) {
 	if err := app.Process.Signal(syscall.Signal(0)); err != nil {
 		alive = "no longer running (" + err.Error() + ")"
 	}
-	t.Fatalf("KeePassXC never reported an open database; last answer: %v\napp %s, and said:\n%s",
-		last, alive, said.String())
+	require.FailNowf(t, "KeePassXC never reported an open database",
+		"last answer: %v\napp %s, and said:\n%s", last, alive, said.String())
 }

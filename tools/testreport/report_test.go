@@ -3,7 +3,16 @@ package main
 import (
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+// floatTolerance is what "the same number" means for the percentages and
+// durations this tool computes. It is far below the one decimal place any of
+// them is ever printed to, so a comparison through it is exact as far as a
+// reader of the report is concerned.
+const floatTolerance = 1e-9
 
 // fixture builds a minimal `go test -json` stream: one line per event, in
 // the same shape `go test -json` actually emits (only the fields this
@@ -21,15 +30,14 @@ func TestParseEventsWallSeconds(t *testing.T) {
 	)
 
 	report, err := parseEvents(strings.NewReader(in), "linux", 20)
-	if err != nil {
-		t.Fatalf("parseEvents: %v", err)
-	}
-	if report.WallSeconds != 5.0 {
-		t.Fatalf("WallSeconds = %v, want 5.0 (first to last event timestamp)", report.WallSeconds)
-	}
-	if report.OS != "linux" {
-		t.Fatalf("OS = %q, want %q", report.OS, "linux")
-	}
+	require.NoError(t, err, "parseEvents")
+	assert.InDelta(t, 5.0, report.WallSeconds, floatTolerance, "the wall clock from the first event to the last, not the sum of the tests")
+	assert.Equal(t, "linux", report.OS, "the report must say which OS it is from")
+	// The stream's last line is the package's own result: no test name, and an
+	// elapsed time covering everything the package ran. Counted as a test it
+	// would head the slowest-tests table on every run, under no name at all.
+	assert.Equal(t, []TestTiming{{Name: "TestFoo", Package: "pkg", Seconds: 3.0}}, report.SlowestTests,
+		"only what a test did is timed as a test")
 }
 
 func TestParseEventsSlowestOrderingAndTruncation(t *testing.T) {
@@ -40,15 +48,11 @@ func TestParseEventsSlowestOrderingAndTruncation(t *testing.T) {
 	)
 
 	report, err := parseEvents(strings.NewReader(in), "linux", 2)
-	if err != nil {
-		t.Fatalf("parseEvents: %v", err)
-	}
-	if len(report.SlowestTests) != 2 {
-		t.Fatalf("len(SlowestTests) = %d, want 2 (keepSlowest truncation)", len(report.SlowestTests))
-	}
-	if report.SlowestTests[0].Name != "TestSlow" || report.SlowestTests[1].Name != "TestMedium" {
-		t.Fatalf("SlowestTests = %+v, want [TestSlow, TestMedium] in that order", report.SlowestTests)
-	}
+	require.NoError(t, err, "parseEvents")
+	assert.Equal(t, []TestTiming{
+		{Name: "TestSlow", Package: "pkg", Seconds: 9.0},
+		{Name: "TestMedium", Package: "pkg", Seconds: 2.0},
+	}, report.SlowestTests, "the slowest first, cut to the number asked for")
 }
 
 func TestParseEventsCapturesFailureOutput(t *testing.T) {
@@ -60,19 +64,12 @@ func TestParseEventsCapturesFailureOutput(t *testing.T) {
 	)
 
 	report, err := parseEvents(strings.NewReader(in), "linux", 20)
-	if err != nil {
-		t.Fatalf("parseEvents: %v", err)
-	}
-	if len(report.Failures) != 1 {
-		t.Fatalf("len(Failures) = %d, want 1", len(report.Failures))
-	}
-	want := "--- FAIL: TestBad\n    want 1, got 2\n"
-	if report.Failures[0].Output != want {
-		t.Fatalf("Failures[0].Output = %q, want %q", report.Failures[0].Output, want)
-	}
-	if report.Failures[0].Name != "TestBad" || report.Failures[0].Package != "pkg" {
-		t.Fatalf("Failures[0] = %+v, want Name=TestBad Package=pkg", report.Failures[0])
-	}
+	require.NoError(t, err, "parseEvents")
+	require.Len(t, report.Failures, 1, "the one test that failed")
+	assert.Equal(t, "TestBad", report.Failures[0].Name, "the test that failed")
+	assert.Equal(t, "pkg", report.Failures[0].Package, "the package it is in")
+	assert.Equal(t, "--- FAIL: TestBad\n    want 1, got 2\n", report.Failures[0].Output,
+		"every output line the test emitted, in order and unabridged")
 }
 
 func TestParseEventsSkipIsNotAFailure(t *testing.T) {
@@ -81,19 +78,12 @@ func TestParseEventsSkipIsNotAFailure(t *testing.T) {
 	)
 
 	report, err := parseEvents(strings.NewReader(in), "linux", 20)
-	if err != nil {
-		t.Fatalf("parseEvents: %v", err)
-	}
-	if len(report.Failures) != 0 {
-		t.Fatalf("len(Failures) = %d, want 0 (skip is not a failure)", len(report.Failures))
-	}
-	if len(report.SlowestTests) != 1 {
-		t.Fatalf("len(SlowestTests) = %d, want 1 (skipped tests still get a timing entry)", len(report.SlowestTests))
-	}
+	require.NoError(t, err, "parseEvents")
+	assert.Empty(t, report.Failures, "a test that was skipped did not fail")
+	assert.Len(t, report.SlowestTests, 1, "it was still a test that ran, and it is still timed")
 }
 
 func TestParseEventsRejectsMalformedInput(t *testing.T) {
-	if _, err := parseEvents(strings.NewReader("not json\n"), "linux", 20); err == nil {
-		t.Fatal("parseEvents accepted malformed input, want an error")
-	}
+	_, err := parseEvents(strings.NewReader("not json\n"), "linux", 20)
+	assert.Error(t, err, "a stream that could not be read must be reported, not summarised as an empty run")
 }

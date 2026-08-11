@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/OrbintSoft/sshakku/internal/secretservice"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestSecretServiceUnresponsiveDaemon covers a Secret Service daemon that is
@@ -46,39 +48,33 @@ func TestSecretServiceUnresponsiveDaemon(t *testing.T) {
 	t.Cleanup(func() { _ = client.Close() })
 
 	backend := &SecretServiceBackend{Client: client, User: unresponsiveUser}
-	if err := backend.Unlock(); err != nil {
-		t.Fatalf("Unlock: %v", err)
-	}
+	require.NoError(t, backend.Unlock(), "the wallet must open before anything can be frozen underneath it")
 	t.Cleanup(func() { _ = backend.Delete(unresponsiveService) })
 
 	// Prove the backend genuinely works before it is frozen, so the later
 	// failure is a mid-session collapse rather than a backend that never
 	// round-tripped.
-	if err := backend.Store(unresponsiveService, "sshakku unresponsive-daemon probe", "probe-passphrase"); err != nil {
-		t.Fatalf("Store: %v", err)
-	}
+	require.NoError(t, backend.Store(unresponsiveService, "sshakku unresponsive-daemon probe", "probe-passphrase"),
+		"the wallet must genuinely work before it is frozen, or the later failure proves nothing")
 	got, found, err := backend.Lookup(unresponsiveService)
-	if err != nil || !found || got != "probe-passphrase" {
-		t.Fatalf("pre-freeze Lookup = (%q, %v, %v), want (%q, true, nil)", got, found, err, "probe-passphrase")
-	}
+	require.NoError(t, err, "and a passphrase just written must read back")
+	require.True(t, found, "the entry is there, so it must be reported found")
+	require.Equal(t, "probe-passphrase", got, "and it must be the one that was written")
 
 	// Shorten the per-call deadline so the frozen-daemon Lookup fails in a few
 	// seconds rather than the 30s default, still far above any healthy
 	// round-trip. Set before the freeze; the value only bites on the next call.
 	client.CallTimeout = 3 * time.Second
 
-	if err := signalProcessByComm("gnome-keyring-d", syscall.SIGSTOP); err != nil {
-		t.Fatalf("freezing the Secret Service daemon: %v", err)
-	}
+	require.NoError(t, signalProcessByComm("gnome-keyring-d", syscall.SIGSTOP),
+		"freezing the Secret Service daemon is what this case is about")
 	// Thaw in cleanup so the Delete/Close cleanups above can still reach the
 	// bus, and nothing is left stopped even though the container is disposable.
 	t.Cleanup(func() { _ = signalProcessByComm("gnome-keyring-d", syscall.SIGCONT) })
 
 	err = lookupWithinBound(t, backend, unresponsiveService)
-	if err == nil {
-		t.Fatal("Lookup succeeded against a frozen daemon; an unresponsive backend must surface an error, not a stale hit")
-	}
-	t.Logf("frozen-daemon Lookup returned the expected bounded error: %v", err)
+	assert.Error(t, err,
+		"a wallet that stopped answering must surface an error the caller can fall back from, never a stale hit")
 }
 
 // lookupWithinBound runs one Lookup against the now-frozen backend and fails
@@ -100,7 +96,8 @@ func lookupWithinBound(t *testing.T, backend *SecretServiceBackend, service stri
 	case r := <-done:
 		return r.err
 	case <-time.After(15 * time.Second):
-		t.Fatal("Lookup did not return within 15s against a frozen daemon; it is hanging")
+		require.FailNow(t, "a lookup against a frozen daemon is hanging",
+			"it did not return within 15s, so the call is not bounded at all and the shell waiting on it never comes back")
 		return nil
 	}
 }

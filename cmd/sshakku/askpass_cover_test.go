@@ -3,10 +3,11 @@ package main
 import (
 	"bytes"
 	"errors"
-	"strings"
 	"testing"
 
 	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestAskpassEnv covers askpass-env against a fake executable lookup, so it runs
@@ -18,42 +19,28 @@ func TestAskpassEnv(t *testing.T) {
 		d := realDeps()
 		d.self = func() (string, error) { return "/opt/sshakku/bin/sshakku", nil }
 		var out, errOut bytes.Buffer
-		if got := d.askpassEnv(&out, &errOut); got != 0 {
-			t.Fatalf("askpassEnv = %d, want 0; stderr=%q", got, errOut.String())
-		}
-		s := out.String()
-		for _, want := range []string{
-			"export SSH_ASKPASS='/opt/sshakku/bin/sshakku-askpass'",
-			"export SSH_ASKPASS_REQUIRE=force",
-		} {
-			if !strings.Contains(s, want) {
-				t.Errorf("output %q missing %q", s, want)
-			}
-		}
+		require.Zerof(t, d.askpassEnv(&out, &errOut), "askpassEnv; stderr=%q", errOut.String())
+		assert.Contains(t, out.String(), "export SSH_ASKPASS='/opt/sshakku/bin/sshakku-askpass'",
+			"the helper beside the binary is what ssh must be pointed at, not the binary itself")
+		assert.Contains(t, out.String(), "export SSH_ASKPASS_REQUIRE=force",
+			"and force is what makes ssh consult it in a session with no display")
 	})
 
 	t.Run("executable lookup failure returns 1", func(t *testing.T) {
 		d := realDeps()
 		d.self = func() (string, error) { return "", errors.New("no exe") }
 		var out, errOut bytes.Buffer
-		if got := d.askpassEnv(&out, &errOut); got != 1 {
-			t.Fatalf("askpassEnv (exe lookup fails) = %d, want 1", got)
-		}
-		if out.Len() != 0 {
-			t.Errorf("stdout = %q, want no exports when the lookup fails", out.String())
-		}
-		if !strings.Contains(errOut.String(), "no exe") {
-			t.Errorf("stderr = %q, want the lookup error", errOut.String())
-		}
+		assert.Equal(t, 1, d.askpassEnv(&out, &errOut), "with no path to the binary there is nothing to export")
+		assert.Empty(t, out.String(), "and a shell must not be given exports pointing at nothing")
+		assert.Contains(t, errOut.String(), "no exe", "the reason must reach the user")
 	})
 
 	t.Run("stdout write error returns 1", func(t *testing.T) {
 		d := realDeps()
 		d.self = func() (string, error) { return "/opt/sshakku/bin/sshakku", nil }
 		var errOut bytes.Buffer
-		if got := d.askpassEnv(errWriter{}, &errOut); got != 1 {
-			t.Errorf("askpassEnv (failing stdout) = %d, want 1", got)
-		}
+		assert.Equal(t, 1, d.askpassEnv(errWriter{}, &errOut),
+			"exports the shell never received must not be reported as delivered")
 	})
 }
 
@@ -72,36 +59,29 @@ func TestAskpassFromHandoff(t *testing.T) {
 		d := realDeps()
 		d.fetchHandoff = func(string) (string, error) { return "s3cret", nil }
 		var out bytes.Buffer
-		if got := d.askpassFromHandoff(&out); got != 0 {
-			t.Fatalf("askpassFromHandoff = %d, want 0", got)
-		}
-		if out.String() != "s3cret\n" {
-			t.Errorf("output = %q, want the passphrase with a trailing newline", out.String())
-		}
+		require.Zero(t, d.askpassFromHandoff(&out), "a token that resolves is a prompt that can be answered")
+		assert.Equal(t, "s3cret\n", out.String(), "the passphrase, with the newline ssh expects and nothing else")
 	})
 
 	t.Run("fetch error returns 1", func(t *testing.T) {
 		d := realDeps()
 		d.fetchHandoff = func(string) (string, error) { return "", errors.New("boom") }
-		if got := d.askpassFromHandoff(&bytes.Buffer{}); got != 1 {
-			t.Errorf("askpassFromHandoff (fetch fails) = %d, want 1", got)
-		}
+		assert.Equal(t, 1, d.askpassFromHandoff(&bytes.Buffer{}),
+			"a stash that could not be read must be reported, not answered with nothing")
 	})
 
 	t.Run("empty passphrase returns 1", func(t *testing.T) {
 		d := realDeps()
 		d.fetchHandoff = func(string) (string, error) { return "", nil }
-		if got := d.askpassFromHandoff(&bytes.Buffer{}); got != 1 {
-			t.Errorf("askpassFromHandoff (empty passphrase) = %d, want 1", got)
-		}
+		assert.Equal(t, 1, d.askpassFromHandoff(&bytes.Buffer{}),
+			"an empty passphrase is not an answer, and handing one to ssh spends a retry")
 	})
 
 	t.Run("stdout write error returns 1", func(t *testing.T) {
 		d := realDeps()
 		d.fetchHandoff = func(string) (string, error) { return "s3cret", nil }
-		if got := d.askpassFromHandoff(errWriter{}); got != 1 {
-			t.Errorf("askpassFromHandoff (failing stdout) = %d, want 1", got)
-		}
+		assert.Equal(t, 1, d.askpassFromHandoff(errWriter{}),
+			"a passphrase ssh never received must not be reported as given")
 	})
 }
 
@@ -118,12 +98,8 @@ func TestAskpassDispatch(t *testing.T) {
 		d := realDeps()
 		d.fetchHandoff = func(string) (string, error) { return "from-handoff", nil }
 		var out bytes.Buffer
-		if got := d.askpass(&out, nil); got != 0 {
-			t.Fatalf("askpass (handoff token set) = %d, want 0", got)
-		}
-		if out.String() != "from-handoff\n" {
-			t.Errorf("output = %q, want the handoff passphrase", out.String())
-		}
+		require.Zero(t, d.askpass(&out, nil), "a token in the environment is a stash to redeem")
+		assert.Equal(t, "from-handoff\n", out.String(), "and the answer comes from it")
 	})
 
 	t.Run("no token falls through to the wallet broker", func(t *testing.T) {
@@ -131,11 +107,7 @@ func TestAskpassDispatch(t *testing.T) {
 		d := depsReturning(&fakeProbeBackend{lookupVal: "wallet-pass", lookupOK: true})
 		var out bytes.Buffer
 		prompt := "Enter passphrase for key '/home/u/.ssh/id_ed25519': "
-		if got := d.askpass(&out, []string{prompt}); got != 0 {
-			t.Fatalf("askpass (wallet hit) = %d, want 0", got)
-		}
-		if out.String() != "wallet-pass\n" {
-			t.Errorf("output = %q, want the wallet passphrase", out.String())
-		}
+		require.Zero(t, d.askpass(&out, []string{prompt}), "with no token the wallet is asked")
+		assert.Equal(t, "wallet-pass\n", out.String(), "and the answer comes from it, not from the terminal")
 	})
 }

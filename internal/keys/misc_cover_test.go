@@ -4,6 +4,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestEnumeratorReadDirHardError covers Keys's non-missing-directory error
@@ -11,12 +14,10 @@ import (
 // ReadDir fail with something other than "does not exist", which propagates.
 func TestEnumeratorReadDirHardError(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "not-a-dir")
-	if err := os.WriteFile(file, []byte("x"), 0o600); err != nil {
-		t.Fatalf("write file: %v", err)
-	}
-	if keys, err := (Enumerator{Dir: file}).Keys(); err == nil || keys != nil {
-		t.Fatalf("Keys = (%v, %v), want (nil, error) reading a non-directory", keys, err)
-	}
+	require.NoError(t, os.WriteFile(file, []byte("x"), 0o600), "seed a file where a directory should be")
+	keys, err := Enumerator{Dir: file}.Keys()
+	assert.Error(t, err, "a key directory that is not a directory must be reported, not read as an account with no keys")
+	assert.Empty(t, keys, "and nothing may be offered to ssh-add")
 }
 
 // TestExecRunnerRunStdinEnvAndStartFailure covers Run's stdin- and env-passing
@@ -25,14 +26,10 @@ func TestEnumeratorReadDirHardError(t *testing.T) {
 // non-zero exit code).
 func TestExecRunnerRunStdinEnvAndStartFailure(t *testing.T) {
 	res, err := ExecRunner{}.Run(Cmd{Name: "cat", Stdin: "hello", Env: []string{"SSHAKKU_X=1"}})
-	if err != nil {
-		t.Fatalf("cat: unexpected error: %v", err)
-	}
-	if string(res.Stdout) != "hello" {
-		t.Fatalf("cat stdout = %q, want %q", res.Stdout, "hello")
-	}
+	require.NoError(t, err, "running a command must succeed")
+	assert.Equal(t, "hello", string(res.Stdout),
+		"and what it was given on standard input must reach it: that is where every secret travels")
 
-	if _, err := (ExecRunner{}).Run(Cmd{Name: "sshakku-no-such-binary-xyz"}); err == nil {
-		t.Fatal("running a nonexistent binary returned nil error, want a start failure")
-	}
+	_, err = ExecRunner{}.Run(Cmd{Name: "sshakku-no-such-binary-xyz"})
+	assert.Error(t, err, "a program that is not installed must be reported as that, not as one that ran and failed")
 }

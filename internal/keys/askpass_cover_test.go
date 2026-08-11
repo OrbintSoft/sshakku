@@ -3,15 +3,18 @@ package keys
 import (
 	"errors"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestParsePassphrasePromptWhitespaceKeyfile covers the empty-keyfile guard:
 // a prompt whose captured path is only whitespace is not treated as a real
 // key-passphrase request.
 func TestParsePassphrasePromptWhitespaceKeyfile(t *testing.T) {
-	if key, ok := ParsePassphrasePrompt("Enter passphrase for   :"); ok {
-		t.Errorf("ParsePassphrasePrompt = (%q, true), want ok=false for a blank key path", key)
-	}
+	_, ok := ParsePassphrasePrompt("Enter passphrase for   :")
+	assert.False(t, ok,
+		"a prompt naming no key at all is not a key's passphrase: there is no entry it could be stored under")
 }
 
 // TestBrokerNonPassphraseNoTerminalLogsInfo covers the non-passphrase prompt
@@ -23,12 +26,10 @@ func TestBrokerNonPassphraseNoTerminalLogsInfo(t *testing.T) {
 	b := Broker{Secret: &fakeSecret{}, TTY: tty, Log: log}
 
 	reply, ok := b.Answer("Please enter your login password:")
-	if ok || reply != "" {
-		t.Fatalf("Answer = (%q, %v), want (\"\", false)", reply, ok)
-	}
-	if !log.contains("INFO askpass: no terminal for prompt") {
-		t.Fatalf("expected an INFO no-terminal log, got %v", log.lines)
-	}
+	assert.False(t, ok, "with nowhere to ask, the question must be declined rather than answered")
+	assert.Empty(t, reply, "and nothing may be handed to ssh as though it were the answer")
+	assert.Truef(t, log.contains("INFO askpass: no terminal for prompt"),
+		"a non-interactive invocation having no terminal is expected, not broken: %v", log.lines)
 }
 
 // TestBrokerNonPassphraseHardErrorLogsError covers the non-passphrase prompt
@@ -39,12 +40,10 @@ func TestBrokerNonPassphraseHardErrorLogsError(t *testing.T) {
 	b := Broker{Secret: &fakeSecret{}, TTY: tty, Log: log}
 
 	reply, ok := b.Answer("Please enter your login password:")
-	if ok || reply != "" {
-		t.Fatalf("Answer = (%q, %v), want (\"\", false)", reply, ok)
-	}
-	if !log.contains("ERROR askpass: no terminal for prompt") {
-		t.Fatalf("expected an ERROR no-terminal log, got %v", log.lines)
-	}
+	assert.False(t, ok, "a terminal that failed cannot answer")
+	assert.Empty(t, reply, "and nothing may be handed to ssh as though it were the answer")
+	assert.Truef(t, log.contains("ERROR askpass: no terminal for prompt"),
+		"a terminal that broke is something an operator has to fix, unlike simply not having one: %v", log.lines)
 }
 
 // TestBrokerStoreErrorLogged covers storePassphrase's store-failure branch:
@@ -57,12 +56,10 @@ func TestBrokerStoreErrorLogged(t *testing.T) {
 	b := Broker{Secret: secret, TTY: tty, Log: log}
 
 	reply, ok := b.Answer("Enter passphrase for /home/u/.ssh/id_rsa:")
-	if !ok || reply != "typed-pass" {
-		t.Fatalf("Answer = (%q, %v), want (\"typed-pass\", true)", reply, ok)
-	}
-	if !log.contains("ERROR askpass: store passphrase for id_rsa") {
-		t.Fatalf("expected an ERROR store log, got %v", log.lines)
-	}
+	require.True(t, ok, "a wallet that would not take the passphrase must not cost the user their key")
+	assert.Equal(t, "typed-pass", reply, "what they typed still opens it")
+	assert.Truef(t, log.contains("ERROR askpass: store passphrase for id_rsa"),
+		"but the log must say it was not saved, or they are asked again next time with no explanation: %v", log.lines)
 }
 
 // TestBrokerNilLoggerDoesNotPanic covers logf's nil-Logger guard: a Broker with
@@ -72,9 +69,8 @@ func TestBrokerNilLoggerDoesNotPanic(t *testing.T) {
 	b := Broker{Secret: secret, TTY: &fakeTTY{}, Log: nil}
 
 	reply, ok := b.Answer("Enter passphrase for /home/u/.ssh/id_rsa:")
-	if !ok || reply != "stored" {
-		t.Fatalf("Answer = (%q, %v), want (\"stored\", true)", reply, ok)
-	}
+	require.True(t, ok, "keeping no session log is a choice, and it must not cost the user their key")
+	assert.Equal(t, "stored", reply, "the passphrase in the wallet still answers")
 }
 
 // TestBrokerCustomServicePrefix covers servicePrefixOf's non-default branch:
@@ -88,10 +84,9 @@ func TestBrokerCustomServicePrefix(t *testing.T) {
 		Config: Config{ServicePrefix: "MyPrefix"},
 	}
 
-	if _, ok := b.Answer("Enter passphrase for /home/u/.ssh/id_rsa:"); !ok {
-		t.Fatal("Answer ok = false, want true")
-	}
-	if len(secret.stored) != 1 || secret.stored[0].service != "MyPrefix-id_rsa" {
-		t.Fatalf("stored = %+v, want service MyPrefix-id_rsa", secret.stored)
-	}
+	_, ok := b.Answer("Enter passphrase for /home/u/.ssh/id_rsa:")
+	require.True(t, ok, "the key must open")
+	require.Lenf(t, secret.stored, 1, "and the passphrase must be saved once: %+v", secret.stored)
+	assert.Equal(t, "MyPrefix-id_rsa", secret.stored[0].service,
+		"under the name this configuration writes, or a later lookup goes looking somewhere else")
 }

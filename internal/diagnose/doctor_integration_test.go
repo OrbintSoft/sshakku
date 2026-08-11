@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/OrbintSoft/sshakku/internal/agent"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/sys/unix"
 )
 
@@ -24,12 +26,10 @@ import (
 func lockRealAgentTests(t *testing.T) {
 	t.Helper()
 	f, err := os.OpenFile(filepath.Join(os.TempDir(), "sshakku-test-real-agent.lock"), os.O_CREATE|os.O_RDWR, 0o600)
-	if err != nil {
-		t.Fatalf("open cross-package real-agent test lock: %v", err)
-	}
+	require.NoError(t, err, "open cross-package real-agent test lock")
 	if err := unix.Flock(int(f.Fd()), unix.LOCK_EX); err != nil {
 		_ = f.Close()
-		t.Fatalf("flock cross-package real-agent test lock: %v", err)
+		require.NoError(t, err, "flock cross-package real-agent test lock")
 	}
 	t.Cleanup(func() {
 		_ = unix.Flock(int(f.Fd()), unix.LOCK_UN)
@@ -68,9 +68,7 @@ func requireIsolatedAgentEnvironment(t *testing.T) {
 func shortDir(t *testing.T) string {
 	t.Helper()
 	dir, err := os.MkdirTemp("", "sshakku")
-	if err != nil {
-		t.Fatalf("mkdir temp: %v", err)
-	}
+	require.NoError(t, err, "mkdir temp")
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	return dir
 }
@@ -118,9 +116,7 @@ func TestDoctorDetectsAndFixesDeadOursAgent(t *testing.T) {
 	m := realManager()
 
 	res1, err := m.EnsureAgent(cfg, nil)
-	if err != nil {
-		t.Fatalf("seed EnsureAgent: %v", err)
-	}
+	require.NoError(t, err, "seed EnsureAgent")
 
 	// EnvSock and the askpass exports mirror a shell the login hook has already
 	// wired (the normal case once shell-init and askpass-env have run), so the
@@ -133,9 +129,7 @@ func TestDoctorDetectsAndFixesDeadOursAgent(t *testing.T) {
 	}
 
 	before := Gather(in, agent.Inspector{}, agent.SocketProber{}, nil, nil, nil, nil)
-	if before.State != StateOursHealthy {
-		t.Fatalf("before crash: State = %v, want ours-healthy", before.State)
-	}
+	require.Equal(t, StateOursHealthy, before.State, "the agent this test then crashes must be healthy to start with")
 
 	// Simulate a real crash: SIGKILL, no graceful socket cleanup by ssh-agent
 	// itself. Whether or not something in this PID namespace reaps it, the
@@ -145,31 +139,21 @@ func TestDoctorDetectsAndFixesDeadOursAgent(t *testing.T) {
 	waitDead(t, res1.Started)
 
 	after := Gather(in, agent.Inspector{}, agent.SocketProber{}, nil, nil, nil, nil)
-	if after.State != StateOursZombie {
-		t.Errorf("after crash: State = %v, want ours-zombie", after.State)
-	}
-	if hasFinding(after, "no problems detected") {
-		t.Errorf("after crash: findings claim no problems, got %v", after.Findings)
-	}
+	assert.Equal(t, StateOursZombie, after.State, "an agent of ours that died leaves its state behind")
+	assert.Falsef(t, hasFinding(after, "no problems detected"),
+		"a report over a crashed agent must not call the machine clean: %v", after.Findings)
 
 	// doctor --fix's actual mechanism (cmd/sshakku's runFix): EnsureAgent,
 	// then re-Gather.
 	res2, err := m.EnsureAgent(cfg, nil)
-	if err != nil {
-		t.Fatalf("fix EnsureAgent: %v", err)
-	}
+	require.NoError(t, err, "fix EnsureAgent")
 	t.Cleanup(func() { _ = syscall.Kill(res2.Started, syscall.SIGTERM) })
-	if res2.Situation != agent.SituationZombie {
-		t.Errorf("fix Situation = %s, want zombie", res2.Situation)
-	}
+	assert.Equal(t, agent.SituationZombie, res2.Situation, "the fix must recognise what it is repairing")
 
 	fixed := Gather(in, agent.Inspector{}, agent.SocketProber{}, nil, nil, nil, nil)
-	if fixed.State != StateOursHealthy {
-		t.Errorf("after fix: State = %v, want ours-healthy", fixed.State)
-	}
-	if !hasFinding(fixed, "no problems detected") {
-		t.Errorf("after fix: expected a clean report, got %v", fixed.Findings)
-	}
+	assert.Equal(t, StateOursHealthy, fixed.State, "the fix must leave a healthy agent behind")
+	assert.Truef(t, hasFinding(fixed, "no problems detected"),
+		"a repaired machine must be reported as clean: %v", fixed.Findings)
 }
 
 func ourUID() int {

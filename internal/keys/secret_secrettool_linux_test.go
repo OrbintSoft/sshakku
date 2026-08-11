@@ -4,8 +4,10 @@ package keys
 
 import (
 	"errors"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSecretToolLookup(t *testing.T) {
@@ -13,36 +15,28 @@ func TestSecretToolLookup(t *testing.T) {
 		r := newFakeRunner().on("secret-tool", stdout("hunter2\n", 0))
 		b := SecretToolBackend{Runner: r, User: "alice"}
 		pass, found, err := b.Lookup(defaultServicePrefix + "-id_rsa")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if !found || pass != "hunter2" {
-			t.Fatalf("Lookup = (%q, %v), want (hunter2, true)", pass, found)
-		}
-		want := []string{"lookup", "service", defaultServicePrefix + "-id_rsa", "username", "alice"}
-		if got := r.calls[0].Args; !equalStrings(got, want) {
-			t.Fatalf("args = %v, want %v", got, want)
-		}
+		require.NoError(t, err, "a stored passphrase must come back")
+		assert.True(t, found, "the item is in the wallet, so it must be reported found")
+		assert.Equal(t, "hunter2", pass,
+			"and the passphrase must be exactly what was stored: secret-tool's trailing newline is not part of it")
+		require.NotEmpty(t, r.calls, "the wallet must actually be asked")
+		assert.Equal(t, []string{"lookup", "service", defaultServicePrefix + "-id_rsa", "username", "alice"},
+			r.calls[0].Args, "the lookup must name both the key and whose passphrase it is")
 	})
 
 	t.Run("miss is found=false, no error", func(t *testing.T) {
 		r := newFakeRunner().on("secret-tool", stdout("", 1))
 		b := SecretToolBackend{Runner: r, User: "alice"}
 		_, found, err := b.Lookup(defaultServicePrefix + "-id_rsa")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if found {
-			t.Fatal("found = true, want false for a miss")
-		}
+		require.NoError(t, err, "a passphrase that was never stored is not an error")
+		assert.False(t, found, "and nothing may be reported found")
 	})
 
 	t.Run("a failure to start secret-tool is an error", func(t *testing.T) {
 		wantErr := errors.New("boom")
 		b := SecretToolBackend{Runner: newFakeRunner().on("secret-tool", fails(wantErr)), User: "alice"}
-		if _, _, err := b.Lookup("x"); !errors.Is(err, wantErr) {
-			t.Fatalf("error = %v, want %v", err, wantErr)
-		}
+		_, _, err := b.Lookup("x")
+		assert.ErrorIs(t, err, wantErr, "a wallet tool that would not run must be reported, not read as a miss")
 	})
 }
 
@@ -52,21 +46,19 @@ func TestSecretToolStore(t *testing.T) {
 	t.Run("passphrase goes on stdin, never in argv", func(t *testing.T) {
 		r := newFakeRunner().on("secret-tool", stdout("", 0))
 		b := SecretToolBackend{Runner: r, User: "alice"}
-		if err := b.Store(defaultServicePrefix+"-id_rsa", "SSH Passphrase for id_rsa", passphrase); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		require.NoError(t, b.Store(defaultServicePrefix+"-id_rsa", "SSH Passphrase for id_rsa", passphrase),
+			"saving a passphrase must succeed")
+		require.NotEmpty(t, r.calls, "the wallet must actually be asked")
 		call := r.calls[0]
-		if call.Stdin != passphrase {
-			t.Fatalf("stdin = %q, want the passphrase", call.Stdin)
-		}
+		assert.Equal(t, passphrase, call.Stdin, "the passphrase must reach secret-tool out of sight, on standard input")
 		for _, a := range call.Args {
-			if strings.Contains(a, passphrase) {
-				t.Fatalf("passphrase leaked into argv: %q", a)
-			}
+			assert.NotContains(t, a, passphrase,
+				"argv is world-readable on this machine: a passphrase there is readable by every other user")
 		}
-		if call.Args[0] != "store" || call.Args[1] != "--label=SSH Passphrase for id_rsa" {
-			t.Fatalf("args = %v, want store with the label", call.Args)
-		}
+		require.GreaterOrEqualf(t, len(call.Args), 2, "the call must name what it is doing: %v", call.Args)
+		assert.Equal(t, "store", call.Args[0], "and it must be a store")
+		assert.Equal(t, "--label=SSH Passphrase for id_rsa", call.Args[1],
+			"carrying the label, which is what a person sees in their wallet")
 	})
 
 	t.Run("a non-zero exit is an error", func(t *testing.T) {
@@ -74,9 +66,8 @@ func TestSecretToolStore(t *testing.T) {
 			return Result{Stderr: []byte("no wallet"), Code: 1}, nil
 		})
 		b := SecretToolBackend{Runner: r, User: "alice"}
-		if err := b.Store("x", "y", passphrase); err == nil {
-			t.Fatal("expected an error for a non-zero exit")
-		}
+		assert.Error(t, b.Store("x", "y", passphrase),
+			"a passphrase the wallet refused to write must not be reported as saved")
 	})
 }
 
@@ -84,13 +75,10 @@ func TestSecretToolDelete(t *testing.T) {
 	t.Run("clears the entry", func(t *testing.T) {
 		r := newFakeRunner().on("secret-tool", stdout("", 0))
 		b := SecretToolBackend{Runner: r, User: "alice"}
-		if err := b.Delete(defaultServicePrefix + "-id_rsa"); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		want := []string{"clear", "service", defaultServicePrefix + "-id_rsa", "username", "alice"}
-		if got := r.calls[0].Args; !equalStrings(got, want) {
-			t.Fatalf("args = %v, want %v", got, want)
-		}
+		require.NoError(t, b.Delete(defaultServicePrefix+"-id_rsa"), "forgetting a passphrase must succeed")
+		require.NotEmpty(t, r.calls, "the wallet must actually be asked")
+		assert.Equal(t, []string{"clear", "service", defaultServicePrefix + "-id_rsa", "username", "alice"},
+			r.calls[0].Args, "exactly the entry that was named may be cleared, and only this user's")
 	})
 
 	t.Run("a non-zero exit is an error", func(t *testing.T) {
@@ -98,23 +86,20 @@ func TestSecretToolDelete(t *testing.T) {
 			return Result{Code: 1}, nil
 		})
 		b := SecretToolBackend{Runner: r, User: "alice"}
-		if err := b.Delete("x"); err == nil {
-			t.Fatal("expected an error for a non-zero exit")
-		}
+		assert.Error(t, b.Delete("x"), "a passphrase the wallet refused to remove must not be reported as forgotten")
 	})
 
 	t.Run("a failure to start secret-tool is an error", func(t *testing.T) {
 		wantErr := errors.New("boom")
 		b := SecretToolBackend{Runner: newFakeRunner().on("secret-tool", fails(wantErr)), User: "alice"}
-		if err := b.Delete("x"); !errors.Is(err, wantErr) {
-			t.Fatalf("error = %v, want %v", err, wantErr)
-		}
+		assert.ErrorIs(t, b.Delete("x"), wantErr,
+			"a wallet tool that would not run must be reported, not read as a passphrase forgotten")
 	})
 }
 
 func TestSecretToolList(t *testing.T) {
 	b := SecretToolBackend{Runner: newFakeRunner(), User: "alice"}
-	if _, err := b.List(); !errors.Is(err, ErrListUnsupported) {
-		t.Fatalf("error = %v, want %v", err, ErrListUnsupported)
-	}
+	_, err := b.List()
+	assert.ErrorIs(t, err, ErrListUnsupported,
+		"secret-tool can look an entry up but not enumerate one, and that must be said, not answered as empty")
 }

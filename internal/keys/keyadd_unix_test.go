@@ -3,9 +3,10 @@
 package keys
 
 import (
-	"reflect"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestSSHAddArgs(t *testing.T) {
@@ -22,10 +23,8 @@ func TestSSHAddArgs(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := sshAddArgs(tc.lifetime, "/k")
-			if !reflect.DeepEqual(got, tc.want) {
-				t.Errorf("sshAddArgs(%v) = %v, want %v", tc.lifetime, got, tc.want)
-			}
+			assert.Equalf(t, tc.want, sshAddArgs(tc.lifetime, "/k"),
+				"how long the agent is asked to keep the key, for a lifetime of %v", tc.lifetime)
 		})
 	}
 }

@@ -4,6 +4,8 @@ import (
 	"errors"
 	"os/user"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // TestCurrentUserLookupFailure covers currentUser's last fallback: with $USER
@@ -16,9 +18,7 @@ func TestCurrentUserLookupFailure(t *testing.T) {
 	t.Cleanup(func() { userCurrent = orig })
 	userCurrent = func() (*user.User, error) { return nil, errors.New("no such user") }
 
-	if got := currentUser(); got != "" {
-		t.Errorf("currentUser() = %q, want \"\" when the lookup fails", got)
-	}
+	assert.Empty(t, currentUser(), "with no $USER and no lookup to fall back on, there is no name to give")
 }
 
 // TestLookupUserParseFailures covers lookupUser's uid/gid parse-failure branches
@@ -33,17 +33,15 @@ func TestLookupUserParseFailures(t *testing.T) {
 		userLookupID = func(string) (*user.User, error) {
 			return &user.User{Uid: "not-a-number", Gid: "0", Username: "x"}, nil
 		}
-		if _, err := lookupUser("123"); err == nil {
-			t.Error("lookupUser = nil error, want a uid parse failure")
-		}
+		_, err := lookupUser("123")
+		assert.Error(t, err, "a uid that is not a number cannot be acted on, and must not be taken for zero")
 	})
 
 	t.Run("non-numeric gid", func(t *testing.T) {
 		userLookup = func(string) (*user.User, error) {
 			return &user.User{Uid: "0", Gid: "not-a-number", Username: "x"}, nil
 		}
-		if _, err := lookupUser("alice"); err == nil {
-			t.Error("lookupUser = nil error, want a gid parse failure")
-		}
+		_, err := lookupUser("alice")
+		assert.Error(t, err, "a gid that is not a number cannot be acted on either")
 	})
 }

@@ -7,6 +7,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"golang.org/x/sys/unix"
 )
 
@@ -29,19 +30,13 @@ func openPTY(t *testing.T) (master, slave *os.File) {
 	master = os.NewFile(uintptr(mfd), "/dev/ptmx")
 	t.Cleanup(func() { _ = master.Close() })
 
-	if err := unix.IoctlSetPointerInt(mfd, unix.TIOCSPTLCK, 0); err != nil {
-		t.Fatalf("unlock pty slave: %v", err)
-	}
+	require.NoError(t, unix.IoctlSetPointerInt(mfd, unix.TIOCSPTLCK, 0), "unlock the pty slave")
 	n, err := unix.IoctlGetInt(mfd, unix.TIOCGPTN)
-	if err != nil {
-		t.Fatalf("read pty number: %v", err)
-	}
+	require.NoError(t, err, "read the pty number")
 
 	name := fmt.Sprintf("/dev/pts/%d", n)
 	slave, err = os.OpenFile(name, os.O_RDWR|unix.O_NOCTTY, 0)
-	if err != nil {
-		t.Fatalf("open pty slave %s: %v", name, err)
-	}
+	require.NoErrorf(t, err, "open the pty slave %s", name)
 	t.Cleanup(func() { _ = slave.Close() })
 	return master, slave
 }

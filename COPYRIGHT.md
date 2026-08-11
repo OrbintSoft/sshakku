@@ -38,8 +38,18 @@ Compiled into the distributed binary:
 Imported only by tests, never linked into the distributed binary:
 
 - **go.uber.org/goleak** — MIT (goroutine-leak detection in the test suite).
+- **github.com/stretchr/testify** — MIT (the `require` and `assert` assertions
+  the test suite is written in), which brings with it
+  **github.com/davecgh/go-spew** (ISC) and **github.com/pmezard/go-difflib**
+  (BSD-3-Clause), used to render the difference between what a failing assertion
+  expected and what it got, and **gopkg.in/yaml.v3** (MIT for the files ported
+  from libyaml, Apache-2.0 for the rest).
 
-These permissive licences (Apache-2.0, BSD-2-Clause, BSD-3-Clause and MIT) are
+`github.com/kr/text` (MIT) also appears in `go.mod` as an indirect requirement.
+It is a test dependency of one of the modules above and is compiled into nothing
+here — neither the binary nor this project's own tests.
+
+These permissive licences (Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC and MIT) are
 compatible with the EUPL 1.2 and with offering the project under additional
 licences, so they do not obstruct relicensing. Apache-2.0 carries two conditions
 the others do not — its notice and attribution requirements, met by this file,

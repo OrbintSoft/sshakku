@@ -7,6 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // errReadWriter is an in-process io.ReadWriter that fails Write with writeErr (when
@@ -36,36 +39,38 @@ func (e *errReadWriter) Read(p []byte) (int, error) {
 // TestIdentitiesAnsweredEdges covers the write-failure and malformed-frame branches
 // of identitiesAnswered that a healthy fake agent never triggers.
 func TestIdentitiesAnsweredEdges(t *testing.T) {
+	// Each buffer below carries a message type that would be accepted, so the
+	// only thing that can make these false is the check being tested. Left
+	// empty, the read simply runs out and every one of them would pass with the
+	// check deleted.
+	answer := []byte{msgIdentitiesAnswer}
+
 	t.Run("write fails", func(t *testing.T) {
-		if identitiesAnswered(&errReadWriter{writeErr: errors.New("broken pipe")}) {
-			t.Error("want false when the request write fails")
-		}
+		wellFormed := append([]byte{0, 0, 0, 1}, answer...)
+		assert.False(t, identitiesAnswered(&errReadWriter{writeErr: errors.New("broken pipe"), readBuf: wellFormed}),
+			"a request that could not be written must not be believed answered")
 	})
 	t.Run("short header", func(t *testing.T) {
 		// Fewer than 4 header bytes: io.ReadFull returns before the frame is read.
-		if identitiesAnswered(&errReadWriter{readBuf: []byte{0, 0}}) {
-			t.Error("want false when the length header is truncated")
-		}
+		assert.False(t, identitiesAnswered(&errReadWriter{readBuf: []byte{0, 0}}),
+			"a truncated length header is not an answer")
 	})
 	t.Run("zero length frame", func(t *testing.T) {
-		if identitiesAnswered(&errReadWriter{readBuf: []byte{0, 0, 0, 0}}) {
-			t.Error("want false when the framed length is below 1")
-		}
+		assert.False(t, identitiesAnswered(&errReadWriter{readBuf: append([]byte{0, 0, 0, 0}, answer...)}),
+			"a framed length below 1 is not an answer, whatever byte follows it")
 	})
 	t.Run("oversized length frame", func(t *testing.T) {
 		// length = maxFrame+1, above the cap.
 		hdr := make([]byte, 4)
 		binary.BigEndian.PutUint32(hdr, maxFrame+1)
-		if identitiesAnswered(&errReadWriter{readBuf: hdr}) {
-			t.Error("want false when the framed length exceeds the cap")
-		}
+		assert.False(t, identitiesAnswered(&errReadWriter{readBuf: append(hdr, answer...)}),
+			"a framed length above the cap is not an answer, whatever byte follows it")
 	})
 	t.Run("type byte truncated", func(t *testing.T) {
 		// A valid length of 1 but no message-type byte follows: the second
 		// io.ReadFull hits EOF.
-		if identitiesAnswered(&errReadWriter{readBuf: []byte{0, 0, 0, 1}}) {
-			t.Error("want false when the message type is missing")
-		}
+		assert.False(t, identitiesAnswered(&errReadWriter{readBuf: []byte{0, 0, 0, 1}}),
+			"a missing message type is not an answer")
 	})
 }
 
@@ -76,35 +81,25 @@ func TestReadStatusUIDMalformed(t *testing.T) {
 	write := func(t *testing.T, body string) string {
 		t.Helper()
 		p := filepath.Join(t.TempDir(), "status")
-		if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(p, []byte(body), 0o600))
 		return p
 	}
 
 	t.Run("Uid line with too few fields", func(t *testing.T) {
-		if got := readStatusUID(write(t, "Name:\tx\nUid:\n")); got != -1 {
-			t.Errorf("readStatusUID = %d, want -1 for a short Uid line", got)
-		}
+		assert.Equal(t, -1, readStatusUID(write(t, "Name:\tx\nUid:\n")), "a short Uid line leaves the owner unknown")
 	})
 	t.Run("non-numeric uid", func(t *testing.T) {
-		if got := readStatusUID(write(t, "Uid:\tnobody\tnobody\n")); got != -1 {
-			t.Errorf("readStatusUID = %d, want -1 for a non-numeric uid", got)
-		}
+		assert.Equal(t, -1, readStatusUID(write(t, "Uid:\tnobody\tnobody\n")), "a non-numeric uid leaves the owner unknown")
 	})
 	t.Run("no Uid line at all", func(t *testing.T) {
-		if got := readStatusUID(write(t, "Name:\tx\nState:\tS\n")); got != -1 {
-			t.Errorf("readStatusUID = %d, want -1 when no Uid line is present", got)
-		}
+		assert.Equal(t, -1, readStatusUID(write(t, "Name:\tx\nState:\tS\n")), "no Uid line leaves the owner unknown")
 	})
 }
 
 // TestSituationStringUnknown covers Situation.String's default arm for a value
 // outside the defined set.
 func TestSituationStringUnknown(t *testing.T) {
-	if got := Situation(99).String(); got != "unknown" {
-		t.Errorf("Situation(99).String() = %q, want %q", got, "unknown")
-	}
+	assert.Equal(t, "unknown", Situation(99).String(), "a situation outside the defined set")
 }
 
 // TestReadProcfsTreeUnreadableCmdline covers readCmdline's read-failure path: a pid
@@ -113,16 +108,10 @@ func TestReadProcfsTreeUnreadableCmdline(t *testing.T) {
 	root := t.TempDir()
 	// A pid directory that exists but has no cmdline file (the process vanished
 	// mid-scan). ReadFile fails and the entry is skipped.
-	if err := os.Mkdir(filepath.Join(root, "999"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.Mkdir(filepath.Join(root, "999"), 0o755))
 	procs, err := readProcfsTree(root)
-	if err != nil {
-		t.Fatalf("readProcfsTree: %v", err)
-	}
-	if len(procs) != 0 {
-		t.Errorf("got %d procs, want none (the cmdline-less entry is skipped)", len(procs))
-	}
+	require.NoError(t, err, "readProcfsTree")
+	assert.Empty(t, procs, "the cmdline-less entry must be skipped")
 }
 
 // TestEnsureAgentReapError covers EnsureAgent's error return when the reap pass
@@ -136,18 +125,16 @@ func TestEnsureAgentReapError(t *testing.T) {
 		Runner:    &recordRunner{},
 		Signaler:  &recordSignaler{},
 	}
-	if _, err := m.EnsureAgent(EnsureConfig{FixedSock: fixed, OurUID: 1000}, nil); err == nil {
-		t.Fatal("want an error when reaping cannot read the process list")
-	}
+	_, err := m.EnsureAgent(EnsureConfig{FixedSock: fixed, OurUID: 1000}, nil)
+	assert.Error(t, err, "a reap that cannot read the process list must be reported")
 }
 
 // TestManagerReapInspectError covers Reap's error return when the process list
 // cannot be read (a missing procfs root).
 func TestManagerReapInspectError(t *testing.T) {
 	m := Manager{Inspector: Inspector{ProcRoot: filepath.Join(t.TempDir(), "nope")}}
-	if _, err := m.Reap(1000); err == nil {
-		t.Fatal("want an error when the process list cannot be read")
-	}
+	_, err := m.Reap(1000)
+	assert.Error(t, err, "a process list that cannot be read must be reported")
 }
 
 // TestManagerStartRunnerError covers Start's error return when the runner fails to
@@ -158,12 +145,10 @@ func TestManagerStartRunnerError(t *testing.T) {
 	state := filepath.Join(dir, "agent.state")
 	m := Manager{Prober: mapProber{}, Runner: &recordRunner{err: errors.New("no ssh-agent")}}
 
-	if _, err := m.Start(socket, state); err == nil {
-		t.Fatal("want an error when the runner fails")
-	}
-	if _, err := os.Stat(state); !os.IsNotExist(err) {
-		t.Errorf("no state file should be written on a runner failure, stat err = %v", err)
-	}
+	_, err := m.Start(socket, state)
+	assert.Error(t, err, "a runner that fails must be reported")
+	_, err = os.Stat(state)
+	assert.ErrorIs(t, err, os.ErrNotExist, "no state file must be written on a runner failure")
 }
 
 // TestManagerStartStateWriteError covers Start's non-fatal path: the agent came up
@@ -175,20 +160,15 @@ func TestManagerStartStateWriteError(t *testing.T) {
 	m := Manager{Prober: mapProber{}, Runner: &recordRunner{pid: 4242}}
 
 	pid, err := m.Start(socket, state)
-	if err == nil {
-		t.Fatal("want an error when the state file cannot be written")
-	}
-	if pid != 4242 {
-		t.Errorf("pid = %d, want the started agent's pid 4242 even when state recording fails", pid)
-	}
+	assert.Error(t, err, "a state file that cannot be written must be reported")
+	assert.Equal(t, 4242, pid, "the started agent's pid must come back even when recording its state fails")
 }
 
 // TestWriteStateError covers WriteState's os.WriteFile failure path.
 func TestWriteStateError(t *testing.T) {
 	bad := filepath.Join(t.TempDir(), "no-such-dir", "agent.state")
-	if err := WriteState(bad, State{PID: 1, Socket: "/x"}); err == nil {
-		t.Fatal("want an error writing state under a missing directory")
-	}
+	assert.Error(t, WriteState(bad, State{PID: 1, Socket: "/x"}),
+		"writing state under a missing directory must be reported")
 }
 
 // TestEnsureAgentClearsStaleFixedSocket covers the start path's stale-socket
@@ -209,28 +189,10 @@ func TestEnsureAgentClearsStaleFixedSocket(t *testing.T) {
 		Signaler:  &recordSignaler{},
 	}
 	res, err := m.EnsureAgent(EnsureConfig{FixedSock: fixed, StatePath: filepath.Join(dir, "st"), OurUID: 1000}, log)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Situation != SituationZombie {
-		t.Fatalf("situation = %v, want zombie after clearing an orphan socket", res.Situation)
-	}
-	if !containsStr(res.Reaped.RemovedSockets, fixed) {
-		t.Errorf("removed sockets = %v, want the orphan %s", res.Reaped.RemovedSockets, fixed)
-	}
-	if runner.started != fixed {
-		t.Errorf("started %q, want a fresh agent on %q", runner.started, fixed)
-	}
-}
-
-// containsStr reports membership for the socket-path slices ReapResult uses.
-func containsStr(xs []string, x string) bool {
-	for _, v := range xs {
-		if v == x {
-			return true
-		}
-	}
-	return false
+	require.NoError(t, err)
+	assert.Equal(t, SituationZombie, res.Situation, "clearing an orphan socket is a zombie recovery, not a clean start")
+	assert.Contains(t, res.Reaped.RemovedSockets, fixed, "the orphan socket must be reported as removed")
+	assert.Equal(t, fixed, runner.started, "a fresh agent must be started on the fixed socket")
 }
 
 // TestEnsureAgentStartError covers EnsureAgent's error return when starting the
@@ -244,9 +206,8 @@ func TestEnsureAgentStartError(t *testing.T) {
 		Runner:    &recordRunner{err: errors.New("no ssh-agent")},
 		Signaler:  &recordSignaler{},
 	}
-	if _, err := m.EnsureAgent(EnsureConfig{FixedSock: fixed, StatePath: filepath.Join(dir, "st"), OurUID: 1000}, nil); err == nil {
-		t.Fatal("want an error when starting the agent fails")
-	}
+	_, err := m.EnsureAgent(EnsureConfig{FixedSock: fixed, StatePath: filepath.Join(dir, "st"), OurUID: 1000}, nil)
+	assert.Error(t, err, "an agent that cannot be started must be reported")
 }
 
 // TestEnsureAgentReplacesStaleFixedOnAdopt covers the adopt path's stale-socket
@@ -270,18 +231,12 @@ func TestEnsureAgentReplacesStaleFixedOnAdopt(t *testing.T) {
 		Signaler:  &recordSignaler{},
 	}
 	res, err := m.EnsureAgent(EnsureConfig{FixedSock: fixed, OurUID: 1000}, log)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Situation != SituationDisaster {
-		t.Fatalf("situation = %v, want disaster (adopt after replacing a stale socket)", res.Situation)
-	}
-	if !containsStr(res.Reaped.RemovedSockets, fixed) {
-		t.Errorf("removed sockets = %v, want the replaced fixed socket %s", res.Reaped.RemovedSockets, fixed)
-	}
-	if target, _ := os.Readlink(fixed); target != foreignSock {
-		t.Errorf("fixed now points at %q, want the adopted %q", target, foreignSock)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, SituationDisaster, res.Situation, "adopting after replacing a stale socket is a disaster")
+	assert.Contains(t, res.Reaped.RemovedSockets, fixed, "the replaced fixed socket must be reported as removed")
+
+	target, _ := os.Readlink(fixed)
+	assert.Equal(t, foreignSock, target, "the fixed path must point at the adopted socket")
 }
 
 // TestEnsureAgentAdoptSymlinkError covers EnsureAgent's error return when adopting
@@ -299,9 +254,8 @@ func TestEnsureAgentAdoptSymlinkError(t *testing.T) {
 		Runner:    &recordRunner{},
 		Signaler:  &recordSignaler{},
 	}
-	if _, err := m.EnsureAgent(EnsureConfig{FixedSock: fixed, OurUID: 1000}, nil); err == nil {
-		t.Fatal("want an error when adoption cannot symlink the fixed socket")
-	}
+	_, err := m.EnsureAgent(EnsureConfig{FixedSock: fixed, OurUID: 1000}, nil)
+	assert.Error(t, err, "an adoption that cannot symlink the fixed socket must be reported")
 }
 
 // TestAdoptSymlinkErrors covers adoptSymlink's two failure returns directly: the
@@ -312,21 +266,14 @@ func TestAdoptSymlinkErrors(t *testing.T) {
 
 	t.Run("symlink fails", func(t *testing.T) {
 		fixed := filepath.Join(dir, "no-such-dir", "agent.sock")
-		if err := adoptSymlink(fixed, "/some/target"); err == nil {
-			t.Error("want an error when the symlink cannot be created")
-		}
+		assert.Error(t, adoptSymlink(fixed, "/some/target"), "a symlink that cannot be created must be reported")
 	})
 	t.Run("rename fails", func(t *testing.T) {
 		occupied := filepath.Join(dir, "occupied")
-		if err := os.Mkdir(occupied, 0o755); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.Mkdir(occupied, 0o755))
 		// Renaming the temp symlink onto an existing directory fails.
-		if err := adoptSymlink(occupied, "/some/target"); err == nil {
-			t.Error("want an error when the rename onto the fixed path fails")
-		}
-		if _, err := os.Lstat(occupied + ".adopt"); !os.IsNotExist(err) {
-			t.Errorf("the temp symlink must be cleaned up on a rename failure, lstat err = %v", err)
-		}
+		assert.Error(t, adoptSymlink(occupied, "/some/target"), "a rename onto the fixed path that fails must be reported")
+		_, err := os.Lstat(occupied + ".adopt")
+		assert.ErrorIs(t, err, os.ErrNotExist, "the temp symlink must be cleaned up on a rename failure")
 	})
 }

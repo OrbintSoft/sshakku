@@ -8,6 +8,8 @@ import (
 
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestNewSecretBackendDefaultKeychain covers what a user who has configured no
@@ -18,12 +20,8 @@ func TestNewSecretBackendDefaultKeychain(t *testing.T) {
 	backend, closeFn := newSecretBackend("alice", fakeLogger{}, config.Settings{SecretBackend: config.DefaultSecretBackend()})
 	defer closeFn()
 	kc, ok := backend.(*keys.KeychainBackend)
-	if !ok {
-		t.Fatalf("backend = %T, want a *keys.KeychainBackend default off Linux", backend)
-	}
-	if kc.Account != "alice" {
-		t.Errorf("Account = %q, want %q", kc.Account, "alice")
-	}
+	require.Truef(t, ok, "an unconfigured machine off Linux opens the OS keychain, got %T", backend)
+	assert.Equal(t, "alice", kc.Account, "scoped to the account it is being opened for")
 }
 
 // TestTheKeychainIsGivenTheBudgetForAWaitOnAPerson verifies F21 where it names
@@ -48,11 +46,8 @@ func TestTheKeychainIsGivenTheBudgetForAWaitOnAPerson(t *testing.T) {
 	defer closeFn()
 
 	kc, ok := backend.(*keys.KeychainBackend)
-	if !ok {
-		t.Fatalf("backend = %T, want a *keys.KeychainBackend default off Linux", backend)
-	}
-	if kc.Timeout != settings.InteractiveTimeout {
-		t.Errorf("Timeout = %s, want %s — the budget for a wait on a person, not the %s given to something that answers on its own",
-			kc.Timeout, settings.InteractiveTimeout, settings.CommandTimeout)
-	}
+	require.Truef(t, ok, "an unconfigured machine off Linux opens the OS keychain, got %T", backend)
+	assert.Equalf(t, settings.InteractiveTimeout, kc.Timeout,
+		"a keychain showing its approval dialog is waiting on a person, not on the %s given to something that answers by itself",
+		settings.CommandTimeout)
 }

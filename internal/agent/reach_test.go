@@ -8,17 +8,22 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // fakeAgent starts an in-process unix listener that handles each connection with
 // reply, and returns its socket path.
+//
+// The accept loop below asserts nothing: it runs on a goroutine of its own, and
+// an assertion there would report a failure from outside the test's own
+// goroutine. What it serves is the subject's input, not its verdict.
 func fakeAgent(t *testing.T, reply func(net.Conn)) string {
 	t.Helper()
 	sock := filepath.Join(shortDir(t), "a.sock")
 	ln, err := net.Listen("unix", sock)
-	if err != nil {
-		t.Fatalf("listen: %v", err)
-	}
+	require.NoError(t, err, "listen")
 	t.Cleanup(func() { _ = ln.Close() })
 	go func() {
 		for {
@@ -60,48 +65,32 @@ func TestSocketProberReachable(t *testing.T) {
 	p := SocketProber{Timeout: time.Second}
 
 	t.Run("healthy with keys", func(t *testing.T) {
-		if !p.Reachable(fakeAgent(t, replyIdentities(2))) {
-			t.Fatal("want reachable")
-		}
+		assert.True(t, p.Reachable(fakeAgent(t, replyIdentities(2))), "an agent holding keys is reachable")
 	})
 	t.Run("healthy but empty", func(t *testing.T) {
-		if !p.Reachable(fakeAgent(t, replyIdentities(0))) {
-			t.Fatal("want reachable for a live agent with no keys")
-		}
+		assert.True(t, p.Reachable(fakeAgent(t, replyIdentities(0))), "a live agent with no keys is still reachable")
 	})
 	t.Run("wrong reply type", func(t *testing.T) {
 		sock := fakeAgent(t, func(c net.Conn) {
 			drainRequest(c)
 			_, _ = c.Write([]byte{0, 0, 0, 1, 99}) // not identities-answer
 		})
-		if p.Reachable(sock) {
-			t.Fatal("want unreachable on an unexpected message type")
-		}
+		assert.False(t, p.Reachable(sock), "an unexpected message type is not an agent")
 	})
 	t.Run("accept then close", func(t *testing.T) {
 		sock := fakeAgent(t, func(net.Conn) {}) // reply nothing; conn is closed
-		if p.Reachable(sock) {
-			t.Fatal("want unreachable when the peer sends nothing")
-		}
+		assert.False(t, p.Reachable(sock), "a peer that sends nothing is not an agent")
 	})
 	t.Run("empty path", func(t *testing.T) {
-		if p.Reachable("") {
-			t.Fatal("want unreachable for an empty path")
-		}
+		assert.False(t, p.Reachable(""), "an empty path is not an agent")
 	})
 	t.Run("missing socket", func(t *testing.T) {
-		if p.Reachable(filepath.Join(shortDir(t), "nope.sock")) {
-			t.Fatal("want unreachable for a missing socket")
-		}
+		assert.False(t, p.Reachable(filepath.Join(shortDir(t), "nope.sock")), "a missing socket is not an agent")
 	})
 	t.Run("not a socket", func(t *testing.T) {
 		f := filepath.Join(shortDir(t), "regular")
-		if err := os.WriteFile(f, []byte("x"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		if p.Reachable(f) {
-			t.Fatal("want unreachable for a regular file")
-		}
+		require.NoError(t, os.WriteFile(f, []byte("x"), 0o600))
+		assert.False(t, p.Reachable(f), "a regular file is not an agent")
 	})
 }
 

@@ -4,6 +4,9 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // namedFake is a prompter that says what it is, the way the real ones do.
@@ -25,26 +28,30 @@ func TestFallbackPrompter(t *testing.T) {
 		terminal := &namedFake{answer: "typed on the terminal"}
 
 		pass, err := FallbackPrompter{Primary: dialog, Fallback: terminal}.Prompt("id_rsa")
-		if err != nil || pass != "typed in the dialog" {
-			t.Fatalf("Prompt = (%q, %v), want the dialog's answer", pass, err)
-		}
-		if terminal.calls != 0 {
-			t.Errorf("the terminal was asked %d times, want 0: the dialog answered", terminal.calls)
-		}
+		require.NoError(t, err, "a dialog that answered must hand the answer back")
+		assert.Equal(t, "typed in the dialog", pass, "and it must be the one typed there")
+		assert.Zero(t, terminal.calls, "the question was answered, so the terminal is not asked as well")
 	})
 
 	t.Run("a dialog that will not run asks on the terminal", func(t *testing.T) {
 		dialog := &namedFake{name: "pinentry", err: errors.New("no such file")}
-		terminal := &namedFake{answer: "typed on the terminal"}
+		terminal := &namedFake{name: "the terminal", answer: "typed on the terminal"}
 		log := &fakeLogger{}
 
 		pass, err := FallbackPrompter{Primary: dialog, Fallback: terminal, Log: log}.Prompt("id_rsa")
-		if err != nil || pass != "typed on the terminal" {
-			t.Fatalf("Prompt = (%q, %v), want the terminal's answer: being unable to ask must not lose the question", pass, err)
-		}
-		if !log.contains("pinentry") {
-			t.Errorf("log = %v, want the prompter that failed named in it", log.lines)
-		}
+		require.NoError(t, err, "a dialog that could not run must not lose the question")
+		assert.Equal(t, "typed on the terminal", pass, "the user is asked on the terminal instead")
+
+		// Both names appear either way round, so what is checked is which of
+		// them the line blames: told the terminal failed and pinentry was tried
+		// instead, a user goes and looks at the one that works.
+		line := strings.Join(log.lines, "\n")
+		failed, substitute := strings.Index(line, "pinentry"), strings.Index(line, "the terminal")
+		require.GreaterOrEqualf(t, failed, 0, "the log must name the one that could not ask: %v", log.lines)
+		require.GreaterOrEqualf(t, substitute, 0, "and where the question went instead: %v", log.lines)
+		assert.Lessf(t, failed, substitute,
+			"in that order: the one that failed is named first, or the line sends the user to the wrong program: %v",
+			log.lines)
 	})
 
 	t.Run("a dismissed dialog is not asked again elsewhere", func(t *testing.T) {
@@ -52,12 +59,9 @@ func TestFallbackPrompter(t *testing.T) {
 		terminal := &namedFake{answer: "typed on the terminal"}
 
 		_, err := FallbackPrompter{Primary: dialog, Fallback: terminal}.Prompt("id_rsa")
-		if !errors.Is(err, ErrPromptCanceled) {
-			t.Fatalf("error = %v, want ErrPromptCanceled", err)
-		}
-		if terminal.calls != 0 {
-			t.Errorf("the terminal was asked %d times after the user dismissed the dialog, want 0: cancelling is an answer", terminal.calls)
-		}
+		assert.ErrorIs(t, err, ErrPromptCanceled, "closing a dialog is an answer, and must be passed on as one")
+		assert.Zero(t, terminal.calls,
+			"so the same question must not be put again somewhere else the user was not looking")
 	})
 
 	t.Run("the log says where the question actually went", func(t *testing.T) {
@@ -70,15 +74,13 @@ func TestFallbackPrompter(t *testing.T) {
 		}
 		log := &fakeLogger{}
 
-		if _, err := (FallbackPrompter{Primary: dialog, Fallback: other, Log: log}).Prompt("id_rsa"); err != nil {
-			t.Fatalf("Prompt = %v, want the other dialog's answer", err)
-		}
+		_, err := FallbackPrompter{Primary: dialog, Fallback: other, Log: log}.Prompt("id_rsa")
+		require.NoError(t, err, "the rest of the chain must answer")
 		// Someone reading the log is trying to find out where they were asked,
 		// or why they were not: a line that names a terminal the question never
 		// reached sends them looking at the wrong thing.
-		if !log.contains("zenity") {
-			t.Errorf("log = %v, want it to name what was asked instead", log.lines)
-		}
+		assert.Truef(t, log.contains("zenity"),
+			"and the log must name where the question actually went: %v", log.lines)
 	})
 
 	t.Run("available while either half can ask", func(t *testing.T) {
@@ -95,24 +97,20 @@ func TestFallbackPrompter(t *testing.T) {
 				Primary:  &namedFake{avail: c.primary},
 				Fallback: &namedFake{avail: c.fallback},
 			}
-			if got := p.Available(); got != c.want {
-				t.Errorf("Available() with (%v, %v) = %v, want %v", c.primary, c.fallback, got, c.want)
-			}
+			assert.Equalf(t, c.want, p.Available(),
+				"a chain can ask while either half can, with the dialog %v and the terminal %v", c.primary, c.fallback)
 		}
 	})
 }
 
 func TestPrompterName(t *testing.T) {
-	if got := PrompterName(&namedFake{name: "pinentry"}); got != "pinentry" {
-		t.Errorf("PrompterName = %q, want %q", got, "pinentry")
-	}
+	assert.Equal(t, "pinentry", PrompterName(&namedFake{name: "pinentry"}),
+		"a prompter that says what it is called is called that")
 	// The terminal is not a program anyone could go and install, so a message
 	// that hands the question to it has to name the place rather than a binary
 	// the reader would then fail to find.
-	if got := PrompterName(TTYPrompter{}); !strings.Contains(got, "terminal") {
-		t.Errorf("PrompterName(TTYPrompter{}) = %q, want the place the user was asked", got)
-	}
-	if got := PrompterName(&fakePrompter{}); got == "" {
-		t.Error("PrompterName = \"\" for a prompter that does not say what it is, want something a message can use")
-	}
+	assert.Contains(t, PrompterName(TTYPrompter{}), "terminal",
+		"the terminal is a place, not a program: naming a binary would send the reader looking for one that does not exist")
+	assert.NotEmpty(t, PrompterName(&fakePrompter{}),
+		"and one that says nothing about itself still needs something a message can put in front of a user")
 }

@@ -5,6 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // blockingTools puts a never-answering stand-in ahead of every external program
@@ -19,15 +22,11 @@ import (
 func blockingTools(t *testing.T) {
 	t.Helper()
 	src, err := os.ReadFile(filepath.Join("..", "..", "test", "bats", "fixtures", "blocking-secret-tool"))
-	if err != nil {
-		t.Fatalf("read the blocking tool fixture: %v", err)
-	}
+	require.NoError(t, err, "a stand-in that neither answers nor fails")
 	dir := t.TempDir()
 	tools := append([]string{bitwardenBin, onePasswordBin}, platformBlockingTools()...)
 	for _, bin := range tools {
-		if err := os.WriteFile(filepath.Join(dir, bin), src, 0o755); err != nil {
-			t.Fatalf("install the blocking %s: %v", bin, err)
-		}
+		require.NoErrorf(t, os.WriteFile(filepath.Join(dir, bin), src, 0o755), "install the blocking %s", bin)
 	}
 	// Prepended, not substituted: the fixture is a shell script and still needs
 	// the ordinary PATH to find the tools it runs.
@@ -96,7 +95,9 @@ func TestNoCommandBlocksIndefinitely(t *testing.T) {
 			select {
 			case <-done:
 			case <-time.After(patience):
-				t.Fatalf("%s never returned against a program that does not answer", tc.name)
+				assert.Failf(t, "the call never came back",
+					"%s waited on a program that does not answer, and a login shell or an ssh at a passphrase "+
+						"prompt is sitting behind it", tc.name)
 			}
 		})
 	}
@@ -107,10 +108,7 @@ func TestNoCommandBlocksIndefinitely(t *testing.T) {
 // the unbounded wait everywhere at once, and every other test here would still
 // pass, since they all pass a budget of their own.
 func TestTimeoutDefaults(t *testing.T) {
-	if DefaultCommandTimeout <= 0 {
-		t.Errorf("DefaultCommandTimeout = %v, want a finite bound", DefaultCommandTimeout)
-	}
-	if DefaultInteractiveTimeout <= 0 {
-		t.Errorf("DefaultInteractiveTimeout = %v, want a finite bound", DefaultInteractiveTimeout)
-	}
+	assert.Positive(t, DefaultCommandTimeout,
+		"a call site that chose no budget must still get a finite one, or the unbounded wait comes back everywhere at once")
+	assert.Positive(t, DefaultInteractiveTimeout, "and so must one that waits on a person")
 }

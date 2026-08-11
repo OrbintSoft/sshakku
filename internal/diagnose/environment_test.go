@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/OrbintSoft/sshakku/internal/agent"
+	"github.com/stretchr/testify/assert"
 )
 
 // envState returns what out shows for the variable name: the text after the
@@ -39,9 +40,7 @@ func TestFormatShowsEveryVariableItWasGiven(t *testing.T) {
 	Format(&buf, r)
 	out := buf.String()
 
-	if !strings.Contains(out, "environment variables:") {
-		t.Errorf("report has no environment variables section:\n%s", out)
-	}
+	assert.Contains(t, out, "environment variables:", "the report must have a section for them")
 	cases := map[string]string{
 		"SSH_ASKPASS":          "/usr/local/bin/sshakku-askpass",
 		"SSH_ASKPASS_REQUIRE":  "force",
@@ -49,12 +48,11 @@ func TestFormatShowsEveryVariableItWasGiven(t *testing.T) {
 	}
 	for name, want := range cases {
 		got, ok := envState(out, name)
-		if !ok {
-			t.Errorf("report never names %s:\n%s", name, out)
-			continue
-		}
-		if got != want {
-			t.Errorf("%s is shown as %q, want %q", name, got, want)
+		// Only compare the state once there is one: a report that never named
+		// the variable has already been reported by the assertion above it, and
+		// the comparison would add a second failure saying the same thing.
+		if assert.Truef(t, ok, "the report must name %s", name) {
+			assert.Equalf(t, want, got, "the state %s is shown in", name)
 		}
 	}
 }
@@ -76,27 +74,21 @@ func TestAnUnreadableEnvironmentIsNotReportedAsUnset(t *testing.T) {
 		SecretEnv:     []SecretEnvVar{{Name: "SSHAKKU_HANDOFF_TOKEN"}},
 	}, src, prober, nil, nil, nil, nil)
 
-	if hasFinding(r, "SSH_AUTH_SOCK is unset") {
-		t.Errorf("the report claims SSH_AUTH_SOCK is unset for a shell it never read: %v", r.Findings)
-	}
-	if hasFinding(r, "SSH_ASKPASS is not wired") {
-		t.Errorf("the report claims the askpass is not wired for a shell it never read: %v", r.Findings)
-	}
-	if !hasFinding(r, "cannot be read from here") {
-		t.Errorf("findings = %v, want one saying the environment could not be read", r.Findings)
-	}
+	assert.Falsef(t, hasFinding(r, "SSH_AUTH_SOCK is unset"),
+		"nothing may be concluded about a shell that was never read: %v", r.Findings)
+	assert.Falsef(t, hasFinding(r, "SSH_ASKPASS is not wired"),
+		"nothing may be concluded about a shell that was never read: %v", r.Findings)
+	assert.Truef(t, hasFinding(r, "cannot be read from here"),
+		"the report must say the environment could not be read: %v", r.Findings)
 
 	var buf bytes.Buffer
 	Format(&buf, r)
 	out := buf.String()
 	for _, name := range []string{"SSH_AUTH_SOCK", "SSH_ASKPASS", "SSHAKKU_HANDOFF_TOKEN"} {
 		got, ok := envState(out, name)
-		if !ok {
-			t.Errorf("report never names %s:\n%s", name, out)
-			continue
-		}
-		if got != "(not readable from here)" {
-			t.Errorf("%s is shown as %q, want it withheld rather than guessed at", name, got)
+		if assert.Truef(t, ok, "the report must name %s", name) {
+			assert.Equalf(t, "(not readable from here)", got,
+				"%s must be withheld rather than guessed at", name)
 		}
 	}
 }
@@ -123,12 +115,8 @@ func TestFormatSaysWhetherASecretIsSetAndNothingMore(t *testing.T) {
 	}
 	for name, want := range cases {
 		got, ok := envState(out, name)
-		if !ok {
-			t.Errorf("report never names %s:\n%s", name, out)
-			continue
-		}
-		if got != want {
-			t.Errorf("%s is reported %q, want %q", name, got, want)
+		if assert.Truef(t, ok, "the report must name %s", name) {
+			assert.Equalf(t, want, got, "%s must be reported as set or unset and nothing more", name)
 		}
 	}
 }
