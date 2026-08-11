@@ -59,8 +59,9 @@ jobs:
       # Before the suite, because it is quick and it fails for a reason no test
       # failure could be confused with: this machine has neither a Mac nor an
       # Apple SDK, so it is the one that can tell whether the macOS half of the
-      # tree still builds without them.
-      - name: Build both targets without a C toolchain
+      # tree still builds without them — and the same run is what keeps the
+      # platforms this job never executes from silently stopping compiling.
+      - name: Build every platform without a C toolchain
         run: make build-cross
 
       - name: Run make test-json

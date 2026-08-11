@@ -226,14 +226,17 @@ endif
 build:
 	CGO_ENABLED=0 $(GO) build -o $(GO_BIN) $(GO_MAIN)
 
-# Both targets this project supports, built for each other's platform without a
-# C compiler or an SDK for it. It answers one question — can this be built where
-# it is not run — which is what a release has to be able to do, and it is also
-# the only way the macOS-only source in this tree gets compiled from anywhere
-# else.
+# Every platform this tree has source for, built from wherever this runs and
+# without a C compiler or an SDK for any of them. It answers one question — can
+# this be built where it is not run — which is what a release has to be able to
+# do, and it is also the only way one platform's own source gets compiled from
+# another machine. Windows is here as a build, not as a supported target: what
+# it holds is the code that reports what this system does not do, and it is
+# listed so that stops compiling loudly rather than quietly.
 build-cross:
 	CGO_ENABLED=0 GOOS=darwin $(GO) build ./...
 	CGO_ENABLED=0 GOOS=linux $(GO) build ./...
+	CGO_ENABLED=0 GOOS=windows $(GO) build ./...
 
 test:
 	$(GO_ENV) $(GO) test $(GO_RACE) ./...
@@ -340,14 +343,17 @@ lint-editorconfig:
 # golangci-lint analyses one build and one only: the host's GOOS with no build
 # tags. Files behind another platform's tag, or behind a failure-injection tag,
 # are not skipped with a note — they are never looked at. Every build this
-# project ships or tests therefore has to be named here. `golangci-lint fmt`
+# project compiles therefore has to be named here, whether or not it is one
+# the project ships or runs its tests on. `golangci-lint fmt`
 # needs no such list: it reads the files, not the build.
 lint-go:
 	golangci-lint fmt --diff
 	CGO_ENABLED=0 GOOS=linux $(GO) vet ./...
 	CGO_ENABLED=0 GOOS=darwin $(GO) vet ./...
+	CGO_ENABLED=0 GOOS=windows $(GO) vet ./...
 	CGO_ENABLED=0 GOOS=linux golangci-lint run
 	CGO_ENABLED=0 GOOS=darwin golangci-lint run
+	CGO_ENABLED=0 GOOS=windows golangci-lint run
 	CGO_ENABLED=0 GOOS=linux golangci-lint run --build-tags=backend_unresponsive
 	CGO_ENABLED=0 GOOS=linux golangci-lint run --build-tags=midsession_failure
 

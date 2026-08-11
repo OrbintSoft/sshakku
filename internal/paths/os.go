@@ -1,0 +1,106 @@
+package paths
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+)
+
+// fromEnv is FromOS with its environment lookups injected, so the HOME fallback
+// (which os.UserHomeDir also derives from $HOME, hence unreachable through the
+// real os functions) can be exercised in tests.
+//
+// private answers whether a directory is this user's alone. It is asked here,
+// at the boundary that reads the environment, so that what Resolve receives is
+// already a directory we are willing to use — the environment names a
+// temporary directory, and a shared one (a bare /tmp) is somewhere anybody can
+// wait for a socket that is the loaded key's front door.
+func fromEnv(getenv func(string) string, homeDir func() (string, error), getuid func() int, private func(string) bool) Env {
+	home := getenv("HOME")
+	if home == "" {
+		if h, err := homeDir(); err == nil {
+			home = h
+		}
+	}
+	tempDir := getenv("TMPDIR")
+	if tempDir != "" && !private(tempDir) {
+		tempDir = ""
+	}
+	return Env{
+		Home:       home,
+		ConfigHome: getenv("XDG_CONFIG_HOME"),
+		StateHome:  getenv("XDG_STATE_HOME"),
+		RuntimeDir: getenv("XDG_RUNTIME_DIR"),
+		CacheHome:  getenv("XDG_CACHE_HOME"),
+		TempDir:    tempDir,
+		UID:        getuid(),
+	}
+}
+
+// Ensure creates the layout's directories (0700, leaf only) and the log file
+// (0600). Intermediate parents (e.g. ~/.config) are created with the process
+// umask but never re-permissioned — only our own leaf dirs are forced to 0700.
+func Ensure(l Layout) error {
+	for _, dir := range dedupe(l.ConfigDir, l.StateDir, l.RuntimeDir, l.SocketDir) {
+		if err := ensureDir(dir, os.Chmod); err != nil {
+			return err
+		}
+	}
+	return ensureFile(l.LogFile, 0o600, os.Chmod)
+}
+
+// CleanupLegacyAgentDir retires our previous location under ~/.ssh: the agent/
+// dir there is what makes OpenSSH 10.x relocate its socket to a random path.
+// Best-effort: it removes only our own socket/lock and leaves the dir if
+// anything else remains.
+func CleanupLegacyAgentDir(home string) {
+	if home == "" {
+		return
+	}
+	dir := filepath.Join(home, ".ssh", "agent")
+	if fi, err := os.Lstat(dir); err != nil || !fi.IsDir() {
+		return
+	}
+	_ = os.Remove(filepath.Join(dir, "ssh-agent.sock"))
+	_ = os.Remove(filepath.Join(dir, ".start.lock"))
+	_ = os.Remove(dir) // rmdir; harmless if the dir is not empty
+}
+
+func ensureDir(path string, chmod func(string, os.FileMode) error) error {
+	if err := os.MkdirAll(path, 0o700); err != nil {
+		return fmt.Errorf("create %s: %w", path, err)
+	}
+	if err := chmod(path, 0o700); err != nil {
+		return fmt.Errorf("chmod %s: %w", path, err)
+	}
+	// Reject a symlink planted in our place: the leaf must be a real directory.
+	fi, err := os.Lstat(path)
+	if err != nil || fi.Mode()&os.ModeSymlink != 0 || !fi.IsDir() {
+		return fmt.Errorf("%s is not a directory", path)
+	}
+	return nil
+}
+
+func ensureFile(path string, perm os.FileMode, chmod func(string, os.FileMode) error) error {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY, perm)
+	if err != nil {
+		return fmt.Errorf("create %s: %w", path, err)
+	}
+	_ = f.Close()
+	if err := chmod(path, perm); err != nil {
+		return fmt.Errorf("chmod %s: %w", path, err)
+	}
+	return nil
+}
+
+func dedupe(items ...string) []string {
+	seen := make(map[string]bool, len(items))
+	out := make([]string, 0, len(items))
+	for _, it := range items {
+		if !seen[it] {
+			seen[it] = true
+			out = append(out, it)
+		}
+	}
+	return out
+}

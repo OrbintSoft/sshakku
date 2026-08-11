@@ -185,10 +185,10 @@ const (
 // because they are programs a user installs rather than something the operating
 // system either has or has not.
 //
-// The two that are the operating system's own — the freedesktop Secret Service
-// and the OS keychain — are declared beside the platform that has them, in
-// backends_linux.go and backends_other.go, along with the list of what can be
-// chosen here and which is chosen by default.
+// The ones that are the operating system's own — the freedesktop Secret
+// Service, the OS keychain — are declared beside the platform that has them, in
+// the per-platform backends_*.go, along with the list of what can be chosen
+// here and which is chosen by default.
 const (
 	SecretBackendOnePassword = "1password"
 	SecretBackendBitwarden   = "bitwarden"
@@ -216,8 +216,8 @@ const (
 
 // Prompter choices for Settings.GUIPrompter that mean the same thing on every
 // system, because they name no program at all. The dialogs themselves are
-// declared beside the platform that can have them, in prompters_linux.go and
-// prompters_darwin.go, along with the list of what can be chosen here.
+// declared beside the platform that can have them, in the per-platform
+// prompters_*.go, along with the list of what can be chosen here.
 const (
 	// GUIPrompterAuto uses whichever dialog the session turns out to have.
 	GUIPrompterAuto = "auto"
