@@ -11,7 +11,44 @@ linters:
     # own goroutine and leaves the run hanging instead of failing.
     - testifylint
 
+    # A build tag is the one comment in this tree the compiler acts on, and the
+    # one that fails open: `// go:build darwin` with a space is not a directive
+    # at all, so the file it guards is compiled into every platform instead of
+    # one, and nothing says so.
+    - gocheckcompilerdirectives
+
+    # An error seen and then not returned: the check runs, the branch is taken,
+    # and the caller is still told the operation worked.
+    - nilerr
+
+    # Multiplying two durations gives a number in units nobody meant —
+    # `timeout * time.Second` is seconds squared. Key lifetimes, agent timeouts
+    # and prompt budgets are most of this program's arithmetic.
+    - durationcheck
+
+    # An unchecked type assertion is a panic waiting for the input nobody
+    # thought of, and this program parses what other tools print.
+    - forcetypeassert
+
+    # Callers here match on sentinels — ErrNoTerminal, ErrPromptCanceled — so
+    # what a sentinel is called is part of the package's interface.
+    - errname
+
+    # Bidirectional and zero-width Unicode can make a line read one way and
+    # compile another. A tool that handles passphrases and accepts patches from
+    # strangers should not rely on a reviewer noticing.
+    - bidichk
+
+    # Every suppression must name the linter it silences and say why, so a
+    # nolint stays an argument someone can disagree with rather than a way to
+    # make a warning disappear.
+    - nolintlint
+
   settings:
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+
     testifylint:
       disable:
         # require-error wants every error assertion to stop the test. Several
