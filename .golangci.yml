@@ -21,6 +21,11 @@ linters:
     # and the caller is still told the operation worked.
     - nilerr
 
+    # `%v` on an error flattens it into text, so the cause stops being something
+    # errors.Is can find. This package family is built on sentinels callers
+    # match against, and a caller cannot match what was turned into a string.
+    - errorlint
+
     # Multiplying two durations gives a number in units nobody meant —
     # `timeout * time.Second` is seconds squared. Key lifetimes, agent timeouts
     # and prompt budgets are most of this program's arithmetic.

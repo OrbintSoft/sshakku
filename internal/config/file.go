@@ -604,7 +604,7 @@ func resolveKeyPatterns(fileVal []string) ([]string, error) {
 		case pattern == "" || strings.Contains(pattern, "/"):
 			return nil, fmt.Errorf("invalid key_patterns entry %q: a pattern matches a file name, not a path, using SSHakku's own naming rule", pattern)
 		case err != nil:
-			return nil, fmt.Errorf("invalid key_patterns entry %q: %v, using SSHakku's own naming rule", pattern, err)
+			return nil, fmt.Errorf("invalid key_patterns entry %q: %w, using SSHakku's own naming rule", pattern, err)
 		}
 	}
 	return slices.Clone(fileVal), nil

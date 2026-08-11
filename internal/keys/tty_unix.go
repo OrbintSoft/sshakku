@@ -38,7 +38,7 @@ var (
 func ReadTTYLine(prompt string, secret bool) (string, error) {
 	f, err := openTTY()
 	if err != nil {
-		return "", fmt.Errorf("%w: %v", ErrNoTerminal, err)
+		return "", fmt.Errorf("%w: %w", ErrNoTerminal, err)
 	}
 	defer func() { _ = f.Close() }()
 

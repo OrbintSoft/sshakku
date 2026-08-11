@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -46,6 +47,22 @@ func TestResolveKeyDiscovery(t *testing.T) {
 		for _, bad := range []string{"[unclosed", "keys/id_*", ""} {
 			assertPatternsRefused(t, []string{"id_*", bad})
 		}
+	})
+
+	// Why a pattern was refused is not the same question as whether it was, and
+	// the two refusals here are different faults: a glob the shell grammar
+	// rejects, and a pattern that is well formed but names a path. Only the
+	// wrapped cause tells them apart without re-reading the sentence.
+	t.Run("a malformed pattern keeps filepath's own verdict", func(t *testing.T) {
+		_, errs := Resolve(File{KeyPatterns: []string{"[unclosed"}}, lookupFrom(nil))
+		require.NotEmpty(t, errs, "a malformed pattern must be refused")
+		assert.ErrorIs(t, errors.Join(errs...), filepath.ErrBadPattern,
+			"the cause has to survive being reported, or nothing downstream can act on it")
+
+		_, errs = Resolve(File{KeyPatterns: []string{"keys/id_*"}}, lookupFrom(nil))
+		require.NotEmpty(t, errs, "a pattern holding a separator must be refused")
+		assert.NotErrorIs(t, errors.Join(errs...), filepath.ErrBadPattern,
+			"and must not be borrowed by the refusal that has nothing to do with the glob grammar")
 	})
 
 	// An explicitly empty list is a written instruction, not an omission, and

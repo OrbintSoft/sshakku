@@ -145,10 +145,14 @@ func TestReadTTYLineReadErrorOnEmpty(t *testing.T) {
 
 func TestReadTTYLineOpenError(t *testing.T) {
 	saveTTYSeams(t)
-	openTTY = func() (*os.File, error) { return nil, errors.New("open /dev/tty: no such device") }
+	cause := errors.New("open /dev/tty: no such device")
+	openTTY = func() (*os.File, error) { return nil, cause }
 	_, err := ReadTTYLine("Answer: ", false)
 	assert.ErrorIs(t, err, ErrNoTerminal,
 		"having no terminal is an ordinary state the callers fall back from, told apart by this very error")
+	assert.ErrorIs(t, err, cause,
+		"and why the open failed stays reachable: a session that has no terminal at all and one whose "+
+			"terminal could not be opened are different situations, and the sentinel alone cannot separate them")
 }
 
 func TestReadTTYLinePromptWriteError(t *testing.T) {
