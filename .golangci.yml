@@ -83,11 +83,10 @@ linters:
         - require-error
 
 formatters:
-  # gofumpt is gofmt plus the rules gofmt leaves to taste, so it subsumes the
-  # plain `gofmt -l` sweep rather than competing with it. `golangci-lint fmt
-  # --diff` (what `make lint-go` runs) also reaches the files `golangci-lint
-  # run` cannot: run only ever analyses the current GOOS, so the _darwin.go
-  # files and anything behind `//go:build ignore` are formatted-checked here
-  # and nowhere else.
+  # gofumpt is gofmt plus the rules gofmt leaves to taste, so it subsumes a
+  # plain gofmt sweep rather than competing with it. Formatting is also the one
+  # check here that is not limited to a single build: `golangci-lint fmt` reads
+  # files, while `run` compiles one GOOS with one set of build tags and cannot
+  # see past it.
   enable:
     - gofumpt

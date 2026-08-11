@@ -435,7 +435,7 @@ Per-file-type lint decisions (rule 12), current as of the last file type added:
 | YAML / GitHub workflows | `actionlint`; other YAML/INI/JSON has no dedicated linter — `editorconfig-checker` covers charset/EOL/indent/final-newline |
 | All committed files | `editorconfig-checker` (config excludes `LICENSE` verbatim, `*.zsh`, and `*.go` — gofumpt owns Go formatting) |
 | Shell — bats tests (`*.bats`) | Deferred until test files enter the repo |
-| Go (`*.go`) | `golangci-lint fmt --diff` (**gofumpt**) + `go vet` + `golangci-lint run` (config `.golangci.yml`); `golang.org/x/sys` (BSD-3-Clause) recorded in `COPYRIGHT.md` |
+| Go (`*.go`) | `golangci-lint fmt --diff` (**gofumpt**) + `go vet` + `golangci-lint run` (config `.golangci.yml`), each run once per build — Linux, macOS, and the two failure-injection tags — see Phase 34 for why one run is not enough; `golang.org/x/sys` (BSD-3-Clause) recorded in `COPYRIGHT.md` |
 | Go tests (`*_test.go`) | `testifylint`, with **`require-error` disabled** — see Phase 33 for why that one checker cannot decide `require` vs `assert` for us. Assertions go through `github.com/stretchr/testify` (MIT, recorded in `COPYRIGHT.md`) |
 | TOML (`*.toml`) | `taplo lint` + `taplo format --check`; runtime parser `github.com/BurntSushi/toml` (MIT) recorded in `COPYRIGHT.md` |
 | Dockerfile (`test/containers/*.Dockerfile`) | `hadolint` (config ignores DL3008 — no viable apt-pin story against a rolling suite; the base image tag is the point-in-time anchor) |
@@ -2110,3 +2110,86 @@ each was reproduced against the shipped binary.
 → rules 22, 23, 24, 27; features F5, F6, F25, F29, F30, F37, F42 — all
 unchanged, and that is the point: each was being reported on by at least one
 test that could not have failed.
+
+### Phase 34 — The linters, and the builds nobody linted ✅ Done
+
+`gofumpt` plus ten analysers, added in the order they were argued for rather
+than alphabetically, and each one made to fire before it was trusted.
+
+**Rule 12 decision.** `.golangci.yml` gains a `formatters:` section enabling
+**gofumpt**, and ten linters on top of the standard set and `testifylint`:
+`gocheckcompilerdirectives`, `nilerr`, `durationcheck`, `forcetypeassert`,
+`errname`, `bidichk`, `nolintlint` (with `require-explanation` and
+`require-specific`), `errorlint`, `usetesting` (with the off-by-default
+`os-setenv` and `os-temp-dir` turned on), and `thelper`. No new module
+dependency: every one of them ships inside the golangci-lint version the lint
+workflow already pins, so `go.mod` is untouched and there is no new licence to
+record.
+
+**gofumpt subsumes the old gate rather than competing with it.** `gofmt -l .` is
+gone from `lint-go`, replaced by `golangci-lint fmt --diff`. The rules gofmt
+leaves to taste are exactly the ones that had drifted: two files carried a
+project import inside the stdlib group. The replacement also reaches further —
+`fmt` reads files, not builds, so it sees the `_darwin.go` files and the
+`//go:build ignore` tool under `test/containers/` that `run` never compiles.
+
+**A linter that reports nothing is indistinguishable from one that is not
+running**, so each was made to fire in a throwaway package that was then
+deleted: a `// go:build linux` with a space in it, a `return nil` after
+`err != nil`, an `i.(string)`, a sentinel without the `Err` prefix, a literal
+U+202E inside a comment, a bare `//nolint`, a `d * time.Second`.
+
+That discipline removed one from the list. **`nilnesserr` was proposed and is
+not here**: it loads and activates, and fires on nothing — six shapes tried,
+including its own documented one, with the callee made opaque so the nilness
+analyzer could not fold the branch away. `nilerr` reports on those same shapes.
+`durationcheck` took the slot: key lifetimes, agent timeouts and prompt budgets
+are most of this program's arithmetic, and multiplying two durations gives
+seconds squared.
+
+**Six defects, all in code that compiled and passed.** Two imports buried in the
+stdlib group. Two errors flattened into text with `%v`, so the cause was
+readable and not reachable — `filepath.Match`'s verdict on a bad `key_patterns`
+glob, and the open failure under `ErrNoTerminal`, which is what separates a
+session that has no terminal from a terminal that would not open. One helper
+without `t.Helper()`, reporting its callers' failures at its own line. And one
+test helper that was dead code on macOS.
+
+**The blind spot that made the last one invisible.** golangci-lint analyses one
+build: the host's GOOS, no build tags. A file behind another platform's tag is
+not skipped with a note — it is never looked at, so the macOS half of this tree
+had never been through a Go linter at all, and neither had the two
+failure-injection files. `lint-go` now names each build: linux, darwin,
+`backend_unresponsive`, `midsession_failure`. Fourteen seconds warm, and no
+macOS host needed for the darwin pass. Both new passes were confirmed able to
+fail — an unused func appended to a `_darwin_test.go` and to a tag-gated test is
+`0 issues` to a plain `run` and exits 1 under `make lint-go`.
+
+**Six suppressions, each an argument rather than a silencing**, which is what
+`nolintlint`'s `require-explanation` is for. Four are the `shortDir` helpers,
+where `t.TempDir()`'s macOS layout overruns the 104-byte `sun_path` limit a unix
+socket is bound under; two are `lockRealAgentTests`, where a temp directory
+shared between test binaries is the entire mechanism and a per-test one would be
+no lock at all.
+
+**Deliberate "no"s, so they are not re-proposed as oversights.** `noctx` (10
+findings, all `net.Dial`/`net.Listen` on local unix sockets with explicit
+timeouts, where a context adds nothing). `gosec` (33: G115×8, G204×6, G30x×8,
+G101×3, G703×3, G602×2) — worth doing and **deferred to its own activity**,
+because almost every finding is inherent to what the program does (exec
+`ssh-add`, read `~/.ssh`, chmod 0600) and each needs a justification, not a
+blanket exclusion. `modernize` (27) is a production refactor wearing a linter's
+hat. `exhaustive` (5) reports only missing zero-cases on switches that already
+have the unreachable `default` rule 27 names. `perfsprint`, `tparallel`, `wsl`,
+`nlreturn`, `varnamelen`, `lll`: churn. `testpackage` would break the internal
+tests. Left on the table with real findings and no decision yet: `misspell`,
+`dupword`, `predeclared`, `godoclint`, `unconvert`, `intrange`, and `recvcheck`
+as the reserve if a slot opens.
+
+**Verified**: `make lint-go` clean on all four builds, `make test` green across
+all thirteen packages, `make build-cross`, `checkmake`, `markdownlint-cli2`.
+No end-to-end run belongs to this phase — one user-visible surface changed and
+it changed in text only: two error messages read exactly as before, and what
+moved is what `errors.Is` can find underneath them.
+
+→ rules 12, 15, 23, 26; no feature in `docs/FEATURES.md` gained or lost a promise
