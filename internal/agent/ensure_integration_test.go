@@ -27,6 +27,7 @@ import (
 // terminated").
 func lockRealAgentTests(t *testing.T) {
 	t.Helper()
+	//nolint:usetesting // a per-test directory would give every test its own lock file, which is no lock at all
 	f, err := os.OpenFile(filepath.Join(os.TempDir(), "sshakku-test-real-agent.lock"), os.O_CREATE|os.O_RDWR, 0o600)
 	require.NoError(t, err, "open cross-package real-agent test lock")
 	if err := unix.Flock(int(f.Fd()), unix.LOCK_EX); err != nil {
@@ -78,6 +79,7 @@ func newRealManager() Manager {
 }
 
 func realCfg(t *testing.T) EnsureConfig {
+	t.Helper()
 	dir := shortDir(t)
 	return EnsureConfig{
 		FixedSock: filepath.Join(dir, "agent.sock"),

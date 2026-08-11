@@ -337,10 +337,19 @@ lint-yaml:
 lint-editorconfig:
 	editorconfig-checker
 
+# golangci-lint analyses one build and one only: the host's GOOS with no build
+# tags. Files behind another platform's tag, or behind a failure-injection tag,
+# are not skipped with a note — they are never looked at. Every build this
+# project ships or tests therefore has to be named here. `golangci-lint fmt`
+# needs no such list: it reads the files, not the build.
 lint-go:
-	@gofmt_out=$$(gofmt -l .); [ -z "$$gofmt_out" ] || { echo "gofmt needed on:"; echo "$$gofmt_out"; exit 1; }
-	$(GO) vet ./...
-	golangci-lint run
+	golangci-lint fmt --diff
+	CGO_ENABLED=0 GOOS=linux $(GO) vet ./...
+	CGO_ENABLED=0 GOOS=darwin $(GO) vet ./...
+	CGO_ENABLED=0 GOOS=linux golangci-lint run
+	CGO_ENABLED=0 GOOS=darwin golangci-lint run
+	CGO_ENABLED=0 GOOS=linux golangci-lint run --build-tags=backend_unresponsive
+	CGO_ENABLED=0 GOOS=linux golangci-lint run --build-tags=midsession_failure
 
 lint-docker:
 	hadolint $(DOCKERFILES)

@@ -25,6 +25,7 @@ import (
 // process (observed in practice as "start ssh-agent: signal: terminated").
 func lockRealAgentTests(t *testing.T) {
 	t.Helper()
+	//nolint:usetesting // a per-test directory would give every test its own lock file, which is no lock at all
 	f, err := os.OpenFile(filepath.Join(os.TempDir(), "sshakku-test-real-agent.lock"), os.O_CREATE|os.O_RDWR, 0o600)
 	require.NoError(t, err, "open cross-package real-agent test lock")
 	if err := unix.Flock(int(f.Fd()), unix.LOCK_EX); err != nil {
@@ -67,7 +68,7 @@ func requireIsolatedAgentEnvironment(t *testing.T) {
 // the 104-byte sun_path limit unix sockets are bound under on BSD/Darwin.
 func shortDir(t *testing.T) string {
 	t.Helper()
-	dir, err := os.MkdirTemp("", "sshakku")
+	dir, err := os.MkdirTemp("", "sshakku") //nolint:usetesting // t.TempDir() is the long macOS path the comment above is about
 	require.NoError(t, err, "mkdir temp")
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	return dir

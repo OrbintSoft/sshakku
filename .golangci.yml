@@ -11,7 +11,67 @@ linters:
     # own goroutine and leaves the run hanging instead of failing.
     - testifylint
 
+    # A build tag is the one comment in this tree the compiler acts on, and the
+    # one that fails open: `// go:build darwin` with a space is not a directive
+    # at all, so the file it guards is compiled into every platform instead of
+    # one, and nothing says so.
+    - gocheckcompilerdirectives
+
+    # An error seen and then not returned: the check runs, the branch is taken,
+    # and the caller is still told the operation worked.
+    - nilerr
+
+    # `%v` on an error flattens it into text, so the cause stops being something
+    # errors.Is can find. This package family is built on sentinels callers
+    # match against, and a caller cannot match what was turned into a string.
+    - errorlint
+
+    # Multiplying two durations gives a number in units nobody meant —
+    # `timeout * time.Second` is seconds squared. Key lifetimes, agent timeouts
+    # and prompt budgets are most of this program's arithmetic.
+    - durationcheck
+
+    # An unchecked type assertion is a panic waiting for the input nobody
+    # thought of, and this program parses what other tools print.
+    - forcetypeassert
+
+    # Callers here match on sentinels — ErrNoTerminal, ErrPromptCanceled — so
+    # what a sentinel is called is part of the package's interface.
+    - errname
+
+    # Bidirectional and zero-width Unicode can make a line read one way and
+    # compile another. A tool that handles passphrases and accepts patches from
+    # strangers should not rely on a reviewer noticing.
+    - bidichk
+
+    # The testing package owns cleanup: t.TempDir and t.Setenv undo themselves
+    # when the test ends, and their os equivalents leave the next test to find
+    # what this one left behind.
+    - usetesting
+
+    # A helper that does not announce itself reports every failure at its own
+    # line, so several tests that fail for different reasons all point at the
+    # same place and none of them points at itself.
+    - thelper
+
+    # Every suppression must name the linter it silences and say why, so a
+    # nolint stays an argument someone can disagree with rather than a way to
+    # make a warning disappear.
+    - nolintlint
+
   settings:
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+
+    usetesting:
+      # Off by default, and both are worth having. os-setenv reports nothing
+      # today, which is the state worth keeping: an os.Setenv survives the test
+      # that made it. os-temp-dir costs two suppressions, at the one place
+      # where a directory shared between test binaries is the whole point.
+      os-setenv: true
+      os-temp-dir: true
+
     testifylint:
       disable:
         # require-error wants every error assertion to stop the test. Several
@@ -21,3 +81,12 @@ linters:
         # two a given assertion wants is a judgement about that test, not
         # something a checker can read off the call.
         - require-error
+
+formatters:
+  # gofumpt is gofmt plus the rules gofmt leaves to taste, so it subsumes a
+  # plain gofmt sweep rather than competing with it. Formatting is also the one
+  # check here that is not limited to a single build: `golangci-lint fmt` reads
+  # files, while `run` compiles one GOOS with one set of build tags and cannot
+  # see past it.
+  enable:
+    - gofumpt

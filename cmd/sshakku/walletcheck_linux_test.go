@@ -12,6 +12,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// withLook fixes what looking at the session bus found, and whether the session
+// has a screen, so every combination of the two can be described from a machine
+// that has neither. Looking at the session bus is a thing only Linux does, so
+// only Linux's tests need it.
+func (p walletProbe) withLook(look secretServiceLook, hasScreen bool) walletProbe {
+	p.look = func(string, string) secretServiceLook { return look }
+	p.hasScreen = hasScreen
+	return p
+}
+
 // TestDoctorReportOnAnUnconfiguredMachine verifies F25 and F26 for the Linux
 // half: a machine nobody has configured is told it uses the freedesktop Secret
 // Service, and asked for the session bus that wallet is reached over.

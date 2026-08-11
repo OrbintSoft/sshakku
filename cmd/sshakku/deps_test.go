@@ -39,6 +39,7 @@ func (m *memoryBackend) Lookup(service string) (string, bool, error) {
 	v, ok := m.stored[service]
 	return v, ok, nil
 }
+
 func (m *memoryBackend) Store(service, _, passphrase string) error {
 	m.stored[service] = passphrase
 	return nil

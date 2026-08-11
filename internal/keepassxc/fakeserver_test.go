@@ -101,7 +101,7 @@ func newFakeServer(t *testing.T) *fakeServer {
 // test in the file goes red at once. /tmp is short on both platforms.
 func shortSocketDir(t *testing.T) string {
 	t.Helper()
-	dir, err := os.MkdirTemp("/tmp", "kpxc")
+	dir, err := os.MkdirTemp("/tmp", "kpxc") //nolint:usetesting // t.TempDir() is the long macOS path the comment above is about
 	require.NoError(t, err, "mkdir temp")
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	return dir

@@ -36,15 +36,6 @@ func probeWith(goos string, found []string, present []string, bus string, listen
 	}
 }
 
-// withLook fixes what looking at the session bus found, and whether the session
-// has a screen, so every combination of the two can be described from a machine
-// that has neither.
-func (p walletProbe) withLook(look secretServiceLook, hasScreen bool) walletProbe {
-	p.look = func(string, string) secretServiceLook { return look }
-	p.hasScreen = hasScreen
-	return p
-}
-
 // requirement returns the named requirement, so a case can assert on the one
 // it is about without depending on the order of the rest.
 func requirement(t *testing.T, view diagnose.WalletView, name string) diagnose.Requirement {
