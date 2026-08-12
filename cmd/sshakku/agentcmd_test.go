@@ -140,9 +140,10 @@ func TestShellInitSpeaksTheDialectItWasAsked(t *testing.T) {
 }
 
 // TestEnsureAgent covers the ensure-agent command against a fake ensurer: a
-// healthy agent prints the single agent_sock assignment, a failed ensure
-// propagates its code, an uncreatable layout returns 1, and a failing stdout
-// surfaces as a write error.
+// healthy agent prints the single agent_sock assignment in the language it was
+// asked for, a dialect there is no printing for is refused before the agent is
+// touched, a failed ensure propagates its code, an uncreatable layout returns 1,
+// and a failing stdout surfaces as a write error.
 func TestEnsureAgent(t *testing.T) {
 	t.Run("healthy agent prints agent_sock", func(t *testing.T) {
 		tempRuntimeEnv(t)
@@ -162,6 +163,21 @@ func TestEnsureAgent(t *testing.T) {
 			"ensureAgent must succeed; stderr=%q", errOut.String())
 		assert.Equal(t, "$agent_sock = '\\\\.\\pipe\\sshakku'\n", out.String(),
 			"the socket, as PowerShell reads an assignment, and nothing else")
+	})
+
+	// F43, on the command that both prints and acts: a dialect this program has
+	// not got is refused before an agent is started, reaped or adopted, exactly
+	// as shell-init refuses it — a mistake in what was asked is not a reason to
+	// touch the lifecycle on the way to saying so.
+	t.Run("a dialect this program has not got", func(t *testing.T) {
+		tempRuntimeEnv(t)
+		d := depsWithEnsurer(refusingEnsurer{t})
+		var out, errOut bytes.Buffer
+		assert.Equal(t, 2, d.ensureAgent(&out, &errOut, []string{"--shell=fish"}),
+			"a dialect this program has not got is a usage error")
+		assert.Empty(t, out.String(),
+			"a shell must be handed nothing rather than lines in a language it cannot read")
+		assert.Contains(t, errOut.String(), "fish", "and told which one was refused")
 	})
 
 	t.Run("ensure failure propagates the exit code", func(t *testing.T) {
