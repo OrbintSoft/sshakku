@@ -216,6 +216,42 @@ jobs:
       - name: Run make test-bats in ${{ matrix.name }}
         run: docker run --init --rm -e SSHAKKU_TEST_ALLOW_BATS=1 -v "${{ github.workspace }}":/src:ro -w /src sshakku-test-${{ matrix.name }} make test-bats
 
+  build-windows:
+    name: go build (windows)
+    runs-on: windows-latest
+    # A narrow question, asked on the machine that can answer it: does the tree
+    # still compile, and type-check its own tests, on Windows? `make build-cross`
+    # asks the other half from Linux — whether Windows can be built from
+    # elsewhere — and neither substitutes for the other, since a toolchain that
+    # cross-compiles cleanly can still meet a native runner's own defaults.
+    #
+    # The test suite is deliberately not run here, and saying so is the point.
+    # It does not pass: a Windows host reports no uid, spells its paths with
+    # backslashes, and has no wallet this project can reach, and several
+    # packages say so. Worse than failing, internal/keys hangs — a re-executed
+    # test helper outlives the run and holds the output pipe open, since there
+    # is no process group on Windows to take it down with — so a step that ran
+    # the suite would sit here until the job's own limit killed it. A step that
+    # ran it and ignored the result would report a platform as tested that
+    # nothing tests.
+    env:
+      CGO_ENABLED: "0"
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: ./.github/actions/setup-go-env
+
+      - name: Build every package
+        run: go build ./...
+
+      # vet type-checks the test files too, which is what catches a _windows.go
+      # that never supplied something the shared tests reach for — a gap no
+      # `go build` would show, since it never compiles them.
+      - name: Vet every package, test files included
+        run: go vet ./...
+
   pr-test-report:
     name: Post test-health PR comment
     needs: [test, test-macos]

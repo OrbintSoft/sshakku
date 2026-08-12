@@ -2269,6 +2269,14 @@ the mechanism that has to work.
   to be discovered at the next login.
 - **W4 — run it** on `windows-*` runners (open decision 9) and on a real
   desktop session, driving the binary through a user's scenario (rule 25).
+  Half of it landed early, out of order, because compiling was what mattered
+  first: a `go build (windows)` job on `windows-latest` builds and vets every
+  package. The suite stays out of that job deliberately — it fails on what the
+  platform is (no uid, backslashes, no wallet) and `internal/keys` does not
+  even finish, since a re-executed test helper outlives the run holding the
+  pipe and Windows has no process group to take it down with. Making those
+  pass is its own step; a job that ran them and ignored the result would
+  report a platform as tested that nothing tests.
 
 **Out of scope here, named so they are not mistaken for oversights**: the agent
 endpoint and its named pipe, Credential Manager and 1Password as Windows

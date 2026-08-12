@@ -215,6 +215,24 @@ controlling terminal at all, while the Go tests allocate a pseudo-terminal
 of their own. They need no daemon and no container, so they run on both
 platforms in the ordinary test run.
 
+## Windows
+
+Windows has no column in the tables above, and that is the honest state of it:
+the tree is **built** there, not tested. The `go build (windows)` job compiles
+every package on a `windows-latest` runner and vets them, which type-checks the
+test files as well — enough to catch a platform file that never supplied
+something the shared tests reach for, and nothing more than that.
+
+The suite is not run there because it does not pass and, in one package, does
+not finish. A Windows host reports no uid, spells its paths with backslashes,
+and offers no wallet this project can reach, so `cmd/sshakku`, `internal/config`
+and several others fail on what the platform is rather than on what the code
+does. `internal/keys` is worse than failing: it hangs, because a re-executed
+test helper outlives the run holding the output pipe, and there is no process
+group on Windows to take it down with. Those failures are the work of turning
+this column into cells, one at a time; until then a passing Windows job would
+be a job that tested nothing.
+
 ## Init system (systemd/OpenRC/...)
 
 Not a real axis: SSHakku has no runtime dependency on any init system or
