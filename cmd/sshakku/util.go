@@ -3,7 +3,6 @@ package main
 import (
 	"os"
 	"os/user"
-	"strings"
 )
 
 // userCurrent looks up the invoking process's OS user, a seam so currentUser's
@@ -21,10 +20,4 @@ func currentUser() string {
 		return u.Username
 	}
 	return ""
-}
-
-// shellSingleQuote wraps s in single quotes safe for POSIX shell eval, so paths
-// containing spaces or metacharacters survive intact.
-func shellSingleQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }

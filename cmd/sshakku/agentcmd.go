@@ -48,7 +48,18 @@ func realEnsurer() agentEnsurer {
 // agent_sock is the live socket EnsureAgent settled on, which may be an adopted
 // agent rather than the fixed path. Only these assignments go to stdout;
 // diagnostics and anomalies go to stderr and the session log.
-func (d deps) shellInit(stdout, stderr io.Writer) int {
+//
+// --shell says which language to print them in (see dialectFromArgs); a shell
+// that says nothing gets the Bourne form above. An invocation that cannot be
+// printed for is answered before the agent is touched: it is a mistake in what
+// was asked, and starting an agent is not part of answering one.
+func (d deps) shellInit(stdout, stderr io.Writer, args []string) int {
+	dialect, err := dialectFromArgs(args)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "sshakku: shell-init: %v\n", err)
+		return 2
+	}
+
 	env := paths.FromOS()
 	layout := paths.Resolve(env, paths.ProbeDir).WithSocketToken(paths.SocketToken())
 	if err := paths.Ensure(layout); err != nil {
@@ -70,7 +81,7 @@ func (d deps) shellInit(stdout, stderr io.Writer) int {
 		{"log_file", layout.LogFile},
 	}
 	for _, a := range assignments {
-		if _, err := fmt.Fprintf(stdout, "%s=%s\n", a.name, shellSingleQuote(a.value)); err != nil {
+		if _, err := io.WriteString(stdout, dialect.setVar(a.name, a.value)); err != nil {
 			_, _ = fmt.Fprintf(stderr, "sshakku: %v\n", err)
 			return 1
 		}
@@ -86,7 +97,14 @@ func (d deps) shellInit(stdout, stderr io.Writer) int {
 //
 // It is a standalone entry point for exercising the lifecycle; the login path
 // reaches the same logic through shell-init, which adds the other assignments.
-func (d deps) ensureAgent(stdout, stderr io.Writer) int {
+// --shell chooses the language, exactly as it does there.
+func (d deps) ensureAgent(stdout, stderr io.Writer, args []string) int {
+	dialect, err := dialectFromArgs(args)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "sshakku: ensure-agent: %v\n", err)
+		return 2
+	}
+
 	env := paths.FromOS()
 	layout := paths.Resolve(env, paths.ProbeDir).WithSocketToken(paths.SocketToken())
 	if err := paths.Ensure(layout); err != nil {
@@ -98,7 +116,7 @@ func (d deps) ensureAgent(stdout, stderr io.Writer) int {
 	if code != 0 {
 		return code
 	}
-	if _, err := fmt.Fprintf(stdout, "agent_sock=%s\n", shellSingleQuote(liveSock)); err != nil {
+	if _, err := io.WriteString(stdout, dialect.setVar("agent_sock", liveSock)); err != nil {
 		_, _ = fmt.Fprintf(stderr, "sshakku: %v\n", err)
 		return 1
 	}

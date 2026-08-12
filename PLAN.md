@@ -2230,7 +2230,7 @@ bash: the directory's existence is the only check, and having made one is taken
 as saying it gets sourced. Not a priority — the marker block in the profile is
 the mechanism that has to work.
 
-- **W1 — a binary that compiles for `GOOS=windows`.** `_windows.go` files
+- **W1 — a binary that compiles for `GOOS=windows`. ✅ Done.** `_windows.go` files
   (rule 26 — named for the platform, never a negation of another) for what the
   unix build supplies and Windows does not: `keyring`'s `Add`/`Read`/`Unlink`
   (no kernel keyring — the `_darwin.go` shape already says this), `paths`'
@@ -2243,10 +2243,19 @@ the mechanism that has to work.
   stub says so and fails explicitly. Closes with `GOOS=windows` in
   `build-cross`, in `lint-go`'s per-build list, and in CI, so it cannot
   regress silently.
-- **W2 — `--shell=powershell`.** `$agent_sock = '…'` with PowerShell's doubled
-  apostrophe, and `$env:SSH_ASKPASS` in place of `export`. The promise goes
-  into `docs/FEATURES.md` first (rule 21) and the assertion is watched failing
-  before the emitter exists (rule 23).
+- **W2 — `--shell=powershell`. ✅ Done.** F43: `$agent_sock = '…'` and
+  `$env:SSH_ASKPASS` in place of `export`, on the three commands that print for
+  a shell — `ensure-agent` as well as the two named here, since a command that
+  prints for a shell and cannot be told which shell is a hole rather than a
+  smaller change. The quoting is not the doubled apostrophe this bullet
+  predicted: PowerShell ends a single-quoted literal at any of **five**
+  characters — `'` and the four curly quotes U+2018, U+2019, U+201A, U+201B —
+  and each doubled stands for itself, identically on 5.1 and 7. Escaping only
+  the apostrophe makes a home under `C:\Users\O’Brien` a parse error, which is
+  an account name, not a curiosity. `SSH_ASKPASS_REQUIRE=force` becomes
+  `'force'` on the posix side too: every value goes through its dialect's
+  quoting, since PowerShell reads a bare word after `=` as a command to run and
+  there is nothing to gain from deciding per value what may be left bare.
 - **W3 — the hook and its wiring.** The four points above; a drop-in
   `001-sshakku.ps1` where a `profile.d` exists, a marker block in the profile
   otherwise; `PSScriptAnalyzer` as `lint-ps1` in `make lint` and CI (rule 12;

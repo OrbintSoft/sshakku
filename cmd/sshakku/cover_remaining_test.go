@@ -187,7 +187,7 @@ func TestRunDispatch(t *testing.T) {
 		var out, errOut bytes.Buffer
 		require.Zerof(t, d.run(&out, &errOut, []string{"askpass-env"}),
 			"a session with no dialog is still one the broker serves; stderr=%q", errOut.String())
-		assert.Equal(t, askpassExports("/opt/sshakku/bin/sshakku"), out.String(),
+		assert.Equal(t, askpassExports(dialect(t, shellPosix), "/opt/sshakku/bin/sshakku"), out.String(),
 			"and it gets the same exports a graphical session does")
 	})
 }

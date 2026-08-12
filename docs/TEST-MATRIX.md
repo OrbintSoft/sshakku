@@ -194,7 +194,20 @@ table above has established where that backend is available at all.
 | A command SSHakku does not recognise, typed in a shell it is wired into, is reported as unknown and never taken for a request for a secret (F30) | ✅ `TestUnknownCommandIsNotASecretRequest` — the real `dispatch` run under the binary's own name, with the wiring's exports set and a terminal that would answer if it were asked: two spellings of a mistake (a flag, and a mistyped subcommand with an argument) are each named on stderr with the usage, nothing reaches stdout, and the terminal is never read. `test/bats/askpass-broker.bats` drives the installed binary in a shell that has sourced the real hook. What the shell test cannot show is the terminal going unread — it runs with no controlling terminal, where "did not ask" and "had nobody to ask" are indistinguishable — so that half of the promise rests on the Go test alone | ✅ same |
 | A wallet that never answers — present but never returning — does not hold up an `ssh` or a login shell (F21), per backend that reaches its wallet by running a program | ✅ `test/bats/askpass-broker.bats`, once per backend × entry point: `secret-service` (blocked `secret-tool`, bounded by `command_timeout`) and `1password` (blocked `op`, bounded by `interactive_timeout`). `TestNoCommandBlocksIndefinitely` covers every external program this code runs, `bw` included — reached there by answering the master-password prompt Bitwarden asks for before it will run anything | ✅ `1password`; `secret-service` — (that backend does not exist on macOS). Bitwarden as on Linux |
 | A wallet that never answers, where the wallet is **not** a program (F21) | — (every Linux backend reaches its wallet by running one, or over D-Bus with its own `CallTimeout`) | ✅ `TestKeychainGivesUpOnAKeychainThatNeverAnswers` (F21) drives all four operations against a keychain that neither answers nor fails — `Lookup`, `Store`, `Delete` and `List`, since `forget --all` waits on the last two exactly as `load-keys` waits on the first — and each gives up inside the budget it was given — `interactive_timeout`, since a keychain call may be waiting on a person approving it — instead of waiting. `TestWithDeadline` covers the giving-up itself, and runs on both platforms. What no test here does is make a *real* keychain hang: see the row above |
+| What is printed for a shell to run is in the language that shell reads (F43) | ✅ the posix form, through `test/bats/shell-plumbing.bats` and `test/bats/askpass-broker.bats`: the installed hook evals what `shell-init` and `askpass-env` print and the socket and the exports are then checked in the shell that ran them, so a line no Bourne shell could read fails the suite rather than passing quietly | ✅ same, through the macOS job's `make test-bats` |
 | The shell suite itself runs on this OS, against the real login hook and real ssh binaries | ✅ `make test-bats` in `debian.Dockerfile` | ✅ `make test-bats` in the `test-macos` job, after the throwaway keychain is set up |
+
+The PowerShell half of F43 has no cell above because it has no column: neither
+job runs a Windows shell. It was driven by hand instead, on Windows 11 against
+both PowerShell 7.6 and Windows PowerShell 5.1 — `askpass-env
+--shell=powershell` piped into `Invoke-Expression` leaves `$env:SSH_ASKPASS`
+holding the helper beside the binary, run from a directory named `O’Brien`,
+whose curly apostrophe is the character the quoting exists for; the same binary
+with no flag wires a Git Bash session on that same machine, and the Bourne form
+fed to PowerShell is the parse error it should be. `shell-init` could not be
+reached there at all — the agent is not ported to Windows, so it fails before
+printing anything. A run by hand is not a test: this stays uncovered until
+there is a Windows job to hold it.
 
 The two live-terminal rows above are covered by the Go suite rather than by
 `test/bats/shell-plumbing.bats`: that suite runs in a container with no

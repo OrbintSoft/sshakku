@@ -11,6 +11,15 @@ Every subcommand follows the same exit-code convention: `0` on success, `1`
 on a runtime failure, `2` on a usage error (unknown command, missing or
 malformed argument).
 
+Three of them — `shell-init`, `ensure-agent` and `askpass-env` — print lines
+for a shell to run, and take `--shell <posix|powershell>` (also
+`--shell=<name>`) to say which shell is asking. Without it they print the
+Bourne form, which is what `eval` in `sh`, `bash` and `zsh` reads — including
+from Git Bash on Windows. `--shell=powershell` prints the same values as
+PowerShell assignments, for `Invoke-Expression` to run. Nothing is inferred
+from the operating system: the binary cannot see which shell started it, and a
+name it does not have is a usage error rather than a guess.
+
 | Command | Run by hand? | Effect |
 | --- | --- | --- |
 | [`shell-init`](#sshakku-shell-init) | No | Keeps the agent healthy, prints the shell assignments the login hook evals. |
@@ -32,6 +41,14 @@ one), and prints the result as shell assignments to `eval`:
 agent_sock='…'
 agent_lock='…'
 log_file='…'
+```
+
+or, with `--shell=powershell`:
+
+```powershell
+$agent_sock = '…'
+$agent_lock = '…'
+$log_file = '…'
 ```
 
 This is the command the login hook evals to pin the shell to the fixed
@@ -74,7 +91,14 @@ through sshakku's wallet-aware broker:
 
 ```sh
 export SSH_ASKPASS='…/sshakku-askpass'
-export SSH_ASKPASS_REQUIRE=force
+export SSH_ASKPASS_REQUIRE='force'
+```
+
+or, with `--shell=powershell`:
+
+```powershell
+$env:SSH_ASKPASS = '…\sshakku-askpass'
+$env:SSH_ASKPASS_REQUIRE = 'force'
 ```
 
 `sshakku-askpass` is installed alongside `sshakku` and is the program `ssh`
