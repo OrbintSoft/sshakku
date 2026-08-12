@@ -37,7 +37,7 @@ load helpers
 	# binary: that is what keeps a passphrase prompt and a typed command from
 	# arriving at the same place.
 	[[ "$output" == *"export SSH_ASKPASS='$(dirname "$SSHAKKU_BIN")/sshakku-askpass'"* ]]
-	[[ "$output" == *"export SSH_ASKPASS_REQUIRE=force"* ]]
+	[[ "$output" == *"export SSH_ASKPASS_REQUIRE='force'"* ]]
 }
 
 # Feature F30: a command SSHakku does not recognise is answered by naming it and

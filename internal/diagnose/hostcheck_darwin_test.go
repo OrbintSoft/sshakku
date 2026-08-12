@@ -10,6 +10,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// settled fails the test when a check was left undetermined, and returns the
+// answer it reached. nil and false are different answers — "nobody could tell"
+// and "no" — and the report says different things about them, so a test that
+// let one stand in for the other would agree with the wrong one.
+func settled(t *testing.T, got *bool, what string) bool {
+	t.Helper()
+	require.NotNilf(t, got, "%s must be settled, not left undetermined", what)
+	return *got
+}
+
 // stubHostProbes points the shell-out/sysctl seams at fixed results for one
 // test and restores them afterward.
 func stubHostProbes(t *testing.T, fdesetup func() ([]byte, error), bridge func() ([]byte, error), arm64 func() (uint32, error)) {

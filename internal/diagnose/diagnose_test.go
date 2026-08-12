@@ -31,16 +31,6 @@ const (
 	legacy = "/home/u/.ssh/agent"
 )
 
-// settled fails the test when a check was left undetermined, and returns the
-// answer it reached. nil and false are different answers — "nobody could tell"
-// and "no" — and the report says different things about them, so a test that
-// let one stand in for the other would agree with the wrong one.
-func settled(t *testing.T, got *bool, what string) bool {
-	t.Helper()
-	require.NotNilf(t, got, "%s must be settled, not left undetermined", what)
-	return *got
-}
-
 // hasFinding reports whether any finding contains sub.
 func hasFinding(r Report, sub string) bool {
 	for _, f := range r.Findings {

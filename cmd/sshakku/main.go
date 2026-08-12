@@ -50,6 +50,10 @@ commands:
                  probe entry in the named (or configured) secret backend
   forget         delete stored passphrases: <keyname>... or --all
   help           show this help
+
+shell-init, ensure-agent and askpass-env print lines for a shell to run, and
+take --shell <posix|powershell> to say which shell is asking. Without it they
+print the Bourne form every POSIX shell reads.
 `
 
 func main() {
@@ -171,13 +175,13 @@ func (d deps) run(stdout, stderr io.Writer, args []string) int {
 	}
 	switch args[0] {
 	case "shell-init":
-		return d.shellInit(stdout, stderr)
+		return d.shellInit(stdout, stderr, args[1:])
 	case "ensure-agent":
-		return d.ensureAgent(stdout, stderr)
+		return d.ensureAgent(stdout, stderr, args[1:])
 	case "load-keys":
 		return d.loadKeys(stderr)
 	case "askpass-env":
-		return d.askpassEnv(stdout, stderr)
+		return d.askpassEnv(stdout, stderr, args[1:])
 	case "config":
 		return d.config(stdout, stderr, args[1:])
 	case "doctor":

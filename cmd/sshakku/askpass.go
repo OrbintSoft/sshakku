@@ -101,22 +101,29 @@ func tail(s string, n int) string {
 // wallet miss the broker prompts on the terminal exactly as ssh would have, so
 // there is nothing a headless session gains by being left unwired. The login
 // entrypoint evals it in every login shell, interactive or not, since it only
-// ever prints export lines.
-func (d deps) askpassEnv(stdout, stderr io.Writer) int {
+// ever prints export lines. --shell says which language to print them in (see
+// dialectFromArgs).
+func (d deps) askpassEnv(stdout, stderr io.Writer, args []string) int {
+	dialect, err := dialectFromArgs(args)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "sshakku: askpass-env: %v\n", err)
+		return 2
+	}
 	self, err := d.self()
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "sshakku: %v\n", err)
 		return 1
 	}
-	if _, err := io.WriteString(stdout, askpassExports(self)); err != nil {
+	if _, err := io.WriteString(stdout, askpassExports(dialect, self)); err != nil {
 		_, _ = fmt.Fprintf(stderr, "sshakku: %v\n", err)
 		return 1
 	}
 	return 0
 }
 
-// askpassExports returns the shell `export` lines pointing ssh's SSH_ASKPASS at
-// the wallet-aware broker installed beside self. REQUIRE=force is what routes
+// askpassExports returns the lines, in the caller's own shell language, that
+// put ssh's SSH_ASKPASS in the environment pointing at the wallet-aware broker
+// installed beside self. REQUIRE=force is what routes
 // every prompt to the broker: `prefer` asks OpenSSH to favour the helper but
 // still ignores it when DISPLAY is unset, which is most terminal sessions and a
 // Mac without an X server. The broker keeps the terminal as its own fallback,
@@ -125,9 +132,7 @@ func (d deps) askpassEnv(stdout, stderr io.Writer) int {
 // Both lines land in every login shell and stay there, which is why neither may
 // say anything about a particular command: they describe where ssh should go for
 // a passphrase, and nothing else in the session is affected by them.
-func askpassExports(self string) string {
-	return fmt.Sprintf(
-		"export SSH_ASKPASS=%s\nexport SSH_ASKPASS_REQUIRE=force\n",
-		shellSingleQuote(askpassProg(self)),
-	)
+func askpassExports(dialect shellDialect, self string) string {
+	return dialect.setEnv("SSH_ASKPASS", askpassProg(self)) +
+		dialect.setEnv("SSH_ASKPASS_REQUIRE", "force")
 }

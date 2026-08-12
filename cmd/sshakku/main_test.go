@@ -41,6 +41,8 @@ func TestRun(t *testing.T) {
 		{"doctor --user missing value", []string{"doctor", "--user"}, 2},
 		{"doctor --user unknown", []string{"doctor", "--user", "sshakku-test-no-such-user"}, 2},
 		{"doctor --test-backend unknown name", []string{"doctor", "--test-backend", "bogus"}, 2},
+		{"askpass-env unknown dialect", []string{"askpass-env", "--shell=fish"}, 2},
+		{"askpass-env unknown argument", []string{"askpass-env", "--posix"}, 2},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -167,8 +169,9 @@ func TestCrossUserGuard(t *testing.T) {
 // makes ssh consult it at all in a session with no DISPLAY.
 func TestAskpassExports(t *testing.T) {
 	want := "export SSH_ASKPASS='/usr/local/bin/sshakku-askpass'\n" +
-		"export SSH_ASKPASS_REQUIRE=force\n"
-	assert.Equal(t, want, askpassExports("/usr/local/bin/sshakku"), "the two lines the shell must export, verbatim")
+		"export SSH_ASKPASS_REQUIRE='force'\n"
+	assert.Equal(t, want, askpassExports(dialect(t, shellPosix), "/usr/local/bin/sshakku"),
+		"the two lines the shell must export, verbatim")
 }
 
 // TestDispatchRoutesOnTheNameItWasRunAs covers the one thing that decides
@@ -282,8 +285,8 @@ func TestAskpassEnvHeadless(t *testing.T) {
 	d := realDeps()
 	d.self = func() (string, error) { return "/opt/sshakku/bin/sshakku", nil }
 	var out, errOut bytes.Buffer
-	require.Zero(t, d.askpassEnv(&out, &errOut), "a session with no display is still one the broker serves")
-	assert.Equal(t, askpassExports("/opt/sshakku/bin/sshakku"), out.String(),
+	require.Zero(t, d.askpassEnv(&out, &errOut, nil), "a session with no display is still one the broker serves")
+	assert.Equal(t, askpassExports(dialect(t, shellPosix), "/opt/sshakku/bin/sshakku"), out.String(),
 		"the same exports a graphical session gets")
 }
 

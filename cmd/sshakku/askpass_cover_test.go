@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"path/filepath"
 	"testing"
 
 	"github.com/OrbintSoft/sshakku/internal/keys"
@@ -19,18 +20,47 @@ func TestAskpassEnv(t *testing.T) {
 		d := realDeps()
 		d.self = func() (string, error) { return "/opt/sshakku/bin/sshakku", nil }
 		var out, errOut bytes.Buffer
-		require.Zerof(t, d.askpassEnv(&out, &errOut), "askpassEnv; stderr=%q", errOut.String())
+		require.Zerof(t, d.askpassEnv(&out, &errOut, nil), "askpassEnv; stderr=%q", errOut.String())
 		assert.Contains(t, out.String(), "export SSH_ASKPASS='/opt/sshakku/bin/sshakku-askpass'",
 			"the helper beside the binary is what ssh must be pointed at, not the binary itself")
-		assert.Contains(t, out.String(), "export SSH_ASKPASS_REQUIRE=force",
+		assert.Contains(t, out.String(), "export SSH_ASKPASS_REQUIRE='force'",
 			"and force is what makes ssh consult it in a session with no display")
+	})
+
+	// F43: the same two lines, in the language a PowerShell session reads. The
+	// directory is the host's own, since where the helper sits is not what this
+	// is about and a path is spelled differently on each.
+	t.Run("the dialect asked for is what it prints", func(t *testing.T) {
+		dir := t.TempDir()
+		d := realDeps()
+		d.self = func() (string, error) { return filepath.Join(dir, "sshakku"), nil }
+		var out, errOut bytes.Buffer
+		require.Zerof(t, d.askpassEnv(&out, &errOut, []string{"--shell=powershell"}),
+			"askpassEnv; stderr=%q", errOut.String())
+		assert.Contains(t, out.String(), "$env:SSH_ASKPASS = '"+filepath.Join(dir, "sshakku-askpass")+"'",
+			"the helper beside the binary, as PowerShell reads an environment assignment")
+		assert.Contains(t, out.String(), "$env:SSH_ASKPASS_REQUIRE = 'force'",
+			"and the value that makes ssh consult it, quoted, since PowerShell would run a bare word")
+		assert.NotContains(t, out.String(), "export ",
+			"nothing may arrive in the language the caller did not ask for")
+	})
+
+	t.Run("a dialect this program has not got", func(t *testing.T) {
+		d := realDeps()
+		d.self = func() (string, error) { return "/opt/sshakku/bin/sshakku", nil }
+		var out, errOut bytes.Buffer
+		assert.Equal(t, 2, d.askpassEnv(&out, &errOut, []string{"--shell=fish"}),
+			"a dialect this program has not got is a usage error")
+		assert.Empty(t, out.String(),
+			"a shell must be handed nothing rather than lines in a language it cannot read")
+		assert.Contains(t, errOut.String(), "fish", "and told which one was refused")
 	})
 
 	t.Run("executable lookup failure returns 1", func(t *testing.T) {
 		d := realDeps()
 		d.self = func() (string, error) { return "", errors.New("no exe") }
 		var out, errOut bytes.Buffer
-		assert.Equal(t, 1, d.askpassEnv(&out, &errOut), "with no path to the binary there is nothing to export")
+		assert.Equal(t, 1, d.askpassEnv(&out, &errOut, nil), "with no path to the binary there is nothing to export")
 		assert.Empty(t, out.String(), "and a shell must not be given exports pointing at nothing")
 		assert.Contains(t, errOut.String(), "no exe", "the reason must reach the user")
 	})
@@ -39,7 +69,7 @@ func TestAskpassEnv(t *testing.T) {
 		d := realDeps()
 		d.self = func() (string, error) { return "/opt/sshakku/bin/sshakku", nil }
 		var errOut bytes.Buffer
-		assert.Equal(t, 1, d.askpassEnv(errWriter{}, &errOut),
+		assert.Equal(t, 1, d.askpassEnv(errWriter{}, &errOut, nil),
 			"exports the shell never received must not be reported as delivered")
 	})
 }
