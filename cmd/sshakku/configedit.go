@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -18,7 +19,7 @@ const fallbackEditor = "vi"
 // configEdit opens the user's own config.toml in their editor, creating it
 // from the commented template when they have none, and reports what the file
 // itself cannot show once the editor exits.
-func (d deps) configEdit(stdout, stderr io.Writer, configDir string) int {
+func (d deps) configEdit(ctx context.Context, stdout, stderr io.Writer, configDir string) int {
 	path := config.MainFile(configDir)
 	if err := ensureConfigFile(configDir, path); err != nil {
 		_, _ = fmt.Fprintf(stderr, "sshakku: %v\n", err)

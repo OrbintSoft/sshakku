@@ -211,7 +211,7 @@ func TestForgetOnAWalletThatCannotDeleteTellsTheUserWhatToDo(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	d := depsReturning(keys.KeePassXCBackend{})
 
-	code := d.forget(&stdout, &stderr, []string{"id_ed25519"})
+	code := d.forget(t.Context(), &stdout, &stderr, []string{"id_ed25519"})
 
 	assert.NotZero(t, code, "nothing was removed, so this did not succeed")
 	assert.NotContains(t, stdout.String(), "forgot", "and nothing may claim the passphrase is gone")

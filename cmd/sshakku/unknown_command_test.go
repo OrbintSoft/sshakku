@@ -59,7 +59,7 @@ func TestUnknownCommandIsNotASecretRequest(t *testing.T) {
 			d.tty = tty
 
 			var stdout, stderr bytes.Buffer
-			code := dispatch(d, &stdout, &stderr, "/usr/local/bin/sshakku", args)
+			code := dispatch(t.Context(), d, &stdout, &stderr, "/usr/local/bin/sshakku", args)
 
 			assert.Emptyf(t, tty.asked,
 				"a command SSHakku does not know is not a question to put to the user: %q", tty.asked)

@@ -113,7 +113,7 @@ func TestConfigRefusesArgumentsItDoesNotKnow(t *testing.T) {
 	tempRuntimeEnv(t)
 
 	var stdout, stderr bytes.Buffer
-	assert.Equal(t, 2, deps{}.run(&stdout, &stderr, []string{"config", "--sohw"}),
+	assert.Equal(t, 2, deps{}.run(t.Context(), &stdout, &stderr, []string{"config", "--sohw"}),
 		"an argument the command does not know is a usage error")
 	assert.Contains(t, stderr.String(), "--sohw", "the answer must name what was actually typed")
 	assert.Empty(t, stdout.String(), "and must not be a report nobody asked for")
@@ -168,7 +168,7 @@ func TestConfigReportsAFailedWrite(t *testing.T) {
 	tempRuntimeEnv(t)
 
 	var stderr bytes.Buffer
-	assert.Equal(t, 1, deps{}.config(errWriter{}, &stderr, nil),
+	assert.Equal(t, 1, deps{}.config(t.Context(), errWriter{}, &stderr, nil),
 		"a report that was never delivered must not exit as though it had been")
 	assert.NotEmpty(t, stderr.String(), "and the failure must be said out loud")
 }
@@ -179,7 +179,7 @@ func TestConfigReportsAFailedWrite(t *testing.T) {
 func runConfig(t *testing.T) (string, string, int) {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
-	code := deps{}.run(&stdout, &stderr, []string{"config"})
+	code := deps{}.run(t.Context(), &stdout, &stderr, []string{"config"})
 	return stdout.String(), stderr.String(), code
 }
 

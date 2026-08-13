@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -19,7 +20,7 @@ import (
 // this binary, which ssh-add execs to fetch the stashed passphrase. The success
 // path is silent; problems go to the session log (and stderr for a hard
 // failure).
-func (d deps) loadKeys(stderr io.Writer) int {
+func (d deps) loadKeys(ctx context.Context, stderr io.Writer) int {
 	env := paths.FromOS()
 	layout := paths.Resolve(env, paths.ProbeDir).WithSocketToken(paths.SocketToken())
 	log := sessionlog.New(layout.LogFile)

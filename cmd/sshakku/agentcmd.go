@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -53,7 +54,7 @@ func realEnsurer() agentEnsurer {
 // that says nothing gets the Bourne form above. An invocation that cannot be
 // printed for is answered before the agent is touched: it is a mistake in what
 // was asked, and starting an agent is not part of answering one.
-func (d deps) shellInit(stdout, stderr io.Writer, args []string) int {
+func (d deps) shellInit(ctx context.Context, stdout, stderr io.Writer, args []string) int {
 	dialect, err := dialectFromArgs(args)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "sshakku: shell-init: %v\n", err)
@@ -70,7 +71,7 @@ func (d deps) shellInit(stdout, stderr io.Writer, args []string) int {
 	}
 	paths.CleanupLegacyAgentDir(env.Home)
 
-	liveSock, code := d.runEnsure(stderr, env, layout)
+	liveSock, code := d.runEnsure(ctx, stderr, env, layout)
 	if code != 0 {
 		return code
 	}
@@ -98,7 +99,7 @@ func (d deps) shellInit(stdout, stderr io.Writer, args []string) int {
 // It is a standalone entry point for exercising the lifecycle; the login path
 // reaches the same logic through shell-init, which adds the other assignments.
 // --shell chooses the language, exactly as it does there.
-func (d deps) ensureAgent(stdout, stderr io.Writer, args []string) int {
+func (d deps) ensureAgent(ctx context.Context, stdout, stderr io.Writer, args []string) int {
 	dialect, err := dialectFromArgs(args)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "sshakku: ensure-agent: %v\n", err)
@@ -112,7 +113,7 @@ func (d deps) ensureAgent(stdout, stderr io.Writer, args []string) int {
 		return 1
 	}
 
-	liveSock, code := d.runEnsure(stderr, env, layout)
+	liveSock, code := d.runEnsure(ctx, stderr, env, layout)
 	if code != 0 {
 		return code
 	}
@@ -137,7 +138,7 @@ func keystateDir(layout paths.Layout) string {
 // to expose and a process exit code (0 on success). shell-init and ensure-agent
 // share it so the login path and the standalone command drive the agent
 // identically; each caller prints the assignments it needs.
-func (d deps) runEnsure(stderr io.Writer, env paths.Env, layout paths.Layout) (string, int) {
+func (d deps) runEnsure(ctx context.Context, stderr io.Writer, env paths.Env, layout paths.Layout) (string, int) {
 	log := sessionlog.New(layout.LogFile)
 	cfg := agent.EnsureConfig{
 		FixedSock: layout.AgentSock,

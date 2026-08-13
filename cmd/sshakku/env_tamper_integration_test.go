@@ -63,7 +63,7 @@ func TestTamperedEnvVarsHandledSafely(t *testing.T) {
 		t.Setenv("SSHAKKU_ASKPASS", "1")
 
 		var stdout, stderr bytes.Buffer
-		code := dispatch(realDeps(), &stdout, &stderr, "/usr/local/bin/sshakku", []string{"help"})
+		code := dispatch(t.Context(), realDeps(), &stdout, &stderr, "/usr/local/bin/sshakku", []string{"help"})
 
 		require.Zerof(t, code, "asking for help is not a failure (stderr: %s)", stderr.String())
 		assert.Contains(t, stdout.String(), "usage: sshakku",
@@ -78,7 +78,7 @@ func TestTamperedEnvVarsHandledSafely(t *testing.T) {
 		t.Setenv(keys.EnvPassHandoffToken, "not-a-real-token")
 
 		var stdout bytes.Buffer
-		code := realDeps().askpass(&stdout, []string{"Enter passphrase:"})
+		code := realDeps().askpass(t.Context(), &stdout, []string{"Enter passphrase:"})
 
 		assert.Equal(t, 1, code, "a handle no stash was made under can redeem nothing")
 		assert.Empty(t, stdout.String(), "and a tampered token must leak nothing at all")

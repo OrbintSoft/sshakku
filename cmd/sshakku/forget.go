@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -13,7 +14,7 @@ import (
 // forget deletes stored passphrases: either the named keys, or every entry
 // sshakku manages with --all. Argument validation happens before any secret
 // backend is opened, so a usage error never touches the D-Bus session bus.
-func (d deps) forget(stdout, stderr io.Writer, args []string) int {
+func (d deps) forget(ctx context.Context, stdout, stderr io.Writer, args []string) int {
 	all := false
 	var names []string
 	for _, a := range args {
