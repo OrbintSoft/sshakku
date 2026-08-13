@@ -2,6 +2,8 @@
 
 package agent
 
+import "context"
+
 // UIDGatedProber wraps another Prober and reports a socket unreachable unless
 // it belongs to UID. That ownership question is asked of the filesystem, which
 // answers it with an SID and an ACL here rather than with a uid, so it cannot
@@ -18,4 +20,4 @@ type UIDGatedProber struct {
 }
 
 // Reachable reports false.
-func (UIDGatedProber) Reachable(string) bool { return false }
+func (UIDGatedProber) Reachable(context.Context, string) bool { return false }

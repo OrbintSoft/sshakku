@@ -68,7 +68,7 @@ func stageKeePassXC(t *testing.T, app, root, stateDir string) {
 	// --config takes the settings file to use, so nothing here depends on where
 	// this build would otherwise keep them, and nothing writes to the settings
 	// of whoever is running the test.
-	cmd := exec.Command(app, "--config", settings, "--pw-stdin", database)
+	cmd := exec.CommandContext(t.Context(), app, "--config", settings, "--pw-stdin", database)
 	// Whatever the app says is kept, because the interesting failure is the one
 	// where it starts, answers, and never opens the database: without its own
 	// account of that there is nothing to diagnose but a timeout.
@@ -151,7 +151,7 @@ func stageDatabase(t *testing.T, root, stateDir string) string {
 func keepassxcCLI(t *testing.T, stdin string, args ...string) string {
 	t.Helper()
 
-	cmd := exec.Command("keepassxc-cli", args...)
+	cmd := exec.CommandContext(t.Context(), "keepassxc-cli", args...)
 	cmd.Stdin = strings.NewReader(stdin)
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
@@ -170,7 +170,7 @@ func waitForOpenDatabase(t *testing.T, app *exec.Cmd, said *lockedBuffer) {
 	deadline := time.Now().Add(45 * time.Second)
 	var last error
 	for time.Now().Before(deadline) {
-		conn, err := dialKeePassXCAt(keepassxc.SocketPaths())
+		conn, err := dialKeePassXCAt(t.Context(), keepassxc.SocketPaths())
 		if err == nil {
 			client, connErr := keepassxc.Connect(conn, 5*time.Second, 5*time.Second)
 			if connErr == nil {

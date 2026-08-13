@@ -57,7 +57,7 @@ const ttyPromptLine = "Enter passphrase for id_test: "
 func buildAskpassHelper(t *testing.T, dir string) string {
 	t.Helper()
 	binary := filepath.Join(dir, "sshakku")
-	build := exec.Command("go", "build", "-o", binary, "github.com/OrbintSoft/sshakku/cmd/sshakku")
+	build := exec.CommandContext(t.Context(), "go", "build", "-o", binary, "github.com/OrbintSoft/sshakku/cmd/sshakku")
 	out, err := build.CombinedOutput()
 	require.NoErrorf(t, err, "the real sshakku binary is what answers the prompt:\n%s", out)
 	helper := filepath.Join(dir, "sshakku-askpass")
@@ -258,13 +258,13 @@ func setupTTYPromptTest(t *testing.T, passphrase string) ttyPromptEnv {
 	t.Setenv("HOME", dir)
 
 	keyfile := filepath.Join(dir, "id_test")
-	out, err := exec.Command("ssh-keygen", "-t", "ed25519", "-N", passphrase, "-f", keyfile, "-q").CombinedOutput()
+	out, err := exec.CommandContext(t.Context(), "ssh-keygen", "-t", "ed25519", "-N", passphrase, "-f", keyfile, "-q").CombinedOutput()
 	require.NoErrorf(t, err, "a real passphrase-protected key to load:\n%s", out)
 
 	askpass := buildAskpassHelper(t, dir)
 
 	sock := filepath.Join(dir, "agent.sock")
-	agentCmd := exec.Command("ssh-agent", "-D", "-a", sock)
+	agentCmd := exec.CommandContext(t.Context(), "ssh-agent", "-D", "-a", sock)
 	require.NoError(t, agentCmd.Start(), "a real ssh-agent to load it into")
 	t.Cleanup(func() {
 		_ = agentCmd.Process.Kill()

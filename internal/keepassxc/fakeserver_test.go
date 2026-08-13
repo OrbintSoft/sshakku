@@ -77,7 +77,7 @@ func newFakeServer(t *testing.T) *fakeServer {
 	keys, err := newKeyPair()
 	require.NoError(t, err, "generating the server key pair")
 	path := filepath.Join(shortSocketDir(t), "s")
-	ln, err := net.Listen("unix", path)
+	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "unix", path)
 	require.NoErrorf(t, err, "listening on %s", path)
 	s := &fakeServer{
 		t:        t,
@@ -124,7 +124,7 @@ func (s *fakeServer) openedPayloads() []map[string]any {
 // dial connects a client to the server and closes it when the test ends.
 func (s *fakeServer) dial() net.Conn {
 	s.t.Helper()
-	conn, err := net.Dial("unix", s.path)
+	conn, err := (&net.Dialer{}).DialContext(s.t.Context(), "unix", s.path)
 	require.NoErrorf(s.t, err, "dialling %s", s.path)
 	s.t.Cleanup(func() { _ = conn.Close() })
 	return conn

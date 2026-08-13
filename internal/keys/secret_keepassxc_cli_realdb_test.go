@@ -88,7 +88,7 @@ func TestKeePassXCCLIRealDatabase(t *testing.T) {
 // rather than looking like a defect in the code under test.
 func createRealDatabase(t *testing.T, path, password string) {
 	t.Helper()
-	cmd := exec.Command(keepassxcCLIBin, "db-create", "-p", path)
+	cmd := exec.CommandContext(t.Context(), keepassxcCLIBin, "db-create", "-p", path)
 	// db-create asks twice: the password and its confirmation.
 	cmd.Stdin = strings.NewReader(password + "\n" + password + "\n")
 	out, err := cmd.CombinedOutput()

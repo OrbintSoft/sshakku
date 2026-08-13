@@ -21,7 +21,7 @@ const agentLockWait = 5 * time.Second
 // result handling is exercised without spawning, reaping, or adopting a real
 // agent on the test host.
 type agentEnsurer interface {
-	EnsureAgent(cfg agent.EnsureConfig, log agent.Logger) (agent.EnsureResult, error)
+	EnsureAgent(ctx context.Context, cfg agent.EnsureConfig, log agent.Logger) (agent.EnsureResult, error)
 }
 
 // realEnsurer wires the concrete system probes and runners into the production
@@ -148,7 +148,7 @@ func (d deps) runEnsure(ctx context.Context, stderr io.Writer, env paths.Env, la
 		OurUID:    env.UID,
 	}
 
-	res, err := d.ensurer.EnsureAgent(cfg, log)
+	res, err := d.ensurer.EnsureAgent(ctx, cfg, log)
 	if err != nil {
 		_ = log.Log("ERROR", fmt.Sprintf("ensure-agent: %v", err))
 		_, _ = fmt.Fprintf(stderr, "sshakku: %v\n", err)

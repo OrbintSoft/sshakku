@@ -1,6 +1,7 @@
 package diagnose
 
 import (
+	"context"
 	"strconv"
 	"strings"
 )
@@ -20,13 +21,13 @@ type ProcInfo struct {
 // supplies the real implementation for how it can be read there; tests supply a
 // fake.
 type AncestrySource interface {
-	Parent(pid int) (ppid int, name string, ok bool)
+	Parent(ctx context.Context, pid int) (ppid int, name string, ok bool)
 }
 
 // ancestry walks the process tree from pid toward pid 1, returning the chain of
 // processes (the pid itself first, then each parent up to init). It is bounded in
 // depth and guards against a cycle, so a hostile or racing /proc cannot loop it.
-func ancestry(pid int, src AncestrySource) []ProcInfo {
+func ancestry(ctx context.Context, pid int, src AncestrySource) []ProcInfo {
 	if src == nil {
 		return nil
 	}
@@ -34,7 +35,7 @@ func ancestry(pid int, src AncestrySource) []ProcInfo {
 	seen := map[int]bool{}
 	for cur := pid; cur >= 1 && !seen[cur] && len(chain) < maxAncestry; {
 		seen[cur] = true
-		ppid, name, ok := src.Parent(cur)
+		ppid, name, ok := src.Parent(ctx, cur)
 		if !ok {
 			break
 		}

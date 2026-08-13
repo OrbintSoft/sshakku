@@ -55,7 +55,7 @@ func requireIsolatedAgentEnvironment(t *testing.T) {
 	}
 	prober := agent.SocketProber{}
 	for _, p := range procs {
-		if p.Socket != "" && prober.Reachable(p.Socket) {
+		if p.Socket != "" && prober.Reachable(t.Context(), p.Socket) {
 			t.Skipf("a real ssh-agent (pid %d, socket %s) is already reachable on this machine — "+
 				"these integration tests need an isolated PID namespace, not a live desktop session", p.PID, p.Socket)
 		}
@@ -116,7 +116,7 @@ func TestDoctorDetectsAndFixesDeadOursAgent(t *testing.T) {
 	}
 	m := realManager()
 
-	res1, err := m.EnsureAgent(cfg, nil)
+	res1, err := m.EnsureAgent(t.Context(), cfg, nil)
 	require.NoError(t, err, "seed EnsureAgent")
 
 	// EnvSock and the askpass exports mirror a shell the login hook has already
@@ -146,7 +146,7 @@ func TestDoctorDetectsAndFixesDeadOursAgent(t *testing.T) {
 
 	// doctor --fix's actual mechanism (cmd/sshakku's runFix): EnsureAgent,
 	// then re-Gather.
-	res2, err := m.EnsureAgent(cfg, nil)
+	res2, err := m.EnsureAgent(t.Context(), cfg, nil)
 	require.NoError(t, err, "fix EnsureAgent")
 	t.Cleanup(func() { _ = syscall.Kill(res2.Started, syscall.SIGTERM) })
 	assert.Equal(t, agent.SituationZombie, res2.Situation, "the fix must recognise what it is repairing")

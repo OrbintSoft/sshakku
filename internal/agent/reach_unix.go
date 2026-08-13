@@ -3,6 +3,7 @@
 package agent
 
 import (
+	"context"
 	"os"
 	"syscall"
 )
@@ -20,7 +21,7 @@ type UIDGatedProber struct {
 
 // Reachable reports false without dialing when socket isn't owned by UID, and
 // otherwise defers to the wrapped Prober.
-func (g UIDGatedProber) Reachable(socket string) bool {
+func (g UIDGatedProber) Reachable(ctx context.Context, socket string) bool {
 	if socket == "" {
 		return false
 	}
@@ -32,5 +33,5 @@ func (g UIDGatedProber) Reachable(socket string) bool {
 	if !ok || int(st.Uid) != g.UID {
 		return false
 	}
-	return g.Prober.Reachable(socket)
+	return g.Prober.Reachable(ctx, socket)
 }

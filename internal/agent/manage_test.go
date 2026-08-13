@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"net"
 	"os"
 	"path/filepath"
@@ -13,7 +14,7 @@ import (
 // mapProber reports reachability from a fixed map; absent paths are unreachable.
 type mapProber map[string]bool
 
-func (m mapProber) Reachable(socket string) bool { return m[socket] }
+func (m mapProber) Reachable(_ context.Context, socket string) bool { return m[socket] }
 
 // recordRunner stands in for ssh-agent: it records the socket it was asked to
 // start and returns a fixed pid.
@@ -23,7 +24,7 @@ type recordRunner struct {
 	started string
 }
 
-func (r *recordRunner) Start(socket string) (int, error) {
+func (r *recordRunner) Start(_ context.Context, socket string) (int, error) {
 	r.started = socket
 	return r.pid, r.err
 }
@@ -79,7 +80,7 @@ func TestManagerReap(t *testing.T) {
 	sig := &recordSignaler{}
 	m := Manager{Prober: prober, Inspector: Inspector{ProcRoot: root}, Signaler: sig}
 
-	res, err := m.Reap(ourUID)
+	res, err := m.Reap(t.Context(), ourUID)
 	require.NoError(t, err, "Reap")
 
 	assert.Equal(t, []int{200}, sig.killed, "only our own dead agent is terminated")
@@ -100,7 +101,7 @@ func TestManagerStart(t *testing.T) {
 	runner := &recordRunner{pid: 4242}
 	m := Manager{Prober: mapProber{}, Runner: runner}
 
-	pid, err := m.Start(socket, state)
+	pid, err := m.Start(t.Context(), socket, state)
 	require.NoError(t, err, "Start")
 	assert.Equal(t, 4242, pid, "the pid the runner announced")
 	assert.Equal(t, socket, runner.started, "the socket the runner was asked for")

@@ -413,7 +413,7 @@ func randomProbeValue() (string, error) {
 // guessing a path — an empty token is a valid "no agent started yet" state, not
 // a failure.
 func (d deps) doctorCrossUser(ctx context.Context, stdout, stderr io.Writer, invoking paths.Env, target targetUser) int {
-	token, err := d.tokenSource.ReadToken(target.UID, target.GID)
+	token, err := d.tokenSource.ReadToken(ctx, target.UID, target.GID)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "sshakku: doctor: %v\n", err)
 		return 1

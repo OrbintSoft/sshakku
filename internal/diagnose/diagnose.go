@@ -250,7 +250,7 @@ func Gather(ctx context.Context, in Inputs, src AgentSource, prober agent.Prober
 		EnvUnreadable: in.EnvUnreadable,
 	}
 	if in.EnvSock != "" {
-		r.EnvReachable = prober.Reachable(in.EnvSock)
+		r.EnvReachable = prober.Reachable(ctx, in.EnvSock)
 	}
 	if st, err := agent.ReadState(in.StatePath); err == nil {
 		r.RecordedPID = st.PID
@@ -266,8 +266,8 @@ func Gather(ctx context.Context, in Inputs, src AgentSource, prober agent.Prober
 			UID:       p.UID,
 			Kind:      agent.Classify(p, in.FixedSock, in.LegacyDir),
 			Socket:    p.Socket,
-			Reachable: p.Socket != "" && prober.Reachable(p.Socket),
-			Ancestry:  ancestry(p.PID, anc),
+			Reachable: p.Socket != "" && prober.Reachable(ctx, p.Socket),
+			Ancestry:  ancestry(ctx, p.PID, anc),
 		}
 		if cg != nil {
 			if unit, ok := cg.Cgroup(p.PID); ok {
@@ -280,7 +280,7 @@ func Gather(ctx context.Context, in Inputs, src AgentSource, prober agent.Prober
 	r.State = classifyState(r)
 	r.LogTail = tailLines(in.LogFile, logTailLines)
 	if host != nil {
-		r.Host = host.Checks()
+		r.Host = host.Checks(ctx)
 	}
 	r.Findings = findings(in, r)
 	if keys != nil {

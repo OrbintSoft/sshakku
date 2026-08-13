@@ -20,13 +20,13 @@ const hostCheckTimeout = 5 * time.Second
 // effect — so DarwinHostSource.Checks and its helpers' branch logic are
 // unit-testable by stubbing them. Production points them at the real tools.
 var (
-	fdesetupStatus = func() ([]byte, error) {
+	fdesetupStatus = func(ctx context.Context) ([]byte, error) {
 		//coverage:ignore
-		return hostCheckOutput("fdesetup", "status")
+		return hostCheckOutput(ctx, "fdesetup", "status")
 	}
-	systemProfilerBridge = func() ([]byte, error) {
+	systemProfilerBridge = func(ctx context.Context) ([]byte, error) {
 		//coverage:ignore
-		return hostCheckOutput("system_profiler", "SPiBridgeDataType")
+		return hostCheckOutput(ctx, "system_profiler", "SPiBridgeDataType")
 	}
 	sysctlARM64 = func() (uint32, error) {
 		//coverage:ignore
@@ -44,20 +44,20 @@ type DarwinHostSource struct {
 }
 
 // Checks implements HostSource.
-func (DarwinHostSource) Checks() HostChecks {
+func (DarwinHostSource) Checks(ctx context.Context) HostChecks {
 	var hc HostChecks
-	hc.DiskEncrypted = fileVaultStatus()
+	hc.DiskEncrypted = fileVaultStatus(ctx)
 	notTmpfs := false
 	hc.TmpTmpfs = &notTmpfs // macOS has no tmpfs-backed /tmp to detect
-	hc.SecureHardwarePresent, hc.SecureHardwareKind = secureEnclaveInfo()
+	hc.SecureHardwarePresent, hc.SecureHardwareKind = secureEnclaveInfo(ctx)
 	return hc
 }
 
 // fileVaultStatus runs `fdesetup status`, which needs no elevated privilege
 // to query (only to change), and interprets its output. nil on any output the
 // parser doesn't recognize (or a run failure), rather than guessing.
-func fileVaultStatus() *bool {
-	out, err := fdesetupStatus()
+func fileVaultStatus(ctx context.Context) *bool {
+	out, err := fdesetupStatus(ctx)
 	if err != nil {
 		return nil
 	}
@@ -75,12 +75,12 @@ func fileVaultStatus() *bool {
 // directly when present. Deliberately avoids IOKit registry class names
 // (e.g. `ioreg -c <class>`) for this: they are internal implementation
 // details Apple can rename between OS releases, unlike a public sysctl name.
-func secureEnclaveInfo() (*bool, string) {
+func secureEnclaveInfo(ctx context.Context) (*bool, string) {
 	if arm64, err := sysctlARM64(); err == nil && arm64 == 1 {
 		present := true
 		return &present, "Secure Enclave"
 	}
-	out, err := systemProfilerBridge()
+	out, err := systemProfilerBridge(ctx)
 	if err != nil {
 		return nil, ""
 	}
@@ -89,9 +89,9 @@ func secureEnclaveInfo() (*bool, string) {
 
 // hostCheckOutput runs a status probe with hostCheckTimeout so a wedged binary
 // surfaces as an undetermined check rather than hanging the caller.
-func hostCheckOutput(name string, args ...string) ([]byte, error) {
+func hostCheckOutput(ctx context.Context, name string, args ...string) ([]byte, error) {
 	//coverage:ignore
-	ctx, cancel := context.WithTimeout(context.Background(), hostCheckTimeout)
+	ctx, cancel := context.WithTimeout(ctx, hostCheckTimeout)
 	defer cancel()
 	return exec.CommandContext(ctx, name, args...).Output()
 }

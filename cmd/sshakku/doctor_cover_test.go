@@ -24,7 +24,7 @@ type fakeTokenSource struct {
 	err   error
 }
 
-func (f fakeTokenSource) ReadToken(int, int) (string, error) { return f.token, f.err }
+func (f fakeTokenSource) ReadToken(context.Context, int, int) (string, error) { return f.token, f.err }
 
 var _ TargetTokenSource = fakeTokenSource{}
 

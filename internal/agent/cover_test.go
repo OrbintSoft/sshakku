@@ -125,7 +125,7 @@ func TestEnsureAgentReapError(t *testing.T) {
 		Runner:    &recordRunner{},
 		Signaler:  &recordSignaler{},
 	}
-	_, err := m.EnsureAgent(EnsureConfig{FixedSock: fixed, OurUID: 1000}, nil)
+	_, err := m.EnsureAgent(t.Context(), EnsureConfig{FixedSock: fixed, OurUID: 1000}, nil)
 	assert.Error(t, err, "a reap that cannot read the process list must be reported")
 }
 
@@ -133,7 +133,7 @@ func TestEnsureAgentReapError(t *testing.T) {
 // cannot be read (a missing procfs root).
 func TestManagerReapInspectError(t *testing.T) {
 	m := Manager{Inspector: Inspector{ProcRoot: filepath.Join(t.TempDir(), "nope")}}
-	_, err := m.Reap(1000)
+	_, err := m.Reap(t.Context(), 1000)
 	assert.Error(t, err, "a process list that cannot be read must be reported")
 }
 
@@ -145,7 +145,7 @@ func TestManagerStartRunnerError(t *testing.T) {
 	state := filepath.Join(dir, "agent.state")
 	m := Manager{Prober: mapProber{}, Runner: &recordRunner{err: errors.New("no ssh-agent")}}
 
-	_, err := m.Start(socket, state)
+	_, err := m.Start(t.Context(), socket, state)
 	assert.Error(t, err, "a runner that fails must be reported")
 	_, err = os.Stat(state)
 	assert.ErrorIs(t, err, os.ErrNotExist, "no state file must be written on a runner failure")
@@ -159,7 +159,7 @@ func TestManagerStartStateWriteError(t *testing.T) {
 	state := filepath.Join(dir, "no-such-dir", "agent.state") // parent missing → write fails
 	m := Manager{Prober: mapProber{}, Runner: &recordRunner{pid: 4242}}
 
-	pid, err := m.Start(socket, state)
+	pid, err := m.Start(t.Context(), socket, state)
 	assert.Error(t, err, "a state file that cannot be written must be reported")
 	assert.Equal(t, 4242, pid, "the started agent's pid must come back even when recording its state fails")
 }
@@ -188,7 +188,7 @@ func TestEnsureAgentClearsStaleFixedSocket(t *testing.T) {
 		Runner:    runner,
 		Signaler:  &recordSignaler{},
 	}
-	res, err := m.EnsureAgent(EnsureConfig{FixedSock: fixed, StatePath: filepath.Join(dir, "st"), OurUID: 1000}, log)
+	res, err := m.EnsureAgent(t.Context(), EnsureConfig{FixedSock: fixed, StatePath: filepath.Join(dir, "st"), OurUID: 1000}, log)
 	require.NoError(t, err)
 	assert.Equal(t, SituationZombie, res.Situation, "clearing an orphan socket is a zombie recovery, not a clean start")
 	assert.Contains(t, res.Reaped.RemovedSockets, fixed, "the orphan socket must be reported as removed")
@@ -206,7 +206,7 @@ func TestEnsureAgentStartError(t *testing.T) {
 		Runner:    &recordRunner{err: errors.New("no ssh-agent")},
 		Signaler:  &recordSignaler{},
 	}
-	_, err := m.EnsureAgent(EnsureConfig{FixedSock: fixed, StatePath: filepath.Join(dir, "st"), OurUID: 1000}, nil)
+	_, err := m.EnsureAgent(t.Context(), EnsureConfig{FixedSock: fixed, StatePath: filepath.Join(dir, "st"), OurUID: 1000}, nil)
 	assert.Error(t, err, "an agent that cannot be started must be reported")
 }
 
@@ -230,7 +230,7 @@ func TestEnsureAgentReplacesStaleFixedOnAdopt(t *testing.T) {
 		Runner:    &recordRunner{},
 		Signaler:  &recordSignaler{},
 	}
-	res, err := m.EnsureAgent(EnsureConfig{FixedSock: fixed, OurUID: 1000}, log)
+	res, err := m.EnsureAgent(t.Context(), EnsureConfig{FixedSock: fixed, OurUID: 1000}, log)
 	require.NoError(t, err)
 	assert.Equal(t, SituationDisaster, res.Situation, "adopting after replacing a stale socket is a disaster")
 	assert.Contains(t, res.Reaped.RemovedSockets, fixed, "the replaced fixed socket must be reported as removed")
@@ -254,7 +254,7 @@ func TestEnsureAgentAdoptSymlinkError(t *testing.T) {
 		Runner:    &recordRunner{},
 		Signaler:  &recordSignaler{},
 	}
-	_, err := m.EnsureAgent(EnsureConfig{FixedSock: fixed, OurUID: 1000}, nil)
+	_, err := m.EnsureAgent(t.Context(), EnsureConfig{FixedSock: fixed, OurUID: 1000}, nil)
 	assert.Error(t, err, "an adoption that cannot symlink the fixed socket must be reported")
 }
 

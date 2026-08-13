@@ -2,6 +2,7 @@ package diagnose
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -24,7 +25,7 @@ func (f fakeSource) Agents() ([]agent.AgentProc, error) { return f.procs, f.err 
 // fakeProber reports a socket reachable iff it is in the up set.
 type fakeProber struct{ up map[string]bool }
 
-func (f fakeProber) Reachable(sock string) bool { return f.up[sock] }
+func (f fakeProber) Reachable(_ context.Context, sock string) bool { return f.up[sock] }
 
 const (
 	fixed  = "/run/user/1000/sshakku/tok/agent.sock"

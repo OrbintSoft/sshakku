@@ -2,6 +2,8 @@
 
 package diagnose
 
+import "context"
+
 // WindowsHostSource gathers the host-hardening observations on this system —
 // none of them yet. Every field of the zero HostChecks means "could not
 // determine", which is what is true here: the questions have Windows answers
@@ -16,6 +18,6 @@ type WindowsHostSource struct {
 }
 
 // Checks reports everything as undetermined.
-func (WindowsHostSource) Checks() HostChecks { return HostChecks{} }
+func (WindowsHostSource) Checks(context.Context) HostChecks { return HostChecks{} }
 
 var _ HostSource = WindowsHostSource{}

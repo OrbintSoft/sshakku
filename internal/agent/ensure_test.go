@@ -55,7 +55,7 @@ func TestEnsureAgentHealthy(t *testing.T) {
 	runner := &recordRunner{pid: 1}
 
 	m := Manager{Prober: mapProber{fixed: true}, Runner: runner, Signaler: &recordSignaler{}}
-	res, err := m.EnsureAgent(EnsureConfig{FixedSock: fixed, StatePath: filepath.Join(dir, "st"), OurUID: 1000}, nil)
+	res, err := m.EnsureAgent(t.Context(), EnsureConfig{FixedSock: fixed, StatePath: filepath.Join(dir, "st"), OurUID: 1000}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, SituationHealthy, res.Situation, "situation")
 	assert.Equal(t, fixed, res.LiveSock, "the live socket is the fixed one")
@@ -74,7 +74,7 @@ func TestEnsureAgentClean(t *testing.T) {
 		Runner:    runner,
 		Signaler:  &recordSignaler{},
 	}
-	res, err := m.EnsureAgent(EnsureConfig{FixedSock: fixed, StatePath: state, OurUID: 1000}, nil)
+	res, err := m.EnsureAgent(t.Context(), EnsureConfig{FixedSock: fixed, StatePath: state, OurUID: 1000}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, SituationClean, res.Situation, "situation")
 	assert.Equal(t, fixed, res.LiveSock, "the live socket is the fixed one")
@@ -100,7 +100,7 @@ func TestEnsureAgentZombie(t *testing.T) {
 	m := Manager{Prober: mapProber{}, Inspector: Inspector{ProcRoot: proc}, Runner: runner, Signaler: sig}
 	log := &fakeLogger{}
 
-	res, err := m.EnsureAgent(EnsureConfig{FixedSock: fixed, StatePath: state, OurUID: 1000}, log)
+	res, err := m.EnsureAgent(t.Context(), EnsureConfig{FixedSock: fixed, StatePath: state, OurUID: 1000}, log)
 	require.NoError(t, err)
 	assert.Equal(t, SituationZombie, res.Situation, "situation")
 	assert.Contains(t, sig.killed, 200, "the dead agent of ours must be reaped")
@@ -126,7 +126,7 @@ func TestEnsureAgentForeign(t *testing.T) {
 	log := &fakeLogger{}
 
 	cfg := EnsureConfig{FixedSock: fixed, LegacyDir: "/nope", StatePath: filepath.Join(dir, "st"), OurUID: 1000}
-	res, err := m.EnsureAgent(cfg, log)
+	res, err := m.EnsureAgent(t.Context(), cfg, log)
 	require.NoError(t, err)
 	assert.Equal(t, SituationForeign, res.Situation, "situation")
 	require.NotNil(t, res.Adopted, "an agent must have been adopted")
@@ -157,7 +157,7 @@ func TestEnsureAgentDisasterMultiple(t *testing.T) {
 		Runner:    &recordRunner{},
 		Signaler:  &recordSignaler{},
 	}
-	res, err := m.EnsureAgent(EnsureConfig{FixedSock: fixed, OurUID: 1000}, nil)
+	res, err := m.EnsureAgent(t.Context(), EnsureConfig{FixedSock: fixed, OurUID: 1000}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, SituationDisaster, res.Situation, "situation")
 	require.NotNil(t, res.Adopted, "an agent must have been adopted")
@@ -185,7 +185,7 @@ func TestEnsureAgentDisasterReapAndAdopt(t *testing.T) {
 		Runner:    &recordRunner{},
 		Signaler:  sig,
 	}
-	res, err := m.EnsureAgent(EnsureConfig{FixedSock: fixed, OurUID: 1000}, nil)
+	res, err := m.EnsureAgent(t.Context(), EnsureConfig{FixedSock: fixed, OurUID: 1000}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, SituationDisaster, res.Situation, "situation")
 	assert.Contains(t, sig.killed, 200, "the dead agent of ours must be reaped")
@@ -226,7 +226,7 @@ func TestEnsureAgentFastPathSkipsLock(t *testing.T) {
 	lk := &fakeLocker{}
 
 	m := Manager{Prober: mapProber{fixed: true}, Runner: &recordRunner{}, Signaler: &recordSignaler{}, Locker: lk}
-	res, err := m.EnsureAgent(EnsureConfig{FixedSock: fixed, LockPath: filepath.Join(dir, "lock"), OurUID: 1000}, nil)
+	res, err := m.EnsureAgent(t.Context(), EnsureConfig{FixedSock: fixed, LockPath: filepath.Join(dir, "lock"), OurUID: 1000}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, SituationHealthy, res.Situation, "situation")
 	assert.Empty(t, lk.locked, "the healthy fast path must not lock")
@@ -246,7 +246,7 @@ func TestEnsureAgentLocksMutatePath(t *testing.T) {
 		Signaler:  &recordSignaler{},
 		Locker:    lk,
 	}
-	res, err := m.EnsureAgent(EnsureConfig{FixedSock: fixed, StatePath: filepath.Join(dir, "st"), LockPath: lock, OurUID: 1000}, nil)
+	res, err := m.EnsureAgent(t.Context(), EnsureConfig{FixedSock: fixed, StatePath: filepath.Join(dir, "st"), LockPath: lock, OurUID: 1000}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, SituationClean, res.Situation, "situation")
 	assert.Equal(t, fixed, runner.started, "the socket the agent was started on")
@@ -266,7 +266,7 @@ func TestEnsureAgentDoubleCheckUnderLock(t *testing.T) {
 	lk := &fakeLocker{onLock: func() { prober[fixed] = true }}
 	m := Manager{Prober: prober, Inspector: Inspector{ProcRoot: shortDir(t)}, Runner: runner, Signaler: sig, Locker: lk}
 
-	res, err := m.EnsureAgent(EnsureConfig{FixedSock: fixed, StatePath: filepath.Join(dir, "st"), LockPath: filepath.Join(dir, "lock"), OurUID: 1000}, nil)
+	res, err := m.EnsureAgent(t.Context(), EnsureConfig{FixedSock: fixed, StatePath: filepath.Join(dir, "st"), LockPath: filepath.Join(dir, "lock"), OurUID: 1000}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, SituationHealthy, res.Situation, "the under-lock re-check must find ours healthy")
 	assert.Equal(t, fixed, res.LiveSock, "the live socket is the fixed one")
@@ -282,7 +282,7 @@ func TestEnsureAgentLockError(t *testing.T) {
 	lk := &fakeLocker{err: errors.New("cannot open lock")}
 
 	m := Manager{Prober: mapProber{}, Inspector: Inspector{ProcRoot: shortDir(t)}, Runner: runner, Signaler: &recordSignaler{}, Locker: lk}
-	_, err := m.EnsureAgent(EnsureConfig{FixedSock: fixed, LockPath: filepath.Join(dir, "lock"), OurUID: 1000}, nil)
+	_, err := m.EnsureAgent(t.Context(), EnsureConfig{FixedSock: fixed, LockPath: filepath.Join(dir, "lock"), OurUID: 1000}, nil)
 	assert.Error(t, err, "a lock that cannot be acquired must be reported")
 	assert.Empty(t, runner.started, "nothing must be started after a lock failure")
 }

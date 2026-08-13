@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -21,7 +22,7 @@ var _ TargetTokenSource = execTokenSource{}
 
 // ReadToken requires the caller to already be root: only root can start a
 // process under another uid's credentials.
-func (execTokenSource) ReadToken(uid, gid int) (string, error) {
+func (execTokenSource) ReadToken(ctx context.Context, uid, gid int) (string, error) {
 	if os.Geteuid() != 0 {
 		return "", fmt.Errorf("reading uid %d's socket token requires root privileges (e.g. run via sudo)", uid)
 	}
@@ -36,7 +37,7 @@ func (execTokenSource) ReadToken(uid, gid int) (string, error) {
 		return "", fmt.Errorf("resolve own executable path: %w", err)
 	}
 	//coverage:ignore
-	cmd := exec.Command(self, internalReadSocketTokenCmd)
+	cmd := exec.CommandContext(ctx, self, internalReadSocketTokenCmd)
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Credential: &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)},
 	}

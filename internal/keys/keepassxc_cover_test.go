@@ -42,7 +42,7 @@ func TestDialKeePassXCNamesEveryPathItTried(t *testing.T) {
 		filepath.Join(shortDir(t), "a"),
 		filepath.Join(shortDir(t), "b"),
 	}
-	_, err := dialKeePassXCAt(absent)
+	_, err := dialKeePassXCAt(t.Context(), absent)
 	require.Error(t, err, "a KeePassXC nothing could reach cannot answer")
 	assert.ErrorIs(t, err, keepassxc.ErrNotRunning, "and it must be said as an app that is not running")
 	for _, path := range absent {
@@ -54,7 +54,7 @@ func TestDialKeePassXCNamesEveryPathItTried(t *testing.T) {
 func TestDialKeePassXCTakesTheFirstThatAnswers(t *testing.T) {
 	dir := shortDir(t)
 	live := filepath.Join(dir, "live")
-	ln, err := net.Listen("unix", live)
+	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "unix", live)
 	require.NoError(t, err, "a socket that answers, later in the list than one that does not")
 	t.Cleanup(func() { _ = ln.Close() })
 	go func() {
@@ -64,7 +64,7 @@ func TestDialKeePassXCTakesTheFirstThatAnswers(t *testing.T) {
 		}
 	}()
 
-	conn, err := dialKeePassXCAt([]string{filepath.Join(dir, "absent"), live})
+	conn, err := dialKeePassXCAt(t.Context(), []string{filepath.Join(dir, "absent"), live})
 	require.NoError(t, err,
 		"the first candidate not answering must not end the search: KeePassXC's socket moved between versions")
 	_ = conn.Close()
@@ -95,7 +95,7 @@ func TestKeePassXCConnectReportsAnUnreachableSocket(t *testing.T) {
 // listening.
 func TestKeePassXCConnectReportsAFailedHandshake(t *testing.T) {
 	path := filepath.Join(shortDir(t), "mute")
-	ln, err := net.Listen("unix", path)
+	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "unix", path)
 	require.NoError(t, err, "a socket that accepts and then says nothing")
 	t.Cleanup(func() { _ = ln.Close() })
 	go func() {
@@ -180,7 +180,7 @@ func TestKeePassXCStoreEntersTheSSHakkuGroup(t *testing.T) {
 // associated" — which is the point: the connection itself was built for real.
 func TestKeePassXCConnectSucceedsOverARealSocket(t *testing.T) {
 	path := filepath.Join(shortDir(t), "s")
-	ln, err := net.Listen("unix", path)
+	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "unix", path)
 	require.NoError(t, err, "a socket that answers the key exchange the way KeePassXC does")
 	t.Cleanup(func() { _ = ln.Close() })
 

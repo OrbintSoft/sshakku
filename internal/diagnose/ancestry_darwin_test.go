@@ -3,6 +3,7 @@
 package diagnose
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -60,12 +61,12 @@ func TestPSAncestryParent(t *testing.T) {
 	t.Run("reads the answer", func(t *testing.T) {
 		restore := psParent
 		defer func() { psParent = restore }()
-		psParent = func(pid int) ([]byte, error) {
+		psParent = func(_ context.Context, pid int) ([]byte, error) {
 			assert.Equal(t, 4242, pid, "the pid asked about must be the one the caller named")
 			return []byte(" 1 /sbin/launchd\n"), nil
 		}
 
-		ppid, name, ok := PSAncestry{}.Parent(4242)
+		ppid, name, ok := PSAncestry{}.Parent(t.Context(), 4242)
 		assert.True(t, ok, "an answer that was read must be reported as one")
 		assert.Equal(t, 1, ppid, "the parent pid in the answer")
 		assert.Equal(t, "/sbin/launchd", name, "the command name in the answer")
@@ -74,9 +75,9 @@ func TestPSAncestryParent(t *testing.T) {
 	t.Run("a failed read is an unknown parent, not a crash", func(t *testing.T) {
 		restore := psParent
 		defer func() { psParent = restore }()
-		psParent = func(int) ([]byte, error) { return nil, errors.New("ps: no such process") }
+		psParent = func(context.Context, int) ([]byte, error) { return nil, errors.New("ps: no such process") }
 
-		_, _, ok := PSAncestry{}.Parent(4242)
+		_, _, ok := PSAncestry{}.Parent(t.Context(), 4242)
 		assert.False(t, ok, "a ps that failed must leave the parent unknown, not invent one")
 	})
 }

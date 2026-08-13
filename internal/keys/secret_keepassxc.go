@@ -103,11 +103,11 @@ func entryURL(service string) string {
 }
 
 // connect opens a session with KeePassXC.
-func (b KeePassXCBackend) connect() (KeePassXCSession, error) {
+func (b KeePassXCBackend) connect(ctx context.Context) (KeePassXCSession, error) {
 	if b.NewSession != nil {
 		return b.NewSession()
 	}
-	conn, err := dialKeePassXCAt(b.socketPaths())
+	conn, err := dialKeePassXCAt(ctx, b.socketPaths())
 	if err != nil {
 		return nil, err
 	}
@@ -130,9 +130,9 @@ func (b KeePassXCBackend) socketPaths() []string {
 
 // dialKeePassXCAt tries each candidate socket in turn and reports every path it
 // tried when none answers, so a user can see where it looked.
-func dialKeePassXCAt(paths []string) (net.Conn, error) {
+func dialKeePassXCAt(ctx context.Context, paths []string) (net.Conn, error) {
 	for _, path := range paths {
-		conn, err := net.Dial("unix", path)
+		conn, err := (&net.Dialer{}).DialContext(ctx, "unix", path)
 		if err == nil {
 			return conn, nil
 		}
@@ -168,7 +168,7 @@ func (b KeePassXCBackend) association(client KeePassXCSession) (keepassxc.Associ
 // written to the entry's username, and that is what decides here — the URL
 // narrows the candidates, the exact comparison picks among them.
 func (b KeePassXCBackend) Lookup(ctx context.Context, service string) (string, bool, error) {
-	client, err := b.connect()
+	client, err := b.connect(ctx)
 	if err != nil {
 		return "", false, err
 	}
@@ -198,7 +198,7 @@ func (b KeePassXCBackend) Lookup(ctx context.Context, service string) (string, b
 // present — they have just been asked for the passphrase — whereas a lookup
 // happens with nobody watching.
 func (b KeePassXCBackend) Store(ctx context.Context, service, label, passphrase string) error {
-	client, err := b.connect()
+	client, err := b.connect(ctx)
 	if err != nil {
 		return err
 	}

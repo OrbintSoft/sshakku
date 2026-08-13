@@ -42,7 +42,7 @@ func TestEnsureAgentForeignSurveyError(t *testing.T) {
 		Runner:    &recordRunner{},
 		Signaler:  &recordSignaler{},
 	}
-	_, err := m.EnsureAgent(EnsureConfig{FixedSock: fixed, OurUID: 1000}, nil)
+	_, err := m.EnsureAgent(t.Context(), EnsureConfig{FixedSock: fixed, OurUID: 1000}, nil)
 	assert.Error(t, err, "a healthy-agent survey that cannot read the process list must be reported")
 	assert.Equal(t, 2, lister.calls, "Agents is called twice: reap then survey")
 }
@@ -68,6 +68,6 @@ func TestSocketProberSetDeadlineError(t *testing.T) {
 	setDeadline = func(net.Conn, time.Time) error { return errors.New("cannot set deadline") }
 
 	sock := fakeAgent(t, replyIdentities(1))
-	assert.False(t, (SocketProber{Timeout: time.Second}).Reachable(sock),
+	assert.False(t, (SocketProber{Timeout: time.Second}).Reachable(t.Context(), sock),
 		"a connection whose deadline cannot be set is unreachable")
 }

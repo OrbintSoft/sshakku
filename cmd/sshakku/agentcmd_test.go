@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"os"
@@ -22,7 +23,7 @@ type fakeEnsurer struct {
 	err error
 }
 
-func (f fakeEnsurer) EnsureAgent(agent.EnsureConfig, agent.Logger) (agent.EnsureResult, error) {
+func (f fakeEnsurer) EnsureAgent(context.Context, agent.EnsureConfig, agent.Logger) (agent.EnsureResult, error) {
 	return f.res, f.err
 }
 
@@ -37,7 +38,7 @@ func (errWriter) Write([]byte) (int, error) { return 0, errors.New("write failed
 // saying so.
 type refusingEnsurer struct{ t *testing.T }
 
-func (r refusingEnsurer) EnsureAgent(agent.EnsureConfig, agent.Logger) (agent.EnsureResult, error) {
+func (r refusingEnsurer) EnsureAgent(context.Context, agent.EnsureConfig, agent.Logger) (agent.EnsureResult, error) {
 	require.FailNow(r.t, "no agent may be driven for an invocation that was refused")
 	return agent.EnsureResult{}, nil
 }

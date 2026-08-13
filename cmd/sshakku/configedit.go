@@ -25,7 +25,7 @@ func (d deps) configEdit(ctx context.Context, stdout, stderr io.Writer, configDi
 		_, _ = fmt.Fprintf(stderr, "sshakku: %v\n", err)
 		return 1
 	}
-	if err := runEditor(path); err != nil {
+	if err := runEditor(ctx, path); err != nil {
 		_, _ = fmt.Fprintf(stderr, "sshakku: %v\n", err)
 		return 1
 	}
@@ -54,9 +54,9 @@ func ensureConfigFile(configDir, path string) error {
 // starts are there so a shell is never left waiting on one; here the shell is
 // waiting on the person at the keyboard, and cutting their editor short would
 // throw away what they had typed.
-func runEditor(path string) error {
+func runEditor(ctx context.Context, path string) error {
 	command := editorCommand()
-	editor := exec.Command(command[0], append(command[1:], path)...) // #nosec G204 -- the editor is the user's own choice, run on their behalf
+	editor := exec.CommandContext(ctx, command[0], append(command[1:], path)...) // #nosec G204 -- the editor is the user's own choice, run on their behalf
 	editor.Stdin, editor.Stdout, editor.Stderr = os.Stdin, os.Stdout, os.Stderr
 	if err := editor.Run(); err != nil {
 		return fmt.Errorf("run editor %q: %w", strings.Join(command, " "), err)

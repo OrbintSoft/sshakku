@@ -3,6 +3,7 @@
 package diagnose
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -22,7 +23,7 @@ func settled(t *testing.T, got *bool, what string) bool {
 
 // stubHostProbes points the shell-out/sysctl seams at fixed results for one
 // test and restores them afterward.
-func stubHostProbes(t *testing.T, fdesetup func() ([]byte, error), bridge func() ([]byte, error), arm64 func() (uint32, error)) {
+func stubHostProbes(t *testing.T, fdesetup func(context.Context) ([]byte, error), bridge func(context.Context) ([]byte, error), arm64 func() (uint32, error)) {
 	t.Helper()
 	of, ob, oa := fdesetupStatus, systemProfilerBridge, sysctlARM64
 	t.Cleanup(func() { fdesetupStatus, systemProfilerBridge, sysctlARM64 = of, ob, oa })
@@ -34,14 +35,14 @@ func stubHostProbes(t *testing.T, fdesetup func() ([]byte, error), bridge func()
 // without needing the Intel bridge probe.
 func TestDarwinChecksAppleSilicon(t *testing.T) {
 	stubHostProbes(t,
-		func() ([]byte, error) { return []byte("FileVault is On.\n"), nil },
-		func() ([]byte, error) {
+		func(context.Context) ([]byte, error) { return []byte("FileVault is On.\n"), nil },
+		func(context.Context) ([]byte, error) {
 			require.FailNow(t, "the Intel bridge probe must not run on an Apple Silicon host")
 			return nil, nil
 		},
 		func() (uint32, error) { return 1, nil },
 	)
-	hc := DarwinHostSource{}.Checks()
+	hc := DarwinHostSource{}.Checks(t.Context())
 	assert.True(t, settled(t, hc.DiskEncrypted, "disk encryption"), "FileVault reported on means the disk is encrypted")
 	assert.False(t, settled(t, hc.TmpTmpfs, "whether /tmp is a tmpfs"), "macOS has no tmpfs on /tmp, and that is known rather than guessed")
 	assert.True(t, settled(t, hc.SecureHardwarePresent, "secure hardware"), "an Apple Silicon host carries a Secure Enclave")
@@ -52,11 +53,11 @@ func TestDarwinChecksAppleSilicon(t *testing.T) {
 // failed fdesetup yields nil (undetermined) rather than a guess.
 func TestFileVaultStatusRunError(t *testing.T) {
 	stubHostProbes(t,
-		func() ([]byte, error) { return nil, errors.New("fdesetup missing") },
-		func() ([]byte, error) { return nil, nil },
+		func(context.Context) ([]byte, error) { return nil, errors.New("fdesetup missing") },
+		func(context.Context) ([]byte, error) { return nil, nil },
 		func() (uint32, error) { return 0, errors.New("not arm64") },
 	)
-	assert.Nil(t, fileVaultStatus(), "a probe that could not run settles nothing, and must not guess")
+	assert.Nil(t, fileVaultStatus(t.Context()), "a probe that could not run settles nothing, and must not guess")
 }
 
 // TestSecureEnclaveInfoIntel covers secureEnclaveInfo's Intel path: the arm64
@@ -65,18 +66,18 @@ func TestFileVaultStatusRunError(t *testing.T) {
 func TestSecureEnclaveInfoIntel(t *testing.T) {
 	notARM64 := func() (uint32, error) { return 0, errors.New("not arm64") }
 
-	stubHostProbes(t, nil, func() ([]byte, error) { return []byte("Apple T2 Security Chip"), nil }, notARM64)
-	present, kind := secureEnclaveInfo()
+	stubHostProbes(t, nil, func(context.Context) ([]byte, error) { return []byte("Apple T2 Security Chip"), nil }, notARM64)
+	present, kind := secureEnclaveInfo(t.Context())
 	assert.True(t, settled(t, present, "secure hardware"), "a T2 chip is secure hardware")
 	assert.Equal(t, "Secure Enclave", kind, "what the report calls it")
 
-	stubHostProbes(t, nil, func() ([]byte, error) { return []byte("no security chip"), nil }, notARM64)
-	present, kind = secureEnclaveInfo()
+	stubHostProbes(t, nil, func(context.Context) ([]byte, error) { return []byte("no security chip"), nil }, notARM64)
+	present, kind = secureEnclaveInfo(t.Context())
 	assert.False(t, settled(t, present, "secure hardware"), "an Intel Mac with no security chip has none")
 	assert.Empty(t, kind, "there is no chip to name")
 
-	stubHostProbes(t, nil, func() ([]byte, error) { return nil, errors.New("system_profiler failed") }, notARM64)
-	present, kind = secureEnclaveInfo()
+	stubHostProbes(t, nil, func(context.Context) ([]byte, error) { return nil, errors.New("system_profiler failed") }, notARM64)
+	present, kind = secureEnclaveInfo(t.Context())
 	assert.Nil(t, present, "a probe that could not run settles nothing, and must not guess")
 	assert.Empty(t, kind, "nothing was learned to name")
 }

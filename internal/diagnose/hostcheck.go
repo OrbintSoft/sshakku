@@ -1,5 +1,7 @@
 package diagnose
 
+import "context"
+
 // HostChecks are best-effort, read-only observations about the host
 // environment: conditions outside sshakku's own control that materially
 // affect its threat model (a leaked wallet on an unencrypted disk, a
@@ -35,5 +37,5 @@ type HostChecks struct {
 // DarwinHostSource (macOS) are the real implementations. Tests supply a
 // fake.
 type HostSource interface {
-	Checks() HostChecks
+	Checks(ctx context.Context) HostChecks
 }

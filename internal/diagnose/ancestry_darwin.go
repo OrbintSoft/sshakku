@@ -17,9 +17,9 @@ const ancestryTimeout = 5 * time.Second
 
 // psParent is the seam over the one shell-out, so PSAncestry's parsing is
 // unit-testable without a process table to read.
-var psParent = func(pid int) ([]byte, error) {
+var psParent = func(ctx context.Context, pid int) ([]byte, error) {
 	//coverage:ignore
-	ctx, cancel := context.WithTimeout(context.Background(), ancestryTimeout)
+	ctx, cancel := context.WithTimeout(ctx, ancestryTimeout)
 	//coverage:ignore
 	defer cancel()
 	//coverage:ignore
@@ -31,8 +31,8 @@ var psParent = func(pid int) ([]byte, error) {
 type PSAncestry struct{}
 
 // Parent returns the parent pid and short name of pid.
-func (PSAncestry) Parent(pid int) (int, string, bool) {
-	out, err := psParent(pid)
+func (PSAncestry) Parent(ctx context.Context, pid int) (int, string, bool) {
+	out, err := psParent(ctx, pid)
 	if err != nil {
 		return 0, "", false
 	}
