@@ -61,7 +61,7 @@ func TestLoadKeysReloadsAfterRealExpiry(t *testing.T) {
 		Config:   Config{KeyLifetime: lifetime},
 	}
 
-	require.NoError(t, loader.LoadKeys(), "the first login of the day must load the key")
+	require.NoError(t, loader.LoadKeys(t.Context()), "the first login of the day must load the key")
 
 	fp, err := FileFingerprint(runner, keyfile)
 	require.NoError(t, err, "reading the key's fingerprint must succeed")
@@ -90,7 +90,7 @@ func TestLoadKeysReloadsAfterRealExpiry(t *testing.T) {
 
 	// Second LoadKeys run: the loader's own fingerprint snapshot must now see
 	// the key as missing (not dedup-skip it) and reload it for real.
-	require.NoError(t, loader.LoadKeys(), "a later login must load the key again")
+	require.NoError(t, loader.LoadKeys(t.Context()), "a later login must load the key again")
 
 	loaded, err = AgentFingerprints(runner)
 	require.NoError(t, err, "asking the agent what it holds must succeed")

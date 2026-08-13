@@ -69,16 +69,16 @@ func TestBitwardenBackendRealAccount(t *testing.T) {
 		testLabel = "sshakku integration test probe"
 		testPass  = "probe-passphrase-not-a-real-secret"
 	)
-	t.Cleanup(func() { _ = backend.Delete(testService) })
-	t.Cleanup(func() { _ = backend.Delete(foreignService) })
+	t.Cleanup(func() { _ = backend.Delete(t.Context(), testService) })
+	t.Cleanup(func() { _ = backend.Delete(t.Context(), foreignService) })
 
 	// Each call below unlocks and locks for itself (held stays false), the
 	// same standalone bracket the reactive askpass-broker path uses — so
 	// this also proves a *repeated* fresh master-password prompt/unlock
 	// works against a real daemon, not just once.
-	require.NoError(t, backend.Store(testService, testLabel, testPass), "saving a passphrase must succeed")
+	require.NoError(t, backend.Store(t.Context(), testService, testLabel, testPass), "saving a passphrase must succeed")
 
-	got, found, err := backend.Lookup(testService)
+	got, found, err := backend.Lookup(t.Context(), testService)
 	require.NoError(t, err, "reading it straight back must succeed")
 	require.True(t, found, "a passphrase just saved must be there")
 	assert.Equal(t, testPass, got, "and be the one that was saved")
@@ -86,25 +86,25 @@ func TestBitwardenBackendRealAccount(t *testing.T) {
 	// F27, against the real CLI: `bw list items` answers with the whole vault,
 	// so an item sshakku did not store has to be dropped before List returns —
 	// whatever List reports is what `forget --all` goes on to delete.
-	require.NoError(t, backend.Store(foreignService, "not sshakku's", "someone-elses-password"),
+	require.NoError(t, backend.Store(t.Context(), foreignService, "not sshakku's", "someone-elses-password"),
 		"the vault must be made to hold something that is not SSHakku's, or there is nothing to leave alone")
 
-	services, err := backend.List()
+	services, err := backend.List(t.Context())
 	require.NoError(t, err, "listing the vault must succeed")
 	assert.Contains(t, services, testService, "what SSHakku stored must be reported")
 	assert.NotContains(t, services, foreignService,
 		"and what it did not must not be: whatever is listed here is what forget --all goes on to delete")
 
-	require.NoError(t, backend.Delete(foreignService), "the foreign item must be cleaned up")
+	require.NoError(t, backend.Delete(t.Context(), foreignService), "the foreign item must be cleaned up")
 
 	const updatedPass = "probe-passphrase-updated-not-a-real-secret"
-	require.NoError(t, backend.Store(testService, testLabel, updatedPass), "replacing a passphrase must succeed")
-	got, _, err = backend.Lookup(testService)
+	require.NoError(t, backend.Store(t.Context(), testService, testLabel, updatedPass), "replacing a passphrase must succeed")
+	got, _, err = backend.Lookup(t.Context(), testService)
 	require.NoError(t, err, "reading the replacement back must succeed")
 	assert.Equal(t, updatedPass, got, "and it must be the new passphrase, not the one it replaced")
 
-	require.NoError(t, backend.Delete(testService), "forgetting a passphrase must succeed")
-	_, found, err = backend.Lookup(testService)
+	require.NoError(t, backend.Delete(t.Context(), testService), "forgetting a passphrase must succeed")
+	_, found, err = backend.Lookup(t.Context(), testService)
 	require.NoError(t, err, "looking for a forgotten passphrase must not be an error")
 	assert.False(t, found, "and it must be gone from the vault")
 }

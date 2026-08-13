@@ -80,7 +80,7 @@ func (d deps) loadKeys(ctx context.Context, stderr io.Writer) int {
 			OnDismiss:     settings.OnDismiss,
 		},
 	}
-	if err := loader.LoadKeys(); err != nil {
+	if err := loader.LoadKeys(ctx); err != nil {
 		_ = log.Log("ERROR", fmt.Sprintf("load-keys: %v", err))
 		_, _ = fmt.Fprintf(stderr, "sshakku: %v\n", err)
 		return 1

@@ -55,10 +55,10 @@ func TestKeychainGivesUpOnAKeychainThatNeverAnswers(t *testing.T) {
 		name string
 		call func(*KeychainBackend) error
 	}{
-		{"Lookup", func(b *KeychainBackend) error { _, _, err := b.Lookup("svc"); return err }},
-		{"Store", func(b *KeychainBackend) error { return b.Store("svc", "a key", "hunter2") }},
-		{"Delete", func(b *KeychainBackend) error { return b.Delete("svc") }},
-		{"List", func(b *KeychainBackend) error { _, err := b.List(); return err }},
+		{"Lookup", func(b *KeychainBackend) error { _, _, err := b.Lookup(t.Context(), "svc"); return err }},
+		{"Store", func(b *KeychainBackend) error { return b.Store(t.Context(), "svc", "a key", "hunter2") }},
+		{"Delete", func(b *KeychainBackend) error { return b.Delete(t.Context(), "svc") }},
+		{"List", func(b *KeychainBackend) error { _, err := b.List(t.Context()); return err }},
 	}
 	for _, op := range ops {
 		t.Run(op.name, func(t *testing.T) {

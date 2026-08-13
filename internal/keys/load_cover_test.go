@@ -23,7 +23,7 @@ func TestLoadKeysStoredAddErrorFailsAndNotifies(t *testing.T) {
 		Runner: r, Secret: secret, Prompt: &fakePrompter{}, Adder: adder,
 		Log: log, Notify: notify, Giveup: giveup,
 	}
-	require.NoError(t, l.LoadKeys(), "one key that could not be loaded must not fail the whole login")
+	require.NoError(t, l.LoadKeys(t.Context()), "one key that could not be loaded must not fail the whole login")
 	assert.Truef(t, log.contains("ERROR add id_rsa"),
 		"ssh-add not running at all is something an operator has to fix, and the log must say so: %v", log.lines)
 	assert.Lenf(t, notify.msgs, 1, "and the user must be told their key is not loaded: %v", notify.msgs)
@@ -45,7 +45,7 @@ func TestLoadKeysPromptAddErrorFailsAndNotifies(t *testing.T) {
 		Runner: r, Secret: secret, Prompt: prompter, Adder: adder,
 		Log: log, Notify: notify,
 	}
-	require.NoError(t, l.LoadKeys(), "one key that could not be loaded must not fail the whole login")
+	require.NoError(t, l.LoadKeys(t.Context()), "one key that could not be loaded must not fail the whole login")
 	assert.Truef(t, log.contains("ERROR add id_rsa"),
 		"ssh-add not running at all is something an operator has to fix, and the log must say so: %v", log.lines)
 	assert.Lenf(t, notify.msgs, 1, "and the user must be told their key is not loaded: %v", notify.msgs)
@@ -66,7 +66,7 @@ func TestLoadKeysPromptHardErrorFailsAndNotifies(t *testing.T) {
 		Runner: r, Secret: secret, Prompt: prompter, Adder: adder,
 		Log: log, Notify: notify,
 	}
-	require.NoError(t, l.LoadKeys(), "one key that could not be loaded must not fail the whole login")
+	require.NoError(t, l.LoadKeys(t.Context()), "one key that could not be loaded must not fail the whole login")
 	assert.Emptyf(t, adder.calls, "with no passphrase in hand there is nothing to try: %+v", adder.calls)
 	assert.Truef(t, log.contains("ERROR prompt id_rsa"),
 		"a dialog that crashed is neither a dismissal nor a missing terminal, and the log must say so: %v", log.lines)
@@ -86,7 +86,7 @@ func TestLoadKeysStoreErrorLogged(t *testing.T) {
 		Keys:   fakeLister{paths: []string{"/ssh/id_rsa"}},
 		Runner: r, Secret: secret, Prompt: prompter, Adder: adder, Log: log,
 	}
-	require.NoError(t, l.LoadKeys(), "one key that could not be loaded must not fail the whole login")
+	require.NoError(t, l.LoadKeys(t.Context()), "one key that could not be loaded must not fail the whole login")
 	assert.Truef(t, log.contains("ERROR store passphrase for id_rsa"),
 		"a wallet that would not take the passphrase must be said so: the key is loaded, but the next login asks again: %v",
 		log.lines)
@@ -108,7 +108,7 @@ func TestLoadKeysRecordGiveupErrorLogged(t *testing.T) {
 		Notify: &fakeNotifier{}, Giveup: giveup,
 		Config: Config{MaxAttempts: 3},
 	}
-	require.NoError(t, l.LoadKeys(), "one key that could not be loaded must not fail the whole login")
+	require.NoError(t, l.LoadKeys(t.Context()), "one key that could not be loaded must not fail the whole login")
 	assert.Truef(t, log.contains("ERROR record give-up for id_rsa"),
 		"a give-up that could not be written down must be said so, or the next login asks about the key again: %v",
 		log.lines)
@@ -128,7 +128,7 @@ func TestLoadKeysClearGiveupErrorLogged(t *testing.T) {
 		Runner: r, Secret: secret, Prompt: &fakePrompter{}, Adder: adder, Log: log,
 		Giveup: giveup,
 	}
-	require.NoError(t, l.LoadKeys(), "one key that could not be loaded must not fail the whole login")
+	require.NoError(t, l.LoadKeys(t.Context()), "one key that could not be loaded must not fail the whole login")
 	assert.Truef(t, log.contains("ERROR clear give-up for id_rsa"),
 		"a stale give-up that could not be dropped must be said so, or the key stays skipped though it opens: %v",
 		log.lines)
@@ -150,7 +150,7 @@ func TestLoadKeysSaveKeyStateErrorLogged(t *testing.T) {
 		Log:      log,
 		KeyState: &fakeKeyState{err: errors.New("keystate write denied")},
 	}
-	require.NoError(t, l.LoadKeys(), "one key that could not be loaded must not fail the whole login")
+	require.NoError(t, l.LoadKeys(t.Context()), "one key that could not be loaded must not fail the whole login")
 	assert.Truef(t, log.contains("ERROR record key state for id_rsa"),
 		"a lifetime that could not be recorded must be said so: nothing then knows when to refill the key: %v",
 		log.lines)
@@ -170,7 +170,7 @@ func TestLoadKeysFingerprintErrorPressesOn(t *testing.T) {
 		Keys:   fakeLister{paths: []string{"/ssh/id_rsa"}},
 		Runner: r, Secret: secret, Prompt: &fakePrompter{}, Adder: adder, Log: log,
 	}
-	require.NoError(t, l.LoadKeys(), "one key that could not be loaded must not fail the whole login")
+	require.NoError(t, l.LoadKeys(t.Context()), "one key that could not be loaded must not fail the whole login")
 	assert.Truef(t, log.contains("ERROR fingerprint id_rsa"),
 		"ssh-keygen not running at all is something an operator has to fix, and the log must say so: %v", log.lines)
 	assert.Lenf(t, adder.calls, 1,
@@ -189,7 +189,7 @@ func TestLoadKeysSessionLockErrorLogged(t *testing.T) {
 		Keys:   fakeLister{paths: []string{"/ssh/id_rsa"}},
 		Runner: r, Secret: secret, Prompt: &fakePrompter{}, Adder: adder, Log: log,
 	}
-	require.NoError(t, l.LoadKeys(), "one key that could not be loaded must not fail the whole login")
+	require.NoError(t, l.LoadKeys(t.Context()), "one key that could not be loaded must not fail the whole login")
 	assert.Equal(t, 1, secret.lockCalls, "the wallet opened for the batch must be closed once when the batch is done")
 	assert.Truef(t, log.contains("ERROR lock secret store"),
 		"and a wallet that would not close must be said so: it is left open with the user's secrets in it: %v",

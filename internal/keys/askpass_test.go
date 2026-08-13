@@ -57,7 +57,7 @@ func TestBrokerWalletHit(t *testing.T) {
 	log := &fakeLogger{}
 	b := Broker{Secret: secret, TTY: tty, Log: log}
 
-	reply, ok := b.Answer("Enter passphrase for key '/home/u/.ssh/id_rsa': ")
+	reply, ok := b.Answer(t.Context(), "Enter passphrase for key '/home/u/.ssh/id_rsa': ")
 	require.True(t, ok, "a passphrase in the wallet must be answered with")
 	assert.Equal(t, "stored", reply, "and it must be the one that was stored")
 	assert.Emptyf(t, tty.calls, "the whole point is that the user is not asked: %+v", tty.calls)
@@ -69,7 +69,7 @@ func TestBrokerWalletMissPromptsAndStores(t *testing.T) {
 	tty := &fakeTTY{answer: "typed"}
 	b := Broker{Secret: secret, TTY: tty, Log: &fakeLogger{}}
 
-	reply, ok := b.Answer("Enter passphrase for key '/home/u/.ssh/id_rsa': ")
+	reply, ok := b.Answer(t.Context(), "Enter passphrase for key '/home/u/.ssh/id_rsa': ")
 	require.True(t, ok, "a passphrase the user typed must be answered with")
 	assert.Equal(t, "typed", reply, "and it must be what they typed")
 	require.Lenf(t, tty.calls, 1, "they are asked once: %+v", tty.calls)
@@ -89,7 +89,7 @@ func TestBrokerWalletMissExcludedByPolicyNotStored(t *testing.T) {
 		Config: Config{WalletStore: func(keyname string) bool { return keyname != "id_rsa" }},
 	}
 
-	reply, ok := b.Answer("Enter passphrase for key '/home/u/.ssh/id_rsa': ")
+	reply, ok := b.Answer(t.Context(), "Enter passphrase for key '/home/u/.ssh/id_rsa': ")
 	require.True(t, ok, "the key must still open")
 	assert.Equal(t, "typed", reply, "with what the user typed")
 	assert.Emptyf(t, secret.stored,
@@ -103,7 +103,7 @@ func TestBrokerNonPassphrasePassThrough(t *testing.T) {
 	tty := &fakeTTY{answer: "yes"}
 	b := Broker{Secret: secret, TTY: tty, Log: &fakeLogger{}}
 
-	reply, ok := b.Answer("Are you sure you want to continue connecting (yes/no/[fingerprint])? ")
+	reply, ok := b.Answer(t.Context(), "Are you sure you want to continue connecting (yes/no/[fingerprint])? ")
 	require.True(t, ok, "a question ssh asks must still reach the user")
 	assert.Equal(t, "yes", reply, "and their answer must reach ssh")
 	require.Lenf(t, tty.calls, 1, "they are asked once: %+v", tty.calls)
@@ -126,7 +126,7 @@ func TestBrokerAPasswordIsNotEchoed(t *testing.T) {
 			tty := &fakeTTY{answer: "the-password"}
 			b := Broker{Secret: &fakeSecret{}, TTY: tty, Log: &fakeLogger{}}
 
-			reply, ok := b.Answer(prompt)
+			reply, ok := b.Answer(t.Context(), prompt)
 			require.True(t, ok, "a question ssh asks must still reach the user")
 			assert.Equal(t, "the-password", reply, "and their answer must reach ssh")
 			require.Lenf(t, tty.calls, 1, "they are asked once: %+v", tty.calls)
@@ -146,7 +146,7 @@ func TestBrokerABlankWalletEntryIsNoPassphrase(t *testing.T) {
 	tty := &fakeTTY{answer: "typed"}
 	b := Broker{Secret: secret, TTY: tty, Log: &fakeLogger{}}
 
-	reply, ok := b.Answer("Enter passphrase for key '/home/u/.ssh/id_rsa': ")
+	reply, ok := b.Answer(t.Context(), "Enter passphrase for key '/home/u/.ssh/id_rsa': ")
 	require.True(t, ok, "the key must still open")
 	assert.NotEmpty(t, strings.TrimSpace(reply),
 		"blank space is not a passphrase, and handing it on fails the connection with nothing asked")
@@ -164,7 +164,7 @@ func TestBrokerNoTerminal(t *testing.T) {
 	log := &fakeLogger{}
 	b := Broker{Secret: secret, TTY: tty, Log: log}
 
-	reply, ok := b.Answer("Enter passphrase for key '/home/u/.ssh/id_rsa': ")
+	reply, ok := b.Answer(t.Context(), "Enter passphrase for key '/home/u/.ssh/id_rsa': ")
 	assert.False(t, ok, "with nowhere to ask, the question must be declined rather than answered")
 	assert.Empty(t, reply, "and nothing may be handed to ssh as though it were a passphrase")
 	assert.Truef(t, log.contains("INFO askpass: no terminal"),
@@ -179,7 +179,7 @@ func TestBrokerPromptFailureLogsError(t *testing.T) {
 	log := &fakeLogger{}
 	b := Broker{Secret: secret, TTY: tty, Log: log}
 
-	reply, ok := b.Answer("Enter passphrase for key '/home/u/.ssh/id_rsa': ")
+	reply, ok := b.Answer(t.Context(), "Enter passphrase for key '/home/u/.ssh/id_rsa': ")
 	assert.False(t, ok, "a terminal that failed cannot answer")
 	assert.Empty(t, reply, "and nothing may be handed to ssh as though it were a passphrase")
 	assert.Truef(t, log.contains("ERROR askpass: no terminal"),
@@ -195,7 +195,7 @@ func TestBrokerLookupErrorLogsInfoNotError(t *testing.T) {
 	log := &fakeLogger{}
 	b := Broker{Secret: secret, TTY: tty, Log: log}
 
-	reply, ok := b.Answer("Enter passphrase for key '/home/u/.ssh/id_rsa': ")
+	reply, ok := b.Answer(t.Context(), "Enter passphrase for key '/home/u/.ssh/id_rsa': ")
 	require.True(t, ok, "a wallet nobody could reach must not cost the user their key")
 	assert.Equal(t, "typed-pass", reply, "they are asked instead, and the key opens")
 	assert.Truef(t, log.contains("INFO askpass: secret lookup"),

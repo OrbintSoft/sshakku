@@ -1,6 +1,7 @@
 package keys
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -129,7 +130,7 @@ func refusedPassword(res Result) bool {
 }
 
 // Lookup returns the passphrase stored for service.
-func (b *KeePassXCCLIBackend) Lookup(service string) (string, bool, error) {
+func (b *KeePassXCCLIBackend) Lookup(ctx context.Context, service string) (string, bool, error) {
 	res, err := b.run([]string{"show", "-s", "-a", "Password", b.Database, b.entryPath(service)})
 	if err != nil {
 		return "", false, err
@@ -147,14 +148,14 @@ func (b *KeePassXCCLIBackend) Lookup(service string) (string, bool, error) {
 
 // Store saves passphrase for service, editing the entry when it already exists
 // so a re-stored passphrase does not leave a second copy in the database.
-func (b *KeePassXCCLIBackend) Store(service, label, passphrase string) error {
+func (b *KeePassXCCLIBackend) Store(ctx context.Context, service, label, passphrase string) error {
 	// label has nowhere to go: the entry is named by its path, which is built
 	// from the service identifier.
 	_ = label
 	path := b.entryPath(service)
 
 	verb := "add"
-	if _, found, err := b.Lookup(service); err != nil {
+	if _, found, err := b.Lookup(ctx, service); err != nil {
 		return err
 	} else if found {
 		verb = "edit"
@@ -188,7 +189,7 @@ func (b *KeePassXCCLIBackend) Store(service, label, passphrase string) error {
 
 // Delete removes the entry for service. Unlike the local-protocol route, the
 // CLI can delete, so `sshakku forget` works here.
-func (b *KeePassXCCLIBackend) Delete(service string) error {
+func (b *KeePassXCCLIBackend) Delete(ctx context.Context, service string) error {
 	res, err := b.run([]string{"rm", b.Database, b.entryPath(service)})
 	if err != nil {
 		return err
@@ -205,7 +206,7 @@ func (b *KeePassXCCLIBackend) Delete(service string) error {
 }
 
 // List returns every entry SSHakku keeps in the database.
-func (b *KeePassXCCLIBackend) List() ([]string, error) {
+func (b *KeePassXCCLIBackend) List(ctx context.Context) ([]string, error) {
 	res, err := b.run([]string{"ls", "-f", b.Database, b.group()})
 	if err != nil {
 		return nil, err

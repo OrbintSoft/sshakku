@@ -133,7 +133,7 @@ func TestSecretServiceLookup(t *testing.T) {
 		}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		pass, found, err := b.Lookup(defaultServicePrefix + "-id_rsa")
+		pass, found, err := b.Lookup(t.Context(), defaultServicePrefix+"-id_rsa")
 		require.NoError(t, err, "a stored passphrase must come back")
 		assert.True(t, found, "the item is there, so it must be reported found")
 		assert.Equal(t, "hunter2", pass, "and the passphrase read out must be the one that was stored")
@@ -147,7 +147,7 @@ func TestSecretServiceLookup(t *testing.T) {
 		c := &fakeSecretServiceClient{collection: col}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		_, found, err := b.Lookup(defaultServicePrefix + "-id_rsa")
+		_, found, err := b.Lookup(t.Context(), defaultServicePrefix+"-id_rsa")
 		require.NoError(t, err, "a passphrase that was never stored is not an error")
 		assert.False(t, found, "and nothing may be reported found")
 		assert.Len(t, c.locked, 1, "the collection must be locked again even when nothing was there")
@@ -157,9 +157,9 @@ func TestSecretServiceLookup(t *testing.T) {
 		c := &fakeSecretServiceClient{collection: col}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		_, _, err := b.Lookup("a")
+		_, _, err := b.Lookup(t.Context(), "a")
 		require.NoError(t, err, "the first lookup must succeed")
-		_, _, err = b.Lookup("b")
+		_, _, err = b.Lookup(t.Context(), "b")
 		require.NoError(t, err, "and so must the second")
 		assert.Equal(t, 1, c.collectionCalls, "the collection is the same one; asking the bus for it twice is a round trip nobody needs")
 	})
@@ -169,7 +169,7 @@ func TestSecretServiceLookup(t *testing.T) {
 		c := &fakeSecretServiceClient{collectionErr: wantErr}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		_, _, err := b.Lookup("x")
+		_, _, err := b.Lookup(t.Context(), "x")
 		assert.ErrorIs(t, err, wantErr, "a collection that could not be resolved must be reported as it was refused")
 		assert.Empty(t, c.unlocked, "and nothing may be unlocked on the strength of a collection nobody found")
 	})
@@ -179,7 +179,7 @@ func TestSecretServiceLookup(t *testing.T) {
 		c := &fakeSecretServiceClient{collection: col, unlockErr: wantErr}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		_, _, err := b.Lookup("x")
+		_, _, err := b.Lookup(t.Context(), "x")
 		assert.ErrorIs(t, err, wantErr, "a user who dismissed the unlock dialog must be told so")
 		assert.Empty(t, c.locked, "and a collection that never opened has nothing to re-lock")
 	})
@@ -189,7 +189,7 @@ func TestSecretServiceLookup(t *testing.T) {
 		c := &fakeSecretServiceClient{collection: col, searchErr: wantErr}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		_, _, err := b.Lookup("x")
+		_, _, err := b.Lookup(t.Context(), "x")
 		assert.ErrorIs(t, err, wantErr, "a search that failed must be reported, not read as a miss")
 		assert.Len(t, c.locked, 1, "and the collection this opened must not be left open behind the error")
 	})
@@ -199,7 +199,7 @@ func TestSecretServiceLookup(t *testing.T) {
 		c := &fakeSecretServiceClient{collection: col, items: []dbus.ObjectPath{item}, secretErr: wantErr}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		_, found, err := b.Lookup("x")
+		_, found, err := b.Lookup(t.Context(), "x")
 		assert.ErrorIs(t, err, wantErr, "a secret that could not be read must be reported as unread")
 		assert.False(t, found, "an item nobody could read out is not a passphrase found")
 		assert.Len(t, c.locked, 1, "and the collection this opened must not be left open behind the error")
@@ -218,18 +218,18 @@ func TestSecretServiceSession(t *testing.T) {
 		}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		require.NoError(t, b.Unlock(), "opening the collection for a run of work must succeed")
-		_, _, err := b.Lookup("a")
+		require.NoError(t, b.Unlock(t.Context()), "opening the collection for a run of work must succeed")
+		_, _, err := b.Lookup(t.Context(), "a")
 		require.NoError(t, err, "a lookup inside the session must succeed")
-		require.NoError(t, b.Store("b", "label", "hunter2"), "and so must a store")
+		require.NoError(t, b.Store(t.Context(), "b", "label", "hunter2"), "and so must a store")
 		assert.Len(t, c.unlocked, 1,
 			"one unlock covers the whole session; unlocking per call is a wallet dialog per key")
 		assert.Empty(t, c.locked, "and nothing may be locked while the session is still open")
 
-		require.NoError(t, b.Lock(), "closing the session must succeed")
+		require.NoError(t, b.Lock(t.Context()), "closing the session must succeed")
 		assert.Len(t, c.locked, 1, "and it must lock the collection exactly once")
 
-		_, _, err = b.Lookup("c")
+		_, _, err = b.Lookup(t.Context(), "c")
 		require.NoError(t, err, "work after the session must still succeed")
 		assert.Len(t, c.unlocked, 2, "a call outside a session opens the collection itself")
 		assert.Len(t, c.locked, 2, "and closes it again")
@@ -240,7 +240,7 @@ func TestSecretServiceSession(t *testing.T) {
 		c := &fakeSecretServiceClient{collectionErr: wantErr}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		assert.ErrorIs(t, b.Unlock(), wantErr, "a session that could not be opened must say so")
+		assert.ErrorIs(t, b.Unlock(t.Context()), wantErr, "a session that could not be opened must say so")
 		assert.False(t, b.held, "and must not believe it holds a collection it never opened")
 	})
 }
@@ -252,7 +252,7 @@ func TestSecretServiceStore(t *testing.T) {
 		c := &fakeSecretServiceClient{collection: col}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		require.NoError(t, b.Store(defaultServicePrefix+"-id_rsa", "SSH Passphrase for id_rsa", "hunter2"),
+		require.NoError(t, b.Store(t.Context(), defaultServicePrefix+"-id_rsa", "SSH Passphrase for id_rsa", "hunter2"),
 			"saving a passphrase must succeed")
 		assert.Equal(t, []dbus.ObjectPath{col}, c.unlocked, "the collection to write into is what must be unlocked")
 		assert.Equal(t, []dbus.ObjectPath{col}, c.locked, "and it must be locked again afterwards")
@@ -272,7 +272,7 @@ func TestSecretServiceStore(t *testing.T) {
 		c := &fakeSecretServiceClient{collectionErr: wantErr}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		assert.ErrorIs(t, b.Store("x", "y", "z"), wantErr,
+		assert.ErrorIs(t, b.Store(t.Context(), "x", "y", "z"), wantErr,
 			"a collection that could not be resolved must be reported as it was refused")
 		assert.Empty(t, c.unlocked, "and nothing may be unlocked on the strength of a collection nobody found")
 	})
@@ -282,7 +282,7 @@ func TestSecretServiceStore(t *testing.T) {
 		c := &fakeSecretServiceClient{collection: col, unlockErr: wantErr}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		assert.ErrorIs(t, b.Store("x", "y", "z"), wantErr, "a user who dismissed the unlock dialog must be told so")
+		assert.ErrorIs(t, b.Store(t.Context(), "x", "y", "z"), wantErr, "a user who dismissed the unlock dialog must be told so")
 		assert.Empty(t, c.locked, "and a collection that never opened has nothing to re-lock")
 	})
 
@@ -291,7 +291,7 @@ func TestSecretServiceStore(t *testing.T) {
 		c := &fakeSecretServiceClient{collection: col, createErr: wantErr}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		assert.ErrorIs(t, b.Store("x", "y", "z"), wantErr,
+		assert.ErrorIs(t, b.Store(t.Context(), "x", "y", "z"), wantErr,
 			"a passphrase the wallet refused to write must not be reported as saved")
 		assert.Len(t, c.locked, 1, "and the collection this opened must not be left open behind the error")
 	})
@@ -305,7 +305,7 @@ func TestSecretServiceDelete(t *testing.T) {
 		c := &fakeSecretServiceClient{collection: col, items: []dbus.ObjectPath{item}}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		require.NoError(t, b.Delete(defaultServicePrefix+"-id_rsa"), "forgetting a passphrase must succeed")
+		require.NoError(t, b.Delete(t.Context(), defaultServicePrefix+"-id_rsa"), "forgetting a passphrase must succeed")
 		assert.Equal(t, []dbus.ObjectPath{col}, c.unlocked, "the collection holding the item is what must be unlocked")
 		assert.Equal(t, []dbus.ObjectPath{col}, c.locked, "and it must be locked again afterwards")
 		assert.Equal(t, []dbus.ObjectPath{item}, c.deletedItems,
@@ -316,7 +316,7 @@ func TestSecretServiceDelete(t *testing.T) {
 		c := &fakeSecretServiceClient{collection: col}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		require.NoError(t, b.Delete(defaultServicePrefix+"-id_rsa"),
+		require.NoError(t, b.Delete(t.Context(), defaultServicePrefix+"-id_rsa"),
 			"a passphrase that is already not there is the outcome that was asked for")
 		assert.Len(t, c.locked, 1, "the collection must be locked again even when nothing was there")
 		assert.Empty(t, c.deletedItems, "and nothing may be removed when nothing matched")
@@ -327,7 +327,7 @@ func TestSecretServiceDelete(t *testing.T) {
 		c := &fakeSecretServiceClient{collectionErr: wantErr}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		assert.ErrorIs(t, b.Delete("x"), wantErr,
+		assert.ErrorIs(t, b.Delete(t.Context(), "x"), wantErr,
 			"a collection that could not be resolved must be reported as it was refused")
 		assert.Empty(t, c.unlocked, "and nothing may be unlocked on the strength of a collection nobody found")
 	})
@@ -337,7 +337,7 @@ func TestSecretServiceDelete(t *testing.T) {
 		c := &fakeSecretServiceClient{collection: col, unlockErr: wantErr}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		assert.ErrorIs(t, b.Delete("x"), wantErr, "a user who dismissed the unlock dialog must be told so")
+		assert.ErrorIs(t, b.Delete(t.Context(), "x"), wantErr, "a user who dismissed the unlock dialog must be told so")
 		assert.Empty(t, c.locked, "and a collection that never opened has nothing to re-lock")
 	})
 
@@ -346,7 +346,7 @@ func TestSecretServiceDelete(t *testing.T) {
 		c := &fakeSecretServiceClient{collection: col, searchErr: wantErr}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		assert.ErrorIs(t, b.Delete("x"), wantErr, "a search that failed must be reported, not read as nothing to remove")
+		assert.ErrorIs(t, b.Delete(t.Context(), "x"), wantErr, "a search that failed must be reported, not read as nothing to remove")
 		assert.Len(t, c.locked, 1, "and the collection this opened must not be left open behind the error")
 	})
 
@@ -355,7 +355,7 @@ func TestSecretServiceDelete(t *testing.T) {
 		c := &fakeSecretServiceClient{collection: col, items: []dbus.ObjectPath{item}, deleteItemErr: wantErr}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		assert.ErrorIs(t, b.Delete("x"), wantErr,
+		assert.ErrorIs(t, b.Delete(t.Context(), "x"), wantErr,
 			"a passphrase the wallet refused to remove must not be reported as forgotten")
 		assert.Len(t, c.locked, 1, "and the collection this opened must not be left open behind the error")
 	})
@@ -377,7 +377,7 @@ func TestSecretServiceList(t *testing.T) {
 		}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		got, err := b.List()
+		got, err := b.List(t.Context())
 		require.NoError(t, err, "listing what the wallet holds must succeed")
 		assert.Equal(t, []string{defaultServicePrefix + "-id_rsa", defaultServicePrefix + "-id_ed25519"}, got,
 			"every item the collection holds must be named, by the key it belongs to")
@@ -389,7 +389,7 @@ func TestSecretServiceList(t *testing.T) {
 		c := &fakeSecretServiceClient{collection: col}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		got, err := b.List()
+		got, err := b.List(t.Context())
 		require.NoError(t, err, "a wallet holding nothing is not an error")
 		assert.Empty(t, got, "and nothing may be listed")
 	})
@@ -399,7 +399,7 @@ func TestSecretServiceList(t *testing.T) {
 		c := &fakeSecretServiceClient{collectionErr: wantErr}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		_, err := b.List()
+		_, err := b.List(t.Context())
 		assert.ErrorIs(t, err, wantErr, "a collection that could not be resolved must be reported as it was refused")
 		assert.Empty(t, c.unlocked, "and nothing may be unlocked on the strength of a collection nobody found")
 	})
@@ -409,7 +409,7 @@ func TestSecretServiceList(t *testing.T) {
 		c := &fakeSecretServiceClient{collection: col, unlockErr: wantErr}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		_, err := b.List()
+		_, err := b.List(t.Context())
 		assert.ErrorIs(t, err, wantErr, "a user who dismissed the unlock dialog must be told so")
 		assert.Empty(t, c.locked, "and a collection that never opened has nothing to re-lock")
 	})
@@ -419,7 +419,7 @@ func TestSecretServiceList(t *testing.T) {
 		c := &fakeSecretServiceClient{collection: col, itemsErr: wantErr}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		_, err := b.List()
+		_, err := b.List(t.Context())
 		assert.ErrorIs(t, err, wantErr, "a collection whose contents could not be read must not be listed as empty")
 		assert.Len(t, c.locked, 1, "and the collection this opened must not be left open behind the error")
 	})
@@ -433,7 +433,7 @@ func TestSecretServiceList(t *testing.T) {
 		}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		_, err := b.List()
+		_, err := b.List(t.Context())
 		assert.ErrorIs(t, err, wantErr, "an item whose attributes could not be read must not be silently dropped")
 		assert.Len(t, c.locked, 1, "and the collection this opened must not be left open behind the error")
 	})
@@ -444,7 +444,7 @@ func TestSecretServiceList(t *testing.T) {
 func TestSecretServiceUnlockClientError(t *testing.T) {
 	client := &fakeSecretServiceClient{collection: "/org/collection/sshakku", unlockErr: errors.New("unlock refused")}
 	b := &SecretServiceBackend{Client: client, User: "u"}
-	assert.Error(t, b.Unlock(), "a collection the bus refused to unlock must not be reported as open")
+	assert.Error(t, b.Unlock(t.Context()), "a collection the bus refused to unlock must not be reported as open")
 }
 
 // TestSecretServiceLockCollectionError covers Lock's resolve-failure branch:
@@ -452,6 +452,6 @@ func TestSecretServiceUnlockClientError(t *testing.T) {
 func TestSecretServiceLockCollectionError(t *testing.T) {
 	client := &fakeSecretServiceClient{collectionErr: errors.New("no such collection")}
 	b := &SecretServiceBackend{Client: client, User: "u"}
-	assert.Error(t, b.Lock(), "a collection that could not be resolved cannot be reported as locked")
+	assert.Error(t, b.Lock(t.Context()), "a collection that could not be resolved cannot be reported as locked")
 	assert.Empty(t, client.locked, "and nothing may be locked on the strength of a collection nobody found")
 }

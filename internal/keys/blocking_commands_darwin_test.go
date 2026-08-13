@@ -2,7 +2,10 @@
 
 package keys
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 // platformBlockingTools names no extra program: what macOS adds to the wallets
 // every platform shares is the Keychain, which is not a program at all.
@@ -15,4 +18,4 @@ func platformBlockingTools() []string { return nil }
 // That is not the same as the case being covered. Nothing bounds that call
 // either — see the keychain row in docs/TEST-MATRIX.md, which records it as a
 // violation of F21 rather than as a case outside it.
-func platformBlockingCases(time.Duration) []blockingCase { return nil }
+func platformBlockingCases(context.Context, time.Duration) []blockingCase { return nil }

@@ -41,7 +41,7 @@ func TestLoadKeysSkipsLoaded(t *testing.T) {
 		Log:    log,
 		Config: Config{},
 	}
-	require.NoError(t, l.LoadKeys(), "loading a login's keys must not fail")
+	require.NoError(t, l.LoadKeys(t.Context()), "loading a login's keys must not fail")
 	assert.Emptyf(t, adder.calls, "a key the agent already holds must not be added again: %+v", adder.calls)
 	assert.Truef(t, log.contains("already added"), "and the log must say why nothing happened: %v", log.lines)
 }
@@ -56,7 +56,7 @@ func TestLoadKeysStoredPassphrase(t *testing.T) {
 		Runner: r, Secret: secret, Prompt: &fakePrompter{}, Adder: adder, Log: log,
 		Config: Config{},
 	}
-	require.NoError(t, l.LoadKeys(), "loading a login's keys must not fail")
+	require.NoError(t, l.LoadKeys(t.Context()), "loading a login's keys must not fail")
 	require.Lenf(t, adder.calls, 1, "one key that is not loaded is one add: %+v", adder.calls)
 	assert.Equal(t, "stored-pass", adder.calls[0].passphrase,
 		"the passphrase in the wallet is what opens the key, without asking anyone")
@@ -73,7 +73,7 @@ func TestLoadKeysPromptThenStore(t *testing.T) {
 		Runner: r, Secret: secret, Prompt: prompter, Adder: adder, Log: &fakeLogger{},
 		Config: Config{},
 	}
-	require.NoError(t, l.LoadKeys(), "loading a login's keys must not fail")
+	require.NoError(t, l.LoadKeys(t.Context()), "loading a login's keys must not fail")
 	require.Lenf(t, adder.calls, 1, "one key that is not loaded is one add: %+v", adder.calls)
 	assert.Equal(t, "typed-pass", adder.calls[0].passphrase, "opened with the passphrase the user typed")
 	require.Lenf(t, secret.stored, 1, "and a passphrase typed once must be saved once: %v", secret.stored)
@@ -98,7 +98,7 @@ func TestLoadKeysLookupErrorLogsInfoNotError(t *testing.T) {
 		Keys:   fakeLister{paths: []string{"/ssh/id_rsa"}},
 		Runner: r, Secret: secret, Prompt: prompter, Adder: adder, Log: log,
 	}
-	require.NoError(t, l.LoadKeys(), "loading a login's keys must not fail")
+	require.NoError(t, l.LoadKeys(t.Context()), "loading a login's keys must not fail")
 	require.Lenf(t, adder.calls, 1, "a wallet nobody could reach must not cost the user their key: %+v", adder.calls)
 	assert.Equal(t, "typed-pass", adder.calls[0].passphrase, "they are asked instead, and the key opens")
 	assert.Truef(t, log.contains("INFO secret lookup"), "the log must say the wallet was not reached: %v", log.lines)
@@ -117,7 +117,7 @@ func TestLoadKeysPromptThenStoreExcludedByPolicy(t *testing.T) {
 		Runner: r, Secret: secret, Prompt: prompter, Adder: adder, Log: log,
 		Config: Config{WalletStore: func(keyname string) bool { return keyname != "id_rsa" }},
 	}
-	require.NoError(t, l.LoadKeys(), "loading a login's keys must not fail")
+	require.NoError(t, l.LoadKeys(t.Context()), "loading a login's keys must not fail")
 	require.Lenf(t, adder.calls, 1, "the key must still be loaded: %+v", adder.calls)
 	assert.Equal(t, "typed-pass", adder.calls[0].passphrase, "with the passphrase the user typed")
 	assert.Emptyf(t, secret.stored,
@@ -137,7 +137,7 @@ func TestLoadKeysAutoLoadExcludedByPolicyNeverAdded(t *testing.T) {
 		Runner: r, Adder: adder, Log: log,
 		Config: Config{AutoLoad: func(keyname string) bool { return keyname != "id_rsa" }},
 	}
-	require.NoError(t, l.LoadKeys(), "loading a login's keys must not fail")
+	require.NoError(t, l.LoadKeys(t.Context()), "loading a login's keys must not fail")
 	assert.Emptyf(t, adder.calls, "a key the user excluded from loading must not be loaded: %+v", adder.calls)
 	require.Lenf(t, r.calls, 1, "nor touched beyond the one snapshot of what the agent holds: %v", r.calls)
 	assert.Equal(t, "ssh-add", r.calls[0].Name, "and that snapshot is the only command that may run")
@@ -157,7 +157,7 @@ func TestLoadKeysRetriesThenGivesUp(t *testing.T) {
 		Runner: r, Secret: secret, Prompt: prompter, Adder: adder, Log: log,
 		Config: Config{},
 	}
-	require.NoError(t, l.LoadKeys(), "loading a login's keys must not fail")
+	require.NoError(t, l.LoadKeys(t.Context()), "loading a login's keys must not fail")
 	assert.Lenf(t, adder.calls, 4,
 		"the stored passphrase is tried once, then the user is asked three times: %+v", adder.calls)
 	assert.Truef(t, log.contains("attempt 3/3"), "the log must number the attempts: %v", log.lines)
@@ -186,7 +186,7 @@ func TestLoadKeysEmptyAnswerIsAWrongAnswer(t *testing.T) {
 		Runner: r, Secret: &fakeSecret{}, Prompt: prompter, Adder: adder, Log: log,
 		Notify: notes, Config: Config{MaxAttempts: 3},
 	}
-	require.NoError(t, l.LoadKeys(), "loading a login's keys must not fail")
+	require.NoError(t, l.LoadKeys(t.Context()), "loading a login's keys must not fail")
 	assert.Len(t, prompter.calls, 3,
 		"Enter on its own opens no key, so it is a wrong answer like any other and the user is asked again")
 	for _, c := range adder.calls {
@@ -216,7 +216,7 @@ func TestLoadKeysBlankStoredPassphraseIsNoPassphrase(t *testing.T) {
 		Runner: r, Secret: secret, Prompt: prompter, Adder: adder, Log: &fakeLogger{},
 		Config: Config{},
 	}
-	require.NoError(t, l.LoadKeys(), "loading a login's keys must not fail")
+	require.NoError(t, l.LoadKeys(t.Context()), "loading a login's keys must not fail")
 
 	for _, c := range adder.calls {
 		assert.NotEmptyf(t, strings.TrimSpace(c.passphrase),
@@ -240,7 +240,7 @@ func TestLoadKeysStaleStoredThenPromptStores(t *testing.T) {
 		Runner: r, Secret: secret, Prompt: prompter, Adder: adder, Log: log,
 		Config: Config{},
 	}
-	require.NoError(t, l.LoadKeys(), "loading a login's keys must not fail")
+	require.NoError(t, l.LoadKeys(t.Context()), "loading a login's keys must not fail")
 	require.Lenf(t, adder.calls, 2, "the stored passphrase is tried, then the user is asked: %+v", adder.calls)
 	assert.Equal(t, "stale", adder.calls[0].passphrase, "the one in the wallet goes first")
 	assert.Equal(t, "fresh", adder.calls[1].passphrase, "and the one they typed second")
@@ -261,7 +261,7 @@ func TestLoadKeysNotifiesOnGiveup(t *testing.T) {
 		Runner: r, Secret: secret, Prompt: prompter, Adder: adder, Log: &fakeLogger{},
 		Notify: notifier, Config: Config{},
 	}
-	require.NoError(t, l.LoadKeys(), "loading a login's keys must not fail")
+	require.NoError(t, l.LoadKeys(t.Context()), "loading a login's keys must not fail")
 	require.Lenf(t, notifier.msgs, 1, "a key that never opened is worth telling the user about, once: %v", notifier.msgs)
 	assert.Contains(t, notifier.msgs[0], "could not load key id_rsa", "and the notice must name the key")
 }
@@ -278,7 +278,7 @@ func TestLoadKeysPromptCanceled(t *testing.T) {
 		Runner: r, Secret: secret, Prompt: prompter, Adder: adder, Log: log,
 		Notify: notifier, Config: Config{},
 	}
-	require.NoError(t, l.LoadKeys(), "loading a login's keys must not fail")
+	require.NoError(t, l.LoadKeys(t.Context()), "loading a login's keys must not fail")
 	assert.Emptyf(t, adder.calls, "a question the user turned down leaves the key alone: %+v", adder.calls)
 	assert.Truef(t, log.contains("dismissed"), "and the log must say so: %v", log.lines)
 	// F38: turning the question down is an answer, so nothing in the session
@@ -303,7 +303,7 @@ func TestLoadKeysDismissedDialogEndsTheAsking(t *testing.T) {
 		Runner: r, Secret: &fakeSecret{}, Prompt: prompter, Adder: adder, Log: &fakeLogger{},
 		Notify: notifier, Giveup: give, Config: Config{},
 	}
-	require.NoError(t, l.LoadKeys(), "loading a login's keys must not fail")
+	require.NoError(t, l.LoadKeys(t.Context()), "loading a login's keys must not fail")
 	assert.Equal(t, []string{"id_one"}, prompter.calls,
 		"shutting one window must not leave the user one more of them per key")
 	assert.Emptyf(t, adder.calls, "nothing is loaded: %+v", adder.calls)
@@ -325,7 +325,7 @@ func TestLoadKeysDismissedDialogSkipsOnlyThatKey(t *testing.T) {
 		Runner: r, Secret: &fakeSecret{}, Prompt: prompter, Adder: &fakeKeyAdder{}, Log: &fakeLogger{},
 		Notify: notifier, Giveup: give, Config: Config{OnDismiss: OnDismissSkip},
 	}
-	require.NoError(t, l.LoadKeys(), "loading a login's keys must not fail")
+	require.NoError(t, l.LoadKeys(t.Context()), "loading a login's keys must not fail")
 	assert.Lenf(t, prompter.calls, 3,
 		"a user who asked to skip turns down one key, not the rest: %v", prompter.calls)
 	assert.Emptyf(t, give.recorded, "and no key is given up: %v", give.recorded)
@@ -346,7 +346,7 @@ func TestLoadKeysDismissedDialogCountsAsAWrongAnswer(t *testing.T) {
 		Runner: r, Secret: &fakeSecret{}, Prompt: prompter, Adder: &fakeKeyAdder{}, Log: &fakeLogger{},
 		Notify: notifier, Giveup: give, Config: Config{MaxAttempts: 3, OnDismiss: OnDismissRetry},
 	}
-	require.NoError(t, l.LoadKeys(), "loading a login's keys must not fail")
+	require.NoError(t, l.LoadKeys(t.Context()), "loading a login's keys must not fail")
 	assert.Lenf(t, prompter.calls, 3,
 		"a user who asked to retry is asked again until the attempts run out: %v", prompter.calls)
 	assert.Equal(t, []string{"id_rsa"}, give.recorded, "then the key is given up, so the next login leaves it alone")
@@ -367,7 +367,7 @@ func TestLoadKeysNoGUIStillUsesVault(t *testing.T) {
 		Keys:   fakeLister{paths: []string{"/ssh/id_rsa"}},
 		Runner: r, Secret: secret, Prompt: &fakePrompter{}, Adder: adder, Log: log,
 	}
-	require.NoError(t, l.LoadKeys(), "loading a login's keys must not fail")
+	require.NoError(t, l.LoadKeys(t.Context()), "loading a login's keys must not fail")
 	require.Lenf(t, adder.calls, 1, "the key must be loaded: %+v", adder.calls)
 	assert.Equal(t, "stored-pass", adder.calls[0].passphrase,
 		"out of the wallet: a session with no dialog on it still has a wallet a command-line tool can read")
@@ -389,7 +389,7 @@ func TestLoadKeysNoTerminalSkipsSilently(t *testing.T) {
 		Runner: r, Secret: secret, Prompt: prompter, Adder: adder, Log: log,
 		Notify: notifier,
 	}
-	require.NoError(t, l.LoadKeys(), "loading a login's keys must not fail")
+	require.NoError(t, l.LoadKeys(t.Context()), "loading a login's keys must not fail")
 	assert.Emptyf(t, adder.calls, "with nowhere to ask, no key can be opened: %+v", adder.calls)
 	assert.Truef(t, log.contains("INFO no terminal available"), "the log must say why: %v", log.lines)
 	assertNothingWentWrong(t, log, "a detached invocation having no terminal is expected, not broken")
@@ -408,7 +408,7 @@ func TestLoadKeysSkipsGivenUp(t *testing.T) {
 		Runner: r, Secret: &fakeSecret{}, Prompt: &fakePrompter{}, Adder: adder, Log: log,
 		Giveup: give, Config: Config{},
 	}
-	require.NoError(t, l.LoadKeys(), "loading a login's keys must not fail")
+	require.NoError(t, l.LoadKeys(t.Context()), "loading a login's keys must not fail")
 	assert.Emptyf(t, adder.calls,
 		"a key given up on earlier must be left alone, or the user is asked about it every login: %+v", adder.calls)
 	assert.Truef(t, log.contains("given up earlier"), "and the log must say why it was skipped: %v", log.lines)
@@ -425,7 +425,7 @@ func TestLoadKeysRecordsGiveupAfterRetries(t *testing.T) {
 		Runner: r, Secret: secret, Prompt: prompter, Adder: adder, Log: &fakeLogger{},
 		Giveup: give, Config: Config{},
 	}
-	require.NoError(t, l.LoadKeys(), "loading a login's keys must not fail")
+	require.NoError(t, l.LoadKeys(t.Context()), "loading a login's keys must not fail")
 	assert.Equal(t, []string{"id_rsa"}, give.recorded,
 		"a key the attempts ran out on must be given up, so the next login does not ask again")
 }
@@ -440,7 +440,7 @@ func TestLoadKeysClearsGiveupOnSuccess(t *testing.T) {
 		Runner: r, Secret: secret, Prompt: &fakePrompter{}, Adder: adder, Log: &fakeLogger{},
 		Giveup: give, Config: Config{},
 	}
-	require.NoError(t, l.LoadKeys(), "loading a login's keys must not fail")
+	require.NoError(t, l.LoadKeys(t.Context()), "loading a login's keys must not fail")
 	assert.Equal(t, []string{"id_rsa"}, give.cleared,
 		"a key that opened must stop being given up on, or it is skipped for good")
 }
@@ -455,7 +455,7 @@ func TestLoadKeysSavesKeyStateOnSuccess(t *testing.T) {
 		Runner: r, Secret: secret, Prompt: &fakePrompter{}, Adder: adder, Log: &fakeLogger{},
 		KeyState: ks, Config: Config{KeyLifetime: 8 * time.Hour},
 	}
-	require.NoError(t, l.LoadKeys(), "loading a login's keys must not fail")
+	require.NoError(t, l.LoadKeys(t.Context()), "loading a login's keys must not fail")
 	assert.Equal(t, []keyStateCall{{"id_rsa", 8 * time.Hour}}, ks.saved,
 		"a key that opened must be recorded with how long it stays in the agent, or nothing knows when to refill it")
 }
@@ -473,7 +473,7 @@ func TestLoadKeysSkipsLoadedNeverSavesKeyState(t *testing.T) {
 		KeyState: ks,
 		Config:   Config{},
 	}
-	require.NoError(t, l.LoadKeys(), "loading a login's keys must not fail")
+	require.NoError(t, l.LoadKeys(t.Context()), "loading a login's keys must not fail")
 	assert.Emptyf(t, ks.saved,
 		"a key already in the agent was not loaded now, and recording it would move an expiry nobody reset: %v", ks.saved)
 }
@@ -489,7 +489,7 @@ func TestLoadKeysExhaustedRetriesNeverSavesKeyState(t *testing.T) {
 		Runner: r, Secret: secret, Prompt: prompter, Adder: adder, Log: &fakeLogger{},
 		Giveup: newFakeGiveup(), KeyState: ks, Config: Config{},
 	}
-	require.NoError(t, l.LoadKeys(), "loading a login's keys must not fail")
+	require.NoError(t, l.LoadKeys(t.Context()), "loading a login's keys must not fail")
 	assert.Emptyf(t, ks.saved, "a key that never opened has no lifetime to record: %v", ks.saved)
 }
 
@@ -502,7 +502,7 @@ func TestLoadKeysSessionUnlocksOnceAcrossKeys(t *testing.T) {
 		Runner: r, Secret: secret, Prompt: &fakePrompter{}, Adder: adder, Log: &fakeLogger{},
 		Config: Config{},
 	}
-	require.NoError(t, l.LoadKeys(), "loading a login's keys must not fail")
+	require.NoError(t, l.LoadKeys(t.Context()), "loading a login's keys must not fail")
 	assert.Lenf(t, adder.calls, 2, "both keys must load: %+v", adder.calls)
 	assert.Equal(t, 1, secret.unlockCalls,
 		"one unlock covers the whole login: unlocking per key is a wallet dialog per key")
@@ -519,7 +519,7 @@ func TestLoadKeysSessionSkipsUnlockWhenNothingNeeded(t *testing.T) {
 		Runner: r, Secret: secret, Adder: &fakeKeyAdder{}, Log: &fakeLogger{},
 		Config: Config{},
 	}
-	require.NoError(t, l.LoadKeys(), "loading a login's keys must not fail")
+	require.NoError(t, l.LoadKeys(t.Context()), "loading a login's keys must not fail")
 	assert.Zero(t, secret.unlockCalls,
 		"every key was already in the agent, so opening the wallet would raise a dialog nothing needed")
 	assert.Zero(t, secret.lockCalls, "and there is nothing to close")
@@ -534,7 +534,7 @@ func TestLoadKeysSessionUnlockFailureFallsBackPerKey(t *testing.T) {
 		Runner: r, Secret: secret, Prompt: &fakePrompter{}, Adder: adder, Log: &fakeLogger{},
 		Config: Config{},
 	}
-	require.NoError(t, l.LoadKeys(), "loading a login's keys must not fail")
+	require.NoError(t, l.LoadKeys(t.Context()), "loading a login's keys must not fail")
 	assert.Lenf(t, adder.calls, 2,
 		"a wallet that would not open for the batch must not cost the user their keys: %+v", adder.calls)
 	assert.Equal(t, 2, secret.unlockCalls, "each key tries for itself instead")
@@ -545,20 +545,20 @@ func TestLoadKeysNoKeys(t *testing.T) {
 	r := newFakeRunner() // ssh-add must not be consulted
 	log := &fakeLogger{}
 	l := Loader{Keys: fakeLister{paths: nil}, Runner: r, Log: log}
-	require.NoError(t, l.LoadKeys(), "loading a login's keys must not fail")
+	require.NoError(t, l.LoadKeys(t.Context()), "loading a login's keys must not fail")
 	assert.Truef(t, log.contains("no keys"), "the log must say there was nothing to do: %v", log.lines)
 	assert.Emptyf(t, r.calls, "and a login with no keys must not go asking the agent about them: %v", r.calls)
 }
 
 func TestLoadKeysEnumerateError(t *testing.T) {
 	l := Loader{Keys: fakeLister{err: errors.New("readdir boom")}, Runner: newFakeRunner()}
-	assert.Error(t, l.LoadKeys(),
+	assert.Error(t, l.LoadKeys(t.Context()),
 		"a key directory that could not be read must be reported, not read as a login with no keys")
 }
 
 func TestLoadKeysAgentSnapshotError(t *testing.T) {
 	r := newFakeRunner().on("ssh-add", fails(errors.New("no ssh-add")))
 	l := Loader{Keys: fakeLister{paths: []string{"/ssh/id_rsa"}}, Runner: r}
-	assert.Error(t, l.LoadKeys(),
+	assert.Error(t, l.LoadKeys(t.Context()),
 		"an agent that could not be asked what it holds must be reported: every key would look unloaded")
 }

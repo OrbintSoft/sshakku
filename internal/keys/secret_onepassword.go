@@ -1,6 +1,7 @@
 package keys
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -83,7 +84,7 @@ func (b *OnePasswordBackend) run(c Cmd) (Result, error) {
 // (op://<vault>/<service>/password). A non-zero exit is treated as a miss,
 // not an error — op does not distinguish "item not found" from other
 // failures by exit code alone, the same ambiguity SecretToolBackend accepts.
-func (b *OnePasswordBackend) Lookup(service string) (string, bool, error) {
+func (b *OnePasswordBackend) Lookup(ctx context.Context, service string) (string, bool, error) {
 	ref := fmt.Sprintf("op://%s/%s/password", b.Vault, service)
 	res, err := b.run(Cmd{Name: onePasswordBin, Args: []string{"read", ref, "--no-newline"}})
 	if err != nil {
@@ -98,8 +99,8 @@ func (b *OnePasswordBackend) Lookup(service string) (string, bool, error) {
 // Store deletes any existing item for service (see the type doc for why an
 // in-place edit isn't used) and creates a fresh one holding label and
 // passphrase.
-func (b *OnePasswordBackend) Store(service, label, passphrase string) error {
-	if err := b.Delete(service); err != nil {
+func (b *OnePasswordBackend) Store(ctx context.Context, service, label, passphrase string) error {
+	if err := b.Delete(ctx, service); err != nil {
 		return err
 	}
 
@@ -134,7 +135,7 @@ func (b *OnePasswordBackend) Store(service, label, passphrase string) error {
 // — nothing to delete — can be reported as success rather than conflated
 // with a real deletion failure, the same shape SecretServiceBackend.Delete
 // uses (search, then delete only what search found).
-func (b *OnePasswordBackend) Delete(service string) error {
+func (b *OnePasswordBackend) Delete(ctx context.Context, service string) error {
 	res, err := b.run(Cmd{Name: onePasswordBin, Args: []string{"item", "get", service, "--vault", b.Vault, "--format", "json"}})
 	if err != nil {
 		return err
@@ -155,7 +156,7 @@ func (b *OnePasswordBackend) Delete(service string) error {
 
 // List enumerates every sshakku-tagged item's title in Vault. Since Vault is
 // dedicated to sshakku (see the type doc), every title is a service string.
-func (b *OnePasswordBackend) List() ([]string, error) {
+func (b *OnePasswordBackend) List(ctx context.Context) ([]string, error) {
 	res, err := b.run(Cmd{Name: onePasswordBin, Args: []string{"item", "list", "--vault", b.Vault, "--tags", onePasswordTag, "--format", "json"}})
 	if err != nil {
 		return nil, err

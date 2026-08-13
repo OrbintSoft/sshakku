@@ -85,12 +85,12 @@ func establishLiveSession(t *testing.T) *SecretServiceBackend {
 	t.Cleanup(func() { _ = client.Close() })
 
 	backend := &SecretServiceBackend{Client: client, User: midSessionUser}
-	require.NoError(t, backend.Unlock(), "the wallet must open before anything can be broken underneath it")
-	t.Cleanup(func() { _ = backend.Delete(midSessionService) })
+	require.NoError(t, backend.Unlock(t.Context()), "the wallet must open before anything can be broken underneath it")
+	t.Cleanup(func() { _ = backend.Delete(t.Context(), midSessionService) })
 
-	require.NoError(t, backend.Store(midSessionService, "sshakku mid-session failure probe", "probe-passphrase"),
+	require.NoError(t, backend.Store(t.Context(), midSessionService, "sshakku mid-session failure probe", "probe-passphrase"),
 		"the wallet must genuinely work before it is broken, or the later failure proves nothing")
-	got, found, err := backend.Lookup(midSessionService)
+	got, found, err := backend.Lookup(t.Context(), midSessionService)
 	require.NoError(t, err, "and a passphrase just written must read back")
 	require.True(t, found, "the entry is there, so it must be reported found")
 	require.Equal(t, "probe-passphrase", got, "and it must be the one that was written")
@@ -109,7 +109,7 @@ func lookupWithinTimeout(t *testing.T, backend *SecretServiceBackend) error {
 	}
 	done := make(chan result, 1)
 	go func() {
-		_, found, err := backend.Lookup(midSessionService)
+		_, found, err := backend.Lookup(t.Context(), midSessionService)
 		done <- result{found: found, err: err}
 	}()
 	select {

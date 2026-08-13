@@ -1,6 +1,7 @@
 package keys
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -142,7 +143,7 @@ type Loader struct {
 // single wallet unlock instead of one per key: the wallet opens lazily on the
 // first key that actually needs it and closes once the batch is done, rather
 // than once per key or waiting out the wallet's own idle timeout.
-func (l Loader) LoadKeys() error {
+func (l Loader) LoadKeys(ctx context.Context) error {
 	keyfiles, err := l.Keys.Keys()
 	if err != nil {
 		return fmt.Errorf("enumerate keys: %w", err)
@@ -163,14 +164,14 @@ func (l Loader) LoadKeys() error {
 			if !sb.unlocked {
 				return
 			}
-			if err := sess.Lock(); err != nil {
+			if err := sess.Lock(ctx); err != nil {
 				l.logf("ERROR", "lock secret store: %v", err)
 			}
 		}()
 	}
 
 	for _, keyfile := range keyfiles {
-		if l.loadOne(keyfile, loaded) {
+		if l.loadOne(ctx, keyfile, loaded) {
 			break
 		}
 	}
@@ -190,28 +191,28 @@ type sessionBackend struct {
 // ensureUnlocked unlocks the session on first use; a failed unlock is left for
 // the wrapped backend's own Lookup/Store to report, so it still falls back to
 // prompting rather than failing the whole batch.
-func (s *sessionBackend) ensureUnlocked() {
+func (s *sessionBackend) ensureUnlocked(ctx context.Context) {
 	if s.unlocked {
 		return
 	}
-	if err := s.sess.Unlock(); err == nil {
+	if err := s.sess.Unlock(ctx); err == nil {
 		s.unlocked = true
 	}
 }
 
-func (s *sessionBackend) Lookup(service string) (string, bool, error) {
-	s.ensureUnlocked()
-	return s.SecretBackend.Lookup(service)
+func (s *sessionBackend) Lookup(ctx context.Context, service string) (string, bool, error) {
+	s.ensureUnlocked(ctx)
+	return s.SecretBackend.Lookup(ctx, service)
 }
 
-func (s *sessionBackend) Store(service, label, passphrase string) error {
-	s.ensureUnlocked()
-	return s.SecretBackend.Store(service, label, passphrase)
+func (s *sessionBackend) Store(ctx context.Context, service, label, passphrase string) error {
+	s.ensureUnlocked(ctx)
+	return s.SecretBackend.Store(ctx, service, label, passphrase)
 }
 
 // loadOne loads a single key unless its fingerprint is already in the agent. It
 // reports whether the user's answer ends the asking for the keys still to come.
-func (l Loader) loadOne(keyfile string, loaded map[string]bool) (askingEnded bool) {
+func (l Loader) loadOne(ctx context.Context, keyfile string, loaded map[string]bool) (askingEnded bool) {
 	keyname := filepath.Base(keyfile)
 
 	if !autoLoads(l.Config, keyname) {
@@ -233,7 +234,7 @@ func (l Loader) loadOne(keyfile string, loaded map[string]bool) (askingEnded boo
 		l.logf("INFO", "%s given up earlier, skipping until the retry window", keyname)
 		return false
 	}
-	return l.addWithRetries(keyfile, keyname)
+	return l.addWithRetries(ctx, keyfile, keyname)
 }
 
 // keyOutcome is what came of trying to load one key.
@@ -255,13 +256,13 @@ const (
 // times. On success it clears any give-up record; when the attempts are
 // exhausted it gives up persistently and notifies the user. It reports whether
 // the asking is over for the rest of the session.
-func (l Loader) addWithRetries(keyfile, keyname string) bool {
+func (l Loader) addWithRetries(ctx context.Context, keyfile, keyname string) bool {
 	max := l.Config.MaxAttempts
 	if max < 1 {
 		max = defaultMaxAttempts
 	}
 
-	switch l.loadViaVaultThenPrompt(keyfile, keyname, max) {
+	switch l.loadViaVaultThenPrompt(ctx, keyfile, keyname, max) {
 	case keyLoaded:
 		l.clearGiveup(keyname)
 		l.saveKeyState(keyname)
@@ -279,10 +280,10 @@ func (l Loader) addWithRetries(keyfile, keyname string) bool {
 // happy path), then prompts the user up to max times, storing the first prompted
 // passphrase that works. A stored passphrase that ssh-add rejects is treated as
 // stale and dropped in favour of prompting.
-func (l Loader) loadViaVaultThenPrompt(keyfile, keyname string, max int) keyOutcome {
+func (l Loader) loadViaVaultThenPrompt(ctx context.Context, keyfile, keyname string, max int) keyOutcome {
 	service := l.servicePrefix() + "-" + keyname
 
-	if pass, ok := l.storedPassphrase(service, keyname); ok {
+	if pass, ok := l.storedPassphrase(ctx, service, keyname); ok {
 		rc, err := l.Adder.AddWithAskpass(keyfile, pass)
 		if err != nil {
 			l.failAdd(keyname, err)
@@ -338,7 +339,7 @@ func (l Loader) loadViaVaultThenPrompt(keyfile, keyname string, max int) keyOutc
 		}
 		if rc == 0 {
 			l.logf("INFO", "added %s to agent", keyname)
-			l.storePassphrase(service, keyname, pass)
+			l.storePassphrase(ctx, service, keyname, pass)
 			return keyLoaded
 		}
 		l.logf("ERROR", "failed to add %s (attempt %d/%d)", keyname, attempt, max)
@@ -351,8 +352,8 @@ func (l Loader) loadViaVaultThenPrompt(keyfile, keyname string, max int) keyOutc
 // usually just the configured backend not being reachable in this
 // environment (no D-Bus session, no GUI) — an expected, recoverable miss, not
 // an operator problem — and is treated the same way as "no entry found".
-func (l Loader) storedPassphrase(service, keyname string) (string, bool) {
-	pass, found, err := l.Secret.Lookup(service)
+func (l Loader) storedPassphrase(ctx context.Context, service, keyname string) (string, bool) {
+	pass, found, err := l.Secret.Lookup(ctx, service)
 	if err != nil {
 		l.logf("INFO", "secret lookup for %s: %v", keyname, err)
 		return "", false
@@ -380,12 +381,12 @@ func (l Loader) failPrompt(keyname string, err error) {
 // storePassphrase saves a freshly prompted passphrase after a successful add,
 // unless the wallet-store policy excludes keyname. Storing is best-effort: the
 // key is already in the agent if this fails.
-func (l Loader) storePassphrase(service, keyname, passphrase string) {
+func (l Loader) storePassphrase(ctx context.Context, service, keyname, passphrase string) {
 	if !walletStores(l.Config, keyname) {
 		l.logf("INFO", "wallet-store policy excludes %s, not storing", keyname)
 		return
 	}
-	if err := storeInWallet(l.Secret, service, keyname, passphrase); err != nil {
+	if err := storeInWallet(ctx, l.Secret, service, keyname, passphrase); err != nil {
 		l.logf("ERROR", "store passphrase for %s: %v", keyname, err)
 		return
 	}

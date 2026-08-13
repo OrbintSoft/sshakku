@@ -41,7 +41,7 @@ func (d deps) askpassBroker(ctx context.Context, stdout io.Writer, args []string
 		Log:    log,
 		Config: keys.Config{WalletStore: settings.StoresWallet, ServicePrefix: settings.ServicePrefix},
 	}
-	reply, ok := broker.Answer(strings.Join(args, " "))
+	reply, ok := broker.Answer(ctx, strings.Join(args, " "))
 	if !ok {
 		return 1
 	}

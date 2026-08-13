@@ -57,7 +57,7 @@ func TestLoadKeysHeadlessVaultHit(t *testing.T) {
 		Adder:  ExecKeyAdder{AskpassProg: askpassScript},
 		Log:    &fakeLogger{},
 	}
-	require.NoError(t, loader.LoadKeys(), "a login with a stored passphrase must load the key")
+	require.NoError(t, loader.LoadKeys(t.Context()), "a login with a stored passphrase must load the key")
 
 	runner := ExecRunner{}
 	fp, err := FileFingerprint(runner, keyfile)
@@ -136,7 +136,10 @@ func runLoadKeysNoTerminalHelper() {
 		Adder:  ExecKeyAdder{},
 		Log:    &fakeLogger{},
 	}
-	if err := loader.LoadKeys(); err != nil {
+	// This runs in the re-executed child, which is a process of its own with
+	// no test to belong to: the root context is created here because here is
+	// where the program starts.
+	if err := loader.LoadKeys(context.Background()); err != nil {
 		os.Exit(1)
 	}
 

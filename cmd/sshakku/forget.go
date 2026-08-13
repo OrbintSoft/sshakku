@@ -44,11 +44,11 @@ func (d deps) forget(ctx context.Context, stdout, stderr io.Writer, args []strin
 	// access at all — it unlocks once up front for the whole operation instead
 	// of once per List/Delete call.
 	if sess, ok := secret.(keys.SecretSession); ok {
-		if err := sess.Unlock(); err != nil {
+		if err := sess.Unlock(ctx); err != nil {
 			_ = log.Log("ERROR", fmt.Sprintf("forget: unlock secret store: %v", err))
 		} else {
 			defer func() {
-				if err := sess.Lock(); err != nil {
+				if err := sess.Lock(ctx); err != nil {
 					_ = log.Log("ERROR", fmt.Sprintf("forget: lock secret store: %v", err))
 				}
 			}()
@@ -57,7 +57,7 @@ func (d deps) forget(ctx context.Context, stdout, stderr io.Writer, args []strin
 
 	var services []string
 	if all {
-		list, err := secret.List()
+		list, err := secret.List(ctx)
 		if err != nil {
 			if errors.Is(err, keys.ErrListUnsupported) {
 				_, _ = fmt.Fprintln(stderr, "sshakku: forget --all needs the native Secret Service backend; name keys explicitly instead")
@@ -76,7 +76,7 @@ func (d deps) forget(ctx context.Context, stdout, stderr io.Writer, args []strin
 
 	fail := false
 	for _, service := range services {
-		if err := secret.Delete(service); err != nil {
+		if err := secret.Delete(ctx, service); err != nil {
 			_, _ = fmt.Fprintf(stderr, "sshakku: forget %s: %v\n", service, err)
 			_ = log.Log("ERROR", fmt.Sprintf("forget %s: %v", service, err))
 			fail = true

@@ -47,7 +47,7 @@ func TestKeePassXCPinnedSecretServiceRouteIsHonoured(t *testing.T) {
 		require.Truef(t, ok, "a route that cannot work here must say so, got %T", backend)
 		assert.ErrorContains(t, unavailable.Reason, "secret-service",
 			"the reason must name the route the user asked for, not another one")
-		_, _, err := backend.Lookup("id_ed25519")
+		_, _, err := backend.Lookup(t.Context(), "id_ed25519")
 		assert.Error(t, err, "an unavailable route must fail rather than report an empty wallet")
 		return
 	}

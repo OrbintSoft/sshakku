@@ -58,7 +58,7 @@ func TestBitwardenLookup(t *testing.T) {
 	t.Run("hit reads the password", func(t *testing.T) {
 		r := newFakeRunner().on(bitwardenBin, stdout("hunter2", 0))
 		b := &BitwardenBackend{Runner: r, Session: "sess-token", held: true}
-		pass, found, err := b.Lookup("sshakku-id_rsa")
+		pass, found, err := b.Lookup(t.Context(), "sshakku-id_rsa")
 		require.NoError(t, err, "a stored passphrase must come back")
 		assert.True(t, found, "the item is in the vault, so it must be reported found")
 		assert.Equal(t, "hunter2", pass, "and the passphrase read out must be the one that was stored")
@@ -77,7 +77,7 @@ func TestBitwardenLookup(t *testing.T) {
 	t.Run("miss is found=false, no error", func(t *testing.T) {
 		r := newFakeRunner().on(bitwardenBin, stdout("Not found.", 1))
 		b := &BitwardenBackend{Runner: r, Session: "sess-token", held: true}
-		_, found, err := b.Lookup("sshakku-id_rsa")
+		_, found, err := b.Lookup(t.Context(), "sshakku-id_rsa")
 		require.NoError(t, err, "a passphrase that was never stored is not an error")
 		assert.False(t, found, "and nothing may be reported found")
 	})
@@ -85,7 +85,7 @@ func TestBitwardenLookup(t *testing.T) {
 	t.Run("a failure to start bw is an error", func(t *testing.T) {
 		wantErr := errors.New("boom")
 		b := &BitwardenBackend{Runner: newFakeRunner().on(bitwardenBin, fails(wantErr)), Session: "sess-token", held: true}
-		_, _, err := b.Lookup("x")
+		_, _, err := b.Lookup(t.Context(), "x")
 		assert.ErrorIs(t, err, wantErr, "a vault tool that would not run must be reported, not read as a miss")
 	})
 }
@@ -99,7 +99,7 @@ func TestBitwardenStore(t *testing.T) {
 			"create item": stdout(`{"id":"new-id"}`, 0),
 		}))
 		b := &BitwardenBackend{Runner: r, Session: "sess-token", held: true}
-		require.NoError(t, b.Store("sshakku-id_rsa", "SSH Passphrase for id_rsa", passphrase),
+		require.NoError(t, b.Store(t.Context(), "sshakku-id_rsa", "SSH Passphrase for id_rsa", passphrase),
 			"saving a passphrase must succeed")
 
 		require.Lenf(t, r.calls, 2, "an entry that is not there is looked up, then created: %+v", r.calls)
@@ -129,7 +129,7 @@ func TestBitwardenStore(t *testing.T) {
 			"edit item": stdout(`{"id":"abc123"}`, 0),
 		}))
 		b := &BitwardenBackend{Runner: r, Session: "sess-token", held: true}
-		require.NoError(t, b.Store("sshakku-id_rsa", "label", passphrase), "replacing a passphrase must succeed")
+		require.NoError(t, b.Store(t.Context(), "sshakku-id_rsa", "label", passphrase), "replacing a passphrase must succeed")
 		require.Lenf(t, r.calls, 2, "an entry that is there is looked up, then edited: %+v", r.calls)
 		assert.Equal(t, []string{"edit", "item", "abc123"}, r.calls[1].Args,
 			"the entry already in the vault must be edited in place; deleting and recreating it loses its history")
@@ -143,7 +143,7 @@ func TestBitwardenStore(t *testing.T) {
 			},
 		}))
 		b := &BitwardenBackend{Runner: r, Session: "sess-token", held: true}
-		assert.Error(t, b.Store("x", "y", passphrase),
+		assert.Error(t, b.Store(t.Context(), "x", "y", passphrase),
 			"a passphrase the vault refused to write must not be reported as saved")
 	})
 }
@@ -155,7 +155,7 @@ func TestBitwardenDelete(t *testing.T) {
 			"delete item": stdout("", 0),
 		}))
 		b := &BitwardenBackend{Runner: r, Session: "sess-token", held: true}
-		require.NoError(t, b.Delete("sshakku-id_rsa"), "forgetting a passphrase must succeed")
+		require.NoError(t, b.Delete(t.Context(), "sshakku-id_rsa"), "forgetting a passphrase must succeed")
 		require.Lenf(t, r.calls, 2, "an entry that is there is looked up, then deleted: %+v", r.calls)
 		assert.Equal(t, []string{"delete", "item", "abc123", "--permanent"}, r.calls[1].Args,
 			"a passphrase the user asked to forget must leave the vault, not sit in its trash")
@@ -166,7 +166,7 @@ func TestBitwardenDelete(t *testing.T) {
 			"get item": stdout("Not found.", 1),
 		}))
 		b := &BitwardenBackend{Runner: r, Session: "sess-token", held: true}
-		require.NoError(t, b.Delete("sshakku-id_rsa"),
+		require.NoError(t, b.Delete(t.Context(), "sshakku-id_rsa"),
 			"a passphrase that is already not there is the outcome that was asked for")
 		assert.Lenf(t, r.calls, 1, "and nothing may be deleted when nothing matched: %+v", r.calls)
 	})
@@ -179,7 +179,7 @@ func TestBitwardenDelete(t *testing.T) {
 			},
 		}))
 		b := &BitwardenBackend{Runner: r, Session: "sess-token", held: true}
-		assert.Error(t, b.Delete("x"), "a passphrase the vault refused to remove must not be reported as forgotten")
+		assert.Error(t, b.Delete(t.Context(), "x"), "a passphrase the vault refused to remove must not be reported as forgotten")
 	})
 }
 
@@ -190,7 +190,7 @@ func TestBitwardenDelete(t *testing.T) {
 func TestBitwardenListLeavesOtherItemsAlone(t *testing.T) {
 	r := newFakeRunner().on(bitwardenBin, stdout(`[{"name":"github.com"},{"name":"`+defaultServicePrefix+`-id_ed25519"},{"name":"Bank"},{"name":"`+defaultServicePrefix+`-id_rsa"},{"name":"Passport scan"}]`, 0))
 	b := &BitwardenBackend{Runner: r, Session: "sess-token", held: true}
-	got, err := b.List()
+	got, err := b.List(t.Context())
 	require.NoError(t, err, "listing what SSHakku keeps in the vault must succeed")
 	assert.Equal(t, []string{defaultServicePrefix + "-id_ed25519", defaultServicePrefix + "-id_rsa"}, got,
 		"only SSHakku's own entries may be reported: everything else in the vault belongs to someone else, "+
@@ -201,7 +201,7 @@ func TestBitwardenList(t *testing.T) {
 	t.Run("returns each item's name", func(t *testing.T) {
 		r := newFakeRunner().on(bitwardenBin, stdout(`[{"name":"`+defaultServicePrefix+`-id_rsa"},{"name":"`+defaultServicePrefix+`-id_ed25519"}]`, 0))
 		b := &BitwardenBackend{Runner: r, Session: "sess-token", held: true}
-		got, err := b.List()
+		got, err := b.List(t.Context())
 		require.NoError(t, err, "listing what the vault holds must succeed")
 		assert.Equal(t, []string{defaultServicePrefix + "-id_rsa", defaultServicePrefix + "-id_ed25519"}, got,
 			"every entry must be named, by the key it belongs to")
@@ -212,7 +212,7 @@ func TestBitwardenList(t *testing.T) {
 	t.Run("empty account returns an empty, non-nil slice", func(t *testing.T) {
 		r := newFakeRunner().on(bitwardenBin, stdout(`[]`, 0))
 		b := &BitwardenBackend{Runner: r, Session: "sess-token", held: true}
-		got, err := b.List()
+		got, err := b.List(t.Context())
 		require.NoError(t, err, "a vault holding nothing is not an error")
 		assert.Empty(t, got, "and nothing may be listed")
 	})
@@ -222,7 +222,7 @@ func TestBitwardenList(t *testing.T) {
 			return Result{Stderr: []byte("vault is locked"), Code: 1}, nil
 		})
 		b := &BitwardenBackend{Runner: r, Session: "sess-token", held: true}
-		_, err := b.List()
+		_, err := b.List(t.Context())
 		assert.Error(t, err, "a vault that could not be read must not be listed as empty")
 	})
 }
@@ -236,7 +236,7 @@ func TestBitwardenUnlock(t *testing.T) {
 		p := &fakePrompter{pass: "correct horse battery staple"}
 		b := &BitwardenBackend{Runner: r, Prompter: p}
 
-		require.NoError(t, b.Unlock(), "unlocking a vault the user is logged into must succeed")
+		require.NoError(t, b.Unlock(t.Context()), "unlocking a vault the user is logged into must succeed")
 		assert.Equal(t, "fresh-session-key", b.Session, "the session bw handed back is what later calls must use")
 		assert.True(t, b.held, "and the vault must be known to be open")
 		assert.Len(t, p.calls, 1, "the master password is asked for once, not once per call")
@@ -260,7 +260,7 @@ func TestBitwardenUnlock(t *testing.T) {
 		p := &fakePrompter{pass: "hunter2"}
 		b := &BitwardenBackend{Runner: r, Prompter: p, Email: "sshakku-test@example.invalid"}
 
-		require.NoError(t, b.Unlock(), "unlocking a vault the user is not yet logged into must succeed")
+		require.NoError(t, b.Unlock(t.Context()), "unlocking a vault the user is not yet logged into must succeed")
 
 		assert.Equal(t, []string{"login", "login", "unlock"}, bwVerbs(r),
 			"a vault nobody is logged into must be logged into before it can be unlocked")
@@ -280,7 +280,7 @@ func TestBitwardenUnlock(t *testing.T) {
 		p := &fakePrompter{pass: "hunter2"}
 		b := &BitwardenBackend{Runner: r, Prompter: p, Server: "https://vault.example.invalid"}
 
-		require.NoError(t, b.Unlock(), "unlocking a self-hosted vault must succeed")
+		require.NoError(t, b.Unlock(t.Context()), "unlocking a self-hosted vault must succeed")
 		require.Greaterf(t, len(r.calls), 1, "the server must be configured before logging in: %+v", r.calls)
 		assert.Equal(t, []string{"config", "server", "https://vault.example.invalid"}, r.calls[1].Args,
 			"a user who named their own server must be logged into that one, not into Bitwarden's")
@@ -297,7 +297,7 @@ func TestBitwardenUnlock(t *testing.T) {
 		p := &fakePrompter{pass: "hunter2"}
 		b := &BitwardenBackend{Runner: r, Prompter: p, Server: "https://vault.example.invalid"}
 
-		require.NoError(t, b.Unlock(),
+		require.NoError(t, b.Unlock(t.Context()),
 			"bw refuses to change the server while logged in, so a login that is already there must be left alone")
 	})
 
@@ -305,7 +305,7 @@ func TestBitwardenUnlock(t *testing.T) {
 		r := newFakeRunner()
 		p := &fakePrompter{err: ErrPromptCanceled}
 		b := &BitwardenBackend{Runner: r, Prompter: p}
-		assert.ErrorIs(t, b.Unlock(), ErrPromptCanceled, "a user who dismissed the prompt has answered, and must be obeyed")
+		assert.ErrorIs(t, b.Unlock(t.Context()), ErrPromptCanceled, "a user who dismissed the prompt has answered, and must be obeyed")
 		assert.Emptyf(t, r.calls, "and nothing may be attempted on a vault they declined to open: %+v", r.calls)
 	})
 
@@ -318,7 +318,7 @@ func TestBitwardenUnlock(t *testing.T) {
 		}))
 		p := &fakePrompter{pass: "wrong"}
 		b := &BitwardenBackend{Runner: r, Prompter: p}
-		assert.Error(t, b.Unlock(), "a wrong master password must be reported, not passed over")
+		assert.Error(t, b.Unlock(t.Context()), "a wrong master password must be reported, not passed over")
 		assert.False(t, b.held, "and the vault must not be believed open when it is not")
 	})
 }
@@ -326,7 +326,7 @@ func TestBitwardenUnlock(t *testing.T) {
 func TestBitwardenLock(t *testing.T) {
 	r := newFakeRunner().on(bitwardenBin, stdout("", 0))
 	b := &BitwardenBackend{Runner: r, Session: "sess-token", held: true}
-	require.NoError(t, b.Lock(), "closing the vault must succeed")
+	require.NoError(t, b.Lock(t.Context()), "closing the vault must succeed")
 	assert.Empty(t, b.Session, "a session key kept past the lock would reopen the vault without asking anyone")
 	assert.False(t, b.held, "and the vault must not be believed open once it is locked")
 }
@@ -342,7 +342,7 @@ func TestBitwardenStandaloneBracket(t *testing.T) {
 		p := &fakePrompter{pass: "hunter2"}
 		b := &BitwardenBackend{Runner: r, Prompter: p}
 
-		pass, found, err := b.Lookup("sshakku-id_rsa")
+		pass, found, err := b.Lookup(t.Context(), "sshakku-id_rsa")
 		require.NoError(t, err, "a lookup on a locked vault must open it and answer")
 		assert.True(t, found, "the item is in the vault, so it must be reported found")
 		assert.Equal(t, "hunter2", pass, "and the passphrase read out must be the one that was stored")
@@ -363,7 +363,7 @@ func TestBitwardenStandaloneBracket(t *testing.T) {
 		}))
 		p := &fakePrompter{pass: "wrong"}
 		b := &BitwardenBackend{Runner: r, Prompter: p}
-		_, _, err := b.Lookup("x")
+		_, _, err := b.Lookup(t.Context(), "x")
 		assert.Error(t, err, "a vault that would not open cannot answer, and must not be read as a miss")
 	})
 }

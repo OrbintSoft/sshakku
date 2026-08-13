@@ -327,7 +327,7 @@ func (d deps) testSecretBackend(ctx context.Context, stdout, stderr io.Writer, l
 		_, _ = fmt.Fprintf(stderr, "sshakku: doctor --test-backend: %v\n", err)
 		return 1
 	}
-	return probeSecretBackend(stdout, log, secret, probe)
+	return probeSecretBackend(ctx, stdout, log, secret, probe)
 }
 
 // probeSecretBackend runs the unlock/store/lookup/delete probe against
@@ -337,23 +337,23 @@ func (d deps) testSecretBackend(ctx context.Context, stdout, stderr io.Writer, l
 // would construct. The probe entry is always deleted before returning, even
 // after an earlier step failed, so no leftover test data survives in the
 // wallet.
-func probeSecretBackend(stdout io.Writer, log keys.Logger, secret keys.SecretBackend, probe string) int {
+func probeSecretBackend(ctx context.Context, stdout io.Writer, log keys.Logger, secret keys.SecretBackend, probe string) int {
 	if sess, ok := secret.(keys.SecretSession); ok {
-		if err := sess.Unlock(); err != nil {
+		if err := sess.Unlock(ctx); err != nil {
 			_, _ = fmt.Fprintf(stdout, "  unlock: FAILED: %v\n", err)
 			_, _ = fmt.Fprintln(stdout, "backend test: FAIL")
 			return 1
 		}
 		_, _ = fmt.Fprintln(stdout, "  unlock: ok")
 		defer func() {
-			if err := sess.Lock(); err != nil {
+			if err := sess.Lock(ctx); err != nil {
 				_ = log.Log("ERROR", fmt.Sprintf("doctor --test-backend: lock: %v", err))
 			}
 		}()
 	}
 
 	ok := true
-	if err := secret.Store(doctorProbeService, "sshakku doctor test probe", probe); err != nil {
+	if err := secret.Store(ctx, doctorProbeService, "sshakku doctor test probe", probe); err != nil {
 		_, _ = fmt.Fprintf(stdout, "  store: FAILED: %v\n", err)
 		ok = false
 	} else {
@@ -361,7 +361,7 @@ func probeSecretBackend(stdout io.Writer, log keys.Logger, secret keys.SecretBac
 	}
 
 	if ok {
-		switch got, found, err := secret.Lookup(doctorProbeService); {
+		switch got, found, err := secret.Lookup(ctx, doctorProbeService); {
 		case err != nil:
 			_, _ = fmt.Fprintf(stdout, "  lookup: FAILED: %v\n", err)
 			ok = false
@@ -376,7 +376,7 @@ func probeSecretBackend(stdout io.Writer, log keys.Logger, secret keys.SecretBac
 		}
 	}
 
-	if err := secret.Delete(doctorProbeService); err != nil {
+	if err := secret.Delete(ctx, doctorProbeService); err != nil {
 		_, _ = fmt.Fprintf(stdout, "  delete: FAILED: %v\n", err)
 		ok = false
 	} else {

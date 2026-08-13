@@ -49,15 +49,15 @@ func TestKeePassXCCLIRealDatabase(t *testing.T) {
 	}
 
 	// F4: nothing is stored yet, so a lookup misses rather than failing.
-	_, found, err := b.Lookup(service)
+	_, found, err := b.Lookup(t.Context(), service)
 	require.NoError(t, err, "a database with nothing in it is not an error")
 	require.False(t, found, "and a fresh database holds nothing")
 
 	// F4: the passphrase is saved.
-	require.NoError(t, b.Store(service, service, passphrase), "saving a passphrase must succeed")
+	require.NoError(t, b.Store(t.Context(), service, service, passphrase), "saving a passphrase must succeed")
 
 	// F5/F6: it comes back, unchanged.
-	got, found, err := b.Lookup(service)
+	got, found, err := b.Lookup(t.Context(), service)
 	require.NoError(t, err, "reading it straight back must succeed")
 	require.True(t, found, "a passphrase just saved must be there")
 	assert.Equal(t, passphrase, got, "and be the one that was saved, byte for byte")
@@ -65,18 +65,18 @@ func TestKeePassXCCLIRealDatabase(t *testing.T) {
 	// Storing again must replace, not accumulate: two entries holding the same
 	// secret is one more copy than the user asked for.
 	const changed = "a-different-passphrase"
-	require.NoError(t, b.Store(service, service, changed), "replacing a passphrase must succeed")
-	got, _, err = b.Lookup(service)
+	require.NoError(t, b.Store(t.Context(), service, service, changed), "replacing a passphrase must succeed")
+	got, _, err = b.Lookup(t.Context(), service)
 	require.NoError(t, err, "reading the replacement back must succeed")
 	assert.Equal(t, changed, got, "and it must be the new passphrase, not the one it replaced")
-	entries, err := b.List()
+	entries, err := b.List(t.Context())
 	require.NoError(t, err, "listing the database must succeed")
 	assert.Equal(t, []string{service}, entries,
 		"one key is one entry: a second holding the same secret is one more copy than the user asked for")
 
 	// F9: forgetting removes it, and the next use finds nothing.
-	require.NoError(t, b.Delete(service), "forgetting a passphrase must succeed")
-	_, found, err = b.Lookup(service)
+	require.NoError(t, b.Delete(t.Context(), service), "forgetting a passphrase must succeed")
+	_, found, err = b.Lookup(t.Context(), service)
 	require.NoError(t, err, "looking for a forgotten passphrase must not be an error")
 	assert.False(t, found, "and it must be gone from the database")
 }

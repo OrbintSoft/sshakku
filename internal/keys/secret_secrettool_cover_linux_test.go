@@ -16,7 +16,7 @@ func TestSecretToolStoreNonZeroExit(t *testing.T) {
 		return Result{Code: 1, Stderr: []byte("store denied")}, nil
 	})
 	b := SecretToolBackend{Runner: r, User: "u"}
-	assert.Error(t, b.Store("svc", "label", "pass"),
+	assert.Error(t, b.Store(t.Context(), "svc", "label", "pass"),
 		"a passphrase the wallet refused to write must not be reported as saved")
 }
 
@@ -26,6 +26,6 @@ func TestSecretToolStoreRunError(t *testing.T) {
 	boom := errors.New("secret-tool exec boom")
 	r := newFakeRunner().on("secret-tool", fails(boom))
 	b := SecretToolBackend{Runner: r, User: "u"}
-	assert.ErrorIs(t, b.Store("svc", "label", "pass"), boom,
+	assert.ErrorIs(t, b.Store(t.Context(), "svc", "label", "pass"), boom,
 		"a wallet tool that would not run must be reported, not read as a passphrase saved")
 }

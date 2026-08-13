@@ -25,7 +25,7 @@ func TestSecretServiceAddressesTheConfiguredContainer(t *testing.T) {
 		c := &fakeSecretServiceClient{collection: col}
 		b := &SecretServiceBackend{Client: c, User: "alice", Container: "my-own-compartment"}
 
-		_, _, err := b.Lookup("SSHakku-Key-id_rsa")
+		_, _, err := b.Lookup(t.Context(), "SSHakku-Key-id_rsa")
 		require.NoError(t, err, "a lookup in the configured compartment must succeed")
 		require.NotEmpty(t, c.collectionAsked, "some compartment must have been addressed")
 		for _, asked := range c.collectionAsked {
@@ -40,7 +40,7 @@ func TestSecretServiceAddressesTheConfiguredContainer(t *testing.T) {
 		c := &fakeSecretServiceClient{collection: col}
 		b := &SecretServiceBackend{Client: c, User: "alice"}
 
-		_, _, err := b.Lookup("SSHakku-Key-id_rsa")
+		_, _, err := b.Lookup(t.Context(), "SSHakku-Key-id_rsa")
 		require.NoError(t, err, "a lookup in SSHakku's own compartment must succeed")
 		require.NotEmpty(t, c.collectionAsked, "some compartment must have been addressed")
 		for _, asked := range c.collectionAsked {
@@ -64,10 +64,10 @@ func TestSecretServiceAddressesTheConfiguredContainer(t *testing.T) {
 		}
 		b := &SecretServiceBackend{Client: c, User: "alice", Container: "my-own-compartment"}
 
-		require.NoError(t, b.Store("SSHakku-Key-id_rsa", "label", "hunter2"), "a store must succeed")
-		_, err := b.List()
+		require.NoError(t, b.Store(t.Context(), "SSHakku-Key-id_rsa", "label", "hunter2"), "a store must succeed")
+		_, err := b.List(t.Context())
 		require.NoError(t, err, "a listing must succeed")
-		require.NoError(t, b.Delete("SSHakku-Key-id_rsa"), "a delete must succeed")
+		require.NoError(t, b.Delete(t.Context(), "SSHakku-Key-id_rsa"), "a delete must succeed")
 		require.NotEmpty(t, c.collectionAsked, "some compartment must have been addressed")
 		for _, asked := range c.collectionAsked {
 			assert.Equal(t, "my-own-compartment", asked.alias,

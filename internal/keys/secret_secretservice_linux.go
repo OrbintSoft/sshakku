@@ -1,6 +1,10 @@
 package keys
 
-import "github.com/godbus/dbus/v5"
+import (
+	"context"
+
+	"github.com/godbus/dbus/v5"
+)
 
 // The collection SSHakku makes for itself, addressed by both alias and label,
 // when the caller names none of its own.
@@ -61,7 +65,7 @@ type SecretServiceBackend struct {
 
 // Unlock unlocks SSHakku's collection and keeps it unlocked for subsequent
 // Lookup/Store/Delete calls until Lock is called.
-func (b *SecretServiceBackend) Unlock() error {
+func (b *SecretServiceBackend) Unlock(ctx context.Context) error {
 	col, err := b.resolveCollection()
 	if err != nil {
 		return err
@@ -74,7 +78,7 @@ func (b *SecretServiceBackend) Unlock() error {
 }
 
 // Lock re-locks SSHakku's collection previously unlocked via Unlock.
-func (b *SecretServiceBackend) Lock() error {
+func (b *SecretServiceBackend) Lock(ctx context.Context) error {
 	col, err := b.resolveCollection()
 	if err != nil {
 		return err
@@ -122,7 +126,7 @@ func (b *SecretServiceBackend) resolveCollection() (dbus.ObjectPath, error) {
 // secret if found, and re-locks the collection before returning — on a hit, a
 // miss, or an error alike. When the collection is already held unlocked (see
 // SecretSession), it skips its own unlock/lock and leaves that to the holder.
-func (b *SecretServiceBackend) Lookup(service string) (string, bool, error) {
+func (b *SecretServiceBackend) Lookup(ctx context.Context, service string) (string, bool, error) {
 	col, err := b.resolveCollection()
 	if err != nil {
 		return "", false, err
@@ -149,7 +153,7 @@ func (b *SecretServiceBackend) Lookup(service string) (string, bool, error) {
 // service, and re-locks the collection before returning — on success or
 // error alike. When the collection is already held unlocked (see
 // SecretSession), it skips its own unlock/lock and leaves that to the holder.
-func (b *SecretServiceBackend) Store(service, label, passphrase string) error {
+func (b *SecretServiceBackend) Store(ctx context.Context, service, label, passphrase string) error {
 	col, err := b.resolveCollection()
 	if err != nil {
 		return err
@@ -170,7 +174,7 @@ func (b *SecretServiceBackend) Store(service, label, passphrase string) error {
 // error alike. A miss (nothing to delete) is success, not an error. When the
 // collection is already held unlocked (see SecretSession), it skips its own
 // unlock/lock and leaves that to the holder.
-func (b *SecretServiceBackend) Delete(service string) error {
+func (b *SecretServiceBackend) Delete(ctx context.Context, service string) error {
 	col, err := b.resolveCollection()
 	if err != nil {
 		return err
@@ -200,7 +204,7 @@ func (b *SecretServiceBackend) Delete(service string) error {
 // exactly what Container is trusted not to break.
 // When the collection is already held unlocked (see
 // SecretSession), it skips its own unlock/lock and leaves that to the holder.
-func (b *SecretServiceBackend) List() ([]string, error) {
+func (b *SecretServiceBackend) List(ctx context.Context) ([]string, error) {
 	col, err := b.resolveCollection()
 	if err != nil {
 		return nil, err

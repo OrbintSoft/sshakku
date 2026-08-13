@@ -26,7 +26,7 @@ func TestKeePassXCCLIUsesTheConfiguredContainer(t *testing.T) {
 		b := cliBackend(runner, &countingPrompter{password: "db"})
 		b.Group = group
 
-		require.NoError(t, b.Store(service, "label", "hunter2"), "saving into the configured group must succeed")
+		require.NoError(t, b.Store(t.Context(), service, "label", "hunter2"), "saving into the configured group must succeed")
 		require.Len(t, runner.calls, 3, "a key with no entry yet is looked up, then its group made, then written")
 		assert.Equal(t, group, lastArg(runner.calls[1].Args), "the group that is made must be the one configured")
 		assert.Equal(t, group+"/"+service, lastArg(runner.calls[2].Args),
@@ -38,7 +38,7 @@ func TestKeePassXCCLIUsesTheConfiguredContainer(t *testing.T) {
 		b := cliBackend(runner, &countingPrompter{password: "db"})
 		b.Group = group
 
-		_, _, err := b.Lookup(service)
+		_, _, err := b.Lookup(t.Context(), service)
 		require.NoError(t, err, "reading from the configured group must succeed")
 		require.NotEmpty(t, runner.calls, "the database must actually be asked")
 		assert.Equal(t, group+"/"+service, lastArg(runner.calls[0].Args),
@@ -50,7 +50,7 @@ func TestKeePassXCCLIUsesTheConfiguredContainer(t *testing.T) {
 		b := cliBackend(runner, &countingPrompter{password: "db"})
 		b.Group = group
 
-		services, err := b.List()
+		services, err := b.List(t.Context())
 		require.NoError(t, err, "enumerating the configured group must succeed")
 		require.NotEmpty(t, runner.calls, "the database must actually be asked")
 		assert.Equal(t, group, lastArg(runner.calls[0].Args), "the group enumerated must be the one configured")
@@ -65,7 +65,7 @@ func TestKeePassXCCLIUsesTheConfiguredContainer(t *testing.T) {
 		runner := &recordingRunner{results: []Result{{Code: 0, Stdout: []byte("hunter2\n")}}}
 		b := cliBackend(runner, &countingPrompter{password: "db"})
 
-		_, _, err := b.Lookup(service)
+		_, _, err := b.Lookup(t.Context(), service)
 		require.NoError(t, err, "reading from SSHakku's own group must succeed")
 		require.NotEmpty(t, runner.calls, "the database must actually be asked")
 		assert.Equal(t, keepassxcCLIGroup+"/"+service, lastArg(runner.calls[0].Args),
@@ -85,7 +85,7 @@ func TestKeePassXCNativeSendsTheConfiguredGroup(t *testing.T) {
 		b := kp.backendFor(&memoryAssociations{})
 		b.Group = "my-own-compartment"
 
-		require.NoError(t, b.Store("id_ed25519", "", "secret"), "saving a passphrase must succeed")
+		require.NoError(t, b.Store(t.Context(), "id_ed25519", "", "secret"), "saving a passphrase must succeed")
 		assert.Equal(t, "my-own-compartment", kp.lastSet.group,
 			"the name that goes on the wire must be the one configured, so a KeePassXC that starts honouring it honours that")
 	})
@@ -94,7 +94,7 @@ func TestKeePassXCNativeSendsTheConfiguredGroup(t *testing.T) {
 		kp := &fakeKeePassXC{}
 		b := kp.backendFor(&memoryAssociations{})
 
-		require.NoError(t, b.Store("id_ed25519", "", "secret"), "saving a passphrase must succeed")
+		require.NoError(t, b.Store(t.Context(), "id_ed25519", "", "secret"), "saving a passphrase must succeed")
 		assert.Equal(t, keepassxcGroup, kp.lastSet.group, "and SSHakku's own name when the user configured none")
 	})
 }

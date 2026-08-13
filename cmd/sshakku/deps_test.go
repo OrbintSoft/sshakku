@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"os"
@@ -35,17 +36,22 @@ type memoryBackend struct{ stored map[string]string }
 
 func newMemoryBackend() *memoryBackend { return &memoryBackend{stored: map[string]string{}} }
 
-func (m *memoryBackend) Lookup(service string) (string, bool, error) {
+func (m *memoryBackend) Lookup(_ context.Context, service string) (string, bool, error) {
 	v, ok := m.stored[service]
 	return v, ok, nil
 }
 
-func (m *memoryBackend) Store(service, _, passphrase string) error {
+func (m *memoryBackend) Store(_ context.Context, service, _, passphrase string) error {
 	m.stored[service] = passphrase
 	return nil
 }
-func (m *memoryBackend) Delete(service string) error { delete(m.stored, service); return nil }
-func (m *memoryBackend) List() ([]string, error) {
+
+func (m *memoryBackend) Delete(_ context.Context, service string) error {
+	delete(m.stored, service)
+	return nil
+}
+
+func (m *memoryBackend) List(context.Context) ([]string, error) {
 	names := make([]string, 0, len(m.stored))
 	for s := range m.stored {
 		names = append(names, s)

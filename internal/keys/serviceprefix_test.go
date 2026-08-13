@@ -55,7 +55,7 @@ func TestBitwardenListGoesByTheBackendsOwnPrefix(t *testing.T) {
 		`[{"name":"Bank"},{"name":"`+mine+`-id_ed25519"},{"name":"`+defaultServicePrefix+`-id_rsa"}]`, 0))
 	b := &BitwardenBackend{Runner: r, Session: "sess-token", held: true, ServicePrefix: mine}
 
-	got, err := b.List()
+	got, err := b.List(t.Context())
 	require.NoError(t, err, "listing the vault must succeed")
 	assert.Equal(t, []string{mine + "-id_ed25519"}, got,
 		"under this configuration the default prefix is another program's name as much as \"Bank\" is, "+

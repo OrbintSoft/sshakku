@@ -2,7 +2,10 @@
 
 package keys
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 // KeychainClient is the subset of macOS's Security.framework generic-password
 // API KeychainBackend needs; the darwin build provides the real
@@ -88,7 +91,7 @@ func (b *KeychainBackend) find(service string) (keychainSecret, error) {
 }
 
 // Lookup reads the passphrase for service via Client.Find.
-func (b *KeychainBackend) Lookup(service string) (string, bool, error) {
+func (b *KeychainBackend) Lookup(ctx context.Context, service string) (string, bool, error) {
 	got, err := b.find(service)
 	return got.passphrase, got.found, err
 }
@@ -102,7 +105,7 @@ func (b *KeychainBackend) Lookup(service string) (string, bool, error) {
 // That makes it two calls, and each gets the budget in full: the budget bounds
 // a call into the framework, and there is no way to hand one the remainder of
 // another's.
-func (b *KeychainBackend) Store(service, label, passphrase string) error {
+func (b *KeychainBackend) Store(ctx context.Context, service, label, passphrase string) error {
 	existing, err := b.find(service)
 	if err != nil {
 		return err
@@ -115,7 +118,7 @@ func (b *KeychainBackend) Store(service, label, passphrase string) error {
 
 // Delete removes the item for service. A missing entry is success, not an
 // error — deleting an already-forgotten key is idempotent.
-func (b *KeychainBackend) Delete(service string) error {
+func (b *KeychainBackend) Delete(ctx context.Context, service string) error {
 	return boundedErr(b, func() error { return b.Client.Delete(b.Account, service) })
 }
 
@@ -125,7 +128,7 @@ func (b *KeychainBackend) Delete(service string) error {
 // the machine keeps its passwords — so the client answers with all of them and
 // the rest is dropped here. Another program's secret is not sshakku's to
 // report, let alone to hand to `forget --all` (F27).
-func (b *KeychainBackend) List() ([]string, error) {
+func (b *KeychainBackend) List(ctx context.Context) ([]string, error) {
 	services, err := bounded(b, func() ([]string, error) { return b.Client.List(b.Account) })
 	if err != nil {
 		return nil, err

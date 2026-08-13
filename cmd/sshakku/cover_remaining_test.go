@@ -106,7 +106,7 @@ func TestProbeSecretBackendLookupErrors(t *testing.T) {
 	t.Run("lookup error is reported", func(t *testing.T) {
 		backend := &fakeProbeBackend{lookupErr: errors.New("boom")}
 		var buf bytes.Buffer
-		assert.Equal(t, 1, probeSecretBackend(&buf, fakeLogger{}, backend, "probe"),
+		assert.Equal(t, 1, probeSecretBackend(t.Context(), &buf, fakeLogger{}, backend, "probe"),
 			"a wallet that errors when read has failed the probe")
 		assert.Contains(t, buf.String(), "lookup: FAILED", "and the step that failed must be named")
 	})
@@ -115,7 +115,7 @@ func TestProbeSecretBackendLookupErrors(t *testing.T) {
 		backend := &fakeProbeBackend{lookupVal: "probe", lookupOK: true, lockErr: errors.New("stuck")}
 		session := fakeProbeSession{backend}
 		var buf bytes.Buffer
-		assert.Zero(t, probeSecretBackend(&buf, fakeLogger{}, session, "probe"),
+		assert.Zero(t, probeSecretBackend(t.Context(), &buf, fakeLogger{}, session, "probe"),
 			"the round trip worked; a wallet that would not lock again does not undo that")
 	})
 }

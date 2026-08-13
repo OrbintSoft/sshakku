@@ -14,7 +14,7 @@ func TestSecretToolLookup(t *testing.T) {
 	t.Run("hit trims the trailing newline", func(t *testing.T) {
 		r := newFakeRunner().on("secret-tool", stdout("hunter2\n", 0))
 		b := SecretToolBackend{Runner: r, User: "alice"}
-		pass, found, err := b.Lookup(defaultServicePrefix + "-id_rsa")
+		pass, found, err := b.Lookup(t.Context(), defaultServicePrefix+"-id_rsa")
 		require.NoError(t, err, "a stored passphrase must come back")
 		assert.True(t, found, "the item is in the wallet, so it must be reported found")
 		assert.Equal(t, "hunter2", pass,
@@ -27,7 +27,7 @@ func TestSecretToolLookup(t *testing.T) {
 	t.Run("miss is found=false, no error", func(t *testing.T) {
 		r := newFakeRunner().on("secret-tool", stdout("", 1))
 		b := SecretToolBackend{Runner: r, User: "alice"}
-		_, found, err := b.Lookup(defaultServicePrefix + "-id_rsa")
+		_, found, err := b.Lookup(t.Context(), defaultServicePrefix+"-id_rsa")
 		require.NoError(t, err, "a passphrase that was never stored is not an error")
 		assert.False(t, found, "and nothing may be reported found")
 	})
@@ -35,7 +35,7 @@ func TestSecretToolLookup(t *testing.T) {
 	t.Run("a failure to start secret-tool is an error", func(t *testing.T) {
 		wantErr := errors.New("boom")
 		b := SecretToolBackend{Runner: newFakeRunner().on("secret-tool", fails(wantErr)), User: "alice"}
-		_, _, err := b.Lookup("x")
+		_, _, err := b.Lookup(t.Context(), "x")
 		assert.ErrorIs(t, err, wantErr, "a wallet tool that would not run must be reported, not read as a miss")
 	})
 }
@@ -46,7 +46,7 @@ func TestSecretToolStore(t *testing.T) {
 	t.Run("passphrase goes on stdin, never in argv", func(t *testing.T) {
 		r := newFakeRunner().on("secret-tool", stdout("", 0))
 		b := SecretToolBackend{Runner: r, User: "alice"}
-		require.NoError(t, b.Store(defaultServicePrefix+"-id_rsa", "SSH Passphrase for id_rsa", passphrase),
+		require.NoError(t, b.Store(t.Context(), defaultServicePrefix+"-id_rsa", "SSH Passphrase for id_rsa", passphrase),
 			"saving a passphrase must succeed")
 		require.NotEmpty(t, r.calls, "the wallet must actually be asked")
 		call := r.calls[0]
@@ -66,7 +66,7 @@ func TestSecretToolStore(t *testing.T) {
 			return Result{Stderr: []byte("no wallet"), Code: 1}, nil
 		})
 		b := SecretToolBackend{Runner: r, User: "alice"}
-		assert.Error(t, b.Store("x", "y", passphrase),
+		assert.Error(t, b.Store(t.Context(), "x", "y", passphrase),
 			"a passphrase the wallet refused to write must not be reported as saved")
 	})
 }
@@ -75,7 +75,7 @@ func TestSecretToolDelete(t *testing.T) {
 	t.Run("clears the entry", func(t *testing.T) {
 		r := newFakeRunner().on("secret-tool", stdout("", 0))
 		b := SecretToolBackend{Runner: r, User: "alice"}
-		require.NoError(t, b.Delete(defaultServicePrefix+"-id_rsa"), "forgetting a passphrase must succeed")
+		require.NoError(t, b.Delete(t.Context(), defaultServicePrefix+"-id_rsa"), "forgetting a passphrase must succeed")
 		require.NotEmpty(t, r.calls, "the wallet must actually be asked")
 		assert.Equal(t, []string{"clear", "service", defaultServicePrefix + "-id_rsa", "username", "alice"},
 			r.calls[0].Args, "exactly the entry that was named may be cleared, and only this user's")
@@ -86,20 +86,20 @@ func TestSecretToolDelete(t *testing.T) {
 			return Result{Code: 1}, nil
 		})
 		b := SecretToolBackend{Runner: r, User: "alice"}
-		assert.Error(t, b.Delete("x"), "a passphrase the wallet refused to remove must not be reported as forgotten")
+		assert.Error(t, b.Delete(t.Context(), "x"), "a passphrase the wallet refused to remove must not be reported as forgotten")
 	})
 
 	t.Run("a failure to start secret-tool is an error", func(t *testing.T) {
 		wantErr := errors.New("boom")
 		b := SecretToolBackend{Runner: newFakeRunner().on("secret-tool", fails(wantErr)), User: "alice"}
-		assert.ErrorIs(t, b.Delete("x"), wantErr,
+		assert.ErrorIs(t, b.Delete(t.Context(), "x"), wantErr,
 			"a wallet tool that would not run must be reported, not read as a passphrase forgotten")
 	})
 }
 
 func TestSecretToolList(t *testing.T) {
 	b := SecretToolBackend{Runner: newFakeRunner(), User: "alice"}
-	_, err := b.List()
+	_, err := b.List(t.Context())
 	assert.ErrorIs(t, err, ErrListUnsupported,
 		"secret-tool can look an entry up but not enumerate one, and that must be said, not answered as empty")
 }

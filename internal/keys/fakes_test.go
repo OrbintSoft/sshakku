@@ -1,6 +1,7 @@
 package keys
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -83,11 +84,11 @@ type fakeSecret struct {
 
 type storeCall struct{ service, label, passphrase string }
 
-func (s *fakeSecret) Lookup(string) (string, bool, error) {
+func (s *fakeSecret) Lookup(context.Context, string) (string, bool, error) {
 	return s.lookupPass, s.lookupFound, s.lookupErr
 }
 
-func (s *fakeSecret) Store(service, label, passphrase string) error {
+func (s *fakeSecret) Store(_ context.Context, service, label, passphrase string) error {
 	if s.storeErr != nil {
 		return s.storeErr
 	}
@@ -95,7 +96,7 @@ func (s *fakeSecret) Store(service, label, passphrase string) error {
 	return nil
 }
 
-func (s *fakeSecret) Delete(service string) error {
+func (s *fakeSecret) Delete(_ context.Context, service string) error {
 	if s.deleteErr != nil {
 		return s.deleteErr
 	}
@@ -103,16 +104,16 @@ func (s *fakeSecret) Delete(service string) error {
 	return nil
 }
 
-func (s *fakeSecret) List() ([]string, error) {
+func (s *fakeSecret) List(context.Context) ([]string, error) {
 	return s.listServices, s.listErr
 }
 
-func (s *fakeSecret) Unlock() error {
+func (s *fakeSecret) Unlock(context.Context) error {
 	s.unlockCalls++
 	return s.unlockErr
 }
 
-func (s *fakeSecret) Lock() error {
+func (s *fakeSecret) Lock(context.Context) error {
 	s.lockCalls++
 	return s.lockErr
 }

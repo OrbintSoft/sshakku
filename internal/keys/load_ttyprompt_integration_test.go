@@ -333,7 +333,10 @@ func runTTYPromptHelper() {
 		Notify: stderrNotifier{},
 		Giveup: giveup.Store{Dir: os.Getenv(envTTYGiveupDir)},
 	}
-	if err := loader.LoadKeys(); err != nil {
+	// This runs in the re-executed child, which is a process of its own with
+	// no test to belong to: the root context is created here because here is
+	// where the program starts.
+	if err := loader.LoadKeys(context.Background()); err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "LoadKeys: %v\n", err)
 		os.Exit(1)
 	}
