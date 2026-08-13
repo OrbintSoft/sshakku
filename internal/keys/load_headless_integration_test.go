@@ -98,7 +98,7 @@ func TestLoadKeysNoTerminalReturnsPromptly(t *testing.T) {
 	})
 	waitForSocket(t, sock)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestLoadKeysNoTerminalReturnsPromptly$")
 	cmd.Env = append(os.Environ(),

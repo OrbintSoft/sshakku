@@ -65,6 +65,11 @@ linters:
       require-specific: true
 
     usetesting:
+      # A test that roots its own context keeps it after the test that made it
+      # has finished: t.Context() is cancelled when the test ends, so a call
+      # left hanging fails the run instead of outliving it.
+      context-background: true
+      context-todo: true
       # Off by default, and both are worth having. os-setenv reports nothing
       # today, which is the state worth keeping: an os.Setenv survives the test
       # that made it. os-temp-dir costs two suppressions, at the one place

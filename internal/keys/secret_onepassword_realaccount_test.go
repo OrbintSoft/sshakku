@@ -109,7 +109,7 @@ func TestOnePasswordBackendRealAccount(t *testing.T) {
 // and deleting the throwaway vault.
 func opRun(t *testing.T, args ...string) (string, error) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), opSetupTimeout)
+	ctx, cancel := context.WithTimeout(t.Context(), opSetupTimeout)
 	defer cancel()
 	out, err := exec.CommandContext(ctx, onePasswordBin, args...).CombinedOutput()
 	return string(out), err
