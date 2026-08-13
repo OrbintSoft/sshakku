@@ -1,6 +1,7 @@
 package keys
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -56,7 +57,7 @@ type Broker struct {
 // Answer returns the reply to send back to ssh on stdout and whether the request
 // succeeded (a false ok maps to a non-zero askpass exit, which ssh treats as a
 // declined prompt).
-func (b Broker) Answer(prompt string) (reply string, ok bool) {
+func (b Broker) Answer(ctx context.Context, prompt string) (reply string, ok bool) {
 	keyfile, isPassphrase := ParsePassphrasePrompt(prompt)
 	if !isPassphrase {
 		ans, err := b.TTY.Prompt(prompt, !looksLikeConfirmation(prompt))
@@ -81,7 +82,7 @@ func (b Broker) Answer(prompt string) (reply string, ok bool) {
 	// reachable in this environment (no D-Bus session, no GUI) — expected and
 	// recoverable, not an operator problem — so it is logged at INFO and
 	// treated the same as "no entry found".
-	pass, found, err := b.Secret.Lookup(service)
+	pass, found, err := b.Secret.Lookup(ctx, service)
 	if err != nil {
 		b.logf("INFO", "askpass: secret lookup for %s: %v", keyname, err)
 	} else if found && strings.TrimSpace(pass) != "" {
@@ -101,7 +102,7 @@ func (b Broker) Answer(prompt string) (reply string, ok bool) {
 		return "", false
 	}
 	if strings.TrimSpace(typed) != "" {
-		b.storePassphrase(service, keyname, typed)
+		b.storePassphrase(ctx, service, keyname, typed)
 	}
 	return typed, true
 }
@@ -115,12 +116,12 @@ func looksLikeConfirmation(prompt string) bool {
 		strings.Contains(p, "continue connecting")
 }
 
-func (b Broker) storePassphrase(service, keyname, passphrase string) {
+func (b Broker) storePassphrase(ctx context.Context, service, keyname, passphrase string) {
 	if !walletStores(b.Config, keyname) {
 		b.logf("INFO", "askpass: wallet-store policy excludes %s, not storing", keyname)
 		return
 	}
-	if err := storeInWallet(b.Secret, service, keyname, passphrase); err != nil {
+	if err := storeInWallet(ctx, b.Secret, service, keyname, passphrase); err != nil {
 		b.logf("ERROR", "askpass: store passphrase for %s: %v", keyname, err)
 		return
 	}
@@ -151,8 +152,8 @@ func servicePrefixOrDefault(prefix string) string {
 
 // storeInWallet saves passphrase under service with the standard label, so the
 // loader and the broker write entries the same way.
-func storeInWallet(secret SecretBackend, service, keyname, passphrase string) error {
-	return secret.Store(service, "SSH Passphrase for "+keyname, passphrase)
+func storeInWallet(ctx context.Context, secret SecretBackend, service, keyname, passphrase string) error {
+	return secret.Store(ctx, service, "SSH Passphrase for "+keyname, passphrase)
 }
 
 // walletStores reports whether keyname should be persisted under c's

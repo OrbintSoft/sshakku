@@ -36,7 +36,7 @@ func TestGraphicalPrompterInAGraphicalSession(t *testing.T) {
 	fakeTool(t, dir, "osascript", "")
 	t.Setenv("PATH", dir)
 
-	assert.NotNil(t, newGraphicalPrompter(config.Settings{}, nil),
+	assert.NotNil(t, newGraphicalPrompter(t.Context(), config.Settings{}, nil),
 		"a login at the machine's own screen can be shown a dialog")
 }
 
@@ -52,7 +52,7 @@ func TestNoGraphicalPrompterOutsideAGraphicalSession(t *testing.T) {
 			fakeTool(t, dir, "osascript", "")
 			t.Setenv("PATH", dir)
 
-			assert.Nilf(t, newGraphicalPrompter(config.Settings{}, nil),
+			assert.Nilf(t, newGraphicalPrompter(t.Context(), config.Settings{}, nil),
 				"a %s session has no window server, so there is nowhere to draw a dialog", manager)
 		})
 	}
@@ -66,7 +66,7 @@ func TestNoGraphicalPrompterWithNothingToDrawWith(t *testing.T) {
 	fakeTool(t, dir, "launchctl", "Aqua")
 	t.Setenv("PATH", dir)
 
-	assert.Nil(t, newGraphicalPrompter(config.Settings{}, nil),
+	assert.Nil(t, newGraphicalPrompter(t.Context(), config.Settings{}, nil),
 		"a session that could show a dialog still needs something installed to draw one")
 }
 
@@ -80,6 +80,6 @@ func TestNoGraphicalPrompterWhenTheUserRefusedOne(t *testing.T) {
 	t.Setenv("PATH", dir)
 
 	settings := config.Settings{GUIPrompter: config.GUIPrompterNone}
-	assert.Nil(t, newGraphicalPrompter(settings, nil),
+	assert.Nil(t, newGraphicalPrompter(t.Context(), settings, nil),
 		"refusing a dialog is the user's to write, and it holds where one could have been shown")
 }

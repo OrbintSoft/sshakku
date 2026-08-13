@@ -1,6 +1,7 @@
 package keys
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -102,11 +103,11 @@ func entryURL(service string) string {
 }
 
 // connect opens a session with KeePassXC.
-func (b KeePassXCBackend) connect() (KeePassXCSession, error) {
+func (b KeePassXCBackend) connect(ctx context.Context) (KeePassXCSession, error) {
 	if b.NewSession != nil {
 		return b.NewSession()
 	}
-	conn, err := dialKeePassXCAt(b.socketPaths())
+	conn, err := dialKeePassXCAt(ctx, b.socketPaths())
 	if err != nil {
 		return nil, err
 	}
@@ -129,9 +130,9 @@ func (b KeePassXCBackend) socketPaths() []string {
 
 // dialKeePassXCAt tries each candidate socket in turn and reports every path it
 // tried when none answers, so a user can see where it looked.
-func dialKeePassXCAt(paths []string) (net.Conn, error) {
+func dialKeePassXCAt(ctx context.Context, paths []string) (net.Conn, error) {
 	for _, path := range paths {
-		conn, err := net.Dial("unix", path)
+		conn, err := (&net.Dialer{}).DialContext(ctx, "unix", path)
 		if err == nil {
 			return conn, nil
 		}
@@ -166,8 +167,8 @@ func (b KeePassXCBackend) association(client KeePassXCSession) (keepassxc.Associ
 // names differing only in case resolve to the same URL. The exact name is also
 // written to the entry's username, and that is what decides here — the URL
 // narrows the candidates, the exact comparison picks among them.
-func (b KeePassXCBackend) Lookup(service string) (string, bool, error) {
-	client, err := b.connect()
+func (b KeePassXCBackend) Lookup(ctx context.Context, service string) (string, bool, error) {
+	client, err := b.connect(ctx)
 	if err != nil {
 		return "", false, err
 	}
@@ -196,8 +197,8 @@ func (b KeePassXCBackend) Lookup(service string) (string, bool, error) {
 // user has to approve, and this is the moment to do it: the user is already
 // present — they have just been asked for the passphrase — whereas a lookup
 // happens with nobody watching.
-func (b KeePassXCBackend) Store(service, label, passphrase string) error {
-	client, err := b.connect()
+func (b KeePassXCBackend) Store(ctx context.Context, service, label, passphrase string) error {
+	client, err := b.connect(ctx)
 	if err != nil {
 		return err
 	}
@@ -244,12 +245,12 @@ func (b KeePassXCBackend) associate(client KeePassXCSession) (keepassxc.Associat
 // Delete reports that this route cannot remove an entry. See
 // ErrDeleteUnsupported: the protocol has no verb for it, and pretending
 // otherwise would mean telling the user a passphrase is gone while it is not.
-func (b KeePassXCBackend) Delete(service string) error {
+func (b KeePassXCBackend) Delete(ctx context.Context, service string) error {
 	return fmt.Errorf("%w: remove the %q entry in KeePassXC to forget it", ErrDeleteUnsupported, entryURL(service))
 }
 
 // List cannot enumerate SSHakku's entries: the protocol looks entries up by
 // URL, one URL at a time, and offers no way to ask which ones exist.
-func (b KeePassXCBackend) List() ([]string, error) {
+func (b KeePassXCBackend) List(ctx context.Context) ([]string, error) {
 	return nil, ErrListUnsupported
 }

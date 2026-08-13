@@ -25,7 +25,7 @@ func TestBitwardenUnlockErrorBranches(t *testing.T) {
 			"login --check": fails(boom),
 		}))
 		b := &BitwardenBackend{Runner: r, Prompter: &fakePrompter{pass: "m"}}
-		assert.ErrorIs(t, b.Unlock(), boom,
+		assert.ErrorIs(t, b.Unlock(t.Context()), boom,
 			"a bw command that would not run must be reported as it failed, not read as a vault that opened")
 	})
 
@@ -35,7 +35,7 @@ func TestBitwardenUnlockErrorBranches(t *testing.T) {
 			"config server": fails(boom),
 		}))
 		b := &BitwardenBackend{Runner: r, Prompter: &fakePrompter{pass: "m"}, Server: "https://vault.invalid"}
-		assert.ErrorIs(t, b.Unlock(), boom,
+		assert.ErrorIs(t, b.Unlock(t.Context()), boom,
 			"a bw command that would not run must be reported as it failed, not read as a vault that opened")
 	})
 
@@ -45,7 +45,7 @@ func TestBitwardenUnlockErrorBranches(t *testing.T) {
 			"config server": func(Cmd) (Result, error) { return Result{Stderr: []byte("nope"), Code: 1}, nil },
 		}))
 		b := &BitwardenBackend{Runner: r, Prompter: &fakePrompter{pass: "m"}, Server: "https://vault.invalid"}
-		assert.Error(t, b.Unlock(),
+		assert.Error(t, b.Unlock(t.Context()),
 			"a server the CLI would not accept must be reported: logging in would reach the wrong vault")
 	})
 
@@ -55,7 +55,7 @@ func TestBitwardenUnlockErrorBranches(t *testing.T) {
 			"login":         fails(boom),
 		}))
 		b := &BitwardenBackend{Runner: r, Prompter: &fakePrompter{pass: "m"}, Email: "u@invalid"}
-		assert.ErrorIs(t, b.Unlock(), boom,
+		assert.ErrorIs(t, b.Unlock(t.Context()), boom,
 			"a bw command that would not run must be reported as it failed, not read as a vault that opened")
 	})
 
@@ -65,7 +65,7 @@ func TestBitwardenUnlockErrorBranches(t *testing.T) {
 			"login":         func(Cmd) (Result, error) { return Result{Stderr: []byte("bad creds"), Code: 1}, nil },
 		}))
 		b := &BitwardenBackend{Runner: r, Prompter: &fakePrompter{pass: "m"}, Email: "u@invalid"}
-		assert.Error(t, b.Unlock(), "an account that could not be logged into must be reported, not unlocked past")
+		assert.Error(t, b.Unlock(t.Context()), "an account that could not be logged into must be reported, not unlocked past")
 	})
 
 	t.Run("unlock fails to run", func(t *testing.T) {
@@ -74,7 +74,7 @@ func TestBitwardenUnlockErrorBranches(t *testing.T) {
 			"unlock --passwordenv": fails(boom),
 		}))
 		b := &BitwardenBackend{Runner: r, Prompter: &fakePrompter{pass: "m"}}
-		assert.ErrorIs(t, b.Unlock(), boom,
+		assert.ErrorIs(t, b.Unlock(t.Context()), boom,
 			"a bw command that would not run must be reported as it failed, not read as a vault that opened")
 	})
 }
@@ -84,7 +84,7 @@ func TestBitwardenLockErrorBranches(t *testing.T) {
 		boom := errors.New("bw exec boom")
 		r := newFakeRunner().on(bitwardenBin, fails(boom))
 		b := &BitwardenBackend{Runner: r, Session: "sess", held: true}
-		assert.ErrorIs(t, b.Lock(), boom, "a lock command that would not run must be reported")
+		assert.ErrorIs(t, b.Lock(t.Context()), boom, "a lock command that would not run must be reported")
 		assert.Empty(t, b.Session,
 			"and the session must be forgotten even so: keeping a key to a vault that may still be open is the worse half")
 		assert.False(t, b.held, "nor may the vault be believed open afterwards")
@@ -95,7 +95,7 @@ func TestBitwardenLockErrorBranches(t *testing.T) {
 			return Result{Stderr: []byte("cannot lock"), Code: 1}, nil
 		})
 		b := &BitwardenBackend{Runner: r, Session: "sess", held: true}
-		assert.Error(t, b.Lock(), "a vault that refused to lock must be reported, not left believed closed")
+		assert.Error(t, b.Lock(t.Context()), "a vault that refused to lock must be reported, not left believed closed")
 	})
 }
 
@@ -106,7 +106,7 @@ func TestBitwardenFindItemIDErrorBranches(t *testing.T) {
 			"get item": fails(boom),
 		}))
 		b := &BitwardenBackend{Runner: r, Session: "sess", held: true}
-		assert.ErrorIs(t, b.Store("svc", "label", "pass"), boom,
+		assert.ErrorIs(t, b.Store(t.Context(), "svc", "label", "pass"), boom,
 			"a bw command that would not run must be reported, not read as a passphrase saved")
 	})
 
@@ -115,7 +115,7 @@ func TestBitwardenFindItemIDErrorBranches(t *testing.T) {
 			"get item": stdout("this is not json", 0),
 		}))
 		b := &BitwardenBackend{Runner: r, Session: "sess", held: true}
-		assert.Error(t, b.Store("svc", "label", "pass"),
+		assert.Error(t, b.Store(t.Context(), "svc", "label", "pass"),
 			"an answer that could not be read must be reported: writing on top of it could overwrite the wrong entry")
 	})
 }
@@ -127,7 +127,7 @@ func TestBitwardenStoreMarshalError(t *testing.T) {
 		"get item": stdout("Not found.", 1),
 	}))
 	b := &BitwardenBackend{Runner: r, Session: "sess", held: true}
-	assert.Error(t, b.Store("svc", "label", "pass"),
+	assert.Error(t, b.Store(t.Context(), "svc", "label", "pass"),
 		"an item that could not be built must be reported, not sent as whatever it came out as")
 }
 
@@ -138,7 +138,7 @@ func TestBitwardenStoreCreateRunError(t *testing.T) {
 		"create item": fails(boom),
 	}))
 	b := &BitwardenBackend{Runner: r, Session: "sess", held: true}
-	assert.ErrorIs(t, b.Store("svc", "label", "pass"), boom,
+	assert.ErrorIs(t, b.Store(t.Context(), "svc", "label", "pass"), boom,
 		"a write that could not start must be reported, not read as a passphrase saved")
 }
 
@@ -150,7 +150,7 @@ func TestBitwardenDeleteRunErrors(t *testing.T) {
 			"get item": fails(boom),
 		}))
 		b := &BitwardenBackend{Runner: r, Session: "sess", held: true}
-		assert.ErrorIs(t, b.Delete("svc"), boom,
+		assert.ErrorIs(t, b.Delete(t.Context(), "svc"), boom,
 			"a bw command that would not run must be reported, not read as a passphrase forgotten")
 	})
 
@@ -160,7 +160,7 @@ func TestBitwardenDeleteRunErrors(t *testing.T) {
 			"delete item": fails(boom),
 		}))
 		b := &BitwardenBackend{Runner: r, Session: "sess", held: true}
-		assert.ErrorIs(t, b.Delete("svc"), boom,
+		assert.ErrorIs(t, b.Delete(t.Context(), "svc"), boom,
 			"a bw command that would not run must be reported, not read as a passphrase forgotten")
 	})
 }
@@ -170,14 +170,14 @@ func TestBitwardenListErrorBranches(t *testing.T) {
 		boom := errors.New("bw exec boom")
 		r := newFakeRunner().on(bitwardenBin, fails(boom))
 		b := &BitwardenBackend{Runner: r, Session: "sess", held: true}
-		_, err := b.List()
+		_, err := b.List(t.Context())
 		assert.ErrorIs(t, err, boom, "a bw command that would not run must be reported, not read as an empty vault")
 	})
 
 	t.Run("list items returns unparseable JSON", func(t *testing.T) {
 		r := newFakeRunner().on(bitwardenBin, stdout("not json", 0))
 		b := &BitwardenBackend{Runner: r, Session: "sess", held: true}
-		_, err := b.List()
+		_, err := b.List(t.Context())
 		assert.Error(t, err, "an answer that could not be read must be reported, not read as an empty vault")
 	})
 }
@@ -209,7 +209,7 @@ func TestBitwardenStandaloneBracketAllMethods(t *testing.T) {
 			"create item": stdout(`{"id":"x"}`, 0),
 		})))
 		b := &BitwardenBackend{Runner: r, Prompter: &fakePrompter{pass: "m"}}
-		require.NoError(t, b.Store("svc", "label", "pass"), "a store on a locked vault must open it and save")
+		require.NoError(t, b.Store(t.Context(), "svc", "label", "pass"), "a store on a locked vault must open it and save")
 		assert.False(t, b.held, "a vault opened for one call must not be left open")
 		assert.Empty(t, b.Session, "nor its session key kept, which would reopen it without asking anyone")
 	})
@@ -219,7 +219,7 @@ func TestBitwardenStandaloneBracketAllMethods(t *testing.T) {
 			"get item": stdout("Not found.", 1),
 		})))
 		b := &BitwardenBackend{Runner: r, Prompter: &fakePrompter{pass: "m"}}
-		require.NoError(t, b.Delete("svc"), "a delete on a locked vault must open it and act")
+		require.NoError(t, b.Delete(t.Context(), "svc"), "a delete on a locked vault must open it and act")
 		assert.False(t, b.held, "and a vault opened for one call must not be left open")
 	})
 
@@ -228,7 +228,7 @@ func TestBitwardenStandaloneBracketAllMethods(t *testing.T) {
 			"list items": stdout("[]", 0),
 		})))
 		b := &BitwardenBackend{Runner: r, Prompter: &fakePrompter{pass: "m"}}
-		_, err := b.List()
+		_, err := b.List(t.Context())
 		require.NoError(t, err, "a listing on a locked vault must open it and answer")
 		assert.False(t, b.held, "and a vault opened for one call must not be left open")
 	})
@@ -240,11 +240,11 @@ func TestBitwardenStandaloneBracketAllMethods(t *testing.T) {
 			var err error
 			switch name {
 			case "store":
-				err = b.Store("svc", "label", "pass")
+				err = b.Store(t.Context(), "svc", "label", "pass")
 			case "delete":
-				err = b.Delete("svc")
+				err = b.Delete(t.Context(), "svc")
 			case "list":
-				_, err = b.List()
+				_, err = b.List(t.Context())
 			}
 			assert.Errorf(t, err, "%s on a vault that would not open must be reported, not carried out blind", name)
 		}

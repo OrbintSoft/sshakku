@@ -154,7 +154,7 @@ func TestWalletViewPerBackend(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			view := walletView(tc.settings, tc.probe)
+			view := walletView(t.Context(), tc.settings, tc.probe)
 			assert.Equal(t, tc.wantBackend, view.Backend, "the wallet the report names")
 			assert.Equal(t, tc.wantRoute, view.Route, "and how it would be reached")
 			if tc.wantReq == "" {

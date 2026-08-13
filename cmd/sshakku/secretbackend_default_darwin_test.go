@@ -17,7 +17,7 @@ import (
 // name is taken from the configuration layer rather than written out, because
 // which wallet is the default here is that layer's answer to give.
 func TestNewSecretBackendDefaultKeychain(t *testing.T) {
-	backend, closeFn := newSecretBackend("alice", fakeLogger{}, config.Settings{SecretBackend: config.DefaultSecretBackend()})
+	backend, closeFn := newSecretBackend(t.Context(), "alice", fakeLogger{}, config.Settings{SecretBackend: config.DefaultSecretBackend()})
 	defer closeFn()
 	kc, ok := backend.(*keys.KeychainBackend)
 	require.Truef(t, ok, "an unconfigured machine off Linux opens the OS keychain, got %T", backend)
@@ -42,7 +42,7 @@ func TestTheKeychainIsGivenTheBudgetForAWaitOnAPerson(t *testing.T) {
 		InteractiveTimeout: 90 * time.Second,
 	}
 
-	backend, closeFn := newSecretBackend("alice", fakeLogger{}, settings)
+	backend, closeFn := newSecretBackend(t.Context(), "alice", fakeLogger{}, settings)
 	defer closeFn()
 
 	kc, ok := backend.(*keys.KeychainBackend)

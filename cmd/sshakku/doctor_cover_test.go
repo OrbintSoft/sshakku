@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -23,7 +24,7 @@ type fakeTokenSource struct {
 	err   error
 }
 
-func (f fakeTokenSource) ReadToken(int, int) (string, error) { return f.token, f.err }
+func (f fakeTokenSource) ReadToken(context.Context, int, int) (string, error) { return f.token, f.err }
 
 var _ TargetTokenSource = fakeTokenSource{}
 
@@ -33,7 +34,7 @@ var _ TargetTokenSource = fakeTokenSource{}
 // returns report; tokenSource yields a fixed token; geteuid reports euid.
 func doctorDeps(report diagnose.Report, ts TargetTokenSource, euid int) deps {
 	d := depsWithEnsurer(fakeEnsurer{})
-	d.gather = func(paths.Env, paths.Layout, config.Settings) diagnose.Report { return report }
+	d.gather = func(context.Context, paths.Env, paths.Layout, config.Settings) diagnose.Report { return report }
 	d.tokenSource = ts
 	d.geteuid = func() int { return euid }
 	return d
@@ -55,7 +56,7 @@ func TestDoctorArgErrors(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			d := doctorDeps(diagnose.Report{}, fakeTokenSource{}, 1000)
 			var out, errOut bytes.Buffer
-			assert.Equalf(t, 2, d.doctor(&out, &errOut, tc.args), "%v is a usage error", tc.args)
+			assert.Equalf(t, 2, d.doctor(t.Context(), &out, &errOut, tc.args), "%v is a usage error", tc.args)
 			assert.Contains(t, errOut.String(), tc.want,
 				"a user who typed something is owed an answer about what they typed")
 		})
@@ -67,7 +68,7 @@ func TestDoctorArgErrors(t *testing.T) {
 func TestDoctorUnknownUser(t *testing.T) {
 	d := doctorDeps(diagnose.Report{}, fakeTokenSource{}, 1000)
 	var out, errOut bytes.Buffer
-	assert.Equal(t, 2, d.doctor(&out, &errOut, []string{"--user", "no-such-user-xyzzy"}),
+	assert.Equal(t, 2, d.doctor(t.Context(), &out, &errOut, []string{"--user", "no-such-user-xyzzy"}),
 		"a user nobody can resolve is a usage error, not a diagnosis of somebody")
 	assert.Contains(t, errOut.String(), "--user", "and the answer must name the flag that was wrong")
 }
@@ -81,7 +82,7 @@ func TestDoctorCrossUserRefused(t *testing.T) {
 	}
 	d := doctorDeps(diagnose.Report{}, fakeTokenSource{err: errors.New("must not run")}, 1000)
 	var out, errOut bytes.Buffer
-	assert.Equal(t, 2, d.doctor(&out, &errOut, []string{"--user", "nobody"}),
+	assert.Equal(t, 2, d.doctor(t.Context(), &out, &errOut, []string{"--user", "nobody"}),
 		"reading another user's session takes root, and the refusal comes before anything is read")
 	assert.Contains(t, errOut.String(), "root", "and must say what would be needed")
 }
@@ -92,7 +93,7 @@ func TestDoctorReadOnly(t *testing.T) {
 	report := diagnose.Report{FixedSock: "/run/sshakku/agent.sock", EnvSock: "/run/sshakku/agent.sock"}
 	d := doctorDeps(report, fakeTokenSource{}, 1000)
 	var out, errOut bytes.Buffer
-	require.Zerof(t, d.doctor(&out, &errOut, nil), "a report changes nothing and cannot fail; stderr=%q", errOut.String())
+	require.Zerof(t, d.doctor(t.Context(), &out, &errOut, nil), "a report changes nothing and cannot fail; stderr=%q", errOut.String())
 	assert.Contains(t, out.String(), "/run/sshakku/agent.sock", "and it must print what was gathered")
 }
 
@@ -103,11 +104,13 @@ func TestDoctorReadOnly(t *testing.T) {
 func TestDoctorTestBackend(t *testing.T) {
 	tempRuntimeEnv(t)
 	d := depsReturning(newMemoryBackend())
-	d.gather = func(paths.Env, paths.Layout, config.Settings) diagnose.Report { return diagnose.Report{} }
+	d.gather = func(context.Context, paths.Env, paths.Layout, config.Settings) diagnose.Report {
+		return diagnose.Report{}
+	}
 	d.tokenSource = fakeTokenSource{}
 	d.geteuid = func() int { return 1000 }
 	var out, errOut bytes.Buffer
-	require.Zerof(t, d.doctor(&out, &errOut, []string{"--test-backend"}),
+	require.Zerof(t, d.doctor(t.Context(), &out, &errOut, []string{"--test-backend"}),
 		"a wallet that works must be reported as working; stderr=%q", errOut.String())
 	assert.Contains(t, out.String(), "backend test: PASS", "and the verdict must be plain")
 }
@@ -124,7 +127,7 @@ func TestDoctorFix(t *testing.T) {
 		d := doctorDeps(report, fakeTokenSource{}, 1000)
 		d.ensurer = fakeEnsurer{res: agent.EnsureResult{LiveSock: layout.AgentSock}}
 		var out, errOut bytes.Buffer
-		require.Zerof(t, d.doctor(&out, &errOut, []string{"--fix"}), "--fix; stderr=%q", errOut.String())
+		require.Zerof(t, d.doctor(t.Context(), &out, &errOut, []string{"--fix"}), "--fix; stderr=%q", errOut.String())
 		assert.NotContains(t, out.String(), "export SSH_AUTH_SOCK",
 			"a shell already pointed at the live socket has nothing to re-export")
 	})
@@ -135,7 +138,7 @@ func TestDoctorFix(t *testing.T) {
 		d := doctorDeps(report, fakeTokenSource{}, 1000)
 		d.ensurer = fakeEnsurer{res: agent.EnsureResult{LiveSock: "/run/sshakku/agent.sock"}}
 		var out, errOut bytes.Buffer
-		require.Zerof(t, d.doctor(&out, &errOut, []string{"--fix"}), "--fix; stderr=%q", errOut.String())
+		require.Zerof(t, d.doctor(t.Context(), &out, &errOut, []string{"--fix"}), "--fix; stderr=%q", errOut.String())
 		assert.Contains(t, out.String(), "export SSH_AUTH_SOCK=",
 			"a shell pointed somewhere else must be told how to reach the agent that is there")
 	})
@@ -146,7 +149,7 @@ func TestDoctorFix(t *testing.T) {
 			"seed a file where the config directory should be")
 		d := doctorDeps(diagnose.Report{}, fakeTokenSource{}, 1000)
 		var out, errOut bytes.Buffer
-		assert.Equal(t, 1, d.doctor(&out, &errOut, []string{"--fix"}),
+		assert.Equal(t, 1, d.doctor(t.Context(), &out, &errOut, []string{"--fix"}),
 			"a repair that could not lay out its own directories has not repaired anything")
 	})
 
@@ -155,7 +158,7 @@ func TestDoctorFix(t *testing.T) {
 		d := doctorDeps(diagnose.Report{}, fakeTokenSource{}, 1000)
 		d.ensurer = fakeEnsurer{err: errors.New("boom")}
 		var out, errOut bytes.Buffer
-		assert.Equal(t, 1, d.doctor(&out, &errOut, []string{"--fix"}),
+		assert.Equal(t, 1, d.doctor(t.Context(), &out, &errOut, []string{"--fix"}),
 			"an agent that could not be ensured must not be reported as repaired")
 	})
 }
@@ -172,7 +175,7 @@ func TestDoctorCrossUser(t *testing.T) {
 	t.Run("token read failure returns 1", func(t *testing.T) {
 		d := doctorDeps(diagnose.Report{}, fakeTokenSource{err: errors.New("keyring boom")}, 0)
 		var out, errOut bytes.Buffer
-		assert.Equal(t, 1, d.doctor(&out, &errOut, []string{"--user", "nobody"}),
+		assert.Equal(t, 1, d.doctor(t.Context(), &out, &errOut, []string{"--user", "nobody"}),
 			"a session that could not be reached must not be reported on as though it had been")
 		assert.Contains(t, errOut.String(), "keyring boom", "and the reason must reach the caller")
 	})
@@ -180,7 +183,7 @@ func TestDoctorCrossUser(t *testing.T) {
 	t.Run("successful read reports the target session", func(t *testing.T) {
 		d := doctorDeps(diagnose.Report{}, fakeTokenSource{token: "tok"}, 0)
 		var out, errOut bytes.Buffer
-		require.Zerof(t, d.doctor(&out, &errOut, []string{"--user", "nobody"}),
+		require.Zerof(t, d.doctor(t.Context(), &out, &errOut, []string{"--user", "nobody"}),
 			"root may look at another user's session; stderr=%q", errOut.String())
 		assert.Contains(t, out.String(), "diagnosing uid",
 			"and the report must say whose session it is about")
@@ -195,7 +198,7 @@ func TestGatherReport(t *testing.T) {
 	tempRuntimeEnv(t)
 	env := paths.FromOS()
 	layout := paths.Resolve(env, paths.ProbeDir)
-	report := gatherReport(env, layout, config.Settings{})
+	report := gatherReport(t.Context(), env, layout, config.Settings{})
 	assert.Equal(t, layout.AgentSock, report.FixedSock,
 		"the report must be about the socket this layout resolves to")
 }

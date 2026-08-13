@@ -12,7 +12,7 @@ import (
 // kernel keyring there is no per-login token to read, so ReadToken always
 // yields an empty token and no error, and no privilege transition is attempted.
 func TestExecTokenSourceNoKeyring(t *testing.T) {
-	tok, err := execTokenSource{}.ReadToken(1, 1)
+	tok, err := execTokenSource{}.ReadToken(t.Context(), 1, 1)
 	assert.NoError(t, err, "there being no kernel keyring here is not a failure to report")
 	assert.Empty(t, tok, "and there is no per-login token to read")
 }

@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -12,7 +13,7 @@ import (
 // Runner starts a fresh ssh-agent bound to socket and returns its pid. It is an
 // interface so tests can stand in for the real `ssh-agent` process.
 type Runner interface {
-	Start(socket string) (pid int, err error)
+	Start(ctx context.Context, socket string) (pid int, err error)
 }
 
 // Signaler delivers a termination signal to a pid. It abstracts the kernel kill
@@ -56,11 +57,11 @@ type State struct {
 // Start clears a stale socket already at path, launches a new ssh-agent there,
 // and records pid+socket in the state file. A healthy socket is never disturbed:
 // callers decide to start only when no agent of ours is already serving it.
-func (m Manager) Start(socket, statePath string) (int, error) {
-	if !m.Prober.Reachable(socket) {
+func (m Manager) Start(ctx context.Context, socket, statePath string) (int, error) {
+	if !m.Prober.Reachable(ctx, socket) {
 		_ = removeSocket(socket) // clear a stale socket so the bind can succeed
 	}
-	pid, err := m.Runner.Start(socket)
+	pid, err := m.Runner.Start(ctx, socket)
 	if err != nil {
 		return 0, err
 	}
@@ -81,14 +82,14 @@ type ReapResult struct {
 // sockets. A healthy agent is never touched, regardless of who started it, and
 // another user's process is never signalled (least privilege). Agents started
 // without an `-a` socket are left alone — we cannot probe or unlink them here.
-func (m Manager) Reap(ourUID int) (ReapResult, error) {
+func (m Manager) Reap(ctx context.Context, ourUID int) (ReapResult, error) {
 	procs, err := m.Inspector.Agents()
 	if err != nil {
 		return ReapResult{}, err
 	}
 	var res ReapResult
 	for _, p := range procs {
-		if p.Socket == "" || m.Prober.Reachable(p.Socket) {
+		if p.Socket == "" || m.Prober.Reachable(ctx, p.Socket) {
 			continue // unknown socket, or healthy — never reap
 		}
 		if p.UID != ourUID {
@@ -155,21 +156,21 @@ type ExecRunner struct {
 // execOutput runs name with args and returns its stdout. It is a package variable
 // so ExecRunner.Start's binary resolution, error wrapping, and output parsing stay
 // unit-testable with a stub, without spawning a real ssh-agent.
-var execOutput = func(name string, args ...string) ([]byte, error) {
+var execOutput = func(ctx context.Context, name string, args ...string) ([]byte, error) {
 	// Spawning the ssh-agent process is an external-process side effect; Start's
 	// logic around this call is unit-tested by stubbing execOutput.
 	//coverage:ignore
-	return exec.Command(name, args...).Output()
+	return exec.CommandContext(ctx, name, args...).Output()
 }
 
 // Start runs `ssh-agent -a <socket>`, which daemonizes and prints its
 // environment, and returns the SSH_AGENT_PID it announces.
-func (r ExecRunner) Start(socket string) (int, error) {
+func (r ExecRunner) Start(ctx context.Context, socket string) (int, error) {
 	bin := r.Path
 	if bin == "" {
 		bin = "ssh-agent"
 	}
-	out, err := execOutput(bin, "-a", socket)
+	out, err := execOutput(ctx, bin, "-a", socket)
 	if err != nil {
 		return 0, fmt.Errorf("start ssh-agent: %w", withAgentComplaint(err))
 	}

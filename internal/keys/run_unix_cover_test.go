@@ -21,7 +21,7 @@ import (
 // difference the guard makes: a command SSHakku could not start becomes a
 // command that simply did not run.
 func TestBoundToProcessGroupCancelBeforeStart(t *testing.T) {
-	cmd := exec.Command("true")
+	cmd := exec.CommandContext(t.Context(), "true")
 	boundToProcessGroup(cmd)
 
 	require.NotNil(t, cmd.Cancel, "the deadline has to have something to call when it fires")

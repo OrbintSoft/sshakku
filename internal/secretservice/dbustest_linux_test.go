@@ -66,7 +66,7 @@ func startBus(t *testing.T, activatable bool) {
 	contents := strings.ReplaceAll(string(template), "@SERVICEDIR@", services)
 	require.NoError(t, os.WriteFile(config, []byte(contents), 0o600), "write bus configuration")
 
-	cmd := exec.Command(bin, "--config-file="+config, "--nofork", "--print-address")
+	cmd := exec.CommandContext(t.Context(), bin, "--config-file="+config, "--nofork", "--print-address")
 	stdout, err := cmd.StdoutPipe()
 	require.NoError(t, err, "dbus-daemon stdout pipe")
 	require.NoError(t, cmd.Start(), "start dbus-daemon")

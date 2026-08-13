@@ -52,7 +52,7 @@ func TestKeePassXCLookupMatchesTheExactKeyName(t *testing.T) {
 	}}
 	b := kp.backendFor(&memoryAssociations{stored: keepassxc.Association{ID: "db", IDKey: "k"}, present: true})
 
-	got, found, err := b.Lookup("id_ed25519")
+	got, found, err := b.Lookup(t.Context(), "id_ed25519")
 	require.NoError(t, err, "a stored passphrase must come back")
 	require.True(t, found, "the entry is in the database, so it must be reported found")
 	assert.Equal(t, "the-right-one", got,
@@ -63,7 +63,7 @@ func TestKeePassXCLookupOfAnAbsentKeyIsAMiss(t *testing.T) {
 	kp := &fakeKeePassXC{}
 	b := kp.backendFor(&memoryAssociations{stored: keepassxc.Association{ID: "db", IDKey: "k"}, present: true})
 
-	_, found, err := b.Lookup("id_absent")
+	_, found, err := b.Lookup(t.Context(), "id_absent")
 	require.NoError(t, err, "a passphrase that was never stored is not an error")
 	assert.False(t, found, "and nothing may be reported found")
 }
@@ -77,7 +77,7 @@ func TestKeePassXCLookupNeverAsksForApproval(t *testing.T) {
 	assoc := &memoryAssociations{} // nothing stored: never approved
 	b := kp.backendFor(assoc)
 
-	_, _, err := b.Lookup("id_ed25519")
+	_, _, err := b.Lookup(t.Context(), "id_ed25519")
 	assert.ErrorIs(t, err, keepassxc.ErrNotAssociated,
 		"a database SSHakku was never approved for must say so, rather than fail as an empty one")
 	assert.Zero(t, kp.associateCalls,
@@ -94,7 +94,7 @@ func TestKeePassXCStoreAssociatesOnFirstUse(t *testing.T) {
 
 	// The label is deliberately not the key's name: they arrive as two separate
 	// arguments, and a case where they read alike cannot tell which one was sent.
-	require.NoError(t, b.Store("id_ed25519", "SSH Passphrase for id_ed25519", "secret"),
+	require.NoError(t, b.Store(t.Context(), "id_ed25519", "SSH Passphrase for id_ed25519", "secret"),
 		"saving a passphrase must succeed")
 	assert.Equal(t, 1, kp.associateCalls,
 		"storing happens right after the user typed the passphrase, so they are there to approve — once")
@@ -110,7 +110,7 @@ func TestKeePassXCStoreReusesAnExistingAssociation(t *testing.T) {
 	assoc := &memoryAssociations{stored: keepassxc.Association{ID: "db", IDKey: "k"}, present: true}
 	b := kp.backendFor(assoc)
 
-	require.NoError(t, b.Store("id_ed25519", "", "secret"), "saving a passphrase must succeed")
+	require.NoError(t, b.Store(t.Context(), "id_ed25519", "", "secret"), "saving a passphrase must succeed")
 	assert.Zero(t, kp.associateCalls, "an approval the user already granted must not be asked for again")
 }
 
@@ -122,14 +122,14 @@ func TestKeePassXCStoreReplacesInPlace(t *testing.T) {
 	}}
 	b := kp.backendFor(&memoryAssociations{stored: keepassxc.Association{ID: "db", IDKey: "k"}, present: true})
 
-	require.NoError(t, b.Store("id_ed25519", "", "new"), "replacing a passphrase must succeed")
+	require.NoError(t, b.Store(t.Context(), "id_ed25519", "", "new"), "replacing a passphrase must succeed")
 	assert.Equal(t, "u-1", kp.lastSet.uuid,
 		"the write must carry the existing entry's identity, or it leaves a second copy of the secret in the database")
 }
 
 func TestKeePassXCDeleteSaysItCannot(t *testing.T) {
 	b := KeePassXCBackend{}
-	err := b.Delete("id_ed25519")
+	err := b.Delete(t.Context(), "id_ed25519")
 	require.ErrorIs(t, err, ErrDeleteUnsupported,
 		"KeePassXC's local protocol has no verb for removing an entry, and that must be said, not faked")
 	// The user has to do it themselves, so the message has to say where.
@@ -138,7 +138,7 @@ func TestKeePassXCDeleteSaysItCannot(t *testing.T) {
 }
 
 func TestKeePassXCListIsUnsupported(t *testing.T) {
-	_, err := (KeePassXCBackend{}).List()
+	_, err := (KeePassXCBackend{}).List(t.Context())
 	assert.ErrorIs(t, err, ErrListUnsupported,
 		"KeePassXC's local protocol cannot enumerate a database, and that must be said, not answered as empty")
 }
@@ -146,7 +146,7 @@ func TestKeePassXCListIsUnsupported(t *testing.T) {
 func TestKeePassXCWithNoAssociationStoreIsAnError(t *testing.T) {
 	kp := &fakeKeePassXC{}
 	b := KeePassXCBackend{NewSession: func() (KeePassXCSession, error) { return kp, nil }}
-	_, _, err := b.Lookup("id_ed25519")
+	_, _, err := b.Lookup(t.Context(), "id_ed25519")
 	require.Error(t, err, "a route with nowhere to keep its approval cannot work, and must say so")
 	assert.NotErrorIs(t, err, keepassxc.ErrNotAssociated,
 		"and it must not be reported as an approval the user has yet to give: approving it again would change nothing, "+
@@ -158,22 +158,22 @@ func TestKeePassXCReportsAnUnreachableKeePassXC(t *testing.T) {
 		NewSession:   func() (KeePassXCSession, error) { return nil, errNoKeePassXC },
 		Associations: &memoryAssociations{},
 	}
-	_, _, err := b.Lookup("id_ed25519")
+	_, _, err := b.Lookup(t.Context(), "id_ed25519")
 	assert.Error(t, err, "a KeePassXC that is not running cannot answer, and must not be read as an empty database")
-	assert.Error(t, b.Store("id_ed25519", "", "p"),
+	assert.Error(t, b.Store(t.Context(), "id_ed25519", "", "p"),
 		"nor may a passphrase be reported as saved into a database nothing reached")
 }
 
 func TestKeePassXCReportsAnUnreadableAssociation(t *testing.T) {
 	kp := &fakeKeePassXC{}
 	b := kp.backendFor(&memoryAssociations{loadErr: errors.New("unreadable")})
-	_, _, err := b.Lookup("id_ed25519")
+	_, _, err := b.Lookup(t.Context(), "id_ed25519")
 	assert.Error(t, err, "an approval that could not be read must be reported, not treated as never granted")
 }
 
 func TestKeePassXCReportsAnUnwritableAssociation(t *testing.T) {
 	kp := &fakeKeePassXC{}
 	b := kp.backendFor(&memoryAssociations{saveErr: errors.New("read-only")})
-	assert.Error(t, b.Store("id_ed25519", "", "p"),
+	assert.Error(t, b.Store(t.Context(), "id_ed25519", "", "p"),
 		"an approval that could not be written down must be reported: the next run would raise the dialog again")
 }

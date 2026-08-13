@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
@@ -14,7 +15,7 @@ import (
 // read or write it, and no configuration can select it, so there is no piece
 // to report as missing: the view names the backend in force and claims nothing
 // further.
-func (p walletProbe) platformWalletView(_ config.Settings, backend string) diagnose.WalletView {
+func (p walletProbe) platformWalletView(_ context.Context, _ config.Settings, backend string) diagnose.WalletView {
 	return diagnose.WalletView{Backend: backend}
 }
 
@@ -25,7 +26,7 @@ func (p walletProbe) platformWalletView(_ config.Settings, backend string) diagn
 // the user pinned is answered under its own name — but the answer here is not a
 // missing piece to go and install. It is that this way in does not exist on
 // this operating system, and another one has to be chosen.
-func (p walletProbe) keepassxcSecretServiceRoute() []diagnose.Requirement {
+func (p walletProbe) keepassxcSecretServiceRoute(ctx context.Context) []diagnose.Requirement {
 	return []diagnose.Requirement{{
 		Name: "secret service",
 		Detail: fmt.Sprintf(
@@ -37,10 +38,10 @@ func (p walletProbe) keepassxcSecretServiceRoute() []diagnose.Requirement {
 // SSHakku's entries in. There is no wallet here to make one in, so it is left
 // nil rather than given a body that does nothing: doing nothing successfully is
 // not the same as having nothing to do, and doctor tells those apart.
-var realMakeCompartment func(settings config.Settings) (string, error)
+var realMakeCompartment func(ctx context.Context, settings config.Settings) (string, error)
 
 // realSecretServiceLook is the look this system can take at a session bus, and
 // Windows has none: no bus, nothing on it, and nothing that could answer. It is
 // left nil rather than given a body that returns emptiness, because there is no
 // question here to answer at all.
-var realSecretServiceLook func(alias, label string) secretServiceLook
+var realSecretServiceLook func(ctx context.Context, alias, label string) secretServiceLook

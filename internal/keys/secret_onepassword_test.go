@@ -31,7 +31,7 @@ func TestOnePasswordLookup(t *testing.T) {
 	t.Run("hit reads the secret reference", func(t *testing.T) {
 		r := newFakeRunner().on(onePasswordBin, stdout("hunter2", 0))
 		b := &OnePasswordBackend{Runner: r, Vault: "sshakku"}
-		pass, found, err := b.Lookup("sshakku-id_rsa")
+		pass, found, err := b.Lookup(t.Context(), "sshakku-id_rsa")
 		require.NoError(t, err, "a stored passphrase must come back")
 		assert.True(t, found, "the item is in the vault, so it must be reported found")
 		assert.Equal(t, "hunter2", pass, "and the passphrase read out must be the one that was stored")
@@ -44,7 +44,7 @@ func TestOnePasswordLookup(t *testing.T) {
 	t.Run("miss is found=false, no error", func(t *testing.T) {
 		r := newFakeRunner().on(onePasswordBin, stdout("", 1))
 		b := &OnePasswordBackend{Runner: r, Vault: "sshakku"}
-		_, found, err := b.Lookup("sshakku-id_rsa")
+		_, found, err := b.Lookup(t.Context(), "sshakku-id_rsa")
 		require.NoError(t, err, "a passphrase that was never stored is not an error")
 		assert.False(t, found, "and nothing may be reported found")
 	})
@@ -52,7 +52,7 @@ func TestOnePasswordLookup(t *testing.T) {
 	t.Run("a failure to start op is an error", func(t *testing.T) {
 		wantErr := errors.New("boom")
 		b := &OnePasswordBackend{Runner: newFakeRunner().on(onePasswordBin, fails(wantErr)), Vault: "sshakku"}
-		_, _, err := b.Lookup("x")
+		_, _, err := b.Lookup(t.Context(), "x")
 		assert.ErrorIs(t, err, wantErr, "a vault tool that would not run must be reported, not read as a miss")
 	})
 }
@@ -66,7 +66,7 @@ func TestOnePasswordStore(t *testing.T) {
 			"item create": stdout("", 0),
 		}))
 		b := &OnePasswordBackend{Runner: r, Vault: "sshakku"}
-		require.NoError(t, b.Store("sshakku-id_rsa", "SSH Passphrase for id_rsa", passphrase),
+		require.NoError(t, b.Store(t.Context(), "sshakku-id_rsa", "SSH Passphrase for id_rsa", passphrase),
 			"saving a passphrase must succeed")
 
 		require.Lenf(t, r.calls, 2, "an entry that is not there is looked up, then created: %+v", r.calls)
@@ -98,7 +98,7 @@ func TestOnePasswordStore(t *testing.T) {
 			"item create": stdout("", 0),
 		}))
 		b := &OnePasswordBackend{Runner: r, Vault: "sshakku"}
-		require.NoError(t, b.Store("sshakku-id_rsa", "label", passphrase), "replacing a passphrase must succeed")
+		require.NoError(t, b.Store(t.Context(), "sshakku-id_rsa", "label", passphrase), "replacing a passphrase must succeed")
 		var verbs []string
 		for _, c := range r.calls {
 			require.GreaterOrEqualf(t, len(c.Args), 2, "every op call names a subcommand: %+v", c.Args)
@@ -117,7 +117,7 @@ func TestOnePasswordStore(t *testing.T) {
 			},
 		}))
 		b := &OnePasswordBackend{Runner: r, Vault: "sshakku"}
-		assert.Error(t, b.Store("x", "y", passphrase),
+		assert.Error(t, b.Store(t.Context(), "x", "y", passphrase),
 			"a passphrase the vault refused to write must not be reported as saved")
 	})
 }
@@ -129,7 +129,7 @@ func TestOnePasswordDelete(t *testing.T) {
 			"item delete": stdout("", 0),
 		}))
 		b := &OnePasswordBackend{Runner: r, Vault: "sshakku"}
-		require.NoError(t, b.Delete("sshakku-id_rsa"), "forgetting a passphrase must succeed")
+		require.NoError(t, b.Delete(t.Context(), "sshakku-id_rsa"), "forgetting a passphrase must succeed")
 		require.Lenf(t, r.calls, 2, "an entry that is there is looked up, then deleted: %+v", r.calls)
 		assert.Equal(t, "delete", r.calls[1].Args[1], "and it must be the deletion")
 	})
@@ -139,7 +139,7 @@ func TestOnePasswordDelete(t *testing.T) {
 			"item get": stdout("", 1),
 		}))
 		b := &OnePasswordBackend{Runner: r, Vault: "sshakku"}
-		require.NoError(t, b.Delete("sshakku-id_rsa"),
+		require.NoError(t, b.Delete(t.Context(), "sshakku-id_rsa"),
 			"a passphrase that is already not there is the outcome that was asked for")
 		assert.Lenf(t, r.calls, 1, "and nothing may be deleted when nothing matched: %+v", r.calls)
 	})
@@ -152,7 +152,7 @@ func TestOnePasswordDelete(t *testing.T) {
 			},
 		}))
 		b := &OnePasswordBackend{Runner: r, Vault: "sshakku"}
-		assert.Error(t, b.Delete("x"), "a passphrase the vault refused to remove must not be reported as forgotten")
+		assert.Error(t, b.Delete(t.Context(), "x"), "a passphrase the vault refused to remove must not be reported as forgotten")
 	})
 }
 
@@ -160,7 +160,7 @@ func TestOnePasswordList(t *testing.T) {
 	t.Run("returns each item's title", func(t *testing.T) {
 		r := newFakeRunner().on(onePasswordBin, stdout(`[{"title":"sshakku-id_rsa"},{"title":"sshakku-id_ed25519"}]`, 0))
 		b := &OnePasswordBackend{Runner: r, Vault: "sshakku"}
-		got, err := b.List()
+		got, err := b.List(t.Context())
 		require.NoError(t, err, "listing what the vault holds must succeed")
 		assert.Equal(t, []string{"sshakku-id_rsa", "sshakku-id_ed25519"}, got,
 			"every entry must be named, by the key it belongs to")
@@ -174,7 +174,7 @@ func TestOnePasswordList(t *testing.T) {
 	t.Run("empty vault returns an empty, non-nil slice", func(t *testing.T) {
 		r := newFakeRunner().on(onePasswordBin, stdout(`[]`, 0))
 		b := &OnePasswordBackend{Runner: r, Vault: "sshakku"}
-		got, err := b.List()
+		got, err := b.List(t.Context())
 		require.NoError(t, err, "a vault holding nothing is not an error")
 		assert.Empty(t, got, "and nothing may be listed")
 	})
@@ -184,7 +184,7 @@ func TestOnePasswordList(t *testing.T) {
 			return Result{Stderr: []byte("not signed in"), Code: 1}, nil
 		})
 		b := &OnePasswordBackend{Runner: r, Vault: "sshakku"}
-		_, err := b.List()
+		_, err := b.List(t.Context())
 		assert.Error(t, err, "a vault that could not be read must not be listed as empty")
 	})
 }

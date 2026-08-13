@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"encoding/binary"
 	"io"
 	"net"
@@ -29,7 +30,7 @@ type SocketProber struct {
 }
 
 // Reachable reports whether an ssh-agent answers on socket.
-func (p SocketProber) Reachable(socket string) bool {
+func (p SocketProber) Reachable(ctx context.Context, socket string) bool {
 	if socket == "" {
 		return false
 	}
@@ -37,7 +38,7 @@ func (p SocketProber) Reachable(socket string) bool {
 	if timeout <= 0 {
 		timeout = DefaultProbeTimeout
 	}
-	conn, err := net.DialTimeout("unix", socket, timeout)
+	conn, err := (&net.Dialer{Timeout: timeout}).DialContext(ctx, "unix", socket)
 	if err != nil {
 		return false
 	}

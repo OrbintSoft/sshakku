@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -145,7 +146,7 @@ func crossUserGuard(target targetUser, fix, testBackend bool, euid int) string {
 // misconfigured backend surfaces here instead of as a broken ssh prompt
 // later. Refused cross-user for the same reason as --fix (see
 // crossUserGuard): it acts, it does not just read.
-func (d deps) doctor(stdout, stderr io.Writer, args []string) int {
+func (d deps) doctor(ctx context.Context, stdout, stderr io.Writer, args []string) int {
 	fix := false
 	testBackend := false
 	var userArg, testBackendName string
@@ -192,7 +193,7 @@ func (d deps) doctor(stdout, stderr io.Writer, args []string) int {
 	}
 
 	if target.Source != "" {
-		return d.doctorCrossUser(stdout, stderr, env, target)
+		return d.doctorCrossUser(ctx, stdout, stderr, env, target)
 	}
 
 	layout := paths.Resolve(env, paths.ProbeDir).WithSocketToken(paths.SocketToken())
@@ -201,14 +202,14 @@ func (d deps) doctor(stdout, stderr io.Writer, args []string) int {
 	// it: which wallets exist and what each one needs is this package's
 	// knowledge, not the diagnose package's.
 	settings := loadSettings(layout, "doctor", sessionlog.New(layout.LogFile))
-	report := d.reportWithWallet(env, layout, settings)
+	report := d.reportWithWallet(ctx, env, layout, settings)
 	diagnose.Format(stdout, report)
 
 	exitCode := 0
 	if testBackend {
 		_, _ = io.WriteString(stdout, "\n── testing secret backend ──\n")
 		log := sessionlog.New(layout.LogFile)
-		exitCode = d.testSecretBackend(stdout, stderr, layout, log, testBackendName)
+		exitCode = d.testSecretBackend(ctx, stdout, stderr, layout, log, testBackendName)
 	}
 	if !fix {
 		return exitCode
@@ -222,17 +223,17 @@ func (d deps) doctor(stdout, stderr io.Writer, args []string) int {
 		return 1
 	}
 	paths.CleanupLegacyAgentDir(env.Home)
-	liveSock, code := d.runEnsure(stderr, env, layout)
+	liveSock, code := d.runEnsure(ctx, stderr, env, layout)
 	if code != 0 {
 		return code
 	}
 
-	if !d.repairWallet(stdout, report.Wallet, settings) {
+	if !d.repairWallet(ctx, stdout, report.Wallet, settings) {
 		exitCode = 1
 	}
 
 	_, _ = io.WriteString(stdout, "\nafter:\n\n")
-	after := d.reportWithWallet(env, layout, settings)
+	after := d.reportWithWallet(ctx, env, layout, settings)
 	diagnose.Format(stdout, after)
 	if after.EnvSock != liveSock {
 		_, _ = fmt.Fprintf(stdout,
@@ -250,9 +251,9 @@ func (d deps) doctor(stdout, stderr io.Writer, args []string) int {
 // that what a repair is judged against is the same report that named the problem
 // — a section present in one and absent from the other would leave anything it
 // covers unshowable as repaired.
-func (d deps) reportWithWallet(env paths.Env, layout paths.Layout, settings config.Settings) diagnose.Report {
-	report := d.gather(env, layout, settings)
-	report.Wallet = d.wallet(settings)
+func (d deps) reportWithWallet(ctx context.Context, env paths.Env, layout paths.Layout, settings config.Settings) diagnose.Report {
+	report := d.gather(ctx, env, layout, settings)
+	report.Wallet = d.wallet(ctx, settings)
 	report.Findings = append(report.Findings, diagnose.WalletFindings(report.Wallet)...)
 	return report
 }
@@ -267,12 +268,12 @@ func (d deps) reportWithWallet(env paths.Env, layout paths.Layout, settings conf
 // holding exactly what it held before: a compartment made half way is worse than
 // one not made at all, and a user told nothing would go looking for the wrong
 // fault.
-func (d deps) repairWallet(stdout io.Writer, view diagnose.WalletView, settings config.Settings) bool {
+func (d deps) repairWallet(ctx context.Context, stdout io.Writer, view diagnose.WalletView, settings config.Settings) bool {
 	ok := true
 	for _, req := range view.Requirements {
 		switch {
 		case req.Fixable && d.makeCompartment != nil:
-			made, err := d.makeCompartment(settings)
+			made, err := d.makeCompartment(ctx, settings)
 			if err != nil {
 				_, _ = fmt.Fprintf(stdout, "wallet: the %s could not be made: %v\n", req.Name, err)
 				ok = false
@@ -310,7 +311,7 @@ const doctorProbeService = "sshakku-doctor-probe"
 // probe entry is always deleted before returning, even after a failure, so
 // no leftover test data survives in the wallet. Returns 0 on a clean pass, 1
 // on any failed step.
-func (d deps) testSecretBackend(stdout, stderr io.Writer, layout paths.Layout, log keys.Logger, name string) int {
+func (d deps) testSecretBackend(ctx context.Context, stdout, stderr io.Writer, layout paths.Layout, log keys.Logger, name string) int {
 	settings := loadSettings(layout, "doctor", log)
 	if name == "" {
 		name = settings.SecretBackend
@@ -318,7 +319,7 @@ func (d deps) testSecretBackend(stdout, stderr io.Writer, layout paths.Layout, l
 	settings.SecretBackend = name
 	_, _ = fmt.Fprintf(stdout, "backend: %s\n", name)
 
-	secret, closeSecret := d.newSecret(currentUser(), log, settings)
+	secret, closeSecret := d.newSecret(ctx, currentUser(), log, settings)
 	defer closeSecret()
 
 	probe, err := randomProbeValue()
@@ -326,7 +327,7 @@ func (d deps) testSecretBackend(stdout, stderr io.Writer, layout paths.Layout, l
 		_, _ = fmt.Fprintf(stderr, "sshakku: doctor --test-backend: %v\n", err)
 		return 1
 	}
-	return probeSecretBackend(stdout, log, secret, probe)
+	return probeSecretBackend(ctx, stdout, log, secret, probe)
 }
 
 // probeSecretBackend runs the unlock/store/lookup/delete probe against
@@ -336,23 +337,23 @@ func (d deps) testSecretBackend(stdout, stderr io.Writer, layout paths.Layout, l
 // would construct. The probe entry is always deleted before returning, even
 // after an earlier step failed, so no leftover test data survives in the
 // wallet.
-func probeSecretBackend(stdout io.Writer, log keys.Logger, secret keys.SecretBackend, probe string) int {
+func probeSecretBackend(ctx context.Context, stdout io.Writer, log keys.Logger, secret keys.SecretBackend, probe string) int {
 	if sess, ok := secret.(keys.SecretSession); ok {
-		if err := sess.Unlock(); err != nil {
+		if err := sess.Unlock(ctx); err != nil {
 			_, _ = fmt.Fprintf(stdout, "  unlock: FAILED: %v\n", err)
 			_, _ = fmt.Fprintln(stdout, "backend test: FAIL")
 			return 1
 		}
 		_, _ = fmt.Fprintln(stdout, "  unlock: ok")
 		defer func() {
-			if err := sess.Lock(); err != nil {
+			if err := sess.Lock(ctx); err != nil {
 				_ = log.Log("ERROR", fmt.Sprintf("doctor --test-backend: lock: %v", err))
 			}
 		}()
 	}
 
 	ok := true
-	if err := secret.Store(doctorProbeService, "sshakku doctor test probe", probe); err != nil {
+	if err := secret.Store(ctx, doctorProbeService, "sshakku doctor test probe", probe); err != nil {
 		_, _ = fmt.Fprintf(stdout, "  store: FAILED: %v\n", err)
 		ok = false
 	} else {
@@ -360,7 +361,7 @@ func probeSecretBackend(stdout io.Writer, log keys.Logger, secret keys.SecretBac
 	}
 
 	if ok {
-		switch got, found, err := secret.Lookup(doctorProbeService); {
+		switch got, found, err := secret.Lookup(ctx, doctorProbeService); {
 		case err != nil:
 			_, _ = fmt.Fprintf(stdout, "  lookup: FAILED: %v\n", err)
 			ok = false
@@ -375,7 +376,7 @@ func probeSecretBackend(stdout io.Writer, log keys.Logger, secret keys.SecretBac
 		}
 	}
 
-	if err := secret.Delete(doctorProbeService); err != nil {
+	if err := secret.Delete(ctx, doctorProbeService); err != nil {
 		_, _ = fmt.Fprintf(stdout, "  delete: FAILED: %v\n", err)
 		ok = false
 	} else {
@@ -411,8 +412,8 @@ func randomProbeValue() (string, error) {
 // per-login token from their own kernel keyring (execTokenSource), rather than
 // guessing a path — an empty token is a valid "no agent started yet" state, not
 // a failure.
-func (d deps) doctorCrossUser(stdout, stderr io.Writer, invoking paths.Env, target targetUser) int {
-	token, err := d.tokenSource.ReadToken(target.UID, target.GID)
+func (d deps) doctorCrossUser(ctx context.Context, stdout, stderr io.Writer, invoking paths.Env, target targetUser) int {
+	token, err := d.tokenSource.ReadToken(ctx, target.UID, target.GID)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "sshakku: doctor: %v\n", err)
 		return 1
@@ -432,7 +433,7 @@ func (d deps) doctorCrossUser(stdout, stderr io.Writer, invoking paths.Env, targ
 	// it must reflect what target could reach, not what this elevated caller
 	// can bypass into.
 	shownEnv, secretEnv := environmentNames()
-	diagnose.Format(stdout, diagnose.Gather(diagnose.Inputs{
+	diagnose.Format(stdout, diagnose.Gather(ctx, diagnose.Inputs{
 		FixedSock:     layout.AgentSock,
 		LegacyDir:     filepath.Join(targetEnv.Home, ".ssh", "agent"),
 		StatePath:     filepath.Join(filepath.Dir(layout.AgentSock), "agent.state"),
@@ -451,7 +452,7 @@ func (d deps) doctorCrossUser(stdout, stderr io.Writer, invoking paths.Env, targ
 // gatherReport builds the diagnostic report for the resolved layout, reading the
 // real procfs, sockets, and process tree. Both the read-only and --fix paths use
 // it so they present the situation identically.
-func gatherReport(env paths.Env, layout paths.Layout, settings config.Settings) diagnose.Report {
+func gatherReport(ctx context.Context, env paths.Env, layout paths.Layout, settings config.Settings) diagnose.Report {
 	runner := keys.ExecRunner{}
 	// One enumerator, read for the keys and named in the report: the set
 	// SSHakku acts on and the set it describes are then the same set.
@@ -463,7 +464,7 @@ func gatherReport(env paths.Env, layout paths.Layout, settings config.Settings) 
 		State:       keystate.Store{Dir: keystateDir(layout)},
 	}
 	shownEnv, secretEnv := environmentReport()
-	return diagnose.Gather(diagnose.Inputs{
+	return diagnose.Gather(ctx, diagnose.Inputs{
 		FixedSock:         layout.AgentSock,
 		LegacyDir:         filepath.Join(env.Home, ".ssh", "agent"),
 		StatePath:         filepath.Join(filepath.Dir(layout.AgentSock), "agent.state"),

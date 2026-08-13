@@ -3,6 +3,7 @@
 package keys
 
 import (
+	"context"
 	"os"
 	"time"
 
@@ -30,6 +31,6 @@ func stashPassphrase(passphrase string, ttl time.Duration) (string, error) {
 	}, maxSocketAddr)
 }
 
-func fetchPassphrase(token string) (string, error) {
-	return socketHandoffFetch(token)
+func fetchPassphrase(ctx context.Context, token string) (string, error) {
+	return socketHandoffFetch(ctx, token)
 }

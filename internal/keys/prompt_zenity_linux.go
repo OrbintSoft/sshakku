@@ -3,6 +3,7 @@
 package keys
 
 import (
+	"context"
 	"strings"
 	"time"
 )
@@ -24,12 +25,12 @@ type ZenityPrompter struct {
 }
 
 // Prompt shows the password dialog for keyname.
-func (p ZenityPrompter) Prompt(keyname string) (string, error) {
+func (p ZenityPrompter) Prompt(ctx context.Context, keyname string) (string, error) {
 	timeout := p.Timeout
 	if timeout <= 0 {
 		timeout = DefaultInteractiveTimeout
 	}
-	res, err := p.Runner.Run(Cmd{
+	res, err := p.Runner.Run(ctx, Cmd{
 		Name: zenityBin,
 		// zenity has no argument for the text above the field, so the key being
 		// asked about goes in the title, which is the only place it can be read.
@@ -49,7 +50,7 @@ func (p ZenityPrompter) Prompt(keyname string) (string, error) {
 func (p ZenityPrompter) Name() string { return zenityBin }
 
 // Available reports whether zenity is on PATH.
-func (p ZenityPrompter) Available() bool {
+func (p ZenityPrompter) Available(context.Context) bool {
 	look := p.lookPath
 	if look == nil {
 		look = execLookPath

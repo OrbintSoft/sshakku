@@ -32,7 +32,7 @@ func TestTamperedEnvVarsHandledSafely(t *testing.T) {
 		t.Setenv("SSH_AUTH_SOCK", bogus)
 
 		env := paths.FromOS()
-		report := gatherReport(env, paths.Resolve(env, paths.ProbeDir), config.Settings{})
+		report := gatherReport(t.Context(), env, paths.Resolve(env, paths.ProbeDir), config.Settings{})
 
 		assert.Equal(t, bogus, report.EnvSock, "the report must show the value the shell really carries")
 		assert.False(t, report.EnvReachable, "a socket nothing is listening on is not a live agent")
@@ -47,7 +47,7 @@ func TestTamperedEnvVarsHandledSafely(t *testing.T) {
 		t.Setenv("SSH_AUTH_SOCK", "")
 
 		env := paths.FromOS()
-		report := gatherReport(env, paths.Resolve(env, paths.ProbeDir), config.Settings{})
+		report := gatherReport(t.Context(), env, paths.Resolve(env, paths.ProbeDir), config.Settings{})
 
 		assert.Empty(t, report.EnvSock, "a shell that exported nothing has nothing to show")
 		assert.Truef(t, findingContains(report.Findings, "SSH_AUTH_SOCK is unset"),
@@ -63,7 +63,7 @@ func TestTamperedEnvVarsHandledSafely(t *testing.T) {
 		t.Setenv("SSHAKKU_ASKPASS", "1")
 
 		var stdout, stderr bytes.Buffer
-		code := dispatch(realDeps(), &stdout, &stderr, "/usr/local/bin/sshakku", []string{"help"})
+		code := dispatch(t.Context(), realDeps(), &stdout, &stderr, "/usr/local/bin/sshakku", []string{"help"})
 
 		require.Zerof(t, code, "asking for help is not a failure (stderr: %s)", stderr.String())
 		assert.Contains(t, stdout.String(), "usage: sshakku",
@@ -78,7 +78,7 @@ func TestTamperedEnvVarsHandledSafely(t *testing.T) {
 		t.Setenv(keys.EnvPassHandoffToken, "not-a-real-token")
 
 		var stdout bytes.Buffer
-		code := realDeps().askpass(&stdout, []string{"Enter passphrase:"})
+		code := realDeps().askpass(t.Context(), &stdout, []string{"Enter passphrase:"})
 
 		assert.Equal(t, 1, code, "a handle no stash was made under can redeem nothing")
 		assert.Empty(t, stdout.String(), "and a tampered token must leak nothing at all")

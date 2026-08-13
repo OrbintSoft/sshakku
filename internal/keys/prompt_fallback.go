@@ -1,6 +1,7 @@
 package keys
 
 import (
+	"context"
 	"errors"
 	"fmt"
 )
@@ -24,15 +25,15 @@ type FallbackPrompter struct {
 }
 
 // Prompt asks for keyname's passphrase.
-func (p FallbackPrompter) Prompt(keyname string) (string, error) {
-	pass, err := p.Primary.Prompt(keyname)
+func (p FallbackPrompter) Prompt(ctx context.Context, keyname string) (string, error) {
+	pass, err := p.Primary.Prompt(ctx, keyname)
 	if err == nil || errors.Is(err, ErrPromptCanceled) {
 		return pass, err
 	}
 	if p.Log != nil {
 		_ = p.Log.Log("ERROR", fmt.Sprintf("%s could not ask for %s (%v), asking %s instead", PrompterName(p.Primary), keyname, err, PrompterName(p.Fallback)))
 	}
-	return p.Fallback.Prompt(keyname)
+	return p.Fallback.Prompt(ctx, keyname)
 }
 
 // Name is what to call this pair in a message. Asking it is asking Primary
@@ -41,8 +42,8 @@ func (p FallbackPrompter) Prompt(keyname string) (string, error) {
 func (p FallbackPrompter) Name() string { return PrompterName(p.Primary) }
 
 // Available reports whether either half can ask.
-func (p FallbackPrompter) Available() bool {
-	return p.Primary.Available() || p.Fallback.Available()
+func (p FallbackPrompter) Available(ctx context.Context) bool {
+	return p.Primary.Available(ctx) || p.Fallback.Available(ctx)
 }
 
 var _ Prompter = FallbackPrompter{}

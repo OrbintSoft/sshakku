@@ -55,7 +55,7 @@ func requireIsolatedAgentEnvironment(t *testing.T) {
 	}
 	prober := agent.SocketProber{}
 	for _, p := range procs {
-		if p.Socket != "" && prober.Reachable(p.Socket) {
+		if p.Socket != "" && prober.Reachable(t.Context(), p.Socket) {
 			t.Skipf("a real ssh-agent (pid %d, socket %s) is already reachable on this machine — "+
 				"these integration tests need an isolated PID namespace, not a live desktop session", p.PID, p.Socket)
 		}
@@ -116,7 +116,7 @@ func TestDoctorDetectsAndFixesDeadOursAgent(t *testing.T) {
 	}
 	m := realManager()
 
-	res1, err := m.EnsureAgent(cfg, nil)
+	res1, err := m.EnsureAgent(t.Context(), cfg, nil)
 	require.NoError(t, err, "seed EnsureAgent")
 
 	// EnvSock and the askpass exports mirror a shell the login hook has already
@@ -129,7 +129,7 @@ func TestDoctorDetectsAndFixesDeadOursAgent(t *testing.T) {
 		EnvAskpass: "/usr/local/bin/sshakku", EnvAskpassRequire: "force",
 	}
 
-	before := Gather(in, agent.Inspector{}, agent.SocketProber{}, nil, nil, nil, nil)
+	before := Gather(t.Context(), in, agent.Inspector{}, agent.SocketProber{}, nil, nil, nil, nil)
 	require.Equal(t, StateOursHealthy, before.State, "the agent this test then crashes must be healthy to start with")
 
 	// Simulate a real crash: SIGKILL, no graceful socket cleanup by ssh-agent
@@ -139,19 +139,19 @@ func TestDoctorDetectsAndFixesDeadOursAgent(t *testing.T) {
 	_ = syscall.Kill(res1.Started, syscall.SIGKILL)
 	waitDead(t, res1.Started)
 
-	after := Gather(in, agent.Inspector{}, agent.SocketProber{}, nil, nil, nil, nil)
+	after := Gather(t.Context(), in, agent.Inspector{}, agent.SocketProber{}, nil, nil, nil, nil)
 	assert.Equal(t, StateOursZombie, after.State, "an agent of ours that died leaves its state behind")
 	assert.Falsef(t, hasFinding(after, "no problems detected"),
 		"a report over a crashed agent must not call the machine clean: %v", after.Findings)
 
 	// doctor --fix's actual mechanism (cmd/sshakku's runFix): EnsureAgent,
 	// then re-Gather.
-	res2, err := m.EnsureAgent(cfg, nil)
+	res2, err := m.EnsureAgent(t.Context(), cfg, nil)
 	require.NoError(t, err, "fix EnsureAgent")
 	t.Cleanup(func() { _ = syscall.Kill(res2.Started, syscall.SIGTERM) })
 	assert.Equal(t, agent.SituationZombie, res2.Situation, "the fix must recognise what it is repairing")
 
-	fixed := Gather(in, agent.Inspector{}, agent.SocketProber{}, nil, nil, nil, nil)
+	fixed := Gather(t.Context(), in, agent.Inspector{}, agent.SocketProber{}, nil, nil, nil, nil)
 	assert.Equal(t, StateOursHealthy, fixed.State, "the fix must leave a healthy agent behind")
 	assert.Truef(t, hasFinding(fixed, "no problems detected"),
 		"a repaired machine must be reported as clean: %v", fixed.Findings)

@@ -2,6 +2,7 @@ package diagnose
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -24,7 +25,7 @@ func (f fakeSource) Agents() ([]agent.AgentProc, error) { return f.procs, f.err 
 // fakeProber reports a socket reachable iff it is in the up set.
 type fakeProber struct{ up map[string]bool }
 
-func (f fakeProber) Reachable(sock string) bool { return f.up[sock] }
+func (f fakeProber) Reachable(_ context.Context, sock string) bool { return f.up[sock] }
 
 const (
 	fixed  = "/run/user/1000/sshakku/tok/agent.sock"
@@ -47,7 +48,7 @@ func TestGatherHealthy(t *testing.T) {
 	}}
 	prober := fakeProber{up: map[string]bool{fixed: true}}
 
-	r := Gather(Inputs{
+	r := Gather(t.Context(), Inputs{
 		FixedSock: fixed,
 		LegacyDir: legacy,
 		EnvSock:   fixed,
@@ -73,7 +74,7 @@ func TestGatherEnvUnset(t *testing.T) {
 	}}
 	prober := fakeProber{up: map[string]bool{fixed: true}}
 
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, src, prober, nil, nil, nil, nil)
+	r := Gather(t.Context(), Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, src, prober, nil, nil, nil, nil)
 	assert.Truef(t, hasFinding(r, "SSH_AUTH_SOCK is unset"),
 		"a shell that exported no socket must be told so: %v", r.Findings)
 	// The clean bill is what a user reads first. It is added only when nothing
@@ -86,7 +87,7 @@ func TestGatherEnvUnset(t *testing.T) {
 func TestGatherEnvNotAnswering(t *testing.T) {
 	src := fakeSource{}
 	prober := fakeProber{} // nothing up
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000}, src, prober, nil, nil, nil, nil)
+	r := Gather(t.Context(), Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000}, src, prober, nil, nil, nil, nil)
 
 	assert.False(t, r.EnvReachable, "nothing answers on the socket the shell exported")
 	assert.Truef(t, hasFinding(r, "not answering"),
@@ -101,7 +102,7 @@ func TestGatherEnvMismatch(t *testing.T) {
 		{PID: 100, UID: 1000, Socket: other},
 	}}
 	prober := fakeProber{up: map[string]bool{other: true}}
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: other, OurUID: 1000}, src, prober, nil, nil, nil, nil)
+	r := Gather(t.Context(), Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: other, OurUID: 1000}, src, prober, nil, nil, nil, nil)
 
 	assert.Truef(t, hasFinding(r, "not our fixed socket"),
 		"a shell pointed at somebody else's agent must be told so: %v", r.Findings)
@@ -115,7 +116,7 @@ func TestGatherMultipleAndDead(t *testing.T) {
 		{PID: 300, UID: 1000, Socket: legacy + "/ssh-agent.sock"}, // legacy, dead
 	}}
 	prober := fakeProber{up: map[string]bool{fixed: true, foreign: true}}
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000}, src, prober, nil, nil, nil, nil)
+	r := Gather(t.Context(), Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000}, src, prober, nil, nil, nil, nil)
 
 	assert.Truef(t, hasFinding(r, "2 agents are answering"),
 		"the report must count the agents that answer: %v", r.Findings)
@@ -136,7 +137,7 @@ func TestGatherDifferentUserAgent(t *testing.T) {
 		{PID: 100, UID: 1000, Socket: other}, // healthy, but not uid 0's
 	}}
 	prober := fakeProber{up: map[string]bool{other: true}}
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 0}, src, prober, nil, nil, nil, nil)
+	r := Gather(t.Context(), Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 0}, src, prober, nil, nil, nil, nil)
 
 	assert.Equal(t, StateClean, r.State, "another user's agent is not serving this account")
 	assert.Falsef(t, hasFinding(r, "foreign ssh-agent"),
@@ -155,7 +156,7 @@ func TestGatherAnotherUsersForeignAgentIsNotThisAccountsProblem(t *testing.T) {
 	const theirs = "/tmp/theirs.sock"
 	src := fakeSource{procs: []agent.AgentProc{{PID: 200, UID: 1000, Socket: theirs}}}
 	prober := fakeProber{up: map[string]bool{theirs: true}}
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 0}, src, prober, nil, nil, nil, nil)
+	r := Gather(t.Context(), Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 0}, src, prober, nil, nil, nil, nil)
 
 	assert.Falsef(t, hasFinding(r, "foreign ssh-agent"),
 		"an agent belonging to another account is not a foreign agent serving this one: %v", r.Findings)
@@ -172,7 +173,7 @@ func TestGatherOrphanedOursAgent(t *testing.T) {
 		{PID: 100, UID: 1000, Socket: orphan},
 	}}
 	prober := fakeProber{up: map[string]bool{orphan: true}}
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, src, prober, nil, nil, nil, nil)
+	r := Gather(t.Context(), Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, src, prober, nil, nil, nil, nil)
 
 	assert.Truef(t, hasFinding(r, "looks like a previous sshakku-managed agent"),
 		"an agent on a socket of our own shape is one of ours left behind: %v", r.Findings)
@@ -226,7 +227,7 @@ func TestKnownForeignShape(t *testing.T) {
 
 func TestGatherEnvSockKnownForeignShape(t *testing.T) {
 	const gpgSSH = "/run/user/1000/gnupg/S.gpg-agent.ssh"
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: gpgSSH, OurUID: 1000},
+	r := Gather(t.Context(), Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: gpgSSH, OurUID: 1000},
 		fakeSource{}, fakeProber{up: map[string]bool{gpgSSH: true}}, nil, nil, nil, nil)
 
 	assert.Truef(t, hasFinding(r, "gpg-agent, with ssh support enabled"),
@@ -235,7 +236,7 @@ func TestGatherEnvSockKnownForeignShape(t *testing.T) {
 
 func TestGatherInspectError(t *testing.T) {
 	src := fakeSource{err: errors.New("boom")}
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000},
+	r := Gather(t.Context(), Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000},
 		src, fakeProber{up: map[string]bool{fixed: true}}, nil, nil, nil, nil)
 	assert.Error(t, r.InspectErr, "processes that could not be listed must be reported")
 	assert.Truef(t, hasFinding(r, "could not enumerate processes"),
@@ -245,20 +246,20 @@ func TestGatherInspectError(t *testing.T) {
 func TestGatherRecordedPID(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "agent.state")
 	require.NoError(t, agent.WriteState(statePath, agent.State{PID: 4242, Socket: fixed}), "seed the state file")
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, StatePath: statePath, OurUID: 1000},
+	r := Gather(t.Context(), Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, StatePath: statePath, OurUID: 1000},
 		fakeSource{}, fakeProber{up: map[string]bool{fixed: true}}, nil, nil, nil, nil)
 	assert.Equal(t, 4242, r.RecordedPID, "the pid the state file recorded")
 }
 
 func TestGatherAskpassNotWired(t *testing.T) {
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000},
+	r := Gather(t.Context(), Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000},
 		fakeSource{}, fakeProber{up: map[string]bool{fixed: true}}, nil, nil, nil, nil)
 	assert.Truef(t, hasFinding(r, "SSH_ASKPASS is not wired"),
 		"a shell with no askpass wired must be told so: %v", r.Findings)
 }
 
 func TestGatherAskpassPartiallyWired(t *testing.T) {
-	r := Gather(Inputs{
+	r := Gather(t.Context(), Inputs{
 		FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000,
 		EnvAskpass: "/usr/bin/sshakku",
 	}, fakeSource{}, fakeProber{up: map[string]bool{fixed: true}}, nil, nil, nil, nil)
@@ -270,7 +271,7 @@ func TestGatherAskpassWired(t *testing.T) {
 	src := fakeSource{procs: []agent.AgentProc{
 		{PID: 100, UID: 1000, Socket: fixed, Args: []string{"ssh-agent", "-a", fixed}},
 	}}
-	r := Gather(Inputs{
+	r := Gather(t.Context(), Inputs{
 		FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000,
 		EnvAskpass: "/usr/bin/sshakku", EnvAskpassRequire: "force",
 	}, src, fakeProber{up: map[string]bool{fixed: true}}, nil, nil, nil, nil)
@@ -286,7 +287,7 @@ func TestGatherAskpassWired(t *testing.T) {
 func TestGatherAskpassNotWiredHeadless(t *testing.T) {
 	t.Setenv("DISPLAY", "")
 	t.Setenv("WAYLAND_DISPLAY", "")
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000},
+	r := Gather(t.Context(), Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000},
 		fakeSource{}, fakeProber{up: map[string]bool{fixed: true}}, nil, nil, nil, nil)
 	assert.Truef(t, hasFinding(r, "SSH_ASKPASS is not wired"),
 		"a session with no display is the one that most needs to be told: %v", r.Findings)

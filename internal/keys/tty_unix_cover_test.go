@@ -186,13 +186,13 @@ func TestReadTTYLineDisableEchoSetError(t *testing.T) {
 }
 
 func TestTTYPrompterPromptAndAvailable(t *testing.T) {
-	assert.True(t, TTYPrompter{}.Available(),
+	assert.True(t, TTYPrompter{}.Available(t.Context()),
 		"the terminal is where the question goes when nothing else can take it, so it never declines the job")
 
 	peer := fakeTTYPair(t)
 	_, err := peer.WriteString("keypass\n")
 	require.NoError(t, err, "the user types a passphrase")
-	got, err := TTYPrompter{}.Prompt("id_rsa")
+	got, err := TTYPrompter{}.Prompt(t.Context(), "id_rsa")
 	require.NoError(t, err, "reading it must succeed")
 	assert.Equal(t, "keypass", got, "and it must be what they typed")
 }

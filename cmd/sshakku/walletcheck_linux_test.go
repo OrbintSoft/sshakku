@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"testing"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
@@ -17,7 +18,7 @@ import (
 // that has neither. Looking at the session bus is a thing only Linux does, so
 // only Linux's tests need it.
 func (p walletProbe) withLook(look secretServiceLook, hasScreen bool) walletProbe {
-	p.look = func(string, string) secretServiceLook { return look }
+	p.look = func(context.Context, string, string) secretServiceLook { return look }
 	p.hasScreen = hasScreen
 	return p
 }
@@ -33,7 +34,7 @@ func TestDoctorReportOnAnUnconfiguredMachine(t *testing.T) {
 	layout := paths.Layout{ConfigDir: t.TempDir()}
 	settings := loadSettings(layout, "test", discardLogger{})
 
-	view := walletView(settings, probeWith("linux", nil, nil, "unix:path=/run/bus", nil))
+	view := walletView(t.Context(), settings, probeWith("linux", nil, nil, "unix:path=/run/bus", nil))
 
 	assert.Equal(t, config.SecretBackendSecretService, view.Backend,
 		"an unconfigured Linux machine uses the freedesktop Secret Service")
@@ -48,7 +49,7 @@ func TestDoctorReportOnAnUnconfiguredMachine(t *testing.T) {
 func TestDoctorReportsAMissingSessionBus(t *testing.T) {
 	settings := config.Settings{SecretBackend: config.SecretBackendSecretService}
 
-	view := walletView(settings, probeWith("linux", nil, nil, "", nil))
+	view := walletView(t.Context(), settings, probeWith("linux", nil, nil, "", nil))
 
 	req := requirement(t, view, "session bus")
 	assert.False(t, req.Present, "a bus whose address is unset is not one that is there")
@@ -65,7 +66,7 @@ func TestKeePassXCOverTheSecretServiceOnLinux(t *testing.T) {
 		KeePassXCRoute: config.KeePassXCRouteAuto,
 	}
 
-	view := walletView(settings, probeWith("linux", nil, nil, "unix:path=/run/bus", nil))
+	view := walletView(t.Context(), settings, probeWith("linux", nil, nil, "unix:path=/run/bus", nil))
 
 	assert.Equal(t, config.KeePassXCRouteSecretService, view.Route, "the route Linux picks on its own")
 	req := requirement(t, view, "session bus")
@@ -83,7 +84,7 @@ func TestDoctorReportsAWalletThatCanHoldNothingHere(t *testing.T) {
 	probe := probeWith("linux", nil, nil, "unix:path=/run/bus", nil).
 		withLook(secretServiceLook{running: true}, false)
 
-	view := walletView(settings, probe)
+	view := walletView(t.Context(), settings, probe)
 
 	req := requirement(t, view, "compartment")
 	assert.False(t, req.Present, "a compartment that cannot be created is not one that is there")
@@ -104,7 +105,7 @@ func TestDoctorSaysACompartmentItCanMakeIsNotThereYet(t *testing.T) {
 	probe := probeWith("linux", nil, nil, "unix:path=/run/bus", nil).
 		withLook(secretServiceLook{running: true}, true)
 
-	view := walletView(settings, probe)
+	view := walletView(t.Context(), settings, probe)
 
 	req := requirement(t, view, "compartment")
 	assert.False(t, req.Present, "one that would appear at the first passphrase saved is still not there yet")
@@ -124,7 +125,7 @@ func TestDoctorReportsTheCompartmentTheSettingsName(t *testing.T) {
 	probe := probeWith("linux", nil, nil, "unix:path=/run/bus", nil).
 		withLook(secretServiceLook{running: true}, false)
 
-	req := requirement(t, walletView(settings, probe), "compartment")
+	req := requirement(t, walletView(t.Context(), settings, probe), "compartment")
 
 	assert.Contains(t, req.Detail, "my-own",
 		"the compartment described must be the one entries would go into, which the user named")
@@ -142,7 +143,7 @@ func TestKeePassXCOverTheSecretServiceSeesAnEmptyBus(t *testing.T) {
 	probe := probeWith("linux", nil, nil, "unix:path=/run/bus", nil).
 		withLook(secretServiceLook{}, false)
 
-	view := walletView(settings, probe)
+	view := walletView(t.Context(), settings, probe)
 
 	assert.False(t, requirement(t, view, "secret service").Present,
 		"a bus with nothing answering on it has no wallet on it")
@@ -159,7 +160,7 @@ func TestKeePassXCOverTheSecretServiceSeesAnEmptyBus(t *testing.T) {
 func TestALookThatCouldNotBeTakenSaysSo(t *testing.T) {
 	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent/bus")
 
-	look := realSecretServiceLook("sshakku", "sshakku")
+	look := realSecretServiceLook(t.Context(), "sshakku", "sshakku")
 
 	assert.True(t, look.lookFailed, "a look that never reached a bus must say it failed")
 
@@ -175,7 +176,7 @@ func TestALookThatCouldNotBeTakenSaysSo(t *testing.T) {
 func TestMakingACompartmentWithNoWalletToMakeItIn(t *testing.T) {
 	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent/bus")
 
-	made, err := realMakeCompartment(config.Settings{})
+	made, err := realMakeCompartment(t.Context(), config.Settings{})
 
 	assert.Error(t, err, "a repair that could not be performed must say so, or the next login finds out")
 	assert.Empty(t, made, "and nothing may be named as made when nothing was")
@@ -187,7 +188,7 @@ func TestMakingACompartmentWithNoWalletToMakeItIn(t *testing.T) {
 // some other wallet. Saying "this is what you asked for" remains an answer to
 // "which wallet would be used"; inventing a requirement for it would not be.
 func TestPlatformWalletViewNamesWhateverItIsGiven(t *testing.T) {
-	view := probeWith("linux", nil, nil, "", nil).platformWalletView(config.Settings{}, "something-else")
+	view := probeWith("linux", nil, nil, "", nil).platformWalletView(t.Context(), config.Settings{}, "something-else")
 
 	assert.Equal(t, "something-else", view.Backend,
 		"naming back what was asked for is still an answer to which wallet would be used")

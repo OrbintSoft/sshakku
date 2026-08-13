@@ -227,7 +227,7 @@ func editorScript(t *testing.T) string {
 func runConfigEdit(t *testing.T) (string, string, int) {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
-	code := deps{}.run(&stdout, &stderr, []string{"config", "--edit"})
+	code := deps{}.run(t.Context(), &stdout, &stderr, []string{"config", "--edit"})
 	return stdout.String(), stderr.String(), code
 }
 

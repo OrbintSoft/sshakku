@@ -4,6 +4,8 @@
 // agent — it only manages the lifecycle of OpenSSH's ssh-agent.
 package agent
 
+import "context"
+
 // ssh-agent wire-protocol message types we use (OpenSSH PROTOCOL.agent).
 const (
 	msgRequestIdentities = 11 // SSH_AGENTC_REQUEST_IDENTITIES
@@ -13,5 +15,5 @@ const (
 // Prober reports whether a usable ssh-agent answers on a unix socket path.
 // Reachable mirrors `ssh-add -l`: an agent with zero keys is still healthy.
 type Prober interface {
-	Reachable(socket string) bool
+	Reachable(ctx context.Context, socket string) bool
 }

@@ -140,11 +140,11 @@ func setupNativeFullRound(t *testing.T, passphrase string) nativeFullRoundEnv {
 	require.NoError(t, os.MkdirAll(filepath.Join(home, ".ssh"), 0o700), "a throwaway account to run in")
 
 	keyfile := filepath.Join(home, ".ssh", "id_test")
-	out, err := exec.Command("ssh-keygen", "-t", "ed25519", "-N", passphrase, "-f", keyfile, "-q").CombinedOutput()
+	out, err := exec.CommandContext(t.Context(), "ssh-keygen", "-t", "ed25519", "-N", passphrase, "-f", keyfile, "-q").CombinedOutput()
 	require.NoErrorf(t, err, "a real passphrase-protected key:\n%s", out)
 
 	binary := filepath.Join(root, "sshakku")
-	out, err = exec.Command("go", "build", "-o", binary, "github.com/OrbintSoft/sshakku/cmd/sshakku").CombinedOutput()
+	out, err = exec.CommandContext(t.Context(), "go", "build", "-o", binary, "github.com/OrbintSoft/sshakku/cmd/sshakku").CombinedOutput()
 	require.NoErrorf(t, err, "the real sshakku binary is what this scenario drives:\n%s", out)
 	// ssh is handed the helper beside the binary, not the binary itself, so a
 	// build with nothing next to it is a layout no install produces: the key
@@ -177,7 +177,7 @@ func setupNativeFullRound(t *testing.T, passphrase string) nativeFullRoundEnv {
 	requireKeePassXCListening(t)
 
 	sock := filepath.Join(root, "agent.sock")
-	agentCmd := exec.Command("ssh-agent", "-D", "-a", sock)
+	agentCmd := exec.CommandContext(t.Context(), "ssh-agent", "-D", "-a", sock)
 	require.NoError(t, agentCmd.Start(),
 		"an ssh-agent of this test's own: the surrounding session's keys are not ours to touch")
 	t.Cleanup(func() {
@@ -223,7 +223,7 @@ func (e nativeFullRoundEnv) childEnv() []string {
 func startSSHakkuOnTerminal(t *testing.T, env nativeFullRoundEnv, slave *os.File, args ...string) *exec.Cmd {
 	t.Helper()
 
-	cmd := exec.Command(env.binary, args...)
+	cmd := exec.CommandContext(t.Context(), env.binary, args...)
 	cmd.Env = env.childEnv()
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = slave, slave, slave
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true, Setctty: true, Ctty: 0}
@@ -241,7 +241,7 @@ func startSSHakkuOnTerminal(t *testing.T, env nativeFullRoundEnv, slave *os.File
 func runSSHakku(t *testing.T, env nativeFullRoundEnv, args ...string) (string, error) {
 	t.Helper()
 
-	cmd := exec.Command(env.binary, args...)
+	cmd := exec.CommandContext(t.Context(), env.binary, args...)
 	cmd.Env = env.childEnv()
 	out, err := cmd.CombinedOutput()
 	return string(out), err
@@ -251,7 +251,7 @@ func runSSHakku(t *testing.T, env nativeFullRoundEnv, args ...string) (string, e
 // looks like to everything downstream of it.
 func clearAgent(t *testing.T) {
 	t.Helper()
-	out, err := exec.Command("ssh-add", "-D").CombinedOutput()
+	out, err := exec.CommandContext(t.Context(), "ssh-add", "-D").CombinedOutput()
 	require.NoErrorf(t, err, "empty the agent, which is what a new login session looks like:\n%s", out)
 }
 
@@ -261,11 +261,11 @@ func waitForAgentToDropKey(t *testing.T, keyfile string) {
 	t.Helper()
 
 	runner := ExecRunner{}
-	fp, err := FileFingerprint(runner, keyfile)
+	fp, err := FileFingerprint(t.Context(), runner, keyfile)
 	require.NoError(t, err, "reading the key's fingerprint must succeed")
 	deadline := time.Now().Add(nativeKeyLifetime + 15*time.Second)
 	for {
-		loaded, err := AgentFingerprints(runner)
+		loaded, err := AgentFingerprints(t.Context(), runner)
 		require.NoError(t, err, "asking the agent what it holds must keep succeeding")
 		if !loaded[fp] {
 			return

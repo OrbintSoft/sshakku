@@ -2,6 +2,7 @@ package diagnose
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"testing"
 
@@ -12,13 +13,13 @@ import (
 // exercised without touching the real /proc or /sys.
 type fakeHostSource struct{ hc HostChecks }
 
-func (f fakeHostSource) Checks() HostChecks { return f.hc }
+func (f fakeHostSource) Checks(context.Context) HostChecks { return f.hc }
 
 // TestGatherRunsHostChecks covers Gather's branch that consults a non-nil
 // HostSource and records its result in the report.
 func TestGatherRunsHostChecks(t *testing.T) {
 	enc := true
-	r := Gather(Inputs{}, fakeSource{}, fakeProber{}, nil, nil, nil, fakeHostSource{hc: HostChecks{DiskEncrypted: &enc}})
+	r := Gather(t.Context(), Inputs{}, fakeSource{}, fakeProber{}, nil, nil, nil, fakeHostSource{hc: HostChecks{DiskEncrypted: &enc}})
 	assert.Equal(t, &enc, r.Host.DiskEncrypted, "the report must carry what the host source answered")
 }
 

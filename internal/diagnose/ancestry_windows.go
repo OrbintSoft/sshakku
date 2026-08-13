@@ -2,6 +2,8 @@
 
 package diagnose
 
+import "context"
+
 // This build reads no process tree: what a chain would be built from — a
 // procfs to walk or a `ps` to shell out to — is not here, so nothing yet
 // produces the names the two functions below describe. They are what the
@@ -16,7 +18,7 @@ package diagnose
 type NoAncestry struct{}
 
 // Parent reports nothing, always.
-func (NoAncestry) Parent(int) (int, string, bool) { return 0, "", false }
+func (NoAncestry) Parent(context.Context, int) (int, string, bool) { return 0, "", false }
 
 var _ AncestrySource = NoAncestry{}
 

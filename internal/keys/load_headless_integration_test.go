@@ -32,11 +32,11 @@ func TestLoadKeysHeadlessVaultHit(t *testing.T) {
 	dir := t.TempDir()
 	keyfile := filepath.Join(dir, "id_test")
 	const passphrase = "sshakku-headless-vault-test-passphrase"
-	out, err := exec.Command("ssh-keygen", "-t", "ed25519", "-N", passphrase, "-f", keyfile, "-q").CombinedOutput()
+	out, err := exec.CommandContext(t.Context(), "ssh-keygen", "-t", "ed25519", "-N", passphrase, "-f", keyfile, "-q").CombinedOutput()
 	require.NoErrorf(t, err, "a real passphrase-protected key to load:\n%s", out)
 
 	sock := filepath.Join(dir, "agent.sock")
-	agentCmd := exec.Command("ssh-agent", "-D", "-a", sock)
+	agentCmd := exec.CommandContext(t.Context(), "ssh-agent", "-D", "-a", sock)
 	require.NoError(t, agentCmd.Start(), "a real ssh-agent to load it into")
 	t.Cleanup(func() {
 		_ = agentCmd.Process.Kill()
@@ -57,12 +57,12 @@ func TestLoadKeysHeadlessVaultHit(t *testing.T) {
 		Adder:  ExecKeyAdder{AskpassProg: askpassScript},
 		Log:    &fakeLogger{},
 	}
-	require.NoError(t, loader.LoadKeys(), "a login with a stored passphrase must load the key")
+	require.NoError(t, loader.LoadKeys(t.Context()), "a login with a stored passphrase must load the key")
 
 	runner := ExecRunner{}
-	fp, err := FileFingerprint(runner, keyfile)
+	fp, err := FileFingerprint(t.Context(), runner, keyfile)
 	require.NoError(t, err, "reading the key's fingerprint must succeed")
-	loaded, err := AgentFingerprints(runner)
+	loaded, err := AgentFingerprints(t.Context(), runner)
 	require.NoError(t, err, "asking the agent what it holds must succeed")
 	assert.Containsf(t, loaded, fp,
 		"the key must be in the agent, and it got there with no dialog anywhere: a session with no screen "+
@@ -86,11 +86,11 @@ func TestLoadKeysNoTerminalReturnsPromptly(t *testing.T) {
 	dir := t.TempDir()
 	keyfile := filepath.Join(dir, "id_test")
 	const passphrase = "sshakku-no-terminal-test-passphrase"
-	genOut, err := exec.Command("ssh-keygen", "-t", "ed25519", "-N", passphrase, "-f", keyfile, "-q").CombinedOutput()
+	genOut, err := exec.CommandContext(t.Context(), "ssh-keygen", "-t", "ed25519", "-N", passphrase, "-f", keyfile, "-q").CombinedOutput()
 	require.NoErrorf(t, err, "a real passphrase-protected key to load:\n%s", genOut)
 
 	sock := filepath.Join(dir, "agent.sock")
-	agentCmd := exec.Command("ssh-agent", "-D", "-a", sock)
+	agentCmd := exec.CommandContext(t.Context(), "ssh-agent", "-D", "-a", sock)
 	require.NoError(t, agentCmd.Start(), "a real ssh-agent to load it into")
 	t.Cleanup(func() {
 		_ = agentCmd.Process.Kill()
@@ -98,7 +98,7 @@ func TestLoadKeysNoTerminalReturnsPromptly(t *testing.T) {
 	})
 	waitForSocket(t, sock)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestLoadKeysNoTerminalReturnsPromptly$")
 	cmd.Env = append(os.Environ(),
@@ -136,16 +136,20 @@ func runLoadKeysNoTerminalHelper() {
 		Adder:  ExecKeyAdder{},
 		Log:    &fakeLogger{},
 	}
-	if err := loader.LoadKeys(); err != nil {
+	// This runs in the re-executed child, which is a process of its own with
+	// no test to belong to: the root context is created here because here is
+	// where the program starts.
+	ctx := context.Background()
+	if err := loader.LoadKeys(ctx); err != nil {
 		os.Exit(1)
 	}
 
 	runner := ExecRunner{}
-	fp, err := FileFingerprint(runner, keyfile)
+	fp, err := FileFingerprint(ctx, runner, keyfile)
 	if err != nil {
 		os.Exit(2)
 	}
-	loaded, err := AgentFingerprints(runner)
+	loaded, err := AgentFingerprints(ctx, runner)
 	if err != nil {
 		os.Exit(3)
 	}

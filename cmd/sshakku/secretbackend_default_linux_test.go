@@ -19,7 +19,7 @@ import (
 // left to integration coverage.
 func TestNewSecretBackendFallback(t *testing.T) {
 	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent/sshakku-no-such-bus")
-	backend, closeFn := newSecretBackend("alice", fakeLogger{}, config.Settings{SecretBackend: config.SecretBackendSecretService})
+	backend, closeFn := newSecretBackend(t.Context(), "alice", fakeLogger{}, config.Settings{SecretBackend: config.SecretBackendSecretService})
 	defer closeFn()
 	tool, ok := backend.(keys.SecretToolBackend)
 	require.Truef(t, ok, "a bus that cannot be reached must fall back rather than fail outright, got %T", backend)

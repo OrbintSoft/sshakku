@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
@@ -19,6 +20,6 @@ var errNoWallet = errors.New("no secret backend is available on windows")
 // none. It reports the reason on every operation rather than behaving like an
 // empty wallet: a miss would send the loader off to ask for a passphrase with
 // no explanation, and would let a later store believe it had saved one.
-func newDefaultSecretBackend(string, keys.Logger, config.Settings) (keys.SecretBackend, func()) {
+func newDefaultSecretBackend(context.Context, string, keys.Logger, config.Settings) (keys.SecretBackend, func()) {
 	return keys.UnavailableBackend{Reason: errNoWallet}, func() {}
 }

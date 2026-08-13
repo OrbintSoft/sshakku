@@ -52,11 +52,11 @@ func TestAddWithAskpassAppliesKeyLifetime(t *testing.T) {
 	keyfile := filepath.Join(dir, "id_test")
 	const passphrase = "sshakku-ttl-test-passphrase"
 
-	out, err := exec.Command("ssh-keygen", "-t", "ed25519", "-N", passphrase, "-f", keyfile, "-q").CombinedOutput()
+	out, err := exec.CommandContext(t.Context(), "ssh-keygen", "-t", "ed25519", "-N", passphrase, "-f", keyfile, "-q").CombinedOutput()
 	require.NoErrorf(t, err, "a real passphrase-protected key to load:\n%s", out)
 
 	sock := filepath.Join(dir, "agent.sock")
-	agentCmd := exec.Command("ssh-agent", "-D", "-a", sock)
+	agentCmd := exec.CommandContext(t.Context(), "ssh-agent", "-D", "-a", sock)
 	require.NoError(t, agentCmd.Start(), "a real ssh-agent to load it into")
 	t.Cleanup(func() {
 		_ = agentCmd.Process.Kill()
@@ -73,21 +73,21 @@ func TestAddWithAskpassAppliesKeyLifetime(t *testing.T) {
 
 	const lifetime = 2 * time.Second
 	adder := ExecKeyAdder{AskpassProg: askpassScript, KeyLifetime: lifetime}
-	rc, err := adder.AddWithAskpass(keyfile, passphrase)
+	rc, err := adder.AddWithAskpass(t.Context(), keyfile, passphrase)
 	require.NoError(t, err, "loading the key through the real handoff must succeed")
 	require.Zero(t, rc, "and ssh-add must accept the passphrase it collected")
 
 	runner := ExecRunner{}
-	fp, err := FileFingerprint(runner, keyfile)
+	fp, err := FileFingerprint(t.Context(), runner, keyfile)
 	require.NoError(t, err, "reading the key's fingerprint must succeed")
 
-	loaded, err := AgentFingerprints(runner)
+	loaded, err := AgentFingerprints(t.Context(), runner)
 	require.NoError(t, err, "asking the agent what it holds must succeed")
 	require.Containsf(t, loaded, fp, "the key must be in the agent before there is any expiry to wait for: %v", loaded)
 
 	deadline := time.Now().Add(lifetime + 5*time.Second)
 	for time.Now().Before(deadline) {
-		loaded, err = AgentFingerprints(runner)
+		loaded, err = AgentFingerprints(t.Context(), runner)
 		require.NoError(t, err, "asking the agent what it holds must keep succeeding")
 		if !loaded[fp] {
 			return // expired as expected

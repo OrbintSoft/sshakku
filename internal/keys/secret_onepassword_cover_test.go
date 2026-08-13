@@ -13,7 +13,7 @@ func TestOnePasswordStoreDeleteErrorPropagates(t *testing.T) {
 		"item get": fails(boom),
 	}))
 	b := &OnePasswordBackend{Runner: r, Vault: "sshakku"}
-	assert.ErrorIs(t, b.Store("svc", "label", "pass"), boom,
+	assert.ErrorIs(t, b.Store(t.Context(), "svc", "label", "pass"), boom,
 		"the old entry has to go before the new one lands, so a removal that failed must stop the write, not be passed over")
 }
 
@@ -24,7 +24,7 @@ func TestOnePasswordStoreMarshalError(t *testing.T) {
 		"item get": stdout("", 1), // nothing to delete
 	}))
 	b := &OnePasswordBackend{Runner: r, Vault: "sshakku"}
-	assert.Error(t, b.Store("svc", "label", "pass"),
+	assert.Error(t, b.Store(t.Context(), "svc", "label", "pass"),
 		"an item that could not be built must be reported, not sent as whatever it came out as")
 }
 
@@ -35,7 +35,7 @@ func TestOnePasswordStoreCreateRunError(t *testing.T) {
 		"item create": fails(boom),
 	}))
 	b := &OnePasswordBackend{Runner: r, Vault: "sshakku"}
-	assert.ErrorIs(t, b.Store("svc", "label", "pass"), boom,
+	assert.ErrorIs(t, b.Store(t.Context(), "svc", "label", "pass"), boom,
 		"a write that could not start must be reported, not read as a passphrase saved")
 }
 
@@ -46,7 +46,7 @@ func TestOnePasswordDeleteItemDeleteRunError(t *testing.T) {
 		"item delete": fails(boom),
 	}))
 	b := &OnePasswordBackend{Runner: r, Vault: "sshakku"}
-	assert.ErrorIs(t, b.Delete("svc"), boom,
+	assert.ErrorIs(t, b.Delete(t.Context(), "svc"), boom,
 		"a removal that could not start must be reported, not read as a passphrase forgotten")
 }
 
@@ -57,7 +57,7 @@ func TestOnePasswordListErrorBranches(t *testing.T) {
 			"item list": fails(boom),
 		}))
 		b := &OnePasswordBackend{Runner: r, Vault: "sshakku"}
-		_, err := b.List()
+		_, err := b.List(t.Context())
 		assert.ErrorIs(t, err, boom, "an op command that would not run must be reported, not read as an empty vault")
 	})
 
@@ -66,7 +66,7 @@ func TestOnePasswordListErrorBranches(t *testing.T) {
 			"item list": stdout("not json", 0),
 		}))
 		b := &OnePasswordBackend{Runner: r, Vault: "sshakku"}
-		_, err := b.List()
+		_, err := b.List(t.Context())
 		assert.Error(t, err, "an answer that could not be read must be reported, not read as an empty vault")
 	})
 }

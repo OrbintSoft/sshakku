@@ -3,6 +3,7 @@
 package diagnose
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -22,7 +23,7 @@ type ProcfsHostSource struct {
 }
 
 // Checks implements HostSource.
-func (h ProcfsHostSource) Checks() HostChecks {
+func (h ProcfsHostSource) Checks(context.Context) HostChecks {
 	procRoot := orDefault(h.ProcRoot, "/proc")
 	sysRoot := orDefault(h.SysRoot, "/sys")
 	devRoot := orDefault(h.DevRoot, "/dev")

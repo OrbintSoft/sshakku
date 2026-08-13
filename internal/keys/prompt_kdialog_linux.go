@@ -3,6 +3,7 @@
 package keys
 
 import (
+	"context"
 	"strings"
 	"time"
 )
@@ -24,12 +25,12 @@ type KDialogPrompter struct {
 }
 
 // Prompt shows the password dialog for keyname.
-func (p KDialogPrompter) Prompt(keyname string) (string, error) {
+func (p KDialogPrompter) Prompt(ctx context.Context, keyname string) (string, error) {
 	timeout := p.Timeout
 	if timeout <= 0 {
 		timeout = DefaultInteractiveTimeout
 	}
-	res, err := p.Runner.Run(Cmd{
+	res, err := p.Runner.Run(ctx, Cmd{
 		Name:    kdialogBin,
 		Args:    []string{"--password", "Enter passphrase for " + keyname},
 		Timeout: timeout,
@@ -47,7 +48,7 @@ func (p KDialogPrompter) Prompt(keyname string) (string, error) {
 func (p KDialogPrompter) Name() string { return kdialogBin }
 
 // Available reports whether kdialog is on PATH.
-func (p KDialogPrompter) Available() bool {
+func (p KDialogPrompter) Available(context.Context) bool {
 	look := p.lookPath
 	if look == nil {
 		look = execLookPath

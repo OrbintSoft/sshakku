@@ -54,7 +54,7 @@ type ExecKeyAdder struct {
 // runs ssh-add detached from any terminal so it fetches the passphrase through
 // the SSH_ASKPASS helper keyed by the handoff token. The passphrase never
 // enters argv or the inherited environment of any other process.
-func (a ExecKeyAdder) AddWithAskpass(keyfile, passphrase string) (int, error) {
+func (a ExecKeyAdder) AddWithAskpass(ctx context.Context, keyfile, passphrase string) (int, error) {
 	ttl := a.KeyTTL
 	if ttl == 0 {
 		ttl = defaultKeyTTL
@@ -71,18 +71,18 @@ func (a ExecKeyAdder) AddWithAskpass(keyfile, passphrase string) (int, error) {
 	}
 	env = passThrough(env, "PATH", "HOME", "USER", "DISPLAY", "WAYLAND_DISPLAY",
 		"SSH_AUTH_SOCK", "XDG_RUNTIME_DIR", "XDG_CONFIG_HOME", "DBUS_SESSION_BUS_ADDRESS")
-	return a.runSSHAdd(env, keyfile)
+	return a.runSSHAdd(ctx, env, keyfile)
 }
 
 // runSSHAdd runs `ssh-add <keyfile>` with env, detached from any terminal (see
 // detachFromTerminal) and with no stdin, so it fetches the passphrase via
 // SSH_ASKPASS and its own chatter is discarded, returning its exit code.
-func (a ExecKeyAdder) runSSHAdd(env []string, keyfile string) (int, error) {
+func (a ExecKeyAdder) runSSHAdd(ctx context.Context, env []string, keyfile string) (int, error) {
 	to := a.AddTimeout
 	if to == 0 {
 		to = defaultAddTimeout
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), to)
+	ctx, cancel := context.WithTimeout(ctx, to)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "ssh-add", sshAddArgs(a.KeyLifetime, keyfile)...)

@@ -201,3 +201,25 @@ appending. See `docs/THREAT-MODEL.md` for the threat model and the June 2026 inc
     the test's own goroutine, which hangs the run instead of failing it —
     `testifylint` in `.golangci.yml` catches that one and several other ways an
     assertion can compile, pass, and check nothing.
+
+28. **One root context, created in `main`.** `context.Background()` appears
+    **once** in the program — at the entry point — and every function below
+    takes the context it was given and derives from it (`WithTimeout`,
+    `WithCancel`). A second root halfway down compiles and is still a defect: a
+    deadline the caller set stops applying at the function that invents its own,
+    and the cancellation the caller holds can no longer reach the work it is
+    waiting for. Tests take theirs from `t.Context()`, which the testing package
+    cancels when the test ends, so a call that hangs fails the run instead of
+    outliving it; `context.Background()` in a test is never right.
+
+    A function that accepts a context must **use** it, and one that can be given
+    a context must be given one: `exec.CommandContext` over `exec.Command`,
+    `(*net.Dialer).DialContext` over `net.Dial`, and so on for every standard
+    call offering both shapes. That an operation already has a timeout is not a
+    reason to skip the context — a timeout ends the wait, a context ends the
+    work, and only one of the two releases the process the caller has given up
+    on. The context travels as the first argument and is never kept in a struct
+    field, where it would be scoped to the object's lifetime instead of to the
+    call's, with nothing left to say which call it belongs to. `contextcheck`,
+    `noctx`, `fatcontext`, `containedctx` and `usetesting` in `.golangci.yml`
+    enforce all of this.

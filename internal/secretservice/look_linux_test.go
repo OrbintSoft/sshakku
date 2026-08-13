@@ -3,6 +3,7 @@
 package secretservice
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -40,11 +41,11 @@ func failBusNames(t *testing.T, method string) {
 	original := listBusNames
 	t.Cleanup(func() { listBusNames = original })
 
-	listBusNames = func(obj dbus.BusObject, timeout time.Duration, called string) ([]string, error) {
+	listBusNames = func(ctx context.Context, obj dbus.BusObject, timeout time.Duration, called string) ([]string, error) {
 		if strings.HasSuffix(called, method) {
 			return nil, errors.New("the bus stopped answering")
 		}
-		return original(obj, timeout, called)
+		return original(ctx, obj, timeout, called)
 	}
 }
 
@@ -56,7 +57,7 @@ func TestLookForCollection(t *testing.T) {
 		svc.aliases["sshakku"] = existing
 		svc.mu.Unlock()
 
-		look, err := LookForCollection("sshakku", "sshakku", lookTestTimeout)
+		look, err := LookForCollection(t.Context(), "sshakku", "sshakku", lookTestTimeout)
 		require.NoError(t, err, "LookForCollection")
 		assert.True(t, look.Running, "a wallet is on the bus")
 		assert.True(t, look.CollectionFound, "the alias resolves the compartment")
@@ -65,7 +66,7 @@ func TestLookForCollection(t *testing.T) {
 	t.Run("a wallet answering, with no compartment — and none is made", func(t *testing.T) {
 		svc := startFakeOnBus(t)
 
-		look, err := LookForCollection("sshakku", "sshakku", lookTestTimeout)
+		look, err := LookForCollection(t.Context(), "sshakku", "sshakku", lookTestTimeout)
 		require.NoError(t, err, "LookForCollection")
 		assert.True(t, look.Running, "a wallet is on the bus")
 		assert.False(t, look.CollectionFound, "the wallet holds no such compartment")
@@ -87,7 +88,7 @@ func TestLookForCollection(t *testing.T) {
 			map[string]dbus.Variant{collectionLabelProp: dbus.MakeVariant("sshakku")}, "")
 		require.Nil(t, dbusErr, "seeding an unaliased collection")
 
-		look, err := LookForCollection("sshakku", "sshakku", lookTestTimeout)
+		look, err := LookForCollection(t.Context(), "sshakku", "sshakku", lookTestTimeout)
 		require.NoError(t, err, "LookForCollection")
 		assert.True(t, look.CollectionFound, "the compartment carries the name as its label")
 	})
@@ -99,7 +100,7 @@ func TestLookForCollection(t *testing.T) {
 		svc.hangOn(hang)
 
 		started := time.Now()
-		look, err := LookForCollection("sshakku", "sshakku", lookTestTimeout)
+		look, err := LookForCollection(t.Context(), "sshakku", "sshakku", lookTestTimeout)
 		elapsed := time.Since(started)
 
 		require.NoError(t, err, "LookForCollection")
@@ -117,7 +118,7 @@ func TestLookForCollection(t *testing.T) {
 		// wants only to know whether a wallet is there.
 		svc.hangOn(hang)
 
-		look, err := LookForCollection("", "", lookTestTimeout)
+		look, err := LookForCollection(t.Context(), "", "", lookTestTimeout)
 		require.NoError(t, err, "LookForCollection")
 		assert.True(t, look.Running, "a wallet is on the bus")
 		assert.NoError(t, look.AskErr, "nothing should have been asked of the wallet")
@@ -132,7 +133,7 @@ func TestLookForCollection(t *testing.T) {
 		svc.failCollectionsProp = true
 		svc.mu.Unlock()
 
-		look, err := LookForCollection("sshakku", "sshakku", lookTestTimeout)
+		look, err := LookForCollection(t.Context(), "sshakku", "sshakku", lookTestTimeout)
 		require.NoError(t, err, "LookForCollection")
 		assert.Error(t, look.AskErr, "a wallet that refused to list what it holds must be reported")
 		assert.False(t, look.CollectionFound, "nothing may be concluded without an answer saying so")
@@ -142,7 +143,7 @@ func TestLookForCollection(t *testing.T) {
 		startFakeOnBus(t)
 		failBusNames(t, "ListNames")
 
-		_, err := LookForCollection("sshakku", "sshakku", lookTestTimeout)
+		_, err := LookForCollection(t.Context(), "sshakku", "sshakku", lookTestTimeout)
 		assert.Error(t, err, "a bus that never said what was on it must be reported")
 	})
 
@@ -150,7 +151,7 @@ func TestLookForCollection(t *testing.T) {
 		startSessionBus(t)
 		failBusNames(t, "ListActivatableNames")
 
-		look, err := LookForCollection("sshakku", "sshakku", lookTestTimeout)
+		look, err := LookForCollection(t.Context(), "sshakku", "sshakku", lookTestTimeout)
 		assert.Error(t, err, "a bus that never answered must be reported")
 		assert.False(t, look.Activatable, "nothing may be concluded from a list that never arrived")
 	})
@@ -158,14 +159,14 @@ func TestLookForCollection(t *testing.T) {
 	t.Run("no bus to look at", func(t *testing.T) {
 		t.Setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent/bus")
 
-		_, err := LookForCollection("sshakku", "sshakku", lookTestTimeout)
+		_, err := LookForCollection(t.Context(), "sshakku", "sshakku", lookTestTimeout)
 		assert.Error(t, err, "a bus that is not there must be reported")
 	})
 
 	t.Run("a bus with no wallet on it", func(t *testing.T) {
 		startSessionBus(t)
 
-		look, err := LookForCollection("sshakku", "sshakku", lookTestTimeout)
+		look, err := LookForCollection(t.Context(), "sshakku", "sshakku", lookTestTimeout)
 		require.NoError(t, err, "LookForCollection")
 		assert.False(t, look.Running, "nothing has claimed the name on this bus")
 		assert.False(t, look.Activatable, "this bus knows how to start no wallet either")
@@ -175,7 +176,7 @@ func TestLookForCollection(t *testing.T) {
 	t.Run("a bus with a wallet it could start", func(t *testing.T) {
 		startActivatableSessionBus(t)
 
-		look, err := LookForCollection("sshakku", "sshakku", lookTestTimeout)
+		look, err := LookForCollection(t.Context(), "sshakku", "sshakku", lookTestTimeout)
 		require.NoError(t, err, "LookForCollection")
 		assert.False(t, look.Running, "nothing has claimed the name yet")
 		assert.True(t, look.Activatable, "the bus knows how to start a wallet")

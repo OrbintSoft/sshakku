@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"os"
@@ -22,7 +23,7 @@ import (
 // (harmless for the secret-store paths this helper serves).
 func depsReturning(backend keys.SecretBackend) deps {
 	d := realDeps()
-	d.newSecret = func(string, keys.Logger, config.Settings) (keys.SecretBackend, func()) {
+	d.newSecret = func(context.Context, string, keys.Logger, config.Settings) (keys.SecretBackend, func()) {
 		return backend, func() {}
 	}
 	return d
@@ -35,17 +36,22 @@ type memoryBackend struct{ stored map[string]string }
 
 func newMemoryBackend() *memoryBackend { return &memoryBackend{stored: map[string]string{}} }
 
-func (m *memoryBackend) Lookup(service string) (string, bool, error) {
+func (m *memoryBackend) Lookup(_ context.Context, service string) (string, bool, error) {
 	v, ok := m.stored[service]
 	return v, ok, nil
 }
 
-func (m *memoryBackend) Store(service, _, passphrase string) error {
+func (m *memoryBackend) Store(_ context.Context, service, _, passphrase string) error {
 	m.stored[service] = passphrase
 	return nil
 }
-func (m *memoryBackend) Delete(service string) error { delete(m.stored, service); return nil }
-func (m *memoryBackend) List() ([]string, error) {
+
+func (m *memoryBackend) Delete(_ context.Context, service string) error {
+	delete(m.stored, service)
+	return nil
+}
+
+func (m *memoryBackend) List(context.Context) ([]string, error) {
 	names := make([]string, 0, len(m.stored))
 	for s := range m.stored {
 		names = append(names, s)
@@ -66,7 +72,7 @@ func TestTestSecretBackend(t *testing.T) {
 		var out, errOut bytes.Buffer
 		// ConfigDir has no config.toml, so the backend name resolves to the
 		// built-in default; an empty name argument must fall back to it.
-		require.Zerof(t, d.testSecretBackend(&out, &errOut, paths.Layout{ConfigDir: t.TempDir()}, fakeLogger{}, ""),
+		require.Zerof(t, d.testSecretBackend(t.Context(), &out, &errOut, paths.Layout{ConfigDir: t.TempDir()}, fakeLogger{}, ""),
 			"a wallet that stores and reads back must pass; stderr=%q", errOut.String())
 		assert.Contains(t, out.String(), "backend: "+config.DefaultSecretBackend(),
 			"with no name given, the wallet tested is the configured one, and the report says which")
@@ -76,7 +82,7 @@ func TestTestSecretBackend(t *testing.T) {
 	t.Run("fail when the backend's store fails", func(t *testing.T) {
 		d := depsReturning(&fakeProbeBackend{storeErr: errors.New("boom")})
 		var out, errOut bytes.Buffer
-		assert.Equal(t, 1, d.testSecretBackend(&out, &errOut, paths.Layout{ConfigDir: t.TempDir()}, fakeLogger{}, "keychain"),
+		assert.Equal(t, 1, d.testSecretBackend(t.Context(), &out, &errOut, paths.Layout{ConfigDir: t.TempDir()}, fakeLogger{}, "keychain"),
 			"a wallet that cannot store must not be reported as working")
 		assert.Contains(t, out.String(), "backend: keychain", "the wallet named is the one tested")
 		assert.Contains(t, out.String(), "backend test: FAIL", "and the verdict must be plain")
@@ -97,7 +103,7 @@ func TestAskpassBroker(t *testing.T) {
 	d := depsReturning(&fakeProbeBackend{lookupVal: "wallet-pass", lookupOK: true})
 	var out bytes.Buffer
 	prompt := "Enter passphrase for key '/home/u/.ssh/id_ed25519': "
-	require.Zero(t, d.askpassBroker(&out, []string{prompt}), "a passphrase the wallet holds must be answered from it")
+	require.Zero(t, d.askpassBroker(t.Context(), &out, []string{prompt}), "a passphrase the wallet holds must be answered from it")
 	assert.Equal(t, "wallet-pass\n", out.String(),
 		"the stored passphrase, with the newline ssh expects and nothing else")
 }
@@ -117,7 +123,7 @@ func TestLoadKeys(t *testing.T) {
 
 		d := depsReturning(newMemoryBackend())
 		var errOut bytes.Buffer
-		assert.Zerof(t, d.loadKeys(&errOut), "a directory with no key in it is nothing to complain about; stderr=%q", errOut.String())
+		assert.Zerof(t, d.loadKeys(t.Context(), &errOut), "a directory with no key in it is nothing to complain about; stderr=%q", errOut.String())
 	})
 
 	t.Run("enumeration failure returns non-zero", func(t *testing.T) {
@@ -133,7 +139,7 @@ func TestLoadKeys(t *testing.T) {
 
 		d := depsReturning(newMemoryBackend())
 		var errOut bytes.Buffer
-		assert.Equal(t, 1, d.loadKeys(&errOut),
+		assert.Equal(t, 1, d.loadKeys(t.Context(), &errOut),
 			"a key directory that could not be read is not the same as one holding no keys")
 	})
 }
@@ -149,7 +155,7 @@ func TestRunLoadKeys(t *testing.T) {
 	t.Setenv("DISPLAY", "")
 
 	d := depsReturning(newMemoryBackend())
-	assert.Zero(t, d.run(io.Discard, io.Discard, []string{"load-keys"}),
+	assert.Zero(t, d.run(t.Context(), io.Discard, io.Discard, []string{"load-keys"}),
 		"load-keys with nothing to load is a silent success")
 }
 
@@ -165,7 +171,7 @@ func TestForget(t *testing.T) {
 	t.Run("named key", func(t *testing.T) {
 		d := depsReturning(newMemoryBackend())
 		var out, errOut bytes.Buffer
-		require.Zerof(t, d.forget(&out, &errOut, []string{"id_rsa"}), "forget id_rsa; stderr=%q", errOut.String())
+		require.Zerof(t, d.forget(t.Context(), &out, &errOut, []string{"id_rsa"}), "forget id_rsa; stderr=%q", errOut.String())
 		assert.Contains(t, out.String(), "forgot "+keys.DefaultServicePrefix+"-id_rsa",
 			"the entry that was removed must be named, under the prefix it was stored with")
 	})
@@ -176,14 +182,14 @@ func TestForget(t *testing.T) {
 		backend.stored[keys.DefaultServicePrefix+"-b"] = "y"
 		d := depsReturning(backend)
 		var out, errOut bytes.Buffer
-		require.Zerof(t, d.forget(&out, &errOut, []string{"--all"}), "forget --all; stderr=%q", errOut.String())
+		require.Zerof(t, d.forget(t.Context(), &out, &errOut, []string{"--all"}), "forget --all; stderr=%q", errOut.String())
 		assert.Empty(t, backend.stored, "--all must leave nothing of ours behind in the wallet")
 	})
 
 	t.Run("delete failure returns non-zero", func(t *testing.T) {
 		d := depsReturning(&fakeProbeBackend{deleteErr: errors.New("boom")})
 		var out, errOut bytes.Buffer
-		assert.Equal(t, 1, d.forget(&out, &errOut, []string{"id_rsa"}),
+		assert.Equal(t, 1, d.forget(t.Context(), &out, &errOut, []string{"id_rsa"}),
 			"a passphrase still in the wallet must not be reported as forgotten")
 	})
 }

@@ -87,19 +87,19 @@ func TestOnePasswordBackendRealAccount(t *testing.T) {
 		testPass    = "probe-passphrase-not-a-real-secret"
 	)
 
-	require.NoError(t, backend.Store(testService, testLabel, testPass), "saving a passphrase must succeed")
+	require.NoError(t, backend.Store(t.Context(), testService, testLabel, testPass), "saving a passphrase must succeed")
 
-	got, found, err := backend.Lookup(testService)
+	got, found, err := backend.Lookup(t.Context(), testService)
 	require.NoError(t, err, "reading it straight back must succeed")
 	require.True(t, found, "a passphrase just saved must be there")
 	assert.Equal(t, testPass, got, "and be the one that was saved")
 
-	services, err := backend.List()
+	services, err := backend.List(t.Context())
 	require.NoError(t, err, "listing the vault must succeed")
 	assert.Contains(t, services, testService, "what SSHakku stored must be reported")
 
-	require.NoError(t, backend.Delete(testService), "forgetting a passphrase must succeed")
-	_, found, err = backend.Lookup(testService)
+	require.NoError(t, backend.Delete(t.Context(), testService), "forgetting a passphrase must succeed")
+	_, found, err = backend.Lookup(t.Context(), testService)
 	require.NoError(t, err, "looking for a forgotten passphrase must not be an error")
 	assert.False(t, found, "and it must be gone from the vault")
 }
@@ -109,7 +109,7 @@ func TestOnePasswordBackendRealAccount(t *testing.T) {
 // and deleting the throwaway vault.
 func opRun(t *testing.T, args ...string) (string, error) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), opSetupTimeout)
+	ctx, cancel := context.WithTimeout(t.Context(), opSetupTimeout)
 	defer cancel()
 	out, err := exec.CommandContext(ctx, onePasswordBin, args...).CombinedOutput()
 	return string(out), err

@@ -30,11 +30,11 @@ func TestLoadKeysReloadsAfterRealExpiry(t *testing.T) {
 	dir := t.TempDir()
 	keyfile := filepath.Join(dir, "id_test")
 	const passphrase = "sshakku-reload-test-passphrase"
-	out, err := exec.Command("ssh-keygen", "-t", "ed25519", "-N", passphrase, "-f", keyfile, "-q").CombinedOutput()
+	out, err := exec.CommandContext(t.Context(), "ssh-keygen", "-t", "ed25519", "-N", passphrase, "-f", keyfile, "-q").CombinedOutput()
 	require.NoErrorf(t, err, "a real passphrase-protected key to load:\n%s", out)
 
 	sock := filepath.Join(dir, "agent.sock")
-	agentCmd := exec.Command("ssh-agent", "-D", "-a", sock)
+	agentCmd := exec.CommandContext(t.Context(), "ssh-agent", "-D", "-a", sock)
 	require.NoError(t, agentCmd.Start(), "a real ssh-agent to load it into")
 	t.Cleanup(func() {
 		_ = agentCmd.Process.Kill()
@@ -61,13 +61,13 @@ func TestLoadKeysReloadsAfterRealExpiry(t *testing.T) {
 		Config:   Config{KeyLifetime: lifetime},
 	}
 
-	require.NoError(t, loader.LoadKeys(), "the first login of the day must load the key")
+	require.NoError(t, loader.LoadKeys(t.Context()), "the first login of the day must load the key")
 
-	fp, err := FileFingerprint(runner, keyfile)
+	fp, err := FileFingerprint(t.Context(), runner, keyfile)
 	require.NoError(t, err, "reading the key's fingerprint must succeed")
 	keyname := filepath.Base(keyfile)
 
-	loaded, err := AgentFingerprints(runner)
+	loaded, err := AgentFingerprints(t.Context(), runner)
 	require.NoError(t, err, "asking the agent what it holds must succeed")
 	require.Containsf(t, loaded, fp, "and the key must be in it: %v", loaded)
 	rec1, ok := state.Load(keyname)
@@ -78,7 +78,7 @@ func TestLoadKeysReloadsAfterRealExpiry(t *testing.T) {
 	// computed expiry, so this catches a regression in the real add path too.
 	deadline := time.Now().Add(lifetime + 5*time.Second)
 	for {
-		loaded, err = AgentFingerprints(runner)
+		loaded, err = AgentFingerprints(t.Context(), runner)
 		require.NoError(t, err, "asking the agent what it holds must keep succeeding")
 		if !loaded[fp] {
 			break
@@ -90,9 +90,9 @@ func TestLoadKeysReloadsAfterRealExpiry(t *testing.T) {
 
 	// Second LoadKeys run: the loader's own fingerprint snapshot must now see
 	// the key as missing (not dedup-skip it) and reload it for real.
-	require.NoError(t, loader.LoadKeys(), "a later login must load the key again")
+	require.NoError(t, loader.LoadKeys(t.Context()), "a later login must load the key again")
 
-	loaded, err = AgentFingerprints(runner)
+	loaded, err = AgentFingerprints(t.Context(), runner)
 	require.NoError(t, err, "asking the agent what it holds must succeed")
 	require.Containsf(t, loaded, fp,
 		"the key must be back: an agent that dropped it is an agent whose snapshot no longer names it, "+

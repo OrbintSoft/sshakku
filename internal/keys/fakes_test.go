@@ -1,6 +1,7 @@
 package keys
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -23,7 +24,7 @@ func (f *fakeRunner) on(name string, h func(Cmd) (Result, error)) *fakeRunner {
 	return f
 }
 
-func (f *fakeRunner) Run(c Cmd) (Result, error) {
+func (f *fakeRunner) Run(_ context.Context, c Cmd) (Result, error) {
 	f.calls = append(f.calls, c)
 	if h, ok := f.handlers[c.Name]; ok {
 		return h(c)
@@ -46,9 +47,9 @@ type fakePrompter struct {
 	calls []string
 }
 
-func (p *fakePrompter) Available() bool { return p.avail }
+func (p *fakePrompter) Available(context.Context) bool { return p.avail }
 
-func (p *fakePrompter) Prompt(keyname string) (string, error) {
+func (p *fakePrompter) Prompt(_ context.Context, keyname string) (string, error) {
 	p.calls = append(p.calls, keyname)
 	return p.pass, p.err
 }
@@ -83,11 +84,11 @@ type fakeSecret struct {
 
 type storeCall struct{ service, label, passphrase string }
 
-func (s *fakeSecret) Lookup(string) (string, bool, error) {
+func (s *fakeSecret) Lookup(context.Context, string) (string, bool, error) {
 	return s.lookupPass, s.lookupFound, s.lookupErr
 }
 
-func (s *fakeSecret) Store(service, label, passphrase string) error {
+func (s *fakeSecret) Store(_ context.Context, service, label, passphrase string) error {
 	if s.storeErr != nil {
 		return s.storeErr
 	}
@@ -95,7 +96,7 @@ func (s *fakeSecret) Store(service, label, passphrase string) error {
 	return nil
 }
 
-func (s *fakeSecret) Delete(service string) error {
+func (s *fakeSecret) Delete(_ context.Context, service string) error {
 	if s.deleteErr != nil {
 		return s.deleteErr
 	}
@@ -103,16 +104,16 @@ func (s *fakeSecret) Delete(service string) error {
 	return nil
 }
 
-func (s *fakeSecret) List() ([]string, error) {
+func (s *fakeSecret) List(context.Context) ([]string, error) {
 	return s.listServices, s.listErr
 }
 
-func (s *fakeSecret) Unlock() error {
+func (s *fakeSecret) Unlock(context.Context) error {
 	s.unlockCalls++
 	return s.unlockErr
 }
 
-func (s *fakeSecret) Lock() error {
+func (s *fakeSecret) Lock(context.Context) error {
 	s.lockCalls++
 	return s.lockErr
 }
@@ -129,7 +130,7 @@ type addCall struct {
 	passphrase string
 }
 
-func (a *fakeKeyAdder) AddWithAskpass(keyfile, passphrase string) (int, error) {
+func (a *fakeKeyAdder) AddWithAskpass(_ context.Context, keyfile, passphrase string) (int, error) {
 	a.calls = append(a.calls, addCall{keyfile: keyfile, passphrase: passphrase})
 	if a.err != nil {
 		return 0, a.err

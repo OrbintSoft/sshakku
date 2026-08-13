@@ -51,12 +51,12 @@ func TestProcfsAncestryParent(t *testing.T) {
 	require.NoError(t, os.MkdirAll(dir, 0o755), "lay out the fake /proc entry")
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "stat"), []byte("77 (ssh-agent) S 42 77 42"), 0o644), "write the fake stat file")
 
-	ppid, name, ok := ProcfsAncestry{Root: root}.Parent(77)
+	ppid, name, ok := ProcfsAncestry{Root: root}.Parent(t.Context(), 77)
 	assert.True(t, ok, "a process whose stat file is there must be answered for")
 	assert.Equal(t, 42, ppid, "the parent read out of the stat file")
 	assert.Equal(t, "ssh-agent", name, "the name read out of the stat file")
 
-	_, _, ok = ProcfsAncestry{Root: root}.Parent(999)
+	_, _, ok = ProcfsAncestry{Root: root}.Parent(t.Context(), 999)
 	assert.False(t, ok, "a process that is not there must not be answered for")
 }
 
@@ -108,7 +108,7 @@ func TestGatherReparentedToInitCgroupFallback(t *testing.T) {
 		1:   {ppid: 0, name: "systemd"},
 	}
 	cg := fakeCgroup{200: "app-gpg-agent.service"}
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000}, src, prober, anc, cg, nil, nil)
+	r := Gather(t.Context(), Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000}, src, prober, anc, cg, nil, nil)
 
 	assert.Truef(t, hasFinding(r, "systemd unit: app-gpg-agent.service"),
 		"an agent whose parent is gone must still be named by its unit: %v", r.Findings)
@@ -141,7 +141,7 @@ func TestParseStatNonNumericPPID(t *testing.T) {
 
 // TestProcfsAncestryDefaultRoot covers Parent's empty-Root default to /proc.
 func TestProcfsAncestryDefaultRoot(t *testing.T) {
-	_, _, ok := ProcfsAncestry{}.Parent(1 << 30)
+	_, _, ok := ProcfsAncestry{}.Parent(t.Context(), 1<<30)
 	assert.False(t, ok, "a pid that is not under /proc must not be answered for")
 }
 
@@ -151,7 +151,7 @@ func TestProcfsAncestryDefaultRoot(t *testing.T) {
 // stat file of its own under /proc, so the test's own process is answered for
 // exactly when the fallback is the real one.
 func TestProcfsAncestryDefaultRootIsProc(t *testing.T) {
-	ppid, name, ok := ProcfsAncestry{}.Parent(os.Getpid())
+	ppid, name, ok := ProcfsAncestry{}.Parent(t.Context(), os.Getpid())
 	require.True(t, ok, "the running process must be answered for")
 	assert.Equal(t, os.Getppid(), ppid, "the parent must be this process's own")
 	assert.NotEmpty(t, name, "the process must be named")
@@ -165,7 +165,7 @@ func TestProcfsAncestryParseFailure(t *testing.T) {
 	require.NoError(t, os.MkdirAll(dir, 0o755), "lay out the fake /proc entry")
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "stat"), []byte("no parentheses here"), 0o644), "write the malformed stat file")
 
-	_, _, ok := ProcfsAncestry{Root: root}.Parent(5)
+	_, _, ok := ProcfsAncestry{Root: root}.Parent(t.Context(), 5)
 	assert.False(t, ok, "a stat file that could not be read must not be answered from")
 }
 
@@ -174,7 +174,7 @@ func TestProcfsAncestryParseFailure(t *testing.T) {
 // regardless of whether the platform has a /proc at all.
 func TestProcfsAncestryReadError(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "does-not-exist")
-	_, _, ok := ProcfsAncestry{Root: root}.Parent(1)
+	_, _, ok := ProcfsAncestry{Root: root}.Parent(t.Context(), 1)
 	assert.False(t, ok, "a stat file that could not be read must not be answered from")
 }
 

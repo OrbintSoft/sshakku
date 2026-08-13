@@ -18,7 +18,7 @@ func TestExecTokenSourceRequiresRoot(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("running as root: the requires-root guard cannot be exercised here")
 	}
-	_, err := execTokenSource{}.ReadToken(1, 1)
+	_, err := execTokenSource{}.ReadToken(t.Context(), 1, 1)
 	require.Error(t, err, "reading another user's keyring without root must be refused, not attempted")
 	assert.ErrorContains(t, err, "root", "and the refusal must say what would be needed")
 }

@@ -25,7 +25,7 @@ func TestBrokerNonPassphraseNoTerminalLogsInfo(t *testing.T) {
 	tty := &fakeTTY{err: ErrNoTerminal}
 	b := Broker{Secret: &fakeSecret{}, TTY: tty, Log: log}
 
-	reply, ok := b.Answer("Please enter your login password:")
+	reply, ok := b.Answer(t.Context(), "Please enter your login password:")
 	assert.False(t, ok, "with nowhere to ask, the question must be declined rather than answered")
 	assert.Empty(t, reply, "and nothing may be handed to ssh as though it were the answer")
 	assert.Truef(t, log.contains("INFO askpass: no terminal for prompt"),
@@ -39,7 +39,7 @@ func TestBrokerNonPassphraseHardErrorLogsError(t *testing.T) {
 	tty := &fakeTTY{err: errors.New("terminal ioctl boom")}
 	b := Broker{Secret: &fakeSecret{}, TTY: tty, Log: log}
 
-	reply, ok := b.Answer("Please enter your login password:")
+	reply, ok := b.Answer(t.Context(), "Please enter your login password:")
 	assert.False(t, ok, "a terminal that failed cannot answer")
 	assert.Empty(t, reply, "and nothing may be handed to ssh as though it were the answer")
 	assert.Truef(t, log.contains("ERROR askpass: no terminal for prompt"),
@@ -55,7 +55,7 @@ func TestBrokerStoreErrorLogged(t *testing.T) {
 	tty := &fakeTTY{answer: "typed-pass"}
 	b := Broker{Secret: secret, TTY: tty, Log: log}
 
-	reply, ok := b.Answer("Enter passphrase for /home/u/.ssh/id_rsa:")
+	reply, ok := b.Answer(t.Context(), "Enter passphrase for /home/u/.ssh/id_rsa:")
 	require.True(t, ok, "a wallet that would not take the passphrase must not cost the user their key")
 	assert.Equal(t, "typed-pass", reply, "what they typed still opens it")
 	assert.Truef(t, log.contains("ERROR askpass: store passphrase for id_rsa"),
@@ -68,7 +68,7 @@ func TestBrokerNilLoggerDoesNotPanic(t *testing.T) {
 	secret := &fakeSecret{lookupPass: "stored", lookupFound: true}
 	b := Broker{Secret: secret, TTY: &fakeTTY{}, Log: nil}
 
-	reply, ok := b.Answer("Enter passphrase for /home/u/.ssh/id_rsa:")
+	reply, ok := b.Answer(t.Context(), "Enter passphrase for /home/u/.ssh/id_rsa:")
 	require.True(t, ok, "keeping no session log is a choice, and it must not cost the user their key")
 	assert.Equal(t, "stored", reply, "the passphrase in the wallet still answers")
 }
@@ -84,7 +84,7 @@ func TestBrokerCustomServicePrefix(t *testing.T) {
 		Config: Config{ServicePrefix: "MyPrefix"},
 	}
 
-	_, ok := b.Answer("Enter passphrase for /home/u/.ssh/id_rsa:")
+	_, ok := b.Answer(t.Context(), "Enter passphrase for /home/u/.ssh/id_rsa:")
 	require.True(t, ok, "the key must open")
 	require.Lenf(t, secret.stored, 1, "and the passphrase must be saved once: %+v", secret.stored)
 	assert.Equal(t, "MyPrefix-id_rsa", secret.stored[0].service,

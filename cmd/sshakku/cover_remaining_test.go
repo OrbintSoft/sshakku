@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"testing"
@@ -40,7 +41,7 @@ func TestForgetSession(t *testing.T) {
 		backend := &fakeProbeBackend{}
 		d := depsReturning(fakeProbeSession{backend})
 		var out, errOut bytes.Buffer
-		assert.Zerof(t, d.forget(&out, &errOut, []string{"id_rsa"}),
+		assert.Zerof(t, d.forget(t.Context(), &out, &errOut, []string{"id_rsa"}),
 			"a wallet that opens and closes cleanly is swept without complaint; stderr=%q", errOut.String())
 	})
 
@@ -48,7 +49,7 @@ func TestForgetSession(t *testing.T) {
 		backend := &fakeProbeBackend{unlockErr: errors.New("locked")}
 		d := depsReturning(fakeProbeSession{backend})
 		var out, errOut bytes.Buffer
-		require.Zerof(t, d.forget(&out, &errOut, []string{"id_rsa"}),
+		require.Zerof(t, d.forget(t.Context(), &out, &errOut, []string{"id_rsa"}),
 			"a wallet that would not open may still let the entry go; stderr=%q", errOut.String())
 		assert.Contains(t, out.String(), "forgot ",
 			"so the sweep must be attempted rather than abandoned at the unlock")
@@ -58,7 +59,7 @@ func TestForgetSession(t *testing.T) {
 		backend := &fakeProbeBackend{lockErr: errors.New("stuck")}
 		d := depsReturning(fakeProbeSession{backend})
 		var out, errOut bytes.Buffer
-		assert.Zerof(t, d.forget(&out, &errOut, []string{"id_rsa"}),
+		assert.Zerof(t, d.forget(t.Context(), &out, &errOut, []string{"id_rsa"}),
 			"a wallet that would not close again does not un-forget what was removed; stderr=%q", errOut.String())
 	})
 }
@@ -75,7 +76,7 @@ func TestForgetErrors(t *testing.T) {
 	t.Run("--all with names is a usage error", func(t *testing.T) {
 		d := depsReturning(newMemoryBackend())
 		var out, errOut bytes.Buffer
-		assert.Equal(t, 2, d.forget(&out, &errOut, []string{"--all", "id_rsa"}),
+		assert.Equal(t, 2, d.forget(t.Context(), &out, &errOut, []string{"--all", "id_rsa"}),
 			"everything and one thing are different requests, and guessing between them is not on")
 		assert.Contains(t, errOut.String(), "cannot be combined", "and the refusal must say why")
 	})
@@ -83,7 +84,7 @@ func TestForgetErrors(t *testing.T) {
 	t.Run("--all with an unsupported List reports the hint", func(t *testing.T) {
 		d := depsReturning(&fakeProbeBackend{listErr: keys.ErrListUnsupported})
 		var out, errOut bytes.Buffer
-		assert.Equal(t, 1, d.forget(&out, &errOut, []string{"--all"}),
+		assert.Equal(t, 1, d.forget(t.Context(), &out, &errOut, []string{"--all"}),
 			"a wallet that cannot be listed cannot be swept, and must not be reported as swept")
 		assert.Contains(t, errOut.String(), "native Secret Service backend",
 			"and the user must be told what would let them do it")
@@ -92,7 +93,7 @@ func TestForgetErrors(t *testing.T) {
 	t.Run("--all with a failing List reports the error", func(t *testing.T) {
 		d := depsReturning(&fakeProbeBackend{listErr: errors.New("boom")})
 		var out, errOut bytes.Buffer
-		assert.Equal(t, 1, d.forget(&out, &errOut, []string{"--all"}),
+		assert.Equal(t, 1, d.forget(t.Context(), &out, &errOut, []string{"--all"}),
 			"a wallet that could not be read must not be reported as emptied")
 		assert.Contains(t, errOut.String(), "boom", "and the reason must reach the user unaltered")
 	})
@@ -106,7 +107,7 @@ func TestProbeSecretBackendLookupErrors(t *testing.T) {
 	t.Run("lookup error is reported", func(t *testing.T) {
 		backend := &fakeProbeBackend{lookupErr: errors.New("boom")}
 		var buf bytes.Buffer
-		assert.Equal(t, 1, probeSecretBackend(&buf, fakeLogger{}, backend, "probe"),
+		assert.Equal(t, 1, probeSecretBackend(t.Context(), &buf, fakeLogger{}, backend, "probe"),
 			"a wallet that errors when read has failed the probe")
 		assert.Contains(t, buf.String(), "lookup: FAILED", "and the step that failed must be named")
 	})
@@ -115,7 +116,7 @@ func TestProbeSecretBackendLookupErrors(t *testing.T) {
 		backend := &fakeProbeBackend{lookupVal: "probe", lookupOK: true, lockErr: errors.New("stuck")}
 		session := fakeProbeSession{backend}
 		var buf bytes.Buffer
-		assert.Zero(t, probeSecretBackend(&buf, fakeLogger{}, session, "probe"),
+		assert.Zero(t, probeSecretBackend(t.Context(), &buf, fakeLogger{}, session, "probe"),
 			"the round trip worked; a wallet that would not lock again does not undo that")
 	})
 }
@@ -133,7 +134,7 @@ func TestDispatchRoutesToAskpass(t *testing.T) {
 	d := depsReturning(&fakeProbeBackend{lookupVal: "wallet-pass", lookupOK: true})
 	prompt := "Enter passphrase for key '/home/u/.ssh/id_ed25519': "
 	var out bytes.Buffer
-	require.Zero(t, dispatch(d, &out, io.Discard, "/usr/local/bin/"+askpassProgName, []string{prompt}),
+	require.Zero(t, dispatch(t.Context(), d, &out, io.Discard, "/usr/local/bin/"+askpassProgName, []string{prompt}),
 		"run under the helper's name, arguments are a prompt to answer")
 	assert.Equal(t, "wallet-pass\n", out.String(), "answered from the wallet, not from a terminal")
 }
@@ -146,13 +147,13 @@ func TestRunHelpAndUnknown(t *testing.T) {
 
 	t.Run("help prints usage", func(t *testing.T) {
 		var out, errOut bytes.Buffer
-		require.Zero(t, d.run(&out, &errOut, []string{"help"}), "asking for help is not a failure")
+		require.Zero(t, d.run(t.Context(), &out, &errOut, []string{"help"}), "asking for help is not a failure")
 		assert.Contains(t, out.String(), "usage: sshakku", "and help is what must be printed")
 	})
 
 	t.Run("unknown command returns 2", func(t *testing.T) {
 		var out, errOut bytes.Buffer
-		assert.Equal(t, 2, d.run(&out, &errOut, []string{"bogus"}), "a command that does not exist is a usage error")
+		assert.Equal(t, 2, d.run(t.Context(), &out, &errOut, []string{"bogus"}), "a command that does not exist is a usage error")
 		assert.Contains(t, errOut.String(), "unknown command", "and the user must be told that is what happened")
 	})
 }
@@ -165,14 +166,14 @@ func TestRunDispatch(t *testing.T) {
 	t.Run("shell-init", func(t *testing.T) {
 		tempRuntimeEnv(t)
 		d := depsWithEnsurer(fakeEnsurer{res: agent.EnsureResult{LiveSock: "/run/sshakku/agent.sock"}})
-		assert.Zero(t, d.run(io.Discard, io.Discard, []string{"shell-init"}),
+		assert.Zero(t, d.run(t.Context(), io.Discard, io.Discard, []string{"shell-init"}),
 			"shell-init must reach the same healthy agent through dispatch as it does directly")
 	})
 
 	t.Run("ensure-agent", func(t *testing.T) {
 		tempRuntimeEnv(t)
 		d := depsWithEnsurer(fakeEnsurer{res: agent.EnsureResult{LiveSock: "/run/sshakku/agent.sock"}})
-		assert.Zero(t, d.run(io.Discard, io.Discard, []string{"ensure-agent"}),
+		assert.Zero(t, d.run(t.Context(), io.Discard, io.Discard, []string{"ensure-agent"}),
 			"and so must ensure-agent")
 	})
 
@@ -182,10 +183,10 @@ func TestRunDispatch(t *testing.T) {
 	// mechanism, so asserting only the exit code would pass either way.
 	t.Run("askpass-env headless", func(t *testing.T) {
 		d := realDeps()
-		d.graphicalPrompter = func(config.Settings, keys.Logger) keys.Prompter { return nil }
+		d.graphicalPrompter = func(context.Context, config.Settings, keys.Logger) keys.Prompter { return nil }
 		d.self = func() (string, error) { return "/opt/sshakku/bin/sshakku", nil }
 		var out, errOut bytes.Buffer
-		require.Zerof(t, d.run(&out, &errOut, []string{"askpass-env"}),
+		require.Zerof(t, d.run(t.Context(), &out, &errOut, []string{"askpass-env"}),
 			"a session with no dialog is still one the broker serves; stderr=%q", errOut.String())
 		assert.Equal(t, askpassExports(dialect(t, shellPosix), "/opt/sshakku/bin/sshakku"), out.String(),
 			"and it gets the same exports a graphical session does")
@@ -205,14 +206,14 @@ func TestAskpassBrokerTerminal(t *testing.T) {
 
 	t.Run("write error on a wallet hit returns 1", func(t *testing.T) {
 		d := depsReturning(&fakeProbeBackend{lookupVal: "wallet-pass", lookupOK: true})
-		assert.Equal(t, 1, d.askpassBroker(errWriter{}, []string{prompt}),
+		assert.Equal(t, 1, d.askpassBroker(t.Context(), errWriter{}, []string{prompt}),
 			"a passphrase ssh never received must not be reported as given")
 	})
 
 	t.Run("wallet miss with no terminal declines", func(t *testing.T) {
 		d := depsReturning(&fakeProbeBackend{lookupOK: false})
 		d.tty = fakeTTY{err: keys.ErrNoTerminal}
-		assert.Equal(t, 1, d.askpassBroker(io.Discard, []string{prompt}),
+		assert.Equal(t, 1, d.askpassBroker(t.Context(), io.Discard, []string{prompt}),
 			"with nothing in the wallet and nowhere to ask, the prompt is declined rather than answered blank")
 	})
 }
@@ -234,7 +235,7 @@ func TestRandomProbeValueError(t *testing.T) {
 		tmp := t.TempDir()
 		d := depsReturning(newMemoryBackend())
 		var out, errOut bytes.Buffer
-		assert.Equal(t, 1, d.testSecretBackend(&out, &errOut, paths.Layout{ConfigDir: tmp}, fakeLogger{}, "keychain"),
+		assert.Equal(t, 1, d.testSecretBackend(t.Context(), &out, &errOut, paths.Layout{ConfigDir: tmp}, fakeLogger{}, "keychain"),
 			"a probe that could not be composed must not be reported as a wallet that failed")
 		assert.Contains(t, errOut.String(), "no entropy", "and the real reason must reach the user")
 	})
@@ -250,7 +251,7 @@ func TestLoadKeysSeams(t *testing.T) {
 		d := depsReturning(newMemoryBackend())
 		d.self = func() (string, error) { return "", errors.New("no exe") }
 		var errOut bytes.Buffer
-		assert.Equal(t, 1, d.loadKeys(&errOut),
+		assert.Equal(t, 1, d.loadKeys(t.Context(), &errOut),
 			"without a path to itself there is no askpass to hand ssh, and loading must not pretend otherwise")
 		assert.Contains(t, errOut.String(), "no exe", "and the reason must reach the user")
 	})
@@ -258,9 +259,11 @@ func TestLoadKeysSeams(t *testing.T) {
 	t.Run("a platform with a dialog selects it over the terminal", func(t *testing.T) {
 		tempRuntimeEnv(t)
 		d := depsReturning(newMemoryBackend())
-		d.graphicalPrompter = func(config.Settings, keys.Logger) keys.Prompter { return fixedPrompter{answer: "from the dialog"} }
+		d.graphicalPrompter = func(context.Context, config.Settings, keys.Logger) keys.Prompter {
+			return fixedPrompter{answer: "from the dialog"}
+		}
 		var errOut bytes.Buffer
-		assert.Zerof(t, d.loadKeys(&errOut),
+		assert.Zerof(t, d.loadKeys(t.Context(), &errOut),
 			"a session with a dialog loads no differently from one without; stderr=%q", errOut.String())
 	})
 }

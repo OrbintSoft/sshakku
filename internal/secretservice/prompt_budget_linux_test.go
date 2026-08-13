@@ -29,7 +29,7 @@ func TestAPromptIsGivenTheBudgetForAWaitOnAPerson(t *testing.T) {
 		client.PromptTimeout = 200 * time.Millisecond
 
 		start := time.Now()
-		err := client.Unlock(col)
+		err := client.Unlock(t.Context(), col)
 		assert.Error(t, err, "a prompt that never completes must not be reported as an unlock")
 		assert.Less(t, time.Since(start), 5*time.Second,
 			"the configured 200ms prompt budget is not the one in force")

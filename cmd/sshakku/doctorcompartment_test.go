@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -26,7 +27,7 @@ type walletSpy struct {
 	calls int
 }
 
-func (w *walletSpy) view(config.Settings) diagnose.WalletView {
+func (w *walletSpy) view(context.Context, config.Settings) diagnose.WalletView {
 	view := w.views[min(w.calls, len(w.views)-1)]
 	w.calls++
 	return view
@@ -54,7 +55,7 @@ type makerSpy struct {
 	calls int
 }
 
-func (m *makerSpy) make(config.Settings) (string, error) {
+func (m *makerSpy) make(context.Context, config.Settings) (string, error) {
 	m.calls++
 	return m.made, m.err
 }
@@ -85,7 +86,7 @@ func TestDoctorMakesTheCompartment(t *testing.T) {
 		d := compartmentDeps(t, wallet, &makerSpy{})
 
 		var out, errOut bytes.Buffer
-		require.Zerof(t, d.doctor(&out, &errOut, nil), "a report changes nothing and cannot fail; stderr=%q", errOut.String())
+		require.Zerof(t, d.doctor(t.Context(), &out, &errOut, nil), "a report changes nothing and cannot fail; stderr=%q", errOut.String())
 
 		assert.NotContains(t, compartmentLine(t, out.String()), "found",
 			"a compartment that is not there must not be called found")
@@ -101,7 +102,7 @@ func TestDoctorMakesTheCompartment(t *testing.T) {
 		d := compartmentDeps(t, wallet, maker)
 
 		var out, errOut bytes.Buffer
-		require.Zerof(t, d.doctor(&out, &errOut, []string{"--fix"}), "--fix; stderr=%q", errOut.String())
+		require.Zerof(t, d.doctor(t.Context(), &out, &errOut, []string{"--fix"}), "--fix; stderr=%q", errOut.String())
 
 		assert.Equal(t, 1, maker.calls, "--fix must make exactly what the report offered, once")
 		assert.Contains(t, fixSection(t, out.String()), theCompartment, "and say what it made")
@@ -115,7 +116,7 @@ func TestDoctorMakesTheCompartment(t *testing.T) {
 		d := compartmentDeps(t, wallet, &makerSpy{made: theCompartment})
 
 		var out, errOut bytes.Buffer
-		require.Zerof(t, d.doctor(&out, &errOut, []string{"--fix"}), "--fix; stderr=%q", errOut.String())
+		require.Zerof(t, d.doctor(t.Context(), &out, &errOut, []string{"--fix"}), "--fix; stderr=%q", errOut.String())
 
 		after := afterReport(t, out.String())
 		require.Contains(t, after, "compartment",
@@ -129,7 +130,7 @@ func TestDoctorMakesTheCompartment(t *testing.T) {
 		d := compartmentDeps(t, wallet, maker)
 
 		var out, errOut bytes.Buffer
-		require.Zerof(t, d.doctor(&out, &errOut, []string{"--fix"}), "--fix; stderr=%q", errOut.String())
+		require.Zerof(t, d.doctor(t.Context(), &out, &errOut, []string{"--fix"}), "--fix; stderr=%q", errOut.String())
 
 		assert.Zero(t, maker.calls, "there is no screen to answer a dialog on, so nothing may be attempted")
 		fix := fixSection(t, out.String())
@@ -150,7 +151,7 @@ func TestDoctorMakesTheCompartment(t *testing.T) {
 		d.makeCompartment = nil
 
 		var out, errOut bytes.Buffer
-		require.Zerof(t, d.doctor(&out, &errOut, []string{"--fix"}), "--fix; stderr=%q", errOut.String())
+		require.Zerof(t, d.doctor(t.Context(), &out, &errOut, []string{"--fix"}), "--fix; stderr=%q", errOut.String())
 		assert.NotContains(t, fixSection(t, out.String()), "made",
 			"a system with nothing of the kind to create must not be told something was created")
 	})
@@ -164,7 +165,7 @@ func TestDoctorMakesTheCompartment(t *testing.T) {
 		// Not zero: --fix was asked to repair, it tried, and the wallet refused.
 		// A caller that only reads the exit code would otherwise be told the
 		// repair succeeded.
-		assert.Equalf(t, 1, d.doctor(&out, &errOut, []string{"--fix"}),
+		assert.Equalf(t, 1, d.doctor(t.Context(), &out, &errOut, []string{"--fix"}),
 			"a repair that was attempted and refused must not exit as though it worked; stderr=%q", errOut.String())
 
 		assert.Contains(t, out.String()+errOut.String(), "the dialog was dismissed",
@@ -180,7 +181,7 @@ func TestDoctorMakesTheCompartment(t *testing.T) {
 		d := compartmentDeps(t, wallet, maker)
 
 		var out, errOut bytes.Buffer
-		require.Zerof(t, d.doctor(&out, &errOut, []string{"--fix"}), "--fix; stderr=%q", errOut.String())
+		require.Zerof(t, d.doctor(t.Context(), &out, &errOut, []string{"--fix"}), "--fix; stderr=%q", errOut.String())
 
 		assert.Zero(t, maker.calls,
 			"making a compartment the wallet already holds is asking it for a second one nobody wanted")
@@ -196,7 +197,7 @@ func TestDoctorMakesTheCompartment(t *testing.T) {
 		d := compartmentDeps(t, wallet, maker)
 
 		var out, errOut bytes.Buffer
-		require.Zerof(t, d.doctor(&out, &errOut, []string{"--fix"}), "--fix; stderr=%q", errOut.String())
+		require.Zerof(t, d.doctor(t.Context(), &out, &errOut, []string{"--fix"}), "--fix; stderr=%q", errOut.String())
 
 		assert.Zero(t, maker.calls, "nothing may be made on the strength of a question nobody could ask")
 		assert.NotContains(t, fixSection(t, out.String()), "not something --fix can provide",

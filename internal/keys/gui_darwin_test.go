@@ -38,7 +38,7 @@ func TestGraphicalSession(t *testing.T) {
 					"what kind of session this is is the only thing launchctl is being asked")
 				return Result{Stdout: []byte(c.out), Code: c.code}, c.err
 			})
-			assert.Equalf(t, c.want, GraphicalSession(r),
+			assert.Equalf(t, c.want, GraphicalSession(t.Context(), r),
 				"being on a Mac is not the condition; every answer that is not plainly \"there is a screen\" must "+
 					"be read as there being none, and %q (code %d, err %v) is what was said",
 				c.out, c.code, c.err)

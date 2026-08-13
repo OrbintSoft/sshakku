@@ -1,6 +1,7 @@
 package keys
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -38,8 +39,8 @@ func blockingTools(t *testing.T) {
 // prompt, which is a different question.
 type fixedPrompter struct{}
 
-func (fixedPrompter) Prompt(string) (string, error) { return "master-password", nil }
-func (fixedPrompter) Available() bool               { return true }
+func (fixedPrompter) Prompt(context.Context, string) (string, error) { return "master-password", nil }
+func (fixedPrompter) Available(context.Context) bool                 { return true }
 
 // TestNoCommandBlocksIndefinitely verifies that nothing SSHakku runs can hold a
 // shell up forever. A login shell and an `ssh` awaiting a passphrase both sit
@@ -70,17 +71,17 @@ func TestNoCommandBlocksIndefinitely(t *testing.T) {
 
 	cases := []blockingCase{
 		{"1Password Lookup", func() {
-			_, _, _ = (&OnePasswordBackend{Runner: ExecRunner{}, Vault: "sshakku", Timeout: brief}).Lookup(defaultServicePrefix + "-id_test")
+			_, _, _ = (&OnePasswordBackend{Runner: ExecRunner{}, Vault: "sshakku", Timeout: brief}).Lookup(t.Context(), defaultServicePrefix+"-id_test")
 		}},
 		{"Bitwarden Lookup", func() {
 			_, _, _ = (&BitwardenBackend{
 				Runner: ExecRunner{}, Prompter: fixedPrompter{}, Email: "u@example.invalid", Timeout: brief,
-			}).Lookup(defaultServicePrefix + "-id_test")
+			}).Lookup(t.Context(), defaultServicePrefix+"-id_test")
 		}},
 	}
 	// The wallets each platform reaches by running a program differ, and so does
 	// which of them exist at all; each platform names its own.
-	cases = append(cases, platformBlockingCases(brief)...)
+	cases = append(cases, platformBlockingCases(t.Context(), brief)...)
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

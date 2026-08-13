@@ -4,6 +4,7 @@ package keys
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -102,13 +103,13 @@ func disableEcho(f *os.File) (func(), error) {
 type TTYPrompter struct{}
 
 // Prompt asks for keyname's passphrase on /dev/tty, with echo disabled.
-func (TTYPrompter) Prompt(keyname string) (string, error) {
+func (TTYPrompter) Prompt(_ context.Context, keyname string) (string, error) {
 	return ReadTTYLine("Enter passphrase for "+keyname+": ", true)
 }
 
 // Available always reports true: TTYPrompter needs no external binary, only a
 // controlling terminal, whose absence is reported by Prompt instead.
-func (TTYPrompter) Available() bool { return true }
+func (TTYPrompter) Available(context.Context) bool { return true }
 
 // Name is what to call this prompter in a message. It is not a program the user
 // could go and install, so it is named the way they would recognise it: the

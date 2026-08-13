@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -13,7 +14,7 @@ import (
 // forget deletes stored passphrases: either the named keys, or every entry
 // sshakku manages with --all. Argument validation happens before any secret
 // backend is opened, so a usage error never touches the D-Bus session bus.
-func (d deps) forget(stdout, stderr io.Writer, args []string) int {
+func (d deps) forget(ctx context.Context, stdout, stderr io.Writer, args []string) int {
 	all := false
 	var names []string
 	for _, a := range args {
@@ -35,7 +36,7 @@ func (d deps) forget(stdout, stderr io.Writer, args []string) int {
 	layout := paths.Resolve(paths.FromOS(), paths.ProbeDir)
 	log := sessionlog.New(layout.LogFile)
 	settings := loadSettings(layout, "forget", log)
-	secret, closeSecret := d.newSecret(currentUser(), log, settings)
+	secret, closeSecret := d.newSecret(ctx, currentUser(), log, settings)
 	defer closeSecret()
 
 	// forget always touches the secret store (listing and/or deleting), so —
@@ -43,11 +44,11 @@ func (d deps) forget(stdout, stderr io.Writer, args []string) int {
 	// access at all — it unlocks once up front for the whole operation instead
 	// of once per List/Delete call.
 	if sess, ok := secret.(keys.SecretSession); ok {
-		if err := sess.Unlock(); err != nil {
+		if err := sess.Unlock(ctx); err != nil {
 			_ = log.Log("ERROR", fmt.Sprintf("forget: unlock secret store: %v", err))
 		} else {
 			defer func() {
-				if err := sess.Lock(); err != nil {
+				if err := sess.Lock(ctx); err != nil {
 					_ = log.Log("ERROR", fmt.Sprintf("forget: lock secret store: %v", err))
 				}
 			}()
@@ -56,7 +57,7 @@ func (d deps) forget(stdout, stderr io.Writer, args []string) int {
 
 	var services []string
 	if all {
-		list, err := secret.List()
+		list, err := secret.List(ctx)
 		if err != nil {
 			if errors.Is(err, keys.ErrListUnsupported) {
 				_, _ = fmt.Fprintln(stderr, "sshakku: forget --all needs the native Secret Service backend; name keys explicitly instead")
@@ -75,7 +76,7 @@ func (d deps) forget(stdout, stderr io.Writer, args []string) int {
 
 	fail := false
 	for _, service := range services {
-		if err := secret.Delete(service); err != nil {
+		if err := secret.Delete(ctx, service); err != nil {
 			_, _ = fmt.Fprintf(stderr, "sshakku: forget %s: %v\n", service, err)
 			_ = log.Log("ERROR", fmt.Sprintf("forget %s: %v", service, err))
 			fail = true

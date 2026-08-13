@@ -3,6 +3,7 @@
 package diagnose
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -17,7 +18,7 @@ type ProcfsAncestry struct {
 }
 
 // Parent returns the parent pid and short name of pid from /proc/<pid>/stat.
-func (a ProcfsAncestry) Parent(pid int) (int, string, bool) {
+func (a ProcfsAncestry) Parent(_ context.Context, pid int) (int, string, bool) {
 	root := a.Root
 	if root == "" {
 		root = "/proc"

@@ -59,12 +59,40 @@ linters:
     # make a warning disappear.
     - nolintlint
 
+    # A context that arrives and is not passed on: the function takes one,
+    # then starts its own work from a fresh root, and the deadline the caller
+    # set stops applying exactly there. This program waits on other people's
+    # software — a session-bus daemon, ssh-add, a wallet's CLI, a socket
+    # nobody is listening on — and the whole point of carrying a context down
+    # to those waits is that one of them can be ended from above.
+    - contextcheck
+
+    # The call that offers both shapes and gets the one without: exec.Command
+    # where exec.CommandContext exists, net.Dial where a Dialer would take a
+    # context. A timeout ends the wait; a context ends the work, and only one
+    # of the two releases what the caller has given up on.
+    - noctx
+
+    # A context re-wrapped inside a loop grows one layer per iteration, so what
+    # started as a deadline becomes a chain of them nobody can read back.
+    - fatcontext
+
+    # A context kept in a struct field is scoped to the object rather than to
+    # the call, and nothing then says which call it belonged to. It travels as
+    # the first argument or it does not travel.
+    - containedctx
+
   settings:
     nolintlint:
       require-explanation: true
       require-specific: true
 
     usetesting:
+      # A test that roots its own context keeps it after the test that made it
+      # has finished: t.Context() is cancelled when the test ends, so a call
+      # left hanging fails the run instead of outliving it.
+      context-background: true
+      context-todo: true
       # Off by default, and both are worth having. os-setenv reports nothing
       # today, which is the state worth keeping: an os.Setenv survives the test
       # that made it. os-temp-dir costs two suppressions, at the one place

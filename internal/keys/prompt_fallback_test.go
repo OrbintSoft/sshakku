@@ -1,6 +1,7 @@
 package keys
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -18,16 +19,19 @@ type namedFake struct {
 	calls  int
 }
 
-func (p *namedFake) Prompt(string) (string, error) { p.calls++; return p.answer, p.err }
-func (p *namedFake) Available() bool               { return p.avail }
-func (p *namedFake) Name() string                  { return p.name }
+func (p *namedFake) Prompt(context.Context, string) (string, error) {
+	p.calls++
+	return p.answer, p.err
+}
+func (p *namedFake) Available(context.Context) bool { return p.avail }
+func (p *namedFake) Name() string                   { return p.name }
 
 func TestFallbackPrompter(t *testing.T) {
 	t.Run("an answer from the dialog is the answer", func(t *testing.T) {
 		dialog := &namedFake{name: "pinentry", answer: "typed in the dialog"}
 		terminal := &namedFake{answer: "typed on the terminal"}
 
-		pass, err := FallbackPrompter{Primary: dialog, Fallback: terminal}.Prompt("id_rsa")
+		pass, err := FallbackPrompter{Primary: dialog, Fallback: terminal}.Prompt(t.Context(), "id_rsa")
 		require.NoError(t, err, "a dialog that answered must hand the answer back")
 		assert.Equal(t, "typed in the dialog", pass, "and it must be the one typed there")
 		assert.Zero(t, terminal.calls, "the question was answered, so the terminal is not asked as well")
@@ -38,7 +42,7 @@ func TestFallbackPrompter(t *testing.T) {
 		terminal := &namedFake{name: "the terminal", answer: "typed on the terminal"}
 		log := &fakeLogger{}
 
-		pass, err := FallbackPrompter{Primary: dialog, Fallback: terminal, Log: log}.Prompt("id_rsa")
+		pass, err := FallbackPrompter{Primary: dialog, Fallback: terminal, Log: log}.Prompt(t.Context(), "id_rsa")
 		require.NoError(t, err, "a dialog that could not run must not lose the question")
 		assert.Equal(t, "typed on the terminal", pass, "the user is asked on the terminal instead")
 
@@ -58,7 +62,7 @@ func TestFallbackPrompter(t *testing.T) {
 		dialog := &namedFake{name: "pinentry", err: ErrPromptCanceled}
 		terminal := &namedFake{answer: "typed on the terminal"}
 
-		_, err := FallbackPrompter{Primary: dialog, Fallback: terminal}.Prompt("id_rsa")
+		_, err := FallbackPrompter{Primary: dialog, Fallback: terminal}.Prompt(t.Context(), "id_rsa")
 		assert.ErrorIs(t, err, ErrPromptCanceled, "closing a dialog is an answer, and must be passed on as one")
 		assert.Zero(t, terminal.calls,
 			"so the same question must not be put again somewhere else the user was not looking")
@@ -74,7 +78,7 @@ func TestFallbackPrompter(t *testing.T) {
 		}
 		log := &fakeLogger{}
 
-		_, err := FallbackPrompter{Primary: dialog, Fallback: other, Log: log}.Prompt("id_rsa")
+		_, err := FallbackPrompter{Primary: dialog, Fallback: other, Log: log}.Prompt(t.Context(), "id_rsa")
 		require.NoError(t, err, "the rest of the chain must answer")
 		// Someone reading the log is trying to find out where they were asked,
 		// or why they were not: a line that names a terminal the question never
@@ -97,7 +101,7 @@ func TestFallbackPrompter(t *testing.T) {
 				Primary:  &namedFake{avail: c.primary},
 				Fallback: &namedFake{avail: c.fallback},
 			}
-			assert.Equalf(t, c.want, p.Available(),
+			assert.Equalf(t, c.want, p.Available(t.Context()),
 				"a chain can ask while either half can, with the dialog %v and the terminal %v", c.primary, c.fallback)
 		}
 	})

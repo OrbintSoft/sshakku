@@ -46,7 +46,7 @@ func TestRun(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equalf(t, tc.want, realDeps().run(io.Discard, io.Discard, tc.args),
+			assert.Equalf(t, tc.want, realDeps().run(t.Context(), io.Discard, io.Discard, tc.args),
 				"the exit status for %q", tc.args)
 		})
 	}
@@ -300,9 +300,9 @@ func TestStderrNotifier(t *testing.T) {
 // own name, it must fall through to normal subcommand dispatch. The askpass
 // branch is exercised via TestAskpassHandoff.
 func TestDispatchRoutesToRun(t *testing.T) {
-	assert.Zero(t, dispatch(realDeps(), io.Discard, io.Discard, "/usr/local/bin/sshakku", []string{"help"}),
+	assert.Zero(t, dispatch(t.Context(), realDeps(), io.Discard, io.Discard, "/usr/local/bin/sshakku", []string{"help"}),
 		"asking for help is not a failure")
-	assert.Equal(t, 2, dispatch(realDeps(), io.Discard, io.Discard, "/usr/local/bin/sshakku", nil),
+	assert.Equal(t, 2, dispatch(t.Context(), realDeps(), io.Discard, io.Discard, "/usr/local/bin/sshakku", nil),
 		"running the tool with nothing to do is a usage error")
 }
 
@@ -317,13 +317,13 @@ func TestAskpassHandoff(t *testing.T) {
 
 	t.Run("missing token", func(t *testing.T) {
 		t.Setenv(keys.EnvPassHandoffToken, "")
-		assert.Equal(t, 1, realDeps().askpassFromHandoff(io.Discard),
+		assert.Equal(t, 1, realDeps().askpassFromHandoff(t.Context(), io.Discard),
 			"with no token there is no prompt to answer, and that must be reported")
 	})
 
 	t.Run("unresolvable token routed via askpass", func(t *testing.T) {
 		t.Setenv(keys.EnvPassHandoffToken, "sshakku-test-nonexistent-token")
-		assert.Equal(t, 1, realDeps().askpass(io.Discard, nil),
+		assert.Equal(t, 1, realDeps().askpass(t.Context(), io.Discard, nil),
 			"a token that resolves to nothing must be reported, not answered with an empty passphrase")
 	})
 }

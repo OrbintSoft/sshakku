@@ -59,7 +59,7 @@ func TestDoctorNamesTheWalletAndWhatIsMissing(t *testing.T) {
 	onlyOnPath(t)
 
 	var out, errOut bytes.Buffer
-	require.Zerof(t, d.doctor(&out, &errOut, nil), "a report changes nothing and cannot fail; stderr=%q", errOut.String())
+	require.Zerof(t, d.doctor(t.Context(), &out, &errOut, nil), "a report changes nothing and cannot fail; stderr=%q", errOut.String())
 	report := out.String()
 
 	for _, want := range []string{"keepassxc", "cli", "keepassxc-cli", "missing"} {
@@ -75,7 +75,7 @@ func TestDoctorSaysNothingIsMissingWhenNothingIs(t *testing.T) {
 	onlyOnPath(t, "keepassxc-cli")
 
 	var out, errOut bytes.Buffer
-	require.Zerof(t, d.doctor(&out, &errOut, nil), "a report changes nothing and cannot fail; stderr=%q", errOut.String())
+	require.Zerof(t, d.doctor(t.Context(), &out, &errOut, nil), "a report changes nothing and cannot fail; stderr=%q", errOut.String())
 	report := out.String()
 
 	assert.Contains(t, report, "keepassxc-cli", "the report must name the tool it found")
@@ -95,7 +95,7 @@ func TestDoctorNamesTheWalletThatWouldBeUsed(t *testing.T) {
 	onlyOnPath(t)
 
 	var out, errOut bytes.Buffer
-	require.Zerof(t, d.doctor(&out, &errOut, nil), "a report changes nothing and cannot fail; stderr=%q", errOut.String())
+	require.Zerof(t, d.doctor(t.Context(), &out, &errOut, nil), "a report changes nothing and cannot fail; stderr=%q", errOut.String())
 	assert.Containsf(t, out.String(), config.DefaultSecretBackend(),
 		"the report must name %q, the wallet an unconfigured machine would open", config.DefaultSecretBackend())
 }
@@ -113,7 +113,7 @@ func TestDoctorRefusesAWalletThisSystemHasNot(t *testing.T) {
 	onlyOnPath(t)
 
 	var out, errOut bytes.Buffer
-	require.Zerof(t, d.doctor(&out, &errOut, nil), "a report changes nothing and cannot fail; stderr=%q", errOut.String())
+	require.Zerof(t, d.doctor(t.Context(), &out, &errOut, nil), "a report changes nothing and cannot fail; stderr=%q", errOut.String())
 	report := out.String()
 	assert.NotContainsf(t, report, "backend:               "+absent,
 		"the report must not name %q, a wallet this system has not got", absent)

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
@@ -26,8 +27,8 @@ func secretServiceBudgets(client *secretservice.Client, settings config.Settings
 	return client
 }
 
-func newDefaultSecretBackend(user string, log keys.Logger, settings config.Settings) (keys.SecretBackend, func()) {
-	client, err := secretservice.NewClient()
+func newDefaultSecretBackend(ctx context.Context, user string, log keys.Logger, settings config.Settings) (keys.SecretBackend, func()) {
+	client, err := secretservice.NewClient(ctx)
 	if err != nil {
 		_ = log.Log("ERROR", fmt.Sprintf("secret service: %v; falling back to secret-tool", err))
 		return keys.SecretToolBackend{Runner: keys.ExecRunner{}, User: user, Timeout: settings.CommandTimeout}, func() {}
@@ -44,6 +45,6 @@ func newDefaultSecretBackend(user string, log keys.Logger, settings config.Setti
 	}
 	return backend, func() {
 		//coverage:ignore
-		_ = client.Close()
+		_ = client.Close(ctx)
 	}
 }

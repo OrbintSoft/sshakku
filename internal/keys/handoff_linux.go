@@ -3,6 +3,7 @@
 package keys
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"time"
@@ -39,7 +40,7 @@ func stashPassphrase(passphrase string, ttl time.Duration) (string, error) {
 // fetchPassphrase reads and unlinks the keyring entry token names — a
 // one-shot read, whether or not it succeeds, so a leaked passphrase cannot
 // linger in the keyring.
-func fetchPassphrase(token string) (string, error) {
+func fetchPassphrase(_ context.Context, token string) (string, error) {
 	n, err := strconv.Atoi(token)
 	if err != nil {
 		return "", fmt.Errorf("malformed handoff token %q: %w", token, err)

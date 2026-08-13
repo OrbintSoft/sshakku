@@ -35,12 +35,12 @@ func TestRandomHandoffTokenReadError(t *testing.T) {
 // fetchPassphrase) rejecting a token it cannot redeem: a non-numeric keyring
 // serial on Linux, an undialable socket path on Darwin.
 func TestFetchHandoffMalformedToken(t *testing.T) {
-	_, err := FetchHandoff("definitely-not-a-valid-handoff-token")
+	_, err := FetchHandoff(t.Context(), "definitely-not-a-valid-handoff-token")
 	assert.Error(t, err, "a handle no stash was made under can redeem nothing")
 }
 
 func TestSocketHandoffFetchDialError(t *testing.T) {
-	_, err := socketHandoffFetch(filepath.Join(t.TempDir(), "nope.sock"))
+	_, err := socketHandoffFetch(t.Context(), filepath.Join(t.TempDir(), "nope.sock"))
 	assert.Error(t, err, "a rendezvous that is not there hands back nothing")
 }
 
@@ -52,7 +52,7 @@ func TestSocketHandoffFetchReadError(t *testing.T) {
 	token, err := socketHandoffStash("s3cr3t", 5*time.Second, fixedBase(shortDir(t)), addrLimit)
 	require.NoError(t, err, "putting a passphrase aside must succeed")
 	readAll = func(io.Reader) ([]byte, error) { return nil, errors.New("read boom") }
-	_, err = socketHandoffFetch(token)
+	_, err = socketHandoffFetch(t.Context(), token)
 	assert.Error(t, err, "a passphrase that could not be read must be reported, not handed on as an empty one")
 }
 

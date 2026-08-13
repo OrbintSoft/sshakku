@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"time"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
@@ -23,7 +24,7 @@ const lookTimeout = 2 * time.Second
 //
 // Any other name reaching here has already been resolved by the configuration
 // layer, which only ever yields a wallet this system has.
-func (p walletProbe) platformWalletView(settings config.Settings, backend string) diagnose.WalletView {
+func (p walletProbe) platformWalletView(ctx context.Context, settings config.Settings, backend string) diagnose.WalletView {
 	if backend != config.SecretBackendSecretService {
 		return diagnose.WalletView{Backend: backend}
 	}
@@ -38,7 +39,7 @@ func (p walletProbe) platformWalletView(settings config.Settings, backend string
 	// The compartment is asked about under the names entries would be stored
 	// under, so what the report describes is the one that would be used.
 	alias, label := keys.SecretServiceCollectionNames(settings.SecretContainer)
-	look := p.look(alias, label)
+	look := p.look(ctx, alias, label)
 	view.Requirements = append(view.Requirements,
 		serviceRequirement(look),
 		compartmentRequirement(label, look, p.hasScreen))
@@ -50,12 +51,12 @@ func (p walletProbe) platformWalletView(settings config.Settings, backend string
 // the wallet answering there. No compartment is described: the group this route
 // keeps entries in is KeePassXC's to make inside a database the user opened, not
 // something the desktop is asked to create.
-func (p walletProbe) keepassxcSecretServiceRoute() []diagnose.Requirement {
+func (p walletProbe) keepassxcSecretServiceRoute(ctx context.Context) []diagnose.Requirement {
 	bus := p.sessionBus()
 	if !bus.Present || p.look == nil {
 		return []diagnose.Requirement{bus}
 	}
-	return []diagnose.Requirement{bus, serviceRequirement(p.look("", ""))}
+	return []diagnose.Requirement{bus, serviceRequirement(p.look(ctx, "", ""))}
 }
 
 // sessionBus reports whether there is a D-Bus session bus to reach a Secret
@@ -81,10 +82,10 @@ func (p walletProbe) sessionBus() diagnose.Requirement {
 // A compartment that is already there is returned as it is, which is why the
 // caller decides whether there was anything to make: what this reports is what
 // it resolved, not what it created.
-func realMakeCompartment(settings config.Settings) (string, error) {
+func realMakeCompartment(ctx context.Context, settings config.Settings) (string, error) {
 	alias, label := keys.SecretServiceCollectionNames(settings.SecretContainer)
 
-	client, err := secretservice.NewClient()
+	client, err := secretservice.NewClient(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -96,11 +97,11 @@ func realMakeCompartment(settings config.Settings) (string, error) {
 	//coverage:ignore
 	defer func() {
 		//coverage:ignore
-		_ = client.Close()
+		_ = client.Close(ctx)
 	}()
 
 	//coverage:ignore
-	if _, err := client.Collection(alias, label); err != nil {
+	if _, err := client.Collection(ctx, alias, label); err != nil {
 		//coverage:ignore
 		return "", err
 	}
@@ -111,8 +112,8 @@ func realMakeCompartment(settings config.Settings) (string, error) {
 // realSecretServiceLook asks the bus, and a wallet already answering on it,
 // about themselves. A look that fails is reported as a wallet that could not be
 // asked, never as one that is not there: the report says what it does not know.
-func realSecretServiceLook(alias, label string) secretServiceLook {
-	look, err := secretservice.LookForCollection(alias, label, lookTimeout)
+func realSecretServiceLook(ctx context.Context, alias, label string) secretServiceLook {
+	look, err := secretservice.LookForCollection(ctx, alias, label, lookTimeout)
 	if err != nil {
 		return secretServiceLook{lookFailed: true}
 	}

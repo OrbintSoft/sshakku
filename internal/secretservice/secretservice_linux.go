@@ -113,8 +113,8 @@ func (c *Client) callTimeout() time.Duration {
 // connected-but-unresponsive daemon surfaces a deadline error instead of
 // blocking forever. CallWithContext returns only once the call completes or the
 // deadline fires, so cancelling the context as call returns is safe.
-func (c *Client) call(obj dbus.BusObject, method string, args ...interface{}) *dbus.Call {
-	ctx, cancel := context.WithTimeout(context.Background(), c.callTimeout())
+func (c *Client) call(ctx context.Context, obj dbus.BusObject, method string, args ...interface{}) *dbus.Call {
+	ctx, cancel := context.WithTimeout(ctx, c.callTimeout())
 	defer cancel()
 	return obj.CallWithContext(ctx, method, 0, args...)
 }
@@ -123,20 +123,20 @@ func (c *Client) call(obj dbus.BusObject, method string, args ...interface{}) *d
 // call. godbus's own BusObject.GetProperty has no context-aware variant and
 // would block indefinitely against a frozen daemon, so this issues the
 // underlying org.freedesktop.DBus.Properties.Get through call instead.
-func (c *Client) property(obj dbus.BusObject, name string) (dbus.Variant, error) {
+func (c *Client) property(ctx context.Context, obj dbus.BusObject, name string) (dbus.Variant, error) {
 	dot := strings.LastIndex(name, ".")
 	if dot < 0 {
 		return dbus.Variant{}, fmt.Errorf("secret service: malformed property name %q", name)
 	}
 	var v dbus.Variant
-	err := c.call(obj, "org.freedesktop.DBus.Properties.Get", name[:dot], name[dot+1:]).Store(&v)
+	err := c.call(ctx, obj, "org.freedesktop.DBus.Properties.Get", name[:dot], name[dot+1:]).Store(&v)
 	return v, err
 }
 
 // NewClient connects to the session bus and negotiates a "plain" Secret
 // Service session — no transport encryption, matching the trust boundary
 // secret-tool already relied on (the session bus is restricted to this user).
-func NewClient() (*Client, error) {
+func NewClient(ctx context.Context) (*Client, error) {
 	conn, err := dbus.ConnectSessionBus()
 	if err != nil {
 		return nil, fmt.Errorf("secret service: connect session bus: %w", err)
@@ -147,7 +147,7 @@ func NewClient() (*Client, error) {
 		output  dbus.Variant
 		session dbus.ObjectPath
 	)
-	ctx, cancel := context.WithTimeout(context.Background(), defaultCallTimeout)
+	ctx, cancel := context.WithTimeout(ctx, defaultCallTimeout)
 	defer cancel()
 	call := service.CallWithContext(ctx, serviceIface+".OpenSession", 0, "plain", dbus.MakeVariant(""))
 	if err := call.Store(&output, &session); err != nil {
@@ -159,8 +159,8 @@ func NewClient() (*Client, error) {
 }
 
 // Close ends the Secret Service session and closes the bus connection.
-func (c *Client) Close() error {
-	_ = c.call(c.conn.Object(busName, c.session), sessionIface+".Close").Err
+func (c *Client) Close(ctx context.Context) error {
+	_ = c.call(ctx, c.conn.Object(busName, c.session), sessionIface+".Close").Err
 	return c.conn.Close()
 }
 
@@ -173,25 +173,25 @@ func (c *Client) Close() error {
 // its Label property instead, and to creating a new, unaliased one
 // (alias "") if none exists yet — the alias fast path above still applies
 // unchanged for a backend like KDE's ksecretd that supports it.
-func (c *Client) Collection(alias, label string) (dbus.ObjectPath, error) {
+func (c *Client) Collection(ctx context.Context, alias, label string) (dbus.ObjectPath, error) {
 	var existing dbus.ObjectPath
-	if err := c.call(c.service, serviceIface+".ReadAlias", alias).Store(&existing); err != nil {
+	if err := c.call(ctx, c.service, serviceIface+".ReadAlias", alias).Store(&existing); err != nil {
 		return "", fmt.Errorf("secret service: read alias %q: %w", alias, err)
 	}
 	if existing != noPrompt {
 		return existing, nil
 	}
 
-	collection, prompt, err := c.createCollection(alias, label)
+	collection, prompt, err := c.createCollection(ctx, alias, label)
 	if isAliasNotSupported(err) {
-		found, ferr := c.findCollectionByLabel(label)
+		found, ferr := c.findCollectionByLabel(ctx, label)
 		if ferr != nil {
 			return "", ferr
 		}
 		if found != noPrompt {
 			return found, nil
 		}
-		collection, prompt, err = c.createCollection("", label)
+		collection, prompt, err = c.createCollection(ctx, "", label)
 	}
 	if err != nil {
 		return "", fmt.Errorf("secret service: create collection %q: %w", alias, err)
@@ -200,7 +200,7 @@ func (c *Client) Collection(alias, label string) (dbus.ObjectPath, error) {
 		return collection, nil
 	}
 
-	result, err := c.completePrompt(prompt)
+	result, err := c.completePrompt(ctx, prompt)
 	if err != nil {
 		return "", err
 	}
@@ -213,9 +213,9 @@ func (c *Client) Collection(alias, label string) (dbus.ObjectPath, error) {
 
 // createCollection is the raw CreateCollection call, factored out so
 // Collection can retry it with a different alias on isAliasNotSupported.
-func (c *Client) createCollection(alias, label string) (collection, prompt dbus.ObjectPath, err error) {
+func (c *Client) createCollection(ctx context.Context, alias, label string) (collection, prompt dbus.ObjectPath, err error) {
 	props := map[string]dbus.Variant{collectionLabelProp: dbus.MakeVariant(label)}
-	err = c.call(c.service, serviceIface+".CreateCollection", props, alias).Store(&collection, &prompt)
+	err = c.call(ctx, c.service, serviceIface+".CreateCollection", props, alias).Store(&collection, &prompt)
 	return collection, prompt, err
 }
 
@@ -234,8 +234,8 @@ func isAliasNotSupported(err error) bool {
 // Collection's alias could not be set (isAliasNotSupported) so ReadAlias can
 // never find it on a later call. Returns noPrompt, not an error, when
 // nothing matches.
-func (c *Client) findCollectionByLabel(label string) (dbus.ObjectPath, error) {
-	v, err := c.property(c.service, serviceCollectionsProp)
+func (c *Client) findCollectionByLabel(ctx context.Context, label string) (dbus.ObjectPath, error) {
+	v, err := c.property(ctx, c.service, serviceCollectionsProp)
 	if err != nil {
 		return "", fmt.Errorf("secret service: list collections: %w", err)
 	}
@@ -244,7 +244,7 @@ func (c *Client) findCollectionByLabel(label string) (dbus.ObjectPath, error) {
 		return "", fmt.Errorf("secret service: list collections: unexpected property type %T", v.Value())
 	}
 	for _, collection := range collections {
-		v, err := c.property(c.conn.Object(busName, collection), collectionLabelProp)
+		v, err := c.property(ctx, c.conn.Object(busName, collection), collectionLabelProp)
 		if err != nil {
 			continue
 		}
@@ -257,37 +257,37 @@ func (c *Client) findCollectionByLabel(label string) (dbus.ObjectPath, error) {
 
 // Unlock unlocks the given objects (typically a single collection),
 // completing an interactive prompt if the Secret Service requires one.
-func (c *Client) Unlock(objects ...dbus.ObjectPath) error {
-	return c.unlockOrLock(serviceIface+".Unlock", objects)
+func (c *Client) Unlock(ctx context.Context, objects ...dbus.ObjectPath) error {
+	return c.unlockOrLock(ctx, serviceIface+".Unlock", objects)
 }
 
 // Lock locks the given objects, completing an interactive prompt if the
 // Secret Service requires one.
-func (c *Client) Lock(objects ...dbus.ObjectPath) error {
-	return c.unlockOrLock(serviceIface+".Lock", objects)
+func (c *Client) Lock(ctx context.Context, objects ...dbus.ObjectPath) error {
+	return c.unlockOrLock(ctx, serviceIface+".Lock", objects)
 }
 
-func (c *Client) unlockOrLock(method string, objects []dbus.ObjectPath) error {
+func (c *Client) unlockOrLock(ctx context.Context, method string, objects []dbus.ObjectPath) error {
 	var (
 		done   []dbus.ObjectPath
 		prompt dbus.ObjectPath
 	)
-	if err := c.call(c.service, method, objects).Store(&done, &prompt); err != nil {
+	if err := c.call(ctx, c.service, method, objects).Store(&done, &prompt); err != nil {
 		return fmt.Errorf("secret service: %s: %w", method, err)
 	}
 	if prompt == noPrompt {
 		return nil
 	}
-	_, err := c.completePrompt(prompt)
+	_, err := c.completePrompt(ctx, prompt)
 	return err
 }
 
 // SearchItems returns the items in collection whose attributes match attrs
 // exactly (all given attributes present with equal values).
-func (c *Client) SearchItems(collection dbus.ObjectPath, attrs map[string]string) ([]dbus.ObjectPath, error) {
+func (c *Client) SearchItems(ctx context.Context, collection dbus.ObjectPath, attrs map[string]string) ([]dbus.ObjectPath, error) {
 	var items []dbus.ObjectPath
 	obj := c.conn.Object(busName, collection)
-	if err := c.call(obj, collectionIface+".SearchItems", attrs).Store(&items); err != nil {
+	if err := c.call(ctx, obj, collectionIface+".SearchItems", attrs).Store(&items); err != nil {
 		return nil, fmt.Errorf("secret service: search items: %w", err)
 	}
 	return items, nil
@@ -295,10 +295,10 @@ func (c *Client) SearchItems(collection dbus.ObjectPath, attrs map[string]string
 
 // GetSecret returns the plaintext value of item, decoded via the client's
 // plain session (no decryption needed).
-func (c *Client) GetSecret(item dbus.ObjectPath) (string, error) {
+func (c *Client) GetSecret(ctx context.Context, item dbus.ObjectPath) (string, error) {
 	var secret Secret
 	obj := c.conn.Object(busName, item)
-	if err := c.call(obj, itemIface+".GetSecret", c.session).Store(&secret); err != nil {
+	if err := c.call(ctx, obj, itemIface+".GetSecret", c.session).Store(&secret); err != nil {
 		return "", fmt.Errorf("secret service: get secret: %w", err)
 	}
 	return string(secret.Value), nil
@@ -307,7 +307,7 @@ func (c *Client) GetSecret(item dbus.ObjectPath) (string, error) {
 // CreateItem stores passphrase under attrs in collection, labelled label.
 // replace controls whether an existing item with the same attrs is
 // overwritten in place rather than duplicated.
-func (c *Client) CreateItem(collection dbus.ObjectPath, label string, attrs map[string]string, passphrase string, replace bool) error {
+func (c *Client) CreateItem(ctx context.Context, collection dbus.ObjectPath, label string, attrs map[string]string, passphrase string, replace bool) error {
 	props := map[string]dbus.Variant{
 		itemLabelProp:      dbus.MakeVariant(label),
 		itemAttributesProp: dbus.MakeVariant(attrs),
@@ -319,22 +319,22 @@ func (c *Client) CreateItem(collection dbus.ObjectPath, label string, attrs map[
 		prompt dbus.ObjectPath
 	)
 	obj := c.conn.Object(busName, collection)
-	call := c.call(obj, collectionIface+".CreateItem", props, secret, replace)
+	call := c.call(ctx, obj, collectionIface+".CreateItem", props, secret, replace)
 	if err := call.Store(&item, &prompt); err != nil {
 		return fmt.Errorf("secret service: create item %q: %w", label, err)
 	}
 	if prompt == noPrompt {
 		return nil
 	}
-	_, err := c.completePrompt(prompt)
+	_, err := c.completePrompt(ctx, prompt)
 	return err
 }
 
 // Items returns every item currently in collection, regardless of attributes
 // — unlike SearchItems, which only returns items matching a given filter.
-func (c *Client) Items(collection dbus.ObjectPath) ([]dbus.ObjectPath, error) {
+func (c *Client) Items(ctx context.Context, collection dbus.ObjectPath) ([]dbus.ObjectPath, error) {
 	obj := c.conn.Object(busName, collection)
-	v, err := c.property(obj, collectionItemsProp)
+	v, err := c.property(ctx, obj, collectionItemsProp)
 	if err != nil {
 		return nil, fmt.Errorf("secret service: collection items: %w", err)
 	}
@@ -347,9 +347,9 @@ func (c *Client) Items(collection dbus.ObjectPath) ([]dbus.ObjectPath, error) {
 
 // ItemAttributes returns the lookup attributes (e.g. "service", "username")
 // item was stored under.
-func (c *Client) ItemAttributes(item dbus.ObjectPath) (map[string]string, error) {
+func (c *Client) ItemAttributes(ctx context.Context, item dbus.ObjectPath) (map[string]string, error) {
 	obj := c.conn.Object(busName, item)
-	v, err := c.property(obj, itemAttributesProp)
+	v, err := c.property(ctx, obj, itemAttributesProp)
 	if err != nil {
 		return nil, fmt.Errorf("secret service: item attributes: %w", err)
 	}
@@ -362,16 +362,16 @@ func (c *Client) ItemAttributes(item dbus.ObjectPath) (map[string]string, error)
 
 // DeleteItem removes item from its collection, completing an interactive
 // prompt if the Secret Service requires one.
-func (c *Client) DeleteItem(item dbus.ObjectPath) error {
+func (c *Client) DeleteItem(ctx context.Context, item dbus.ObjectPath) error {
 	var prompt dbus.ObjectPath
 	obj := c.conn.Object(busName, item)
-	if err := c.call(obj, itemIface+".Delete").Store(&prompt); err != nil {
+	if err := c.call(ctx, obj, itemIface+".Delete").Store(&prompt); err != nil {
 		return fmt.Errorf("secret service: delete item: %w", err)
 	}
 	if prompt == noPrompt {
 		return nil
 	}
-	_, err := c.completePrompt(prompt)
+	_, err := c.completePrompt(ctx, prompt)
 	return err
 }
 
@@ -380,7 +380,7 @@ func (c *Client) DeleteItem(item dbus.ObjectPath) error {
 // promptTimeout, after which the prompt is dismissed and an error returned.
 // A user-dismissed prompt is also reported as an error, never as a silent
 // zero value, since callers must not confuse "dismissed" with "not found".
-func (c *Client) completePrompt(path dbus.ObjectPath) (dbus.Variant, error) {
+func (c *Client) completePrompt(ctx context.Context, path dbus.ObjectPath) (dbus.Variant, error) {
 	ch := make(chan *dbus.Signal, 1)
 	c.conn.Signal(ch)
 	defer c.conn.RemoveSignal(ch)
@@ -396,7 +396,7 @@ func (c *Client) completePrompt(path dbus.ObjectPath) (dbus.Variant, error) {
 	defer func() { _ = c.conn.RemoveMatchSignal(matchOpts...) }()
 
 	prompt := c.conn.Object(busName, path)
-	if err := c.call(prompt, promptIface+".Prompt", "").Err; err != nil {
+	if err := c.call(ctx, prompt, promptIface+".Prompt", "").Err; err != nil {
 		return dbus.Variant{}, fmt.Errorf("secret service: prompt %s: %w", path, err)
 	}
 
@@ -414,8 +414,17 @@ func (c *Client) completePrompt(path dbus.ObjectPath) (dbus.Variant, error) {
 			return dbus.Variant{}, fmt.Errorf("secret service: prompt %s dismissed", path)
 		}
 		return result, nil
+	case <-ctx.Done():
+		// The caller has stopped waiting, so the dialog in front of the user is
+		// waiting for an answer nobody will read: dismiss it rather than leave
+		// it on their screen. The dismissal itself is not the caller's to
+		// cancel — it is the cleanup for a call already given up on — so it is
+		// made on a context that carries everything but the cancellation, and
+		// is bounded by the client's own call timeout as any other call is.
+		_ = c.call(context.WithoutCancel(ctx), prompt, promptIface+".Dismiss").Err
+		return dbus.Variant{}, fmt.Errorf("secret service: prompt %s: %w", path, ctx.Err())
 	case <-time.After(c.promptWait()):
-		_ = c.call(prompt, promptIface+".Dismiss").Err
+		_ = c.call(ctx, prompt, promptIface+".Dismiss").Err
 		return dbus.Variant{}, fmt.Errorf("secret service: prompt %s timed out after %s", path, c.promptWait())
 	}
 }

@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"sort"
@@ -72,7 +73,7 @@ type EnsureResult struct {
 // agent; otherwise it reaps the dead, then either adopts a healthy agent it did
 // not start (reporting the anomaly) or starts its own. It never reimplements the
 // agent and, on success, never leaves the shell pointed at a dead socket.
-func (m Manager) EnsureAgent(cfg EnsureConfig, log Logger) (EnsureResult, error) {
+func (m Manager) EnsureAgent(ctx context.Context, cfg EnsureConfig, log Logger) (EnsureResult, error) {
 	logf := func(level, format string, a ...any) {
 		if log != nil {
 			_ = log.Log(level, fmt.Sprintf(format, a...))
@@ -81,7 +82,7 @@ func (m Manager) EnsureAgent(cfg EnsureConfig, log Logger) (EnsureResult, error)
 
 	// Ours is already healthy on the fixed socket: attach and go, silently. This
 	// fast path runs before the lock, so the common login is never serialised.
-	if m.Prober.Reachable(cfg.FixedSock) {
+	if m.Prober.Reachable(ctx, cfg.FixedSock) {
 		return EnsureResult{Situation: SituationHealthy, LiveSock: cfg.FixedSock}, nil
 	}
 
@@ -94,14 +95,14 @@ func (m Manager) EnsureAgent(cfg EnsureConfig, log Logger) (EnsureResult, error)
 			return EnsureResult{}, fmt.Errorf("acquire agent lock: %w", err)
 		}
 		defer unlock()
-		if m.Prober.Reachable(cfg.FixedSock) {
+		if m.Prober.Reachable(ctx, cfg.FixedSock) {
 			return EnsureResult{Situation: SituationHealthy, LiveSock: cfg.FixedSock}, nil
 		}
 	}
 
 	// Clear the dead agents we are allowed to, then survey which healthy agents
 	// remain.
-	reap, err := m.Reap(cfg.OurUID)
+	reap, err := m.Reap(ctx, cfg.OurUID)
 	if err != nil {
 		return EnsureResult{}, fmt.Errorf("reap dead agents: %w", err)
 	}
@@ -110,7 +111,7 @@ func (m Manager) EnsureAgent(cfg EnsureConfig, log Logger) (EnsureResult, error)
 		logf("INFO", "reaped dead agents: pids %v, sockets %v", reap.Terminated, reap.RemovedSockets)
 	}
 
-	foreign, err := m.healthyForeign(cfg.FixedSock)
+	foreign, err := m.healthyForeign(ctx, cfg.FixedSock)
 	if err != nil {
 		return EnsureResult{}, err
 	}
@@ -126,7 +127,7 @@ func (m Manager) EnsureAgent(cfg EnsureConfig, log Logger) (EnsureResult, error)
 			reaped = true
 			logf("INFO", "removed stale socket with no live owner: %s", cfg.FixedSock)
 		}
-		pid, err := m.Start(cfg.FixedSock, cfg.StatePath)
+		pid, err := m.Start(ctx, cfg.FixedSock, cfg.StatePath)
 		if err != nil {
 			return EnsureResult{}, fmt.Errorf("start agent: %w", err)
 		}
@@ -176,7 +177,7 @@ func (m Manager) EnsureAgent(cfg EnsureConfig, log Logger) (EnsureResult, error)
 
 // healthyForeign returns the live ssh-agents bound to a socket other than the
 // fixed one, sorted by pid for a deterministic adoption choice.
-func (m Manager) healthyForeign(fixedSock string) ([]AgentProc, error) {
+func (m Manager) healthyForeign(ctx context.Context, fixedSock string) ([]AgentProc, error) {
 	procs, err := m.Inspector.Agents()
 	if err != nil {
 		return nil, fmt.Errorf("inspect agents: %w", err)
@@ -186,7 +187,7 @@ func (m Manager) healthyForeign(fixedSock string) ([]AgentProc, error) {
 		if p.Socket == "" || p.Socket == fixedSock {
 			continue
 		}
-		if m.Prober.Reachable(p.Socket) {
+		if m.Prober.Reachable(ctx, p.Socket) {
 			out = append(out, p)
 		}
 	}

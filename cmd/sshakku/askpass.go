@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -16,11 +17,11 @@ import (
 // via $SSHAKKU_HANDOFF_TOKEN; with a token we serve that one-shot stash.
 // Without one we are the reactive broker for an interactive ssh whose key has
 // expired, and answer the prompt in args from the wallet (or the terminal).
-func (d deps) askpass(stdout io.Writer, args []string) int {
+func (d deps) askpass(ctx context.Context, stdout io.Writer, args []string) int {
 	if os.Getenv(keys.EnvPassHandoffToken) != "" {
-		return d.askpassFromHandoff(stdout)
+		return d.askpassFromHandoff(ctx, stdout)
 	}
-	return d.askpassBroker(stdout, args)
+	return d.askpassBroker(ctx, stdout, args)
 }
 
 // askpassBroker answers ssh's passphrase or confirmation prompt: a key passphrase
@@ -28,11 +29,11 @@ func (d deps) askpass(stdout io.Writer, args []string) int {
 // the terminal. Only the reply goes to stdout; diagnostics go to the session log.
 // It reads the config file for the wallet-store policy, so a miss-then-store
 // refill honours the same include/exclude rules as load-keys.
-func (d deps) askpassBroker(stdout io.Writer, args []string) int {
+func (d deps) askpassBroker(ctx context.Context, stdout io.Writer, args []string) int {
 	layout := paths.Resolve(paths.FromOS(), paths.ProbeDir)
 	log := sessionlog.New(layout.LogFile)
 	settings := loadSettings(layout, "askpass", log)
-	secret, closeSecret := d.newSecret(currentUser(), log, settings)
+	secret, closeSecret := d.newSecret(ctx, currentUser(), log, settings)
 	defer closeSecret()
 	broker := keys.Broker{
 		Secret: secret,
@@ -40,7 +41,7 @@ func (d deps) askpassBroker(stdout io.Writer, args []string) int {
 		Log:    log,
 		Config: keys.Config{WalletStore: settings.StoresWallet, ServicePrefix: settings.ServicePrefix},
 	}
-	reply, ok := broker.Answer(strings.Join(args, " "))
+	reply, ok := broker.Answer(ctx, strings.Join(args, " "))
 	if !ok {
 		return 1
 	}
@@ -57,7 +58,7 @@ func (d deps) askpassBroker(stdout io.Writer, args []string) int {
 // passphrase never touches stderr or argv; only the handoff token crosses the
 // environment. Diagnostics go to the session log alone, so the success path
 // stays silent.
-func (d deps) askpassFromHandoff(stdout io.Writer) int {
+func (d deps) askpassFromHandoff(ctx context.Context, stdout io.Writer) int {
 	log := sessionlog.New(paths.Resolve(paths.FromOS(), paths.ProbeDir).LogFile)
 
 	token := os.Getenv(keys.EnvPassHandoffToken)
@@ -66,7 +67,7 @@ func (d deps) askpassFromHandoff(stdout io.Writer) int {
 		return 1
 	}
 
-	pass, err := d.fetchHandoff(token)
+	pass, err := d.fetchHandoff(ctx, token)
 	if err != nil {
 		_ = log.Log("ERROR", fmt.Sprintf("askpass: fetch handoff token …%s: %v", tail(token, 3), err))
 		return 1

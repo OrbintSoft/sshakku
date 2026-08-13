@@ -53,7 +53,7 @@ type ExecRunner struct {
 // and the wait then lasts as long as that child does, however dead the tool
 // itself is. WaitDelay bounds that second wait too, so the deadline holds for
 // what the caller actually experiences rather than only for the process table.
-func (r ExecRunner) Run(c Cmd) (Result, error) {
+func (r ExecRunner) Run(ctx context.Context, c Cmd) (Result, error) {
 	timeout := c.Timeout
 	if timeout <= 0 {
 		timeout = r.Timeout
@@ -61,7 +61,7 @@ func (r ExecRunner) Run(c Cmd) (Result, error) {
 	if timeout <= 0 {
 		timeout = DefaultCommandTimeout
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, c.Name, c.Args...)
 	cmd.WaitDelay = commandWaitDelay

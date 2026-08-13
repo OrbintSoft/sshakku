@@ -41,22 +41,22 @@ func TestSecretServiceUnresponsiveDaemon(t *testing.T) {
 		unresponsiveService = "sshakku-unresponsive-test-probe"
 	)
 
-	client, err := secretservice.NewClient()
+	client, err := secretservice.NewClient(t.Context())
 	if err != nil {
 		t.Skipf("no real Secret Service daemon reachable on the ambient D-Bus session bus: %v", err)
 	}
-	t.Cleanup(func() { _ = client.Close() })
+	t.Cleanup(func() { _ = client.Close(t.Context()) })
 
 	backend := &SecretServiceBackend{Client: client, User: unresponsiveUser}
-	require.NoError(t, backend.Unlock(), "the wallet must open before anything can be frozen underneath it")
-	t.Cleanup(func() { _ = backend.Delete(unresponsiveService) })
+	require.NoError(t, backend.Unlock(t.Context()), "the wallet must open before anything can be frozen underneath it")
+	t.Cleanup(func() { _ = backend.Delete(t.Context(), unresponsiveService) })
 
 	// Prove the backend genuinely works before it is frozen, so the later
 	// failure is a mid-session collapse rather than a backend that never
 	// round-tripped.
-	require.NoError(t, backend.Store(unresponsiveService, "sshakku unresponsive-daemon probe", "probe-passphrase"),
+	require.NoError(t, backend.Store(t.Context(), unresponsiveService, "sshakku unresponsive-daemon probe", "probe-passphrase"),
 		"the wallet must genuinely work before it is frozen, or the later failure proves nothing")
-	got, found, err := backend.Lookup(unresponsiveService)
+	got, found, err := backend.Lookup(t.Context(), unresponsiveService)
 	require.NoError(t, err, "and a passphrase just written must read back")
 	require.True(t, found, "the entry is there, so it must be reported found")
 	require.Equal(t, "probe-passphrase", got, "and it must be the one that was written")
@@ -89,7 +89,7 @@ func lookupWithinBound(t *testing.T, backend *SecretServiceBackend, service stri
 	}
 	done := make(chan result, 1)
 	go func() {
-		_, found, err := backend.Lookup(service)
+		_, found, err := backend.Lookup(t.Context(), service)
 		done <- result{found: found, err: err}
 	}()
 	select {

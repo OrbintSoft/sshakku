@@ -3,6 +3,8 @@
 package main
 
 import (
+	"context"
+
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/keys"
 )
@@ -31,12 +33,12 @@ func darwinDialogs(settings config.Settings) []dialog {
 //
 // Which dialog is not much of a choice here — the system has one — but "none"
 // is still the user's to write, and it means the terminal wherever it appears.
-func newGraphicalPrompter(settings config.Settings, log keys.Logger) keys.Prompter {
+func newGraphicalPrompter(ctx context.Context, settings config.Settings, log keys.Logger) keys.Prompter {
 	if settings.GUIPrompter == config.GUIPrompterNone {
 		return nil
 	}
-	if !keys.GraphicalSession(keys.ExecRunner{Timeout: settings.CommandTimeout}) {
+	if !keys.GraphicalSession(ctx, keys.ExecRunner{Timeout: settings.CommandTimeout}) {
 		return nil
 	}
-	return chooseDialog(darwinDialogs(settings), settings.GUIPrompter, keys.TTYPrompter{}, log)
+	return chooseDialog(ctx, darwinDialogs(settings), settings.GUIPrompter, keys.TTYPrompter{}, log)
 }

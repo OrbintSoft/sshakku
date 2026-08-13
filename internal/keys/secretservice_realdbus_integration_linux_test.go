@@ -44,33 +44,33 @@ func TestSecretServiceBackendRealDaemon(t *testing.T) {
 		t.Skipf("skipping: set %s=1 to run against a real Secret Service daemon (only safe in a disposable environment, e.g. a desktop-stack container)", allowRealSecretServiceEnv)
 	}
 
-	client, err := secretservice.NewClient()
+	client, err := secretservice.NewClient(t.Context())
 	if err != nil {
 		t.Skipf("no real Secret Service daemon reachable on the ambient D-Bus session bus: %v", err)
 	}
-	t.Cleanup(func() { _ = client.Close() })
+	t.Cleanup(func() { _ = client.Close(t.Context()) })
 
 	const (
 		testUser    = "sshakku-integration-test-user"
 		testService = "sshakku-integration-test-probe"
 	)
 	backend := &SecretServiceBackend{Client: client, User: testUser}
-	require.NoError(t, backend.Unlock(), "the wallet must open before a batch of work can run under one unlock")
+	require.NoError(t, backend.Unlock(t.Context()), "the wallet must open before a batch of work can run under one unlock")
 	// Registered before the Delete cleanup below so it runs last (t.Cleanup
 	// is LIFO): Delete must still run while held unlocked.
-	t.Cleanup(func() { _ = backend.Lock() })
-	t.Cleanup(func() { _ = backend.Delete(testService) })
+	t.Cleanup(func() { _ = backend.Lock(t.Context()) })
+	t.Cleanup(func() { _ = backend.Delete(t.Context(), testService) })
 
-	require.NoError(t, backend.Store(testService, "sshakku integration test probe", "probe-passphrase"),
+	require.NoError(t, backend.Store(t.Context(), testService, "sshakku integration test probe", "probe-passphrase"),
 		"saving a passphrase must succeed")
 
-	got, found, err := backend.Lookup(testService)
+	got, found, err := backend.Lookup(t.Context(), testService)
 	require.NoError(t, err, "reading it straight back must succeed")
 	require.True(t, found, "a passphrase just saved must be there")
 	assert.Equal(t, "probe-passphrase", got, "and be the one that was saved")
 
-	require.NoError(t, backend.Delete(testService), "forgetting a passphrase must succeed")
-	_, found, err = backend.Lookup(testService)
+	require.NoError(t, backend.Delete(t.Context(), testService), "forgetting a passphrase must succeed")
+	_, found, err = backend.Lookup(t.Context(), testService)
 	require.NoError(t, err, "looking for a forgotten passphrase must not be an error")
 	assert.False(t, found, "and it must be gone from the wallet")
 }

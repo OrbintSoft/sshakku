@@ -46,7 +46,7 @@ func TestForgetRemovesTheEntryTheConfiguredPrefixNames(t *testing.T) {
 	d := configuredPrefix(t, prefix, backend)
 
 	var out, errOut bytes.Buffer
-	require.Zerof(t, d.forget(&out, &errOut, []string{"id_rsa"}), "forget id_rsa; stderr=%q", errOut.String())
+	require.Zerof(t, d.forget(t.Context(), &out, &errOut, []string{"id_rsa"}), "forget id_rsa; stderr=%q", errOut.String())
 	assert.NotContains(t, backend.stored, prefix+"-id_rsa",
 		"the entry the configured prefix names is the one that must be gone from the wallet")
 	assert.Contains(t, out.String(), "forgot "+prefix+"-id_rsa",

@@ -1,5 +1,7 @@
 package keys
 
+import "context"
+
 // UnavailableBackend stands for a secret store that cannot be reached at all —
 // a route the user pinned that this platform does not provide, for instance.
 //
@@ -14,13 +16,15 @@ type UnavailableBackend struct {
 }
 
 // Lookup reports the reason rather than a miss.
-func (b UnavailableBackend) Lookup(string) (string, bool, error) { return "", false, b.Reason }
+func (b UnavailableBackend) Lookup(context.Context, string) (string, bool, error) {
+	return "", false, b.Reason
+}
 
 // Store reports the reason.
-func (b UnavailableBackend) Store(string, string, string) error { return b.Reason }
+func (b UnavailableBackend) Store(context.Context, string, string, string) error { return b.Reason }
 
 // Delete reports the reason.
-func (b UnavailableBackend) Delete(string) error { return b.Reason }
+func (b UnavailableBackend) Delete(context.Context, string) error { return b.Reason }
 
 // List reports the reason.
-func (b UnavailableBackend) List() ([]string, error) { return nil, b.Reason }
+func (b UnavailableBackend) List(ctx context.Context) ([]string, error) { return nil, b.Reason }

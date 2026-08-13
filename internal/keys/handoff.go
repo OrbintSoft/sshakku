@@ -1,6 +1,7 @@
 package keys
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 )
@@ -30,6 +31,6 @@ func randomHandoffToken() (string, error) {
 // FetchHandoff redeems token for the one-shot passphrase AddWithAskpass
 // stashed, invalidating it whether or not the read succeeds. Called by the
 // SSH_ASKPASS child process, never by the loader itself.
-func FetchHandoff(token string) (string, error) {
-	return fetchPassphrase(token)
+func FetchHandoff(ctx context.Context, token string) (string, error) {
+	return fetchPassphrase(ctx, token)
 }

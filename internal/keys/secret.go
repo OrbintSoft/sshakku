@@ -1,6 +1,7 @@
 package keys
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -48,19 +49,24 @@ func ownServices(names []string, prefix string) []string {
 // and its secret-tool fallback on Linux, the OS keychain off it, plus the
 // CLI-backed 1Password and Bitwarden backends. service is an opaque per-key
 // identifier the backend maps onto its own schema.
+//
+// Every call takes the caller's context. What is behind this seam is another
+// program or another process — a session-bus daemon, a vault's CLI, a socket —
+// and each of them can be slow, locked, or waiting on a person, so the caller
+// that can afford to stop waiting is the one holding the context.
 type SecretBackend interface {
 	// Lookup returns the stored passphrase for service and whether one was found.
 	// A miss is reported as found=false, not an error.
-	Lookup(service string) (passphrase string, found bool, err error)
+	Lookup(ctx context.Context, service string) (passphrase string, found bool, err error)
 	// Store saves passphrase for service under a human-readable label.
-	Store(service, label, passphrase string) error
+	Store(ctx context.Context, service, label, passphrase string) error
 	// Delete removes the entry for service. A missing entry is success, not an
 	// error — deleting an already-forgotten key is idempotent.
-	Delete(service string) error
+	Delete(ctx context.Context, service string) error
 	// List returns the service identifiers of every entry sshakku manages, for
 	// forgetting them all at once. Returns ErrListUnsupported if the backend
 	// cannot enumerate its entries.
-	List() ([]string, error)
+	List(ctx context.Context) ([]string, error)
 }
 
 // SecretSession is implemented by backends that can hold their store unlocked
@@ -72,7 +78,7 @@ type SecretBackend interface {
 type SecretSession interface {
 	// Unlock unlocks the store and keeps it unlocked for subsequent
 	// Lookup/Store/Delete calls until Lock is called.
-	Unlock() error
+	Unlock(ctx context.Context) error
 	// Lock re-locks the store previously unlocked via Unlock.
-	Lock() error
+	Lock(ctx context.Context) error
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -19,7 +20,7 @@ import (
 // this binary, which ssh-add execs to fetch the stashed passphrase. The success
 // path is silent; problems go to the session log (and stderr for a hard
 // failure).
-func (d deps) loadKeys(stderr io.Writer) int {
+func (d deps) loadKeys(ctx context.Context, stderr io.Writer) int {
 	env := paths.FromOS()
 	layout := paths.Resolve(env, paths.ProbeDir).WithSocketToken(paths.SocketToken())
 	log := sessionlog.New(layout.LogFile)
@@ -53,11 +54,11 @@ func (d deps) loadKeys(stderr io.Writer) int {
 	// ask when it misses — the platform's dialog where there is one, otherwise
 	// the terminal, which needs no external binary.
 	var prompter keys.Prompter = keys.TTYPrompter{}
-	if graphical := d.graphicalPrompter(settings, log); graphical != nil {
+	if graphical := d.graphicalPrompter(ctx, settings, log); graphical != nil {
 		prompter = graphical
 	}
 
-	secret, closeSecret := d.newSecret(currentUser(), log, settings)
+	secret, closeSecret := d.newSecret(ctx, currentUser(), log, settings)
 	defer closeSecret()
 
 	loader := keys.Loader{
@@ -79,7 +80,7 @@ func (d deps) loadKeys(stderr io.Writer) int {
 			OnDismiss:     settings.OnDismiss,
 		},
 	}
-	if err := loader.LoadKeys(); err != nil {
+	if err := loader.LoadKeys(ctx); err != nil {
 		_ = log.Log("ERROR", fmt.Sprintf("load-keys: %v", err))
 		_, _ = fmt.Fprintf(stderr, "sshakku: %v\n", err)
 		return 1

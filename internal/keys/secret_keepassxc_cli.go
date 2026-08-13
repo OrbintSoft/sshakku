@@ -1,6 +1,7 @@
 package keys
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -77,14 +78,14 @@ func (b *KeePassXCCLIBackend) entryPath(service string) string {
 }
 
 // unlock returns the database password, asking for it the first time.
-func (b *KeePassXCCLIBackend) unlock() (string, error) {
+func (b *KeePassXCCLIBackend) unlock(ctx context.Context) (string, error) {
 	if b.password != "" {
 		return b.password, nil
 	}
 	if b.Database == "" {
 		return "", ErrNoDatabase
 	}
-	password, err := b.Prompter.Prompt("your KeePassXC database password")
+	password, err := b.Prompter.Prompt(ctx, "your KeePassXC database password")
 	if err != nil {
 		return "", err
 	}
@@ -94,8 +95,8 @@ func (b *KeePassXCCLIBackend) unlock() (string, error) {
 
 // run invokes keepassxc-cli with the database password — and anything else the
 // subcommand will ask for — on standard input, in the order it asks.
-func (b *KeePassXCCLIBackend) run(args []string, extraInput ...string) (Result, error) {
-	password, err := b.unlock()
+func (b *KeePassXCCLIBackend) run(ctx context.Context, args []string, extraInput ...string) (Result, error) {
+	password, err := b.unlock(ctx)
 	if err != nil {
 		return Result{}, err
 	}
@@ -107,7 +108,7 @@ func (b *KeePassXCCLIBackend) run(args []string, extraInput ...string) (Result, 
 	for _, extra := range extraInput {
 		input += extra + "\n"
 	}
-	res, err := b.Runner.Run(Cmd{
+	res, err := b.Runner.Run(ctx, Cmd{
 		Name:    keepassxcCLIBin,
 		Args:    full,
 		Stdin:   input,
@@ -129,8 +130,8 @@ func refusedPassword(res Result) bool {
 }
 
 // Lookup returns the passphrase stored for service.
-func (b *KeePassXCCLIBackend) Lookup(service string) (string, bool, error) {
-	res, err := b.run([]string{"show", "-s", "-a", "Password", b.Database, b.entryPath(service)})
+func (b *KeePassXCCLIBackend) Lookup(ctx context.Context, service string) (string, bool, error) {
+	res, err := b.run(ctx, []string{"show", "-s", "-a", "Password", b.Database, b.entryPath(service)})
 	if err != nil {
 		return "", false, err
 	}
@@ -147,14 +148,14 @@ func (b *KeePassXCCLIBackend) Lookup(service string) (string, bool, error) {
 
 // Store saves passphrase for service, editing the entry when it already exists
 // so a re-stored passphrase does not leave a second copy in the database.
-func (b *KeePassXCCLIBackend) Store(service, label, passphrase string) error {
+func (b *KeePassXCCLIBackend) Store(ctx context.Context, service, label, passphrase string) error {
 	// label has nowhere to go: the entry is named by its path, which is built
 	// from the service identifier.
 	_ = label
 	path := b.entryPath(service)
 
 	verb := "add"
-	if _, found, err := b.Lookup(service); err != nil {
+	if _, found, err := b.Lookup(ctx, service); err != nil {
 		return err
 	} else if found {
 		verb = "edit"
@@ -166,14 +167,14 @@ func (b *KeePassXCCLIBackend) Store(service, label, passphrase string) error {
 		// Creating it is idempotent in effect: an "it already exists" failure is
 		// not distinguished, because the add that follows is the real test of
 		// whether the group is usable.
-		if _, err := b.run([]string{"mkdir", b.Database, b.group()}); err != nil {
+		if _, err := b.run(ctx, []string{"mkdir", b.Database, b.group()}); err != nil {
 			return err
 		}
 	}
 
 	// -p makes keepassxc-cli ask for the entry's own password, which follows
 	// the database password on standard input.
-	res, err := b.run([]string{verb, "-p", b.Database, path}, passphrase)
+	res, err := b.run(ctx, []string{verb, "-p", b.Database, path}, passphrase)
 	if err != nil {
 		return err
 	}
@@ -188,8 +189,8 @@ func (b *KeePassXCCLIBackend) Store(service, label, passphrase string) error {
 
 // Delete removes the entry for service. Unlike the local-protocol route, the
 // CLI can delete, so `sshakku forget` works here.
-func (b *KeePassXCCLIBackend) Delete(service string) error {
-	res, err := b.run([]string{"rm", b.Database, b.entryPath(service)})
+func (b *KeePassXCCLIBackend) Delete(ctx context.Context, service string) error {
+	res, err := b.run(ctx, []string{"rm", b.Database, b.entryPath(service)})
 	if err != nil {
 		return err
 	}
@@ -205,8 +206,8 @@ func (b *KeePassXCCLIBackend) Delete(service string) error {
 }
 
 // List returns every entry SSHakku keeps in the database.
-func (b *KeePassXCCLIBackend) List() ([]string, error) {
-	res, err := b.run([]string{"ls", "-f", b.Database, b.group()})
+func (b *KeePassXCCLIBackend) List(ctx context.Context) ([]string, error) {
+	res, err := b.run(ctx, []string{"ls", "-f", b.Database, b.group()})
 	if err != nil {
 		return nil, err
 	}

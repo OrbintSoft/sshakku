@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"testing"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
@@ -21,7 +22,7 @@ func TestNewSecretBackend(t *testing.T) {
 
 	t.Run("1password", func(t *testing.T) {
 		s := config.Settings{SecretBackend: config.SecretBackendOnePassword, OnePasswordVault: "sshakku-vault"}
-		backend, closeFn := newSecretBackend("alice", fakeLogger{}, s)
+		backend, closeFn := newSecretBackend(t.Context(), "alice", fakeLogger{}, s)
 		defer closeFn()
 		op, ok := backend.(*keys.OnePasswordBackend)
 		require.Truef(t, ok, "the wallet chosen must be the one built, got %T", backend)
@@ -34,7 +35,7 @@ func TestNewSecretBackend(t *testing.T) {
 			BitwardenEmail:  "alice@example.com",
 			BitwardenServer: "https://vault.example",
 		}
-		backend, closeFn := newSecretBackend("alice", fakeLogger{}, s)
+		backend, closeFn := newSecretBackend(t.Context(), "alice", fakeLogger{}, s)
 		defer closeFn()
 		bw, ok := backend.(*keys.BitwardenBackend)
 		require.Truef(t, ok, "the wallet chosen must be the one built, got %T", backend)
@@ -58,15 +59,15 @@ func TestNewSecretBackend(t *testing.T) {
 func TestBitwardenMasterPrompterGUI(t *testing.T) {
 	p := walletPasswordPrompter{graphical: fixedPrompter{answer: "master-pass"}}
 
-	got, err := p.Prompt("Bitwarden master password")
+	got, err := p.Prompt(t.Context(), "Bitwarden master password")
 	require.NoError(t, err, "Prompt")
 	assert.Equal(t, "master-pass", got, "the answer the dialog gave, with nothing added to it")
-	assert.True(t, p.Available(), "a prompter with a dialog behind it is always available")
+	assert.True(t, p.Available(t.Context()), "a prompter with a dialog behind it is always available")
 }
 
 // fixedPrompter is a dialog that always answers, standing in for whichever one
 // the platform would draw with.
 type fixedPrompter struct{ answer string }
 
-func (p fixedPrompter) Prompt(string) (string, error) { return p.answer, nil }
-func (fixedPrompter) Available() bool                 { return true }
+func (p fixedPrompter) Prompt(context.Context, string) (string, error) { return p.answer, nil }
+func (fixedPrompter) Available(context.Context) bool                   { return true }

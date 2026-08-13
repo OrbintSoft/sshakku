@@ -13,7 +13,7 @@ import (
 func TestKDialogPrompt(t *testing.T) {
 	t.Run("returns the entered passphrase, newline trimmed", func(t *testing.T) {
 		r := newFakeRunner().on("kdialog", stdout("typed-pass\n", 0))
-		got, err := KDialogPrompter{Runner: r}.Prompt("id_rsa")
+		got, err := KDialogPrompter{Runner: r}.Prompt(t.Context(), "id_rsa")
 		require.NoError(t, err, "a dialog the user answered must hand the answer back")
 		assert.Equal(t, "typed-pass", got,
 			"and it must be what they typed: the newline the dialog prints is not part of the passphrase")
@@ -24,7 +24,7 @@ func TestKDialogPrompt(t *testing.T) {
 
 	t.Run("a dismissed dialog is ErrPromptCanceled", func(t *testing.T) {
 		r := newFakeRunner().on("kdialog", stdout("", 1))
-		_, err := KDialogPrompter{Runner: r}.Prompt("id_rsa")
+		_, err := KDialogPrompter{Runner: r}.Prompt(t.Context(), "id_rsa")
 		assert.ErrorIs(t, err, ErrPromptCanceled,
 			"closing a dialog is an answer, and must be passed on as one rather than as a failure")
 	})
@@ -32,7 +32,7 @@ func TestKDialogPrompt(t *testing.T) {
 	t.Run("a failure to start kdialog is an error", func(t *testing.T) {
 		wantErr := errors.New("boom")
 		r := newFakeRunner().on("kdialog", fails(wantErr))
-		_, err := KDialogPrompter{Runner: r}.Prompt("id_rsa")
+		_, err := KDialogPrompter{Runner: r}.Prompt(t.Context(), "id_rsa")
 		assert.ErrorIs(t, err, wantErr,
 			"a dialog that could not be started must be reported as that, not as one the user dismissed")
 	})
@@ -40,14 +40,14 @@ func TestKDialogPrompt(t *testing.T) {
 
 func TestKDialogAvailable(t *testing.T) {
 	found := KDialogPrompter{lookPath: func(string) (string, error) { return "/usr/bin/kdialog", nil }}
-	assert.True(t, found.Available(), "a dialog that is installed can be asked in")
+	assert.True(t, found.Available(t.Context()), "a dialog that is installed can be asked in")
 	missing := KDialogPrompter{lookPath: func(string) (string, error) { return "", errors.New("not found") }}
-	assert.False(t, missing.Available(), "and one that is not installed cannot")
+	assert.False(t, missing.Available(t.Context()), "and one that is not installed cannot")
 }
 
 // TestKDialogAvailableDefaultLookPath covers Available's nil-lookPath branch,
 // which falls back to the real os/exec PATH lookup. The result depends on
 // whether kdialog happens to be installed; only the branch matters here.
 func TestKDialogAvailableDefaultLookPath(t *testing.T) {
-	_ = KDialogPrompter{}.Available()
+	_ = KDialogPrompter{}.Available(t.Context())
 }

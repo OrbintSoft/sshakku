@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"runtime"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
@@ -17,7 +18,7 @@ import (
 // The OS wallets have no case of their own: each exists on one platform, where
 // it is that platform's default, and the configuration layer never yields a
 // name this system has not got.
-func newSecretBackend(user string, log keys.Logger, settings config.Settings) (keys.SecretBackend, func()) {
+func newSecretBackend(ctx context.Context, user string, log keys.Logger, settings config.Settings) (keys.SecretBackend, func()) {
 	switch settings.SecretBackend {
 	case config.SecretBackendOnePassword:
 		return &keys.OnePasswordBackend{
@@ -28,16 +29,16 @@ func newSecretBackend(user string, log keys.Logger, settings config.Settings) (k
 	case config.SecretBackendBitwarden:
 		return &keys.BitwardenBackend{
 			Runner:        keys.ExecRunner{Timeout: settings.CommandTimeout},
-			Prompter:      newWalletPasswordPrompter(settings, log),
+			Prompter:      newWalletPasswordPrompter(ctx, settings, log),
 			Email:         settings.BitwardenEmail,
 			Server:        settings.BitwardenServer,
 			Timeout:       settings.InteractiveTimeout,
 			ServicePrefix: settings.ServicePrefix,
 		}, func() {}
 	case config.SecretBackendKeePassXC:
-		return newKeePassXCBackend(runtime.GOOS, user, log, settings)
+		return newKeePassXCBackend(ctx, runtime.GOOS, user, log, settings)
 	default:
-		return newDefaultSecretBackend(user, log, settings)
+		return newDefaultSecretBackend(ctx, user, log, settings)
 	}
 }
 
@@ -54,9 +55,9 @@ type walletPasswordPrompter struct {
 	graphical keys.Prompter
 }
 
-func (p walletPasswordPrompter) Prompt(keyname string) (string, error) {
+func (p walletPasswordPrompter) Prompt(ctx context.Context, keyname string) (string, error) {
 	if p.graphical != nil {
-		return p.graphical.Prompt(keyname)
+		return p.graphical.Prompt(ctx, keyname)
 	}
 	// Terminal fallback: reaches the real controlling terminal, so it cannot run
 	// in a unit test; the graphical branch above is unit-tested.
@@ -64,8 +65,8 @@ func (p walletPasswordPrompter) Prompt(keyname string) (string, error) {
 	return ttyPrompter{}.Prompt("Enter "+keyname, true)
 }
 
-func (walletPasswordPrompter) Available() bool { return true }
+func (walletPasswordPrompter) Available(context.Context) bool { return true }
 
-func newWalletPasswordPrompter(settings config.Settings, log keys.Logger) keys.Prompter {
-	return walletPasswordPrompter{graphical: newGraphicalPrompter(settings, log)}
+func newWalletPasswordPrompter(ctx context.Context, settings config.Settings, log keys.Logger) keys.Prompter {
+	return walletPasswordPrompter{graphical: newGraphicalPrompter(ctx, settings, log)}
 }

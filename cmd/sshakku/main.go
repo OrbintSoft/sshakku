@@ -6,6 +6,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -59,8 +60,14 @@ print the Bourne form every POSIX shell reads.
 func main() {
 	// The process entry point: a single os.Exit around the testable dispatch,
 	// with nothing here to unit-test (a test can't observe os.Exit).
+	//
+	// The context created here is the program's only root. Everything that
+	// waits on something outside this process — the session bus, ssh-add, a
+	// wallet's CLI, a socket — derives its own from the one passed down, so a
+	// deadline or a cancellation set above a wait reaches the wait itself. A
+	// second root anywhere below would be where that stops being true.
 	//coverage:ignore
-	os.Exit(dispatch(realDeps(), os.Stdout, os.Stderr, os.Args[0], os.Args[1:]))
+	os.Exit(dispatch(context.Background(), realDeps(), os.Stdout, os.Stderr, os.Args[0], os.Args[1:]))
 }
 
 // deps carries the process's injectable system seams so the command bodies can
@@ -72,7 +79,7 @@ func main() {
 type deps struct {
 	// newSecret opens the secret backend settings.SecretBackend selects, with a
 	// cleanup func that releases whatever it opened (see newSecretBackend).
-	newSecret func(user string, log keys.Logger, settings config.Settings) (keys.SecretBackend, func())
+	newSecret func(ctx context.Context, user string, log keys.Logger, settings config.Settings) (keys.SecretBackend, func())
 	// ensurer drives the fixed socket to a healthy ssh-agent (see runEnsure). The
 	// production value is the concrete agent.Manager; tests substitute a fake so
 	// the shell-init/ensure-agent bodies run without spawning a real agent.
@@ -81,7 +88,7 @@ type deps struct {
 	// gatherReport), reading the real procfs, sockets, and process tree. Injected
 	// so doctor's report-printing and self-heal paths run against a synthetic
 	// report instead of this host's live agent state.
-	gather func(env paths.Env, layout paths.Layout, settings config.Settings) diagnose.Report
+	gather func(ctx context.Context, env paths.Env, layout paths.Layout, settings config.Settings) diagnose.Report
 	// tokenSource reads another user's per-login socket token for a cross-user
 	// doctor run (see execTokenSource). The production value re-executes this
 	// binary under the target's credentials; a fake lets doctorCrossUser run
@@ -101,11 +108,11 @@ type deps struct {
 	// both branches run regardless of what the test host has, and platform-bound
 	// in production (newGraphicalPrompter): what counts as a usable graphical
 	// session, and what draws the dialog, are each platform's own answers.
-	graphicalPrompter func(config.Settings, keys.Logger) keys.Prompter
+	graphicalPrompter func(context.Context, config.Settings, keys.Logger) keys.Prompter
 	// fetchHandoff redeems a one-shot passphrase-handoff token (keys.FetchHandoff).
 	// Injected so askpass's handoff path is testable without a live kernel
 	// keyring, which many containers and CI runners lack.
-	fetchHandoff func(token string) (string, error)
+	fetchHandoff func(ctx context.Context, token string) (string, error)
 	// tty is the reactive broker's terminal fallback when a passphrase prompt
 	// misses the wallet (see askpassBroker). The production value reads
 	// /dev/tty; a fake lets the broker's decline path run without a controlling
@@ -118,11 +125,11 @@ type deps struct {
 	// finds is what decides whether anything is created. Taking the finished
 	// view rather than the probe behind it also keeps that decision checkable
 	// from a machine whose wallet has no compartment at all.
-	wallet func(settings config.Settings) diagnose.WalletView
+	wallet func(ctx context.Context, settings config.Settings) diagnose.WalletView
 	// makeCompartment creates the compartment the configured wallet keeps
 	// SSHakku's entries in, and reports what it made. Nil where this system's
 	// wallet has no such thing to make. Only --fix ever calls it.
-	makeCompartment func(settings config.Settings) (string, error)
+	makeCompartment func(ctx context.Context, settings config.Settings) (string, error)
 }
 
 // realDeps wires deps to the production implementations.
@@ -151,11 +158,11 @@ func realDeps() deps {
 // helper by the path it was given, and a person types the binary's own name, so
 // the two callers arrive under different names and there is nothing to work
 // out: args are a prompt to answer, or a subcommand, and never both.
-func dispatch(d deps, stdout, stderr io.Writer, invokedAs string, args []string) int {
+func dispatch(ctx context.Context, d deps, stdout, stderr io.Writer, invokedAs string, args []string) int {
 	if filepath.Base(invokedAs) == askpassProgName {
-		return d.askpass(stdout, args)
+		return d.askpass(ctx, stdout, args)
 	}
-	return d.run(stdout, stderr, args)
+	return d.run(ctx, stdout, stderr, args)
 }
 
 // askpassProg returns the path to hand ssh as its SSH_ASKPASS helper: the name
@@ -168,26 +175,26 @@ func askpassProg(self string) string {
 
 // run dispatches a subcommand and returns the process exit code. Output goes to
 // the supplied writers so the command is testable without touching real stdio.
-func (d deps) run(stdout, stderr io.Writer, args []string) int {
+func (d deps) run(ctx context.Context, stdout, stderr io.Writer, args []string) int {
 	if len(args) == 0 {
 		_, _ = fmt.Fprint(stderr, usage)
 		return 2
 	}
 	switch args[0] {
 	case "shell-init":
-		return d.shellInit(stdout, stderr, args[1:])
+		return d.shellInit(ctx, stdout, stderr, args[1:])
 	case "ensure-agent":
-		return d.ensureAgent(stdout, stderr, args[1:])
+		return d.ensureAgent(ctx, stdout, stderr, args[1:])
 	case "load-keys":
-		return d.loadKeys(stderr)
+		return d.loadKeys(ctx, stderr)
 	case "askpass-env":
 		return d.askpassEnv(stdout, stderr, args[1:])
 	case "config":
-		return d.config(stdout, stderr, args[1:])
+		return d.config(ctx, stdout, stderr, args[1:])
 	case "doctor":
-		return d.doctor(stdout, stderr, args[1:])
+		return d.doctor(ctx, stdout, stderr, args[1:])
 	case "forget":
-		return d.forget(stdout, stderr, args[1:])
+		return d.forget(ctx, stdout, stderr, args[1:])
 	case internalReadSocketTokenCmd:
 		return readSocketTokenInternal(stdout)
 	case "help", "-h", "--help":
