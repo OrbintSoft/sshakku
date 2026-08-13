@@ -2286,3 +2286,70 @@ backends, WSL2 (Linux with an agent story of its own), Cygwin, MSI packaging
 → goals 13, 16, 17; open decisions 3, 8, 9.
 
 → rules 12, 15, 23, 26; no feature in `docs/FEATURES.md` gained or lost a promise
+
+### Phase 36 — The context that every call started over
+
+This program waits on other people's software — a D-Bus daemon that may not
+answer, `ssh-add`, a wallet CLI, a socket nobody is listening on — and it did so
+with no way to say "stop, the caller has gone". Twelve `context.Background()`
+calls, each one a root of its own, born where the wait was and reaching nothing
+above it; below `main` there was no context at all, so a deadline set at the top
+had nothing to travel down. Rule 28 states the shape that was missing: **one
+root, created in `main`, and everything below inherits it.** Tests take theirs
+from `t.Context()`, which the testing package cancels when the test ends, so a
+call that hangs fails the run rather than outliving it.
+
+**The root is a plain `context.Background()`, not `signal.NotifyContext`.**
+Making Ctrl-C cancel the D-Bus call in flight is a promise to a user, and a
+promise belongs in `docs/FEATURES.md` with a test that watches it fail first
+(rules 21–23). This phase changes no behaviour anyone can observe: it is the
+plumbing that such a promise would need, and it is deliberately left un-wired
+so the refactor and the feature can be judged separately.
+
+**Rule 12 decision.** `.golangci.yml` gains four linters, all of them already
+inside the pinned golangci-lint, so `go.mod` is untouched and there is no new
+licence to record (rule 16): **`contextcheck`** (a function that receives a
+context and creates a new one instead of inheriting), **`noctx`**
+(`exec.Command`, `net.Dial` and friends where a `*Context` form exists),
+**`fatcontext`** (a context re-wrapped inside a loop), **`containedctx`** (a
+context kept in a struct field, where it outlives the call it belonged to).
+
+**This reverses Phase 34's deliberate "no" on `noctx`**, and the reversal is the
+point rather than a change of taste. That "no" read: ten findings, all local
+unix sockets with explicit timeouts, *where a context adds nothing*. It was true
+only because there was no context to pass — with nothing above the dial, the
+timeout was genuinely all there was. Once the root flows from `main`, the same
+ten calls are the places where the caller's cancellation stops. A timeout ends
+the wait; a context ends the work.
+
+- **C1 — the rule and the record.** Rule 28 in `CLAUDE.md`, this phase in
+  `PLAN.md`.
+- **C2 — tests take `t.Context()`.** The test-side roots, and `usetesting`'s
+  `context-background`/`context-todo` stated explicitly in `.golangci.yml`
+  rather than left to the default.
+- **C3 — the root and the dispatch.** `main` creates the one
+  `context.Background()` and hands it to `dispatch`; `run`, `askpass` and the
+  command bodies take it as their first argument. Plumbing only — nothing
+  consumes it yet.
+- **C4 — the secret backends.** `ctx` on `Lookup`/`Store`/`Delete`/`List`,
+  across all eight implementations and every fake, which is where three of the
+  production roots lived (the Secret Service calls) and where the KeePassXC
+  dial is.
+- **C5 — the prompts.** `Prompter`, `TTY`, the askpass broker, the passphrase
+  handoff socket, pinentry, and the platform dialogs.
+- **C6 — loading keys.** The `ssh-add` runner and the key-add path: the last
+  production roots on Linux.
+- **C7 — the agent and the doctor.** `EnsureAgent` and its runner,
+  `net.DialTimeout` → `(&net.Dialer{Timeout: …}).DialContext`, the report
+  gatherer with the two darwin roots (ancestry, host checks), the wallet view,
+  the compartment maker, the cross-user token source, and the `$EDITOR` the
+  `config --edit` path spawns.
+- **C8 — enable the linters and close.** Each made to fire once before it is
+  trusted (rule 23 applied to a linter: a check that has never reported is
+  indistinguishable from one that is not running), then `make lint` on every
+  build, `make test`, `make build-cross`.
+
+→ goals 14, 16.
+
+→ rules 12, 16, 28; no feature in `docs/FEATURES.md` gained or lost a promise,
+and `docs/TEST-MATRIX.md` is untouched: nothing here is visible to a user.
