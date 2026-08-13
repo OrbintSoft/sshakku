@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"testing"
@@ -182,7 +183,7 @@ func TestRunDispatch(t *testing.T) {
 	// mechanism, so asserting only the exit code would pass either way.
 	t.Run("askpass-env headless", func(t *testing.T) {
 		d := realDeps()
-		d.graphicalPrompter = func(config.Settings, keys.Logger) keys.Prompter { return nil }
+		d.graphicalPrompter = func(context.Context, config.Settings, keys.Logger) keys.Prompter { return nil }
 		d.self = func() (string, error) { return "/opt/sshakku/bin/sshakku", nil }
 		var out, errOut bytes.Buffer
 		require.Zerof(t, d.run(t.Context(), &out, &errOut, []string{"askpass-env"}),
@@ -258,7 +259,9 @@ func TestLoadKeysSeams(t *testing.T) {
 	t.Run("a platform with a dialog selects it over the terminal", func(t *testing.T) {
 		tempRuntimeEnv(t)
 		d := depsReturning(newMemoryBackend())
-		d.graphicalPrompter = func(config.Settings, keys.Logger) keys.Prompter { return fixedPrompter{answer: "from the dialog"} }
+		d.graphicalPrompter = func(context.Context, config.Settings, keys.Logger) keys.Prompter {
+			return fixedPrompter{answer: "from the dialog"}
+		}
 		var errOut bytes.Buffer
 		assert.Zerof(t, d.loadKeys(t.Context(), &errOut),
 			"a session with a dialog loads no differently from one without; stderr=%q", errOut.String())

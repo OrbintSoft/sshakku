@@ -29,7 +29,7 @@ func TestHasGraphicalSession(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			assert.Equal(t, c.want, HasGraphicalSession(c.env, c.runner),
+			assert.Equal(t, c.want, HasGraphicalSession(t.Context(), c.env, c.runner),
 				"whether there is a screen decides where the user is asked, and getting it wrong the permissive "+
 					"way is a login shell waiting on a dialog nobody will ever see")
 			if !c.noXcall {

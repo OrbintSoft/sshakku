@@ -29,7 +29,7 @@ func newSecretBackend(ctx context.Context, user string, log keys.Logger, setting
 	case config.SecretBackendBitwarden:
 		return &keys.BitwardenBackend{
 			Runner:        keys.ExecRunner{Timeout: settings.CommandTimeout},
-			Prompter:      newWalletPasswordPrompter(settings, log),
+			Prompter:      newWalletPasswordPrompter(ctx, settings, log),
 			Email:         settings.BitwardenEmail,
 			Server:        settings.BitwardenServer,
 			Timeout:       settings.InteractiveTimeout,
@@ -55,9 +55,9 @@ type walletPasswordPrompter struct {
 	graphical keys.Prompter
 }
 
-func (p walletPasswordPrompter) Prompt(keyname string) (string, error) {
+func (p walletPasswordPrompter) Prompt(ctx context.Context, keyname string) (string, error) {
 	if p.graphical != nil {
-		return p.graphical.Prompt(keyname)
+		return p.graphical.Prompt(ctx, keyname)
 	}
 	// Terminal fallback: reaches the real controlling terminal, so it cannot run
 	// in a unit test; the graphical branch above is unit-tested.
@@ -65,8 +65,8 @@ func (p walletPasswordPrompter) Prompt(keyname string) (string, error) {
 	return ttyPrompter{}.Prompt("Enter "+keyname, true)
 }
 
-func (walletPasswordPrompter) Available() bool { return true }
+func (walletPasswordPrompter) Available(context.Context) bool { return true }
 
-func newWalletPasswordPrompter(settings config.Settings, log keys.Logger) keys.Prompter {
-	return walletPasswordPrompter{graphical: newGraphicalPrompter(settings, log)}
+func newWalletPasswordPrompter(ctx context.Context, settings config.Settings, log keys.Logger) keys.Prompter {
+	return walletPasswordPrompter{graphical: newGraphicalPrompter(ctx, settings, log)}
 }

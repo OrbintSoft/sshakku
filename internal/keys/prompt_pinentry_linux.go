@@ -68,18 +68,18 @@ type PinentryPrompter struct {
 // display to draw on. It is deliberately not told about a terminal: a pinentry
 // built for the console would otherwise take one over, and the terminal is the
 // other prompter's job, not this one's.
-func (p PinentryPrompter) Prompt(keyname string) (string, error) {
+func (p PinentryPrompter) Prompt(ctx context.Context, keyname string) (string, error) {
 	timeout := p.Timeout
 	if timeout <= 0 {
 		timeout = DefaultInteractiveTimeout
 	}
-	return p.converse(timeout, func(c *assuanConv) (string, error) { return c.getpin(keyname) })
+	return p.converse(ctx, timeout, func(c *assuanConv) (string, error) { return c.getpin(keyname) })
 }
 
 // converse runs one pinentry, hands the conversation with it to ask, and closes
 // the dialog and reaps the process however that ends.
-func (p PinentryPrompter) converse(timeout time.Duration, ask func(*assuanConv) (string, error)) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+func (p PinentryPrompter) converse(ctx context.Context, timeout time.Duration, ask func(*assuanConv) (string, error)) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, p.bin())
@@ -122,7 +122,7 @@ func (p PinentryPrompter) converse(timeout time.Duration, ask func(*assuanConv) 
 // An answer nobody understands, or none at all, counts as a dialog: passing over
 // one that works is the worse mistake, and one that fails when it is finally
 // asked already reaches the terminal with its name in the log.
-func (p PinentryPrompter) Available() bool {
+func (p PinentryPrompter) Available(ctx context.Context) bool {
 	look := p.lookPath
 	if look == nil {
 		look = execLookPath
@@ -134,7 +134,7 @@ func (p PinentryPrompter) Available() bool {
 	if timeout <= 0 {
 		timeout = DefaultCommandTimeout
 	}
-	flavor, err := p.converse(timeout, (*assuanConv).flavor)
+	flavor, err := p.converse(ctx, timeout, (*assuanConv).flavor)
 	if err != nil {
 		return true
 	}

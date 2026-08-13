@@ -3,6 +3,8 @@
 package main
 
 import (
+	"context"
+
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/keys"
 )
@@ -12,4 +14,4 @@ import (
 // nothing for a session with a screen to be offered. Returning nil is what
 // sends the caller to the other way of asking rather than to a dialog that
 // would never appear.
-func newGraphicalPrompter(config.Settings, keys.Logger) keys.Prompter { return nil }
+func newGraphicalPrompter(context.Context, config.Settings, keys.Logger) keys.Prompter { return nil }

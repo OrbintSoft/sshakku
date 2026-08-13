@@ -15,7 +15,7 @@ import (
 func TestOsascriptPrompt(t *testing.T) {
 	t.Run("returns the entered passphrase, newline trimmed", func(t *testing.T) {
 		r := newFakeRunner().on(osascriptBin, stdout("typed-pass\n", 0))
-		got, err := OsascriptPrompter{Runner: r}.Prompt("id_rsa")
+		got, err := OsascriptPrompter{Runner: r}.Prompt(t.Context(), "id_rsa")
 		require.NoError(t, err, "a dialog the user answered must hand the answer back")
 		assert.Equal(t, "typed-pass", got,
 			"and it must be what they typed: the newline the dialog prints is not part of the passphrase")
@@ -38,7 +38,7 @@ func TestOsascriptPrompt(t *testing.T) {
 			body, _ = os.ReadFile(c.Args[0])
 			return Result{Stdout: []byte("x")}, nil
 		})
-		_, err := OsascriptPrompter{Runner: r}.Prompt("id_rsa")
+		_, err := OsascriptPrompter{Runner: r}.Prompt(t.Context(), "id_rsa")
 		require.NoError(t, err, "putting the dialog on the screen must succeed")
 		assert.Equal(t, passphraseDialog, string(body),
 			"and what osascript reads while it runs must be the dialog SSHakku ships, present on disk at that moment")
@@ -50,7 +50,7 @@ func TestOsascriptPrompt(t *testing.T) {
 			path = c.Args[0]
 			return Result{Stdout: []byte("x")}, nil
 		})
-		_, err := OsascriptPrompter{Runner: r}.Prompt("id_rsa")
+		_, err := OsascriptPrompter{Runner: r}.Prompt(t.Context(), "id_rsa")
 		require.NoError(t, err, "putting the dialog on the screen must succeed")
 		_, err = os.Stat(path)
 		assert.ErrorIsf(t, err, os.ErrNotExist, "and the script must not outlive the prompt: %s", path)
@@ -58,7 +58,7 @@ func TestOsascriptPrompt(t *testing.T) {
 
 	t.Run("a dismissed dialog is ErrPromptCanceled", func(t *testing.T) {
 		r := newFakeRunner().on(osascriptBin, stdout("", 1))
-		_, err := OsascriptPrompter{Runner: r}.Prompt("id_rsa")
+		_, err := OsascriptPrompter{Runner: r}.Prompt(t.Context(), "id_rsa")
 		assert.ErrorIs(t, err, ErrPromptCanceled,
 			"closing a dialog is an answer, and must be passed on as one rather than as a failure")
 	})
@@ -66,7 +66,7 @@ func TestOsascriptPrompt(t *testing.T) {
 	t.Run("a failure to start osascript is an error", func(t *testing.T) {
 		wantErr := errors.New("boom")
 		r := newFakeRunner().on(osascriptBin, fails(wantErr))
-		_, err := OsascriptPrompter{Runner: r}.Prompt("id_rsa")
+		_, err := OsascriptPrompter{Runner: r}.Prompt(t.Context(), "id_rsa")
 		assert.ErrorIs(t, err, wantErr,
 			"a dialog that could not be started must be reported as that, not as one the user dismissed")
 	})
@@ -76,7 +76,7 @@ func TestOsascriptPrompt(t *testing.T) {
 		defer stubCreateDialogScript(t, func() (*os.File, error) { return nil, wantErr })()
 
 		r := newFakeRunner().on(osascriptBin, stdout("typed-pass\n", 0))
-		_, err := OsascriptPrompter{Runner: r}.Prompt("id_rsa")
+		_, err := OsascriptPrompter{Runner: r}.Prompt(t.Context(), "id_rsa")
 		assert.ErrorIs(t, err, wantErr,
 			"with no script to put on the screen the question cannot be asked, and that must be said rather than "+
 				"answered as though nobody was there")
@@ -97,7 +97,7 @@ func TestOsascriptPrompt(t *testing.T) {
 		})()
 
 		r := newFakeRunner().on(osascriptBin, stdout("typed-pass\n", 0))
-		_, err := OsascriptPrompter{Runner: r}.Prompt("id_rsa")
+		_, err := OsascriptPrompter{Runner: r}.Prompt(t.Context(), "id_rsa")
 		assert.Error(t, err, "a script that could not be written cannot be run, and that must be said")
 		assert.Emptyf(t, r.calls, "osascript must not be run with a script that was never written: %+v", r.calls)
 		_, statErr := os.Stat(path)
@@ -116,15 +116,15 @@ func stubCreateDialogScript(t *testing.T, f func() (*os.File, error)) func() {
 
 func TestOsascriptAvailable(t *testing.T) {
 	found := OsascriptPrompter{lookPath: func(string) (string, error) { return "/usr/bin/osascript", nil }}
-	assert.True(t, found.Available(), "a dialog that is installed can be asked in")
+	assert.True(t, found.Available(t.Context()), "a dialog that is installed can be asked in")
 	missing := OsascriptPrompter{lookPath: func(string) (string, error) { return "", errors.New("not found") }}
-	assert.False(t, missing.Available(), "and one that is not installed cannot")
+	assert.False(t, missing.Available(t.Context()), "and one that is not installed cannot")
 }
 
 // TestOsascriptAvailableDefaultLookPath covers Available's nil-lookPath branch,
 // which falls back to the real os/exec PATH lookup.
 func TestOsascriptAvailableDefaultLookPath(t *testing.T) {
-	_ = OsascriptPrompter{}.Available()
+	_ = OsascriptPrompter{}.Available(t.Context())
 }
 
 // TestEmbeddedDialogTakesItsArgument pins the contract the Go side depends on:

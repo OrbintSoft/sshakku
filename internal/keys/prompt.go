@@ -1,6 +1,9 @@
 package keys
 
-import "errors"
+import (
+	"context"
+	"errors"
+)
 
 // ErrPromptCanceled is returned by a Prompter when the user dismisses the dialog
 // instead of entering a passphrase. The loader treats it as "give up on this key"
@@ -11,10 +14,10 @@ var ErrPromptCanceled = errors.New("passphrase prompt canceled")
 type Prompter interface {
 	// Prompt returns the passphrase entered for keyname, ErrPromptCanceled if the
 	// user dismisses the dialog, or another error if the prompt cannot run.
-	Prompt(keyname string) (string, error)
+	Prompt(ctx context.Context, keyname string) (string, error)
 	// Available reports whether this prompter can ask on the session it finds
 	// itself in, so the loader can fall back to a terminal prompt when none can.
-	Available() bool
+	Available(ctx context.Context) bool
 }
 
 // namedPrompter is implemented by prompters that can say what they are, so a

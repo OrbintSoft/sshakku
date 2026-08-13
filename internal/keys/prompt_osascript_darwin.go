@@ -3,6 +3,7 @@
 package keys
 
 import (
+	"context"
 	_ "embed"
 	"os"
 	"strings"
@@ -71,7 +72,7 @@ func writeDialogScript() (path string, cleanup func(), err error) {
 }
 
 // Prompt shows the passphrase dialog for keyname.
-func (p OsascriptPrompter) Prompt(keyname string) (string, error) {
+func (p OsascriptPrompter) Prompt(ctx context.Context, keyname string) (string, error) {
 	script, cleanup, err := writeDialogScript()
 	if err != nil {
 		return "", err
@@ -100,7 +101,7 @@ func (p OsascriptPrompter) Prompt(keyname string) (string, error) {
 func (p OsascriptPrompter) Name() string { return osascriptBin }
 
 // Available reports whether osascript is on PATH.
-func (p OsascriptPrompter) Available() bool {
+func (p OsascriptPrompter) Available(ctx context.Context) bool {
 	look := p.lookPath
 	if look == nil {
 		look = execLookPath

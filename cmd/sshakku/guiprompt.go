@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
@@ -28,15 +29,15 @@ type dialog struct {
 // installed programs can tell in advance. One that cannot draw must not take
 // the question past the ones that can, and the terminal a login shell started
 // from is the last resort rather than the first.
-func chooseDialog(dialogs []dialog, want string, terminal keys.Prompter, log keys.Logger) keys.Prompter {
+func chooseDialog(ctx context.Context, dialogs []dialog, want string, terminal keys.Prompter, log keys.Logger) keys.Prompter {
 	if want != "" && want != config.GUIPrompterAuto {
-		return namedDialog(dialogs, want, terminal, log)
+		return namedDialog(ctx, dialogs, want, terminal, log)
 	}
 	// Built from the terminal backwards, so each dialog falls back to the next
 	// one after it and the last of them falls back to the terminal.
 	asked, found := terminal, false
 	for i := len(dialogs) - 1; i >= 0; i-- {
-		if !dialogs[i].prompter.Available() {
+		if !dialogs[i].prompter.Available(ctx) {
 			continue
 		}
 		asked, found = keys.FallbackPrompter{Primary: dialogs[i].prompter, Fallback: asked, Log: log}, true
@@ -49,12 +50,12 @@ func chooseDialog(dialogs []dialog, want string, terminal keys.Prompter, log key
 
 // namedDialog returns the one dialog the configuration asked for, paired with
 // the terminal, or nil when it cannot ask here.
-func namedDialog(dialogs []dialog, want string, terminal keys.Prompter, log keys.Logger) keys.Prompter {
+func namedDialog(ctx context.Context, dialogs []dialog, want string, terminal keys.Prompter, log keys.Logger) keys.Prompter {
 	for _, d := range dialogs {
 		if d.name != want {
 			continue
 		}
-		if d.prompter.Available() {
+		if d.prompter.Available(ctx) {
 			return keys.FallbackPrompter{Primary: d.prompter, Fallback: terminal, Log: log}
 		}
 		// Saying which one could not ask, and why, is the difference between

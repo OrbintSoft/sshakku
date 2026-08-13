@@ -2,6 +2,8 @@
 
 package keys
 
+import "context"
+
 // GUIEnv is the subset of the environment that GUI detection reads. Both
 // variables are freedesktop display-server conventions, which is why this
 // lives on the Linux side: no macOS session advertises itself this way.
@@ -17,7 +19,7 @@ type GUIEnv struct {
 //
 // It answers only whether there is a screen. Whether anything is installed to
 // draw a dialog on it is a separate question, asked of the dialogs themselves.
-func HasGraphicalSession(env GUIEnv, r Runner) bool {
+func HasGraphicalSession(ctx context.Context, env GUIEnv, r Runner) bool {
 	if env.WaylandDisplay != "" {
 		return true
 	}

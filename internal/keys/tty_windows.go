@@ -2,7 +2,10 @@
 
 package keys
 
-import "errors"
+import (
+	"context"
+	"errors"
+)
 
 // ErrNoTerminal is returned when there is no controlling terminal to prompt
 // on. A headless session with no GUI and no tty is a normal, expected
@@ -26,10 +29,10 @@ func ReadTTYLine(string, bool) (string, error) { return "", errNoConsolePrompt }
 type TTYPrompter struct{}
 
 // Prompt reports errNoConsolePrompt.
-func (TTYPrompter) Prompt(string) (string, error) { return "", errNoConsolePrompt }
+func (TTYPrompter) Prompt(context.Context, string) (string, error) { return "", errNoConsolePrompt }
 
 // Available reports false: there is no console prompt to fall back to here.
-func (TTYPrompter) Available() bool { return false }
+func (TTYPrompter) Available(context.Context) bool { return false }
 
 // Name is what to call this prompter in a message: the place the user would be
 // asked, not a program they could go and install.

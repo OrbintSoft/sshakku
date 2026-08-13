@@ -43,7 +43,7 @@ func TestSocketHandoffRoundTrip(t *testing.T) {
 	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm(),
 		"reachable by this user alone: anyone who can connect to it gets the passphrase")
 
-	got, err := socketHandoffFetch(token)
+	got, err := socketHandoffFetch(t.Context(), token)
 	require.NoError(t, err, "collecting it must succeed")
 	assert.Equal(t, "s3cr3t", got, "and hand back exactly what was put aside")
 }
@@ -51,7 +51,7 @@ func TestSocketHandoffRoundTrip(t *testing.T) {
 func TestSocketHandoffOneShot(t *testing.T) {
 	token, err := socketHandoffStash("s3cr3t", 5*time.Second, fixedBase(shortDir(t)), addrLimit)
 	require.NoError(t, err, "putting a passphrase aside must succeed")
-	_, err = socketHandoffFetch(token)
+	_, err = socketHandoffFetch(t.Context(), token)
 	require.NoError(t, err, "and the helper that was meant to have it must get it")
 
 	deadline := time.Now().Add(2 * time.Second)
@@ -65,7 +65,7 @@ func TestSocketHandoffOneShot(t *testing.T) {
 	assert.Truef(t, os.IsNotExist(err),
 		"a passphrase that has been collected must leave nothing behind to collect again: %s", token)
 
-	_, err = socketHandoffFetch(token)
+	_, err = socketHandoffFetch(t.Context(), token)
 	assert.Error(t, err, "and a second attempt must get nothing: one stash is one handoff")
 }
 

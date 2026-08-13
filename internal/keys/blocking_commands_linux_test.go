@@ -22,19 +22,19 @@ func platformBlockingTools() []string {
 func platformBlockingCases(ctx context.Context, brief time.Duration) []blockingCase {
 	return []blockingCase{
 		{"GUI detection (xset)", func() {
-			HasGraphicalSession(GUIEnv{Display: ":0"}, ExecRunner{})
+			HasGraphicalSession(ctx, GUIEnv{Display: ":0"}, ExecRunner{})
 		}},
 		{"graphical passphrase prompt (kdialog)", func() {
-			_, _ = KDialogPrompter{Runner: ExecRunner{}, Timeout: brief}.Prompt("id_test")
+			_, _ = KDialogPrompter{Runner: ExecRunner{}, Timeout: brief}.Prompt(ctx, "id_test")
 		}},
 		{"graphical passphrase prompt (zenity)", func() {
-			_, _ = ZenityPrompter{Runner: ExecRunner{}, Timeout: brief}.Prompt("id_test")
+			_, _ = ZenityPrompter{Runner: ExecRunner{}, Timeout: brief}.Prompt(ctx, "id_test")
 		}},
 		{"graphical passphrase prompt (pinentry)", func() {
-			_, _ = PinentryPrompter{Timeout: brief}.Prompt("id_test")
+			_, _ = PinentryPrompter{Timeout: brief}.Prompt(ctx, "id_test")
 		}},
 		{"which pinentry is installed", func() {
-			PinentryPrompter{ProbeTimeout: brief}.Available()
+			PinentryPrompter{ProbeTimeout: brief}.Available(ctx)
 		}},
 		{"secret-tool Lookup", func() {
 			_, _, _ = SecretToolBackend{Runner: ExecRunner{}, User: "u", Timeout: brief}.Lookup(ctx, defaultServicePrefix+"-id_test")

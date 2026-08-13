@@ -67,7 +67,7 @@ func (d deps) askpassFromHandoff(ctx context.Context, stdout io.Writer) int {
 		return 1
 	}
 
-	pass, err := d.fetchHandoff(token)
+	pass, err := d.fetchHandoff(ctx, token)
 	if err != nil {
 		_ = log.Log("ERROR", fmt.Sprintf("askpass: fetch handoff token …%s: %v", tail(token, 3), err))
 		return 1

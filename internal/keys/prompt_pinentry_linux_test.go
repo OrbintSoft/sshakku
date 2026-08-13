@@ -23,7 +23,7 @@ func TestPinentryPrompt(t *testing.T) {
 	t.Run("returns what was typed", func(t *testing.T) {
 		t.Setenv("SSHAKKU_TEST_PINENTRY_PIN", "correct horse")
 
-		pass, err := PinentryPrompter{Bin: fakePinentry}.Prompt("id_rsa")
+		pass, err := PinentryPrompter{Bin: fakePinentry}.Prompt(t.Context(), "id_rsa")
 		require.NoError(t, err, "a dialog the user answered must hand the answer back")
 		assert.Equal(t, "correct horse", pass, "and it must be what they typed")
 	})
@@ -31,7 +31,7 @@ func TestPinentryPrompt(t *testing.T) {
 	t.Run("a dismissed dialog is ErrPromptCanceled", func(t *testing.T) {
 		t.Setenv("SSHAKKU_TEST_PINENTRY_CANCEL", "1")
 
-		_, err := PinentryPrompter{Bin: fakePinentry}.Prompt("id_rsa")
+		_, err := PinentryPrompter{Bin: fakePinentry}.Prompt(t.Context(), "id_rsa")
 		assert.ErrorIs(t, err, ErrPromptCanceled,
 			"closing a dialog is an answer, and must be passed on as one rather than as a failure")
 	})
@@ -40,7 +40,7 @@ func TestPinentryPrompt(t *testing.T) {
 		t.Setenv("SSHAKKU_TEST_PINENTRY_NOISE", "1")
 		t.Setenv("SSHAKKU_TEST_PINENTRY_PIN", "the-passphrase")
 
-		pass, err := PinentryPrompter{Bin: fakePinentry}.Prompt("id_rsa")
+		pass, err := PinentryPrompter{Bin: fakePinentry}.Prompt(t.Context(), "id_rsa")
 		require.NoError(t, err, "a dialog the user answered must hand the answer back")
 		assert.Equal(t, "the-passphrase", pass,
 			"pinentry may say things about itself at any point, and none of them is the passphrase")
@@ -49,7 +49,7 @@ func TestPinentryPrompt(t *testing.T) {
 	t.Run("percent-escaped bytes come back as they were typed", func(t *testing.T) {
 		t.Setenv("SSHAKKU_TEST_PINENTRY_PIN", "a%25b%0Ac")
 
-		pass, err := PinentryPrompter{Bin: fakePinentry}.Prompt("id_rsa")
+		pass, err := PinentryPrompter{Bin: fakePinentry}.Prompt(t.Context(), "id_rsa")
 		require.NoError(t, err, "a dialog the user answered must hand the answer back")
 		assert.Equal(t, "a%b\nc", pass,
 			"the protocol escapes bytes on the wire, and a passphrase left escaped is not the one that was typed")
@@ -59,14 +59,14 @@ func TestPinentryPrompt(t *testing.T) {
 		t.Setenv("SSHAKKU_TEST_PINENTRY_HANG", "1")
 
 		start := time.Now()
-		_, err := PinentryPrompter{Bin: fakePinentry, Timeout: 300 * time.Millisecond}.Prompt("id_rsa")
+		_, err := PinentryPrompter{Bin: fakePinentry, Timeout: 300 * time.Millisecond}.Prompt(t.Context(), "id_rsa")
 		assert.Error(t, err, "a dialog that never answered must end as an error the caller can fall back from")
 		assert.Less(t, time.Since(start), 5*time.Second,
 			"and within the bound it was given: something is waiting on this, and it must not wait for ever")
 	})
 
 	t.Run("a pinentry that cannot be started is an error, not a hang", func(t *testing.T) {
-		_, err := PinentryPrompter{Bin: "/nonexistent/pinentry"}.Prompt("id_rsa")
+		_, err := PinentryPrompter{Bin: "/nonexistent/pinentry"}.Prompt(t.Context(), "id_rsa")
 		require.Error(t, err, "a dialog that cannot be started cannot ask, and that must be said")
 		assert.NotErrorIs(t, err, ErrPromptCanceled,
 			"but not as a dismissal: nobody was there to dismiss anything, and the question can still go elsewhere")
@@ -81,14 +81,14 @@ func TestPinentryAvailable(t *testing.T) {
 
 	t.Run("not installed", func(t *testing.T) {
 		p := PinentryPrompter{lookPath: func(string) (string, error) { return "", errors.New("not found") }}
-		assert.False(t, p.Available(), "a program that is not installed cannot put a dialog on any screen")
+		assert.False(t, p.Available(t.Context()), "a program that is not installed cannot put a dialog on any screen")
 	})
 
 	t.Run("a build that draws on a screen", func(t *testing.T) {
 		t.Setenv("SSHAKKU_TEST_PINENTRY_FLAVOR", "gtk2:curses")
 
 		p := PinentryPrompter{Bin: fakePinentry, lookPath: installed}
-		assert.True(t, p.Available(),
+		assert.True(t, p.Available(t.Context()),
 			"a pinentry that draws with GTK is a dialog: the console it also falls back to is not what it leads with")
 	})
 
@@ -97,7 +97,7 @@ func TestPinentryAvailable(t *testing.T) {
 			t.Setenv("SSHAKKU_TEST_PINENTRY_FLAVOR", flavor)
 
 			p := PinentryPrompter{Bin: fakePinentry, lookPath: installed}
-			assert.Falsef(t, p.Available(),
+			assert.Falsef(t, p.Available(t.Context()),
 				"the %s build draws on a terminal, so counting it as a dialog would take the question from one that "+
 					"can be drawn and leave it with nowhere to appear", flavor)
 		}
@@ -107,13 +107,13 @@ func TestPinentryAvailable(t *testing.T) {
 		t.Setenv("SSHAKKU_TEST_PINENTRY_FLAVOR", "a-toolkit-nobody-has-written-yet")
 
 		p := PinentryPrompter{Bin: fakePinentry, lookPath: installed}
-		assert.True(t, p.Available(),
+		assert.True(t, p.Available(t.Context()),
 			"a build this code has never heard of counts as a dialog: passing over one that works is the worse mistake")
 	})
 
 	t.Run("a pinentry that cannot be asked counts as a dialog", func(t *testing.T) {
 		p := PinentryPrompter{Bin: "/nonexistent/pinentry", lookPath: installed}
-		assert.True(t, p.Available(),
+		assert.True(t, p.Available(t.Context()),
 			"a pinentry too old to say what it draws with is not one that cannot draw")
 	})
 
@@ -133,7 +133,7 @@ func TestPinentryAvailable(t *testing.T) {
 		t.Setenv("SSHAKKU_TEST_PINENTRY_HANG", "1")
 
 		start := time.Now()
-		PinentryPrompter{Bin: fakePinentry, lookPath: installed, ProbeTimeout: 300 * time.Millisecond}.Available()
+		PinentryPrompter{Bin: fakePinentry, lookPath: installed, ProbeTimeout: 300 * time.Millisecond}.Available(t.Context())
 		assert.Less(t, time.Since(start), 5*time.Second,
 			"asking pinentry about itself waits on no person, and must be bounded like any other command")
 	})
@@ -203,14 +203,14 @@ func TestPinentryConversationWithNoPipesToTalkOver(t *testing.T) {
 	t.Run("nothing to write to", func(t *testing.T) {
 		saved(t)
 		stdinPipe = func(*exec.Cmd) (io.WriteCloser, error) { return nil, errors.New("stdin already set") }
-		_, err := PinentryPrompter{Bin: fakePinentry}.Prompt("id_rsa")
+		_, err := PinentryPrompter{Bin: fakePinentry}.Prompt(t.Context(), "id_rsa")
 		assert.Error(t, err, "with no way to put the question, the caller must be told rather than left waiting")
 	})
 
 	t.Run("nothing to read from", func(t *testing.T) {
 		saved(t)
 		stdoutPipe = func(*exec.Cmd) (io.ReadCloser, error) { return nil, errors.New("stdout already set") }
-		_, err := PinentryPrompter{Bin: fakePinentry}.Prompt("id_rsa")
+		_, err := PinentryPrompter{Bin: fakePinentry}.Prompt(t.Context(), "id_rsa")
 		assert.Error(t, err, "with no way to hear the answer, no dialog may be left running with nobody reading it")
 	})
 }

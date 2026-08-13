@@ -54,7 +54,7 @@ func TestSocketHandoffNoGoroutineLeak(t *testing.T) {
 	// Claimed stash: the server must exit right after serving the one fetch.
 	claimed, err := socketHandoffStash("s3cr3t", 5*time.Second, fixedBase(base), addrLimit)
 	require.NoError(t, err, "putting a second passphrase aside must succeed")
-	_, err = socketHandoffFetch(claimed)
+	_, err = socketHandoffFetch(t.Context(), claimed)
 	require.NoError(t, err, "and the helper that was meant to have it must get it")
 	waitGone(t, claimed)
 

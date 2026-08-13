@@ -1,6 +1,7 @@
 package keys
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -38,12 +39,12 @@ type countingPrompter struct {
 	asked    int
 }
 
-func (p *countingPrompter) Prompt(string) (string, error) {
+func (p *countingPrompter) Prompt(context.Context, string) (string, error) {
 	p.asked++
 	return p.password, p.err
 }
 
-func (p *countingPrompter) Available() bool { return true }
+func (p *countingPrompter) Available(context.Context) bool { return true }
 
 // cliBackend wires a CLI backend to the fakes above.
 func cliBackend(runner *recordingRunner, prompter *countingPrompter) *KeePassXCCLIBackend {

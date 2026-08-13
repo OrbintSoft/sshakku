@@ -297,7 +297,7 @@ func (l Loader) loadViaVaultThenPrompt(ctx context.Context, keyfile, keyname str
 	}
 
 	for attempt := 1; attempt <= max; attempt++ {
-		pass, err := l.Prompt.Prompt(keyname)
+		pass, err := l.Prompt.Prompt(ctx, keyname)
 		if err != nil {
 			switch {
 			case errors.Is(err, ErrPromptCanceled):

@@ -37,7 +37,7 @@ func TestADialogThatFailsIsNamedByItsOwnName(t *testing.T) {
 
 			log := &fakeLogger{}
 			terminal := &namedFake{answer: "typed on the terminal"}
-			pass, err := FallbackPrompter{Primary: c.prompter, Fallback: terminal, Log: log}.Prompt("id_rsa")
+			pass, err := FallbackPrompter{Primary: c.prompter, Fallback: terminal, Log: log}.Prompt(t.Context(), "id_rsa")
 			require.NoError(t, err, "a dialog that could not run must not lose the question")
 			assert.Equal(t, "typed on the terminal", pass, "the user is asked on the terminal instead")
 			assert.Containsf(t, strings.Join(log.lines, "\n"), c.name,

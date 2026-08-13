@@ -1,6 +1,7 @@
 package keys
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -38,8 +39,8 @@ func blockingTools(t *testing.T) {
 // prompt, which is a different question.
 type fixedPrompter struct{}
 
-func (fixedPrompter) Prompt(string) (string, error) { return "master-password", nil }
-func (fixedPrompter) Available() bool               { return true }
+func (fixedPrompter) Prompt(context.Context, string) (string, error) { return "master-password", nil }
+func (fixedPrompter) Available(context.Context) bool                 { return true }
 
 // TestNoCommandBlocksIndefinitely verifies that nothing SSHakku runs can hold a
 // shell up forever. A login shell and an `ssh` awaiting a passphrase both sit

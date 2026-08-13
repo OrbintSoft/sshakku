@@ -47,9 +47,9 @@ type fakePrompter struct {
 	calls []string
 }
 
-func (p *fakePrompter) Available() bool { return p.avail }
+func (p *fakePrompter) Available(context.Context) bool { return p.avail }
 
-func (p *fakePrompter) Prompt(keyname string) (string, error) {
+func (p *fakePrompter) Prompt(_ context.Context, keyname string) (string, error) {
 	p.calls = append(p.calls, keyname)
 	return p.pass, p.err
 }

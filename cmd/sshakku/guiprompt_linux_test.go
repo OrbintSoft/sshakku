@@ -22,7 +22,7 @@ func TestNoGraphicalPrompterWithNoDisplayServer(t *testing.T) {
 	t.Setenv("WAYLAND_DISPLAY", "")
 	t.Setenv("DISPLAY", "")
 
-	assert.Nil(t, newGraphicalPrompter(config.Settings{}, nil),
+	assert.Nil(t, newGraphicalPrompter(t.Context(), config.Settings{}, nil),
 		"with no display server a dialog would be drawn nowhere, and the login shell would wait for it")
 }
 
@@ -52,11 +52,11 @@ func TestGraphicalPromptOnADesktopWithoutKDE(t *testing.T) {
 	t.Setenv("WAYLAND_DISPLAY", "wayland-0")
 	t.Setenv("SSHAKKU_TEST_PINENTRY_PIN", typed)
 
-	p := newGraphicalPrompter(config.Settings{}, nil)
+	p := newGraphicalPrompter(t.Context(), config.Settings{}, nil)
 	require.NotNil(t, p,
 		"a graphical session that is not KDE still has a screen, so the passphrase is asked for in a dialog")
 
-	pass, err := p.Prompt("id_test")
+	pass, err := p.Prompt(t.Context(), "id_test")
 	require.NoError(t, err, "the dialog must answer")
 	assert.Equal(t, typed, pass, "with what was typed into it")
 }
@@ -71,7 +71,7 @@ func TestGraphicalPromptWithOnlyZenity(t *testing.T) {
 	t.Setenv("PATH", dir)
 	t.Setenv("WAYLAND_DISPLAY", "wayland-0")
 
-	p := newGraphicalPrompter(config.Settings{}, nil)
+	p := newGraphicalPrompter(t.Context(), config.Settings{}, nil)
 	fallback, ok := p.(keys.FallbackPrompter)
 	require.Truef(t, ok, "a dialog must be paired with the terminal to fall back to, got %T", p)
 	assert.IsType(t, keys.ZenityPrompter{}, fallback.Primary,
@@ -97,7 +97,7 @@ func TestGraphicalPromptWhereTheOnlyPinentryIsAConsoleOne(t *testing.T) {
 	t.Setenv("WAYLAND_DISPLAY", "wayland-0")
 	t.Setenv("SSHAKKU_TEST_PINENTRY_FLAVOR", "curses")
 
-	p := newGraphicalPrompter(config.Settings{}, nil)
+	p := newGraphicalPrompter(t.Context(), config.Settings{}, nil)
 	fallback, ok := p.(keys.FallbackPrompter)
 	require.Truef(t, ok, "a dialog must be paired with the terminal to fall back to, got %T", p)
 	assert.IsType(t, keys.ZenityPrompter{}, fallback.Primary,
@@ -124,14 +124,14 @@ func TestGraphicalPrompterHonoursTheConfiguration(t *testing.T) {
 	t.Run("none asks on the terminal even with a screen and a dialog installed", func(t *testing.T) {
 		install(t, "pinentry", "kdialog")
 
-		assert.Nilf(t, newGraphicalPrompter(config.Settings{GUIPrompter: config.GUIPrompterNone}, nil),
+		assert.Nilf(t, newGraphicalPrompter(t.Context(), config.Settings{GUIPrompter: config.GUIPrompterNone}, nil),
 			"gui_prompter = %q means no dialog, screen or no screen", config.GUIPrompterNone)
 	})
 
 	t.Run("a named dialog is the one asked in", func(t *testing.T) {
 		install(t, "pinentry", "kdialog")
 
-		p := newGraphicalPrompter(config.Settings{GUIPrompter: config.GUIPrompterKDialog}, nil)
+		p := newGraphicalPrompter(t.Context(), config.Settings{GUIPrompter: config.GUIPrompterKDialog}, nil)
 		fallback, ok := p.(keys.FallbackPrompter)
 		require.Truef(t, ok, "a dialog must be paired with the terminal to fall back to, got %T", p)
 		assert.IsType(t, keys.KDialogPrompter{}, fallback.Primary, "naming one dialog must not get another")
@@ -140,7 +140,7 @@ func TestGraphicalPrompterHonoursTheConfiguration(t *testing.T) {
 	t.Run("a named dialog that is not installed goes to the terminal, not to another", func(t *testing.T) {
 		install(t, "kdialog")
 
-		assert.Nil(t, newGraphicalPrompter(config.Settings{GUIPrompter: config.GUIPrompterPinentry}, nil),
+		assert.Nil(t, newGraphicalPrompter(t.Context(), config.Settings{GUIPrompter: config.GUIPrompterPinentry}, nil),
 			"a dialog the user did not choose is not a fallback for the one they did")
 	})
 }
@@ -153,7 +153,7 @@ func TestGraphicalSessionWithNoDialogInstalledAsksOnTheTerminal(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	t.Setenv("WAYLAND_DISPLAY", "wayland-0")
 
-	assert.Nil(t, newGraphicalPrompter(config.Settings{}, nil),
+	assert.Nil(t, newGraphicalPrompter(t.Context(), config.Settings{}, nil),
 		"a screen is not enough on its own: with no dialog installed the question must go to the terminal")
 }
 
@@ -171,7 +171,7 @@ func TestANamedPinentryThatCannotDrawIsNotReportedMissing(t *testing.T) {
 	t.Setenv("SSHAKKU_TEST_PINENTRY_FLAVOR", "curses")
 
 	log := &recordingLogger{}
-	assert.Nil(t, newGraphicalPrompter(config.Settings{GUIPrompter: config.GUIPrompterPinentry}, log),
+	assert.Nil(t, newGraphicalPrompter(t.Context(), config.Settings{GUIPrompter: config.GUIPrompterPinentry}, log),
 		"a named pinentry that cannot draw here sends the question to the terminal")
 
 	said := strings.Join(log.lines, "\n")
@@ -206,7 +206,7 @@ func TestGraphicalPrompterWithASessionAndKDialog(t *testing.T) {
 	t.Setenv("PATH", dir)
 	t.Setenv("WAYLAND_DISPLAY", "wayland-0")
 
-	p := newGraphicalPrompter(config.Settings{}, nil)
+	p := newGraphicalPrompter(t.Context(), config.Settings{}, nil)
 	require.NotNil(t, p, "a compositor is advertised and kdialog is installed, so there is a dialog to ask in")
 	fallback, ok := p.(keys.FallbackPrompter)
 	require.Truef(t, ok, "a dialog must be paired with the terminal to fall back to, got %T", p)

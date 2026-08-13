@@ -1,6 +1,7 @@
 package keys
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net"
@@ -131,8 +132,8 @@ func serveSocketHandoffOnce(ln net.Listener, sockPath, passphrase string, ttl ti
 
 // socketHandoffFetch dials the socket token names and reads the one
 // passphrase it serves.
-func socketHandoffFetch(token string) (string, error) {
-	conn, err := net.Dial("unix", token)
+func socketHandoffFetch(ctx context.Context, token string) (string, error) {
+	conn, err := (&net.Dialer{}).DialContext(ctx, "unix", token)
 	if err != nil {
 		return "", err
 	}

@@ -33,7 +33,7 @@ func newKeePassXCBackend(ctx context.Context, goos, user string, log keys.Logger
 	case config.KeePassXCRouteNative:
 		return newKeePassXCNativeRoute(settings), func() {}
 	case config.KeePassXCRouteCLI:
-		return newKeePassXCCLIRoute(settings, log), func() {}
+		return newKeePassXCCLIRoute(ctx, settings, log), func() {}
 	default:
 		// The Secret Service route: KeePassXC implements that API itself, so
 		// reaching it is the same as reaching any other wallet behind it and
@@ -83,10 +83,10 @@ func keepassxcRouteUnavailable(route, goos, database string) error {
 // KeePassXC running. It asks for the database password, so it is bounded by the
 // interactive budget — the one for a command waiting on a person — rather than
 // the shorter budget for a command expected to answer on its own.
-func newKeePassXCCLIRoute(settings config.Settings, log keys.Logger) keys.SecretBackend {
+func newKeePassXCCLIRoute(ctx context.Context, settings config.Settings, log keys.Logger) keys.SecretBackend {
 	return &keys.KeePassXCCLIBackend{
 		Runner:   keys.ExecRunner{Timeout: settings.CommandTimeout},
-		Prompter: newWalletPasswordPrompter(settings, log),
+		Prompter: newWalletPasswordPrompter(ctx, settings, log),
 		Database: settings.KeePassXCDatabase,
 		KeyFile:  settings.KeePassXCKeyFile,
 		Group:    settings.SecretContainer,

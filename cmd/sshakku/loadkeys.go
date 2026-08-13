@@ -54,7 +54,7 @@ func (d deps) loadKeys(ctx context.Context, stderr io.Writer) int {
 	// ask when it misses — the platform's dialog where there is one, otherwise
 	// the terminal, which needs no external binary.
 	var prompter keys.Prompter = keys.TTYPrompter{}
-	if graphical := d.graphicalPrompter(settings, log); graphical != nil {
+	if graphical := d.graphicalPrompter(ctx, settings, log); graphical != nil {
 		prompter = graphical
 	}
 

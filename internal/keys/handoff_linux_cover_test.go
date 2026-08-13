@@ -55,7 +55,7 @@ func TestStashPassphrase(t *testing.T) {
 
 func TestFetchPassphrase(t *testing.T) {
 	t.Run("malformed token", func(t *testing.T) {
-		_, err := fetchPassphrase("not-a-serial")
+		_, err := fetchPassphrase(t.Context(), "not-a-serial")
 		assert.Error(t, err, "a handle no stash was made under can redeem nothing")
 	})
 
@@ -64,7 +64,7 @@ func TestFetchPassphrase(t *testing.T) {
 		unlinked := false
 		keyringRead = func(keyring.Serial) ([]byte, error) { return nil, errors.New("EKEYEXPIRED") }
 		keyringUnlink = func(keyring.Serial) error { unlinked = true; return nil }
-		_, err := fetchPassphrase("7")
+		_, err := fetchPassphrase(t.Context(), "7")
 		assert.Error(t, err, "a passphrase that could not be read must be reported, not handed on as an empty one")
 		assert.True(t, unlinked,
 			"and the key must go anyway: a passphrase left in the keyring after a failed collection is one nobody is watching")
@@ -75,7 +75,7 @@ func TestFetchPassphrase(t *testing.T) {
 		var unlinked keyring.Serial
 		keyringRead = func(keyring.Serial) ([]byte, error) { return []byte("s3cr3t"), nil }
 		keyringUnlink = func(s keyring.Serial) error { unlinked = s; return nil }
-		got, err := fetchPassphrase("7")
+		got, err := fetchPassphrase(t.Context(), "7")
 		require.NoError(t, err, "collecting a stashed passphrase must succeed")
 		assert.Equal(t, "s3cr3t", got, "and hand back exactly what was put aside")
 		assert.Equal(t, keyring.Serial(7), unlinked,

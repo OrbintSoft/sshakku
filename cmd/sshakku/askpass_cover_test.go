@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"path/filepath"
 	"testing"
@@ -87,7 +88,7 @@ func TestAskpassFromHandoff(t *testing.T) {
 
 	t.Run("resolved passphrase is written", func(t *testing.T) {
 		d := realDeps()
-		d.fetchHandoff = func(string) (string, error) { return "s3cret", nil }
+		d.fetchHandoff = func(context.Context, string) (string, error) { return "s3cret", nil }
 		var out bytes.Buffer
 		require.Zero(t, d.askpassFromHandoff(t.Context(), &out), "a token that resolves is a prompt that can be answered")
 		assert.Equal(t, "s3cret\n", out.String(), "the passphrase, with the newline ssh expects and nothing else")
@@ -95,21 +96,21 @@ func TestAskpassFromHandoff(t *testing.T) {
 
 	t.Run("fetch error returns 1", func(t *testing.T) {
 		d := realDeps()
-		d.fetchHandoff = func(string) (string, error) { return "", errors.New("boom") }
+		d.fetchHandoff = func(context.Context, string) (string, error) { return "", errors.New("boom") }
 		assert.Equal(t, 1, d.askpassFromHandoff(t.Context(), &bytes.Buffer{}),
 			"a stash that could not be read must be reported, not answered with nothing")
 	})
 
 	t.Run("empty passphrase returns 1", func(t *testing.T) {
 		d := realDeps()
-		d.fetchHandoff = func(string) (string, error) { return "", nil }
+		d.fetchHandoff = func(context.Context, string) (string, error) { return "", nil }
 		assert.Equal(t, 1, d.askpassFromHandoff(t.Context(), &bytes.Buffer{}),
 			"an empty passphrase is not an answer, and handing one to ssh spends a retry")
 	})
 
 	t.Run("stdout write error returns 1", func(t *testing.T) {
 		d := realDeps()
-		d.fetchHandoff = func(string) (string, error) { return "s3cret", nil }
+		d.fetchHandoff = func(context.Context, string) (string, error) { return "s3cret", nil }
 		assert.Equal(t, 1, d.askpassFromHandoff(t.Context(), errWriter{}),
 			"a passphrase ssh never received must not be reported as given")
 	})
@@ -126,7 +127,7 @@ func TestAskpassDispatch(t *testing.T) {
 	t.Run("handoff token routes to the stash", func(t *testing.T) {
 		t.Setenv(keys.EnvPassHandoffToken, "42")
 		d := realDeps()
-		d.fetchHandoff = func(string) (string, error) { return "from-handoff", nil }
+		d.fetchHandoff = func(context.Context, string) (string, error) { return "from-handoff", nil }
 		var out bytes.Buffer
 		require.Zero(t, d.askpass(t.Context(), &out, nil), "a token in the environment is a stash to redeem")
 		assert.Equal(t, "from-handoff\n", out.String(), "and the answer comes from it")

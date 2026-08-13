@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"os"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
@@ -37,7 +38,7 @@ func linuxDialogs(settings config.Settings) []dialog {
 // must be there to ask in — which is more than being installed, since one of
 // pinentry's builds draws on a terminal and would take the question somewhere
 // nobody is looking.
-func newGraphicalPrompter(settings config.Settings, log keys.Logger) keys.Prompter {
+func newGraphicalPrompter(ctx context.Context, settings config.Settings, log keys.Logger) keys.Prompter {
 	if settings.GUIPrompter == config.GUIPrompterNone {
 		return nil
 	}
@@ -45,8 +46,8 @@ func newGraphicalPrompter(settings config.Settings, log keys.Logger) keys.Prompt
 		WaylandDisplay: os.Getenv("WAYLAND_DISPLAY"),
 		Display:        os.Getenv("DISPLAY"),
 	}
-	if !keys.HasGraphicalSession(guiEnv, keys.ExecRunner{}) {
+	if !keys.HasGraphicalSession(ctx, guiEnv, keys.ExecRunner{}) {
 		return nil
 	}
-	return chooseDialog(linuxDialogs(settings), settings.GUIPrompter, keys.TTYPrompter{}, log)
+	return chooseDialog(ctx, linuxDialogs(settings), settings.GUIPrompter, keys.TTYPrompter{}, log)
 }

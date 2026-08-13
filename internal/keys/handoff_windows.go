@@ -3,6 +3,7 @@
 package keys
 
 import (
+	"context"
 	"errors"
 	"time"
 )
@@ -20,4 +21,4 @@ var errNoHandoff = errors.New("passphrase handoff is not implemented on windows"
 func stashPassphrase(string, time.Duration) (string, error) { return "", errNoHandoff }
 
 // fetchPassphrase reports errNoHandoff.
-func fetchPassphrase(string) (string, error) { return "", errNoHandoff }
+func fetchPassphrase(context.Context, string) (string, error) { return "", errNoHandoff }

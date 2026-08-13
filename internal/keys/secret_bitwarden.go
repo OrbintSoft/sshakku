@@ -135,7 +135,7 @@ func (b *BitwardenBackend) env() []string {
 // caching or storing the password itself. The password reaches bw only via
 // --passwordenv, never argv.
 func (b *BitwardenBackend) Unlock(ctx context.Context) error {
-	password, err := b.Prompter.Prompt("your Bitwarden master password")
+	password, err := b.Prompter.Prompt(ctx, "your Bitwarden master password")
 	if err != nil {
 		return err
 	}
