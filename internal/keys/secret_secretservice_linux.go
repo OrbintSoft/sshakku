@@ -20,17 +20,17 @@ const (
 type SecretServiceClient interface {
 	// Collection resolves (creating if necessary) the object path of the
 	// collection identified by alias.
-	Collection(alias, label string) (dbus.ObjectPath, error)
-	Unlock(objects ...dbus.ObjectPath) error
-	Lock(objects ...dbus.ObjectPath) error
-	SearchItems(collection dbus.ObjectPath, attrs map[string]string) ([]dbus.ObjectPath, error)
-	GetSecret(item dbus.ObjectPath) (string, error)
-	CreateItem(collection dbus.ObjectPath, label string, attrs map[string]string, passphrase string, replace bool) error
+	Collection(ctx context.Context, alias, label string) (dbus.ObjectPath, error)
+	Unlock(ctx context.Context, objects ...dbus.ObjectPath) error
+	Lock(ctx context.Context, objects ...dbus.ObjectPath) error
+	SearchItems(ctx context.Context, collection dbus.ObjectPath, attrs map[string]string) ([]dbus.ObjectPath, error)
+	GetSecret(ctx context.Context, item dbus.ObjectPath) (string, error)
+	CreateItem(ctx context.Context, collection dbus.ObjectPath, label string, attrs map[string]string, passphrase string, replace bool) error
 	// Items returns every item currently in collection, regardless of attributes.
-	Items(collection dbus.ObjectPath) ([]dbus.ObjectPath, error)
+	Items(ctx context.Context, collection dbus.ObjectPath) ([]dbus.ObjectPath, error)
 	// ItemAttributes returns the lookup attributes item was stored under.
-	ItemAttributes(item dbus.ObjectPath) (map[string]string, error)
-	DeleteItem(item dbus.ObjectPath) error
+	ItemAttributes(ctx context.Context, item dbus.ObjectPath) (map[string]string, error)
+	DeleteItem(ctx context.Context, item dbus.ObjectPath) error
 }
 
 // SecretServiceBackend keeps passphrases in a dedicated Secret Service
@@ -66,11 +66,11 @@ type SecretServiceBackend struct {
 // Unlock unlocks SSHakku's collection and keeps it unlocked for subsequent
 // Lookup/Store/Delete calls until Lock is called.
 func (b *SecretServiceBackend) Unlock(ctx context.Context) error {
-	col, err := b.resolveCollection()
+	col, err := b.resolveCollection(ctx)
 	if err != nil {
 		return err
 	}
-	if err := b.Client.Unlock(col); err != nil {
+	if err := b.Client.Unlock(ctx, col); err != nil {
 		return err
 	}
 	b.held = true
@@ -79,12 +79,12 @@ func (b *SecretServiceBackend) Unlock(ctx context.Context) error {
 
 // Lock re-locks SSHakku's collection previously unlocked via Unlock.
 func (b *SecretServiceBackend) Lock(ctx context.Context) error {
-	col, err := b.resolveCollection()
+	col, err := b.resolveCollection(ctx)
 	if err != nil {
 		return err
 	}
 	b.held = false
-	return b.Client.Lock(col)
+	return b.Client.Lock(ctx, col)
 }
 
 var _ SecretSession = (*SecretServiceBackend)(nil)
@@ -110,10 +110,10 @@ func SecretServiceCollectionNames(container string) (alias, label string) {
 	return secretServiceAlias, secretServiceLabel
 }
 
-func (b *SecretServiceBackend) resolveCollection() (dbus.ObjectPath, error) {
+func (b *SecretServiceBackend) resolveCollection(ctx context.Context) (dbus.ObjectPath, error) {
 	if b.collection == "" {
 		alias, label := b.collectionNames()
-		col, err := b.Client.Collection(alias, label)
+		col, err := b.Client.Collection(ctx, alias, label)
 		if err != nil {
 			return "", err
 		}
@@ -127,22 +127,22 @@ func (b *SecretServiceBackend) resolveCollection() (dbus.ObjectPath, error) {
 // miss, or an error alike. When the collection is already held unlocked (see
 // SecretSession), it skips its own unlock/lock and leaves that to the holder.
 func (b *SecretServiceBackend) Lookup(ctx context.Context, service string) (string, bool, error) {
-	col, err := b.resolveCollection()
+	col, err := b.resolveCollection(ctx)
 	if err != nil {
 		return "", false, err
 	}
 	if !b.held {
-		if err := b.Client.Unlock(col); err != nil {
+		if err := b.Client.Unlock(ctx, col); err != nil {
 			return "", false, err
 		}
-		defer func() { _ = b.Client.Lock(col) }()
+		defer func() { _ = b.Client.Lock(ctx, col) }()
 	}
 
-	items, err := b.Client.SearchItems(col, map[string]string{"service": service, "username": b.User})
+	items, err := b.Client.SearchItems(ctx, col, map[string]string{"service": service, "username": b.User})
 	if err != nil || len(items) == 0 {
 		return "", false, err
 	}
-	passphrase, err := b.Client.GetSecret(items[0])
+	passphrase, err := b.Client.GetSecret(ctx, items[0])
 	if err != nil {
 		return "", false, err
 	}
@@ -154,19 +154,19 @@ func (b *SecretServiceBackend) Lookup(ctx context.Context, service string) (stri
 // error alike. When the collection is already held unlocked (see
 // SecretSession), it skips its own unlock/lock and leaves that to the holder.
 func (b *SecretServiceBackend) Store(ctx context.Context, service, label, passphrase string) error {
-	col, err := b.resolveCollection()
+	col, err := b.resolveCollection(ctx)
 	if err != nil {
 		return err
 	}
 	if !b.held {
-		if err := b.Client.Unlock(col); err != nil {
+		if err := b.Client.Unlock(ctx, col); err != nil {
 			return err
 		}
-		defer func() { _ = b.Client.Lock(col) }()
+		defer func() { _ = b.Client.Lock(ctx, col) }()
 	}
 
 	attrs := map[string]string{"service": service, "username": b.User}
-	return b.Client.CreateItem(col, label, attrs, passphrase, true)
+	return b.Client.CreateItem(ctx, col, label, attrs, passphrase, true)
 }
 
 // Delete unlocks SSHakku's collection, deletes every item matching service,
@@ -175,23 +175,23 @@ func (b *SecretServiceBackend) Store(ctx context.Context, service, label, passph
 // collection is already held unlocked (see SecretSession), it skips its own
 // unlock/lock and leaves that to the holder.
 func (b *SecretServiceBackend) Delete(ctx context.Context, service string) error {
-	col, err := b.resolveCollection()
+	col, err := b.resolveCollection(ctx)
 	if err != nil {
 		return err
 	}
 	if !b.held {
-		if err := b.Client.Unlock(col); err != nil {
+		if err := b.Client.Unlock(ctx, col); err != nil {
 			return err
 		}
-		defer func() { _ = b.Client.Lock(col) }()
+		defer func() { _ = b.Client.Lock(ctx, col) }()
 	}
 
-	items, err := b.Client.SearchItems(col, map[string]string{"service": service, "username": b.User})
+	items, err := b.Client.SearchItems(ctx, col, map[string]string{"service": service, "username": b.User})
 	if err != nil {
 		return err
 	}
 	for _, item := range items {
-		if err := b.Client.DeleteItem(item); err != nil {
+		if err := b.Client.DeleteItem(ctx, item); err != nil {
 			return err
 		}
 	}
@@ -205,24 +205,24 @@ func (b *SecretServiceBackend) Delete(ctx context.Context, service string) error
 // When the collection is already held unlocked (see
 // SecretSession), it skips its own unlock/lock and leaves that to the holder.
 func (b *SecretServiceBackend) List(ctx context.Context) ([]string, error) {
-	col, err := b.resolveCollection()
+	col, err := b.resolveCollection(ctx)
 	if err != nil {
 		return nil, err
 	}
 	if !b.held {
-		if err := b.Client.Unlock(col); err != nil {
+		if err := b.Client.Unlock(ctx, col); err != nil {
 			return nil, err
 		}
-		defer func() { _ = b.Client.Lock(col) }()
+		defer func() { _ = b.Client.Lock(ctx, col) }()
 	}
 
-	items, err := b.Client.Items(col)
+	items, err := b.Client.Items(ctx, col)
 	if err != nil {
 		return nil, err
 	}
 	services := make([]string, 0, len(items))
 	for _, item := range items {
-		attrs, err := b.Client.ItemAttributes(item)
+		attrs, err := b.Client.ItemAttributes(ctx, item)
 		if err != nil {
 			return nil, err
 		}

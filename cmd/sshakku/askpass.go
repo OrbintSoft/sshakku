@@ -33,7 +33,7 @@ func (d deps) askpassBroker(ctx context.Context, stdout io.Writer, args []string
 	layout := paths.Resolve(paths.FromOS(), paths.ProbeDir)
 	log := sessionlog.New(layout.LogFile)
 	settings := loadSettings(layout, "askpass", log)
-	secret, closeSecret := d.newSecret(currentUser(), log, settings)
+	secret, closeSecret := d.newSecret(ctx, currentUser(), log, settings)
 	defer closeSecret()
 	broker := keys.Broker{
 		Secret: secret,

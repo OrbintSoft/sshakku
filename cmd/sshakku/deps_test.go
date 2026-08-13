@@ -23,7 +23,7 @@ import (
 // (harmless for the secret-store paths this helper serves).
 func depsReturning(backend keys.SecretBackend) deps {
 	d := realDeps()
-	d.newSecret = func(string, keys.Logger, config.Settings) (keys.SecretBackend, func()) {
+	d.newSecret = func(context.Context, string, keys.Logger, config.Settings) (keys.SecretBackend, func()) {
 		return backend, func() {}
 	}
 	return d

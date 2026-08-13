@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -29,7 +30,7 @@ type walletProbe struct {
 	hasScreen bool
 	// look asks the session bus, and a wallet already answering on it, about
 	// themselves. Nil where this system has no such bus.
-	look func(alias, label string) secretServiceLook
+	look func(ctx context.Context, alias, label string) secretServiceLook
 	// goos is the platform, so the answer can be checked from any of them.
 	goos string
 }
@@ -56,8 +57,8 @@ type secretServiceLook struct {
 }
 
 // realWalletView describes the configured wallet as this machine actually is.
-func realWalletView(settings config.Settings) diagnose.WalletView {
-	return walletView(settings, realWalletProbe())
+func realWalletView(ctx context.Context, settings config.Settings) diagnose.WalletView {
+	return walletView(ctx, settings, realWalletProbe())
 }
 
 // realWalletProbe looks at the machine this is running on.
@@ -161,10 +162,10 @@ func compartmentRequirement(compartment string, look secretServiceLook, hasScree
 // The wallets that are the operating system's own are described by
 // platformWalletView, which is compiled per platform — the freedesktop pieces
 // exist on Linux alone, and there is nothing to say about them elsewhere.
-func walletView(settings config.Settings, probe walletProbe) diagnose.WalletView {
+func walletView(ctx context.Context, settings config.Settings, probe walletProbe) diagnose.WalletView {
 	switch backend := settings.SecretBackend; backend {
 	case config.SecretBackendKeePassXC:
-		return probe.keepassxcView(settings)
+		return probe.keepassxcView(ctx, settings)
 	case config.SecretBackendOnePassword:
 		return diagnose.WalletView{
 			Backend:      backend,
@@ -176,13 +177,13 @@ func walletView(settings config.Settings, probe walletProbe) diagnose.WalletView
 			Requirements: []diagnose.Requirement{probe.tool("bw", "Bitwarden's command-line tool")},
 		}
 	default:
-		return probe.platformWalletView(settings, backend)
+		return probe.platformWalletView(ctx, settings, backend)
 	}
 }
 
 // keepassxcView describes KeePassXC by the route that would actually be taken,
 // since the three routes need entirely different things present.
-func (p walletProbe) keepassxcView(settings config.Settings) diagnose.WalletView {
+func (p walletProbe) keepassxcView(ctx context.Context, settings config.Settings) diagnose.WalletView {
 	route := settings.KeePassXCRoute
 	if route == "" || route == config.KeePassXCRouteAuto {
 		route = keepassxcRouteFor(p.goos)
@@ -202,7 +203,7 @@ func (p walletProbe) keepassxcView(settings config.Settings) diagnose.WalletView
 		// own name rather than swapped (F23), so this route is still described
 		// off Linux — but what there is to say about it differs so completely
 		// that each platform says its own.
-		view.Requirements = append(view.Requirements, p.keepassxcSecretServiceRoute()...)
+		view.Requirements = append(view.Requirements, p.keepassxcSecretServiceRoute(ctx)...)
 	}
 	return view
 }

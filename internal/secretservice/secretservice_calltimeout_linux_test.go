@@ -22,7 +22,7 @@ func TestClientCallTimesOutWhenDaemonUnresponsive(t *testing.T) {
 	svc.hangOn(release)
 
 	start := time.Now()
-	_, err := client.Collection("sshakku", "SSHakku")
+	_, err := client.Collection(t.Context(), "sshakku", "SSHakku")
 	elapsed := time.Since(start)
 
 	require.Error(t, err, "an unresponsive daemon must not be reported as a collection")
@@ -37,7 +37,7 @@ func TestClientCallTimesOutWhenDaemonUnresponsive(t *testing.T) {
 // Get/Items/Attributes tests never reach.
 func TestClientPropertyRejectsMalformedName(t *testing.T) {
 	var c Client
-	_, err := c.property(nil, "no-dot-here")
+	_, err := c.property(t.Context(), nil, "no-dot-here")
 	require.Error(t, err, "a malformed property name must be refused")
 	assert.ErrorContains(t, err, "malformed property name", "the error must say what was wrong with it")
 }

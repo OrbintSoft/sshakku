@@ -37,14 +37,14 @@ type Look struct {
 // A wallet that is merely activatable is left alone: starting it would be an
 // act, and this is a look. Every round-trip is bounded by timeout, so a wallet
 // that has stopped answering costs the caller that much delay and no more.
-func LookForCollection(alias, label string, timeout time.Duration) (Look, error) {
+func LookForCollection(ctx context.Context, alias, label string, timeout time.Duration) (Look, error) {
 	conn, err := dbus.ConnectSessionBus()
 	if err != nil {
 		return Look{}, fmt.Errorf("secret service: connect session bus: %w", err)
 	}
 	defer func() { _ = conn.Close() }()
 
-	names, err := listBusNames(conn.BusObject(), timeout, "org.freedesktop.DBus.ListNames")
+	names, err := listBusNames(ctx, conn.BusObject(), timeout, "org.freedesktop.DBus.ListNames")
 	if err != nil {
 		return Look{}, fmt.Errorf("secret service: list bus names: %w", err)
 	}
@@ -56,7 +56,7 @@ func LookForCollection(alias, label string, timeout time.Duration) (Look, error)
 		return look, nil
 	}
 	if !look.Running {
-		activatable, err := listBusNames(conn.BusObject(), timeout, "org.freedesktop.DBus.ListActivatableNames")
+		activatable, err := listBusNames(ctx, conn.BusObject(), timeout, "org.freedesktop.DBus.ListActivatableNames")
 		if err != nil {
 			return look, fmt.Errorf("secret service: list activatable bus names: %w", err)
 		}
@@ -71,7 +71,7 @@ func LookForCollection(alias, label string, timeout time.Duration) (Look, error)
 	client := &Client{conn: conn, service: conn.Object(busName, rootPath), CallTimeout: timeout}
 
 	var existing dbus.ObjectPath
-	if err := client.call(client.service, serviceIface+".ReadAlias", alias).Store(&existing); err != nil {
+	if err := client.call(ctx, client.service, serviceIface+".ReadAlias", alias).Store(&existing); err != nil {
 		look.AskErr = fmt.Errorf("secret service: read alias %q: %w", alias, err)
 		return look, nil
 	}
@@ -83,7 +83,7 @@ func LookForCollection(alias, label string, timeout time.Duration) (Look, error)
 	// The alias is unset either because the compartment is not there or because
 	// this implementation keeps no aliases but its own, in which case the
 	// compartment it made carries the name as its label instead.
-	found, err := client.findCollectionByLabel(label)
+	found, err := client.findCollectionByLabel(ctx, label)
 	if err != nil {
 		look.AskErr = err
 		return look, nil
@@ -96,17 +96,17 @@ func LookForCollection(alias, label string, timeout time.Duration) (Look, error)
 // plain function, so a test can make the bus fail to answer: a live bus that has
 // just accepted a connection does not stop answering on request, and what a look
 // concludes when it cannot be asked is exactly what has to be checkable.
-var listBusNames = func(obj dbus.BusObject, timeout time.Duration, method string) ([]string, error) {
+var listBusNames = func(ctx context.Context, obj dbus.BusObject, timeout time.Duration, method string) ([]string, error) {
 	var names []string
-	err := lookCall(obj, timeout, method).Store(&names)
+	err := lookCall(ctx, obj, timeout, method).Store(&names)
 	return names, err
 }
 
 // lookCall is one bounded D-Bus round-trip on an object this package holds no
 // Client for — the message bus itself, which answers about names rather than
 // about secrets.
-func lookCall(obj dbus.BusObject, timeout time.Duration, method string, args ...interface{}) *dbus.Call {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+func lookCall(ctx context.Context, obj dbus.BusObject, timeout time.Duration, method string, args ...interface{}) *dbus.Call {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	return obj.CallWithContext(ctx, method, 0, args...)
 }

@@ -253,7 +253,7 @@ func (d deps) doctor(ctx context.Context, stdout, stderr io.Writer, args []strin
 // covers unshowable as repaired.
 func (d deps) reportWithWallet(ctx context.Context, env paths.Env, layout paths.Layout, settings config.Settings) diagnose.Report {
 	report := d.gather(env, layout, settings)
-	report.Wallet = d.wallet(settings)
+	report.Wallet = d.wallet(ctx, settings)
 	report.Findings = append(report.Findings, diagnose.WalletFindings(report.Wallet)...)
 	return report
 }
@@ -273,7 +273,7 @@ func (d deps) repairWallet(ctx context.Context, stdout io.Writer, view diagnose.
 	for _, req := range view.Requirements {
 		switch {
 		case req.Fixable && d.makeCompartment != nil:
-			made, err := d.makeCompartment(settings)
+			made, err := d.makeCompartment(ctx, settings)
 			if err != nil {
 				_, _ = fmt.Fprintf(stdout, "wallet: the %s could not be made: %v\n", req.Name, err)
 				ok = false
@@ -319,7 +319,7 @@ func (d deps) testSecretBackend(ctx context.Context, stdout, stderr io.Writer, l
 	settings.SecretBackend = name
 	_, _ = fmt.Fprintf(stdout, "backend: %s\n", name)
 
-	secret, closeSecret := d.newSecret(currentUser(), log, settings)
+	secret, closeSecret := d.newSecret(ctx, currentUser(), log, settings)
 	defer closeSecret()
 
 	probe, err := randomProbeValue()

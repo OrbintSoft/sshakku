@@ -58,7 +58,7 @@ func (d deps) loadKeys(ctx context.Context, stderr io.Writer) int {
 		prompter = graphical
 	}
 
-	secret, closeSecret := d.newSecret(currentUser(), log, settings)
+	secret, closeSecret := d.newSecret(ctx, currentUser(), log, settings)
 	defer closeSecret()
 
 	loader := keys.Loader{

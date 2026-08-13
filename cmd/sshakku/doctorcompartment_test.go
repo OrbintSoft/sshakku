@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -26,7 +27,7 @@ type walletSpy struct {
 	calls int
 }
 
-func (w *walletSpy) view(config.Settings) diagnose.WalletView {
+func (w *walletSpy) view(context.Context, config.Settings) diagnose.WalletView {
 	view := w.views[min(w.calls, len(w.views)-1)]
 	w.calls++
 	return view
@@ -54,7 +55,7 @@ type makerSpy struct {
 	calls int
 }
 
-func (m *makerSpy) make(config.Settings) (string, error) {
+func (m *makerSpy) make(context.Context, config.Settings) (string, error) {
 	m.calls++
 	return m.made, m.err
 }

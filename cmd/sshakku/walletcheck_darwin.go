@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
@@ -13,7 +14,7 @@ import (
 // itself: off Linux that is the OS keychain, reached through the system rather
 // than through anything installed alongside, so there is no separate piece that
 // could be missing and nothing to report as absent.
-func (p walletProbe) platformWalletView(_ config.Settings, backend string) diagnose.WalletView {
+func (p walletProbe) platformWalletView(_ context.Context, _ config.Settings, backend string) diagnose.WalletView {
 	return diagnose.WalletView{Backend: backend}
 }
 
@@ -24,7 +25,7 @@ func (p walletProbe) platformWalletView(_ config.Settings, backend string) diagn
 // the user pinned is answered under its own name (F23) — but the answer here is
 // not a missing piece to go and install. It is that this way in does not exist
 // on this operating system, and another one has to be chosen.
-func (p walletProbe) keepassxcSecretServiceRoute() []diagnose.Requirement {
+func (p walletProbe) keepassxcSecretServiceRoute(ctx context.Context) []diagnose.Requirement {
 	return []diagnose.Requirement{{
 		Name: "secret service",
 		Detail: fmt.Sprintf(
@@ -38,10 +39,10 @@ func (p walletProbe) keepassxcSecretServiceRoute() []diagnose.Requirement {
 // nothing that could be missing. Left nil rather than given a body that does
 // nothing, because doing nothing successfully is not the same as having nothing
 // to do.
-var realMakeCompartment func(settings config.Settings) (string, error)
+var realMakeCompartment func(ctx context.Context, settings config.Settings) (string, error)
 
 // realSecretServiceLook is the look this system can take at a session bus, and
 // macOS has none: no bus, nothing on it, and nothing that could answer. It is
 // left nil rather than given a body that returns emptiness, because there is no
 // question here to answer at all.
-var realSecretServiceLook func(alias, label string) secretServiceLook
+var realSecretServiceLook func(ctx context.Context, alias, label string) secretServiceLook

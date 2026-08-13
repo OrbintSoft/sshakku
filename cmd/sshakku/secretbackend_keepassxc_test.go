@@ -27,7 +27,7 @@ func keepassxcSettings(route string) config.Settings {
 // where SSHakku would have picked it. A Linux user who does not want the Secret
 // Service can say so and be taken at their word.
 func TestKeePassXCPinnedNativeRouteIsUsedEverywhere(t *testing.T) {
-	backend, closeFn := newSecretBackend("alice", fakeLogger{}, keepassxcSettings(config.KeePassXCRouteNative))
+	backend, closeFn := newSecretBackend(t.Context(), "alice", fakeLogger{}, keepassxcSettings(config.KeePassXCRouteNative))
 	defer closeFn()
 
 	assert.IsTypef(t, keys.KeePassXCBackend{}, backend,
@@ -39,7 +39,7 @@ func TestKeePassXCPinnedNativeRouteIsUsedEverywhere(t *testing.T) {
 // under its own name rather than silently swapped for another, which would
 // answer a question the user did not ask.
 func TestKeePassXCPinnedSecretServiceRouteIsHonoured(t *testing.T) {
-	backend, closeFn := newSecretBackend("alice", fakeLogger{}, keepassxcSettings(config.KeePassXCRouteSecretService))
+	backend, closeFn := newSecretBackend(t.Context(), "alice", fakeLogger{}, keepassxcSettings(config.KeePassXCRouteSecretService))
 	defer closeFn()
 
 	if runtime.GOOS != "linux" {
@@ -67,9 +67,9 @@ func TestKeePassXCPinnedSecretServiceRouteIsHonoured(t *testing.T) {
 func TestKeePassXCSecretServiceRouteHandsOffToTheDefaultBackend(t *testing.T) {
 	settings := keepassxcSettings(config.KeePassXCRouteSecretService)
 
-	got, closeGot := newKeePassXCBackend("linux", "alice", fakeLogger{}, settings)
+	got, closeGot := newKeePassXCBackend(t.Context(), "linux", "alice", fakeLogger{}, settings)
 	defer closeGot()
-	want, closeWant := newDefaultSecretBackend("alice", fakeLogger{}, settings)
+	want, closeWant := newDefaultSecretBackend(t.Context(), "alice", fakeLogger{}, settings)
 	defer closeWant()
 
 	assert.Equal(t, fmt.Sprintf("%T", want), fmt.Sprintf("%T", got),
@@ -137,7 +137,7 @@ func TestKeePassXCCLIRouteNeedsADatabase(t *testing.T) {
 func TestKeePassXCEmptyRouteIsTheAutomaticOne(t *testing.T) {
 	for _, route := range []string{"", config.KeePassXCRouteAuto} {
 		t.Run("route "+route, func(t *testing.T) {
-			backend, closeFn := newKeePassXCBackend("darwin", "alice", fakeLogger{}, keepassxcSettings(route))
+			backend, closeFn := newKeePassXCBackend(t.Context(), "darwin", "alice", fakeLogger{}, keepassxcSettings(route))
 			defer closeFn()
 
 			assert.IsType(t, keys.KeePassXCBackend{}, backend,
@@ -150,7 +150,7 @@ func TestKeePassXCPinnedCLIRouteIsBuiltWhenItHasADatabase(t *testing.T) {
 	settings := keepassxcSettings(config.KeePassXCRouteCLI)
 	settings.KeePassXCDatabase = "/somewhere/secrets.kdbx"
 	settings.KeePassXCKeyFile = "/somewhere/secrets.key"
-	backend, closeFn := newSecretBackend("alice", fakeLogger{}, settings)
+	backend, closeFn := newSecretBackend(t.Context(), "alice", fakeLogger{}, settings)
 	defer closeFn()
 
 	cli, ok := backend.(*keys.KeePassXCCLIBackend)
@@ -161,7 +161,7 @@ func TestKeePassXCPinnedCLIRouteIsBuiltWhenItHasADatabase(t *testing.T) {
 }
 
 func TestKeePassXCPinnedCLIRouteWithNoDatabaseReportsItself(t *testing.T) {
-	backend, closeFn := newSecretBackend("alice", fakeLogger{}, keepassxcSettings(config.KeePassXCRouteCLI))
+	backend, closeFn := newSecretBackend(t.Context(), "alice", fakeLogger{}, keepassxcSettings(config.KeePassXCRouteCLI))
 	defer closeFn()
 
 	unavailable, ok := backend.(keys.UnavailableBackend)

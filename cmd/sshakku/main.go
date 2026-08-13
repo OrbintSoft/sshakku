@@ -79,7 +79,7 @@ func main() {
 type deps struct {
 	// newSecret opens the secret backend settings.SecretBackend selects, with a
 	// cleanup func that releases whatever it opened (see newSecretBackend).
-	newSecret func(user string, log keys.Logger, settings config.Settings) (keys.SecretBackend, func())
+	newSecret func(ctx context.Context, user string, log keys.Logger, settings config.Settings) (keys.SecretBackend, func())
 	// ensurer drives the fixed socket to a healthy ssh-agent (see runEnsure). The
 	// production value is the concrete agent.Manager; tests substitute a fake so
 	// the shell-init/ensure-agent bodies run without spawning a real agent.
@@ -125,11 +125,11 @@ type deps struct {
 	// finds is what decides whether anything is created. Taking the finished
 	// view rather than the probe behind it also keeps that decision checkable
 	// from a machine whose wallet has no compartment at all.
-	wallet func(settings config.Settings) diagnose.WalletView
+	wallet func(ctx context.Context, settings config.Settings) diagnose.WalletView
 	// makeCompartment creates the compartment the configured wallet keeps
 	// SSHakku's entries in, and reports what it made. Nil where this system's
 	// wallet has no such thing to make. Only --fix ever calls it.
-	makeCompartment func(settings config.Settings) (string, error)
+	makeCompartment func(ctx context.Context, settings config.Settings) (string, error)
 }
 
 // realDeps wires deps to the production implementations.

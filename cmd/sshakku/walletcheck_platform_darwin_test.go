@@ -25,7 +25,7 @@ func TestDoctorReportOnAnUnconfiguredMachine(t *testing.T) {
 	layout := paths.Layout{ConfigDir: t.TempDir()}
 	settings := loadSettings(layout, "test", discardLogger{})
 
-	view := walletView(settings, probeWith(runtime.GOOS, nil, nil, "", nil))
+	view := walletView(t.Context(), settings, probeWith(runtime.GOOS, nil, nil, "", nil))
 
 	assert.Equal(t, config.SecretBackendKeychain, view.Backend,
 		"the report must name the wallet the passphrases actually go into")
@@ -47,7 +47,7 @@ func TestKeePassXCOverASecretServiceThisPlatformHasNot(t *testing.T) {
 		KeePassXCRoute: config.KeePassXCRouteSecretService,
 	}
 
-	view := walletView(settings, probeWith(runtime.GOOS, nil, nil, "", nil))
+	view := walletView(t.Context(), settings, probeWith(runtime.GOOS, nil, nil, "", nil))
 
 	assert.Equal(t, config.KeePassXCRouteSecretService, view.Route,
 		"a route the user pinned is answered under its own name, not swapped for another")

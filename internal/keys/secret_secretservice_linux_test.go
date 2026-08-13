@@ -1,6 +1,7 @@
 package keys
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -60,7 +61,7 @@ type ssCreateCall struct {
 	replace    bool
 }
 
-func (f *fakeSecretServiceClient) Collection(alias, label string) (dbus.ObjectPath, error) {
+func (f *fakeSecretServiceClient) Collection(_ context.Context, alias, label string) (dbus.ObjectPath, error) {
 	f.collectionCalls++
 	f.collectionAsked = append(f.collectionAsked, ssCollectionCall{alias: alias, label: label})
 	if f.collectionErr != nil {
@@ -69,17 +70,17 @@ func (f *fakeSecretServiceClient) Collection(alias, label string) (dbus.ObjectPa
 	return f.collection, nil
 }
 
-func (f *fakeSecretServiceClient) Unlock(objects ...dbus.ObjectPath) error {
+func (f *fakeSecretServiceClient) Unlock(_ context.Context, objects ...dbus.ObjectPath) error {
 	f.unlocked = append(f.unlocked, objects...)
 	return f.unlockErr
 }
 
-func (f *fakeSecretServiceClient) Lock(objects ...dbus.ObjectPath) error {
+func (f *fakeSecretServiceClient) Lock(_ context.Context, objects ...dbus.ObjectPath) error {
 	f.locked = append(f.locked, objects...)
 	return f.lockErr
 }
 
-func (f *fakeSecretServiceClient) SearchItems(_ dbus.ObjectPath, attrs map[string]string) ([]dbus.ObjectPath, error) {
+func (f *fakeSecretServiceClient) SearchItems(_ context.Context, _ dbus.ObjectPath, attrs map[string]string) ([]dbus.ObjectPath, error) {
 	f.searchedAttrs = attrs
 	if f.searchErr != nil {
 		return nil, f.searchErr
@@ -87,33 +88,33 @@ func (f *fakeSecretServiceClient) SearchItems(_ dbus.ObjectPath, attrs map[strin
 	return f.items, nil
 }
 
-func (f *fakeSecretServiceClient) GetSecret(item dbus.ObjectPath) (string, error) {
+func (f *fakeSecretServiceClient) GetSecret(_ context.Context, item dbus.ObjectPath) (string, error) {
 	if f.secretErr != nil {
 		return "", f.secretErr
 	}
 	return f.secretsByItem[item], nil
 }
 
-func (f *fakeSecretServiceClient) CreateItem(collection dbus.ObjectPath, label string, attrs map[string]string, passphrase string, replace bool) error {
+func (f *fakeSecretServiceClient) CreateItem(_ context.Context, collection dbus.ObjectPath, label string, attrs map[string]string, passphrase string, replace bool) error {
 	f.createdItems = append(f.createdItems, ssCreateCall{collection, label, attrs, passphrase, replace})
 	return f.createErr
 }
 
-func (f *fakeSecretServiceClient) Items(collection dbus.ObjectPath) ([]dbus.ObjectPath, error) {
+func (f *fakeSecretServiceClient) Items(_ context.Context, collection dbus.ObjectPath) ([]dbus.ObjectPath, error) {
 	if f.itemsErr != nil {
 		return nil, f.itemsErr
 	}
 	return f.itemsByCollection[collection], nil
 }
 
-func (f *fakeSecretServiceClient) ItemAttributes(item dbus.ObjectPath) (map[string]string, error) {
+func (f *fakeSecretServiceClient) ItemAttributes(_ context.Context, item dbus.ObjectPath) (map[string]string, error) {
 	if f.attrsErr != nil {
 		return nil, f.attrsErr
 	}
 	return f.attrsByItem[item], nil
 }
 
-func (f *fakeSecretServiceClient) DeleteItem(item dbus.ObjectPath) error {
+func (f *fakeSecretServiceClient) DeleteItem(_ context.Context, item dbus.ObjectPath) error {
 	if f.deleteItemErr != nil {
 		return f.deleteItemErr
 	}

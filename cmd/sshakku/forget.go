@@ -36,7 +36,7 @@ func (d deps) forget(ctx context.Context, stdout, stderr io.Writer, args []strin
 	layout := paths.Resolve(paths.FromOS(), paths.ProbeDir)
 	log := sessionlog.New(layout.LogFile)
 	settings := loadSettings(layout, "forget", log)
-	secret, closeSecret := d.newSecret(currentUser(), log, settings)
+	secret, closeSecret := d.newSecret(ctx, currentUser(), log, settings)
 	defer closeSecret()
 
 	// forget always touches the secret store (listing and/or deleting), so —

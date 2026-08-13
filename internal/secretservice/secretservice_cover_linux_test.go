@@ -32,7 +32,7 @@ func TestNewClientErrors(t *testing.T) {
 		// An address pointing at a socket that doesn't exist makes
 		// ConnectSessionBus fail before any Secret Service call.
 		t.Setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent/sshakku-test-bus")
-		_, err := NewClient()
+		_, err := NewClient(t.Context())
 		assert.Error(t, err, "an unreachable bus must be reported")
 	})
 
@@ -49,7 +49,7 @@ func TestNewClientErrors(t *testing.T) {
 		require.NoErrorf(t, err, "request name %s", busName)
 		require.Equalf(t, dbus.RequestNameReplyPrimaryOwner, reply, "request name %s", busName)
 
-		_, err = NewClient()
+		_, err = NewClient(t.Context())
 		assert.Error(t, err, "an OpenSession with no object to answer it must be reported")
 	})
 }
@@ -58,7 +58,7 @@ func TestClientCollectionErrors(t *testing.T) {
 	t.Run("ReadAlias failure surfaces", func(t *testing.T) {
 		client, _ := newTestClient(t, "")
 		_ = client.conn.Close()
-		_, err := client.Collection("sshakku", "sshakku")
+		_, err := client.Collection(t.Context(), "sshakku", "sshakku")
 		assert.Error(t, err, "a ReadAlias that fails must be reported")
 	})
 
@@ -69,7 +69,7 @@ func TestClientCollectionErrors(t *testing.T) {
 		svc.failCollectionsProp = true // then fail the by-label lookup it does
 		svc.mu.Unlock()
 
-		_, err := client.Collection("sshakku", "sshakku")
+		_, err := client.Collection(t.Context(), "sshakku", "sshakku")
 		assert.Error(t, err, "a by-label fallback lookup that fails must be reported")
 	})
 
@@ -79,7 +79,7 @@ func TestClientCollectionErrors(t *testing.T) {
 		svc.failCreateCollection = true
 		svc.mu.Unlock()
 
-		_, err := client.Collection("sshakku", "sshakku")
+		_, err := client.Collection(t.Context(), "sshakku", "sshakku")
 		assert.Error(t, err, "a CreateCollection that fails outright must be reported")
 
 		// Reporting the error is only half of it: a failure that is not the
@@ -96,7 +96,7 @@ func TestClientCollectionErrors(t *testing.T) {
 
 	t.Run("a non-path prompt result is an error", func(t *testing.T) {
 		client, _ := newTestClient(t, "badresult")
-		_, err := client.Collection("sshakku", "sshakku")
+		_, err := client.Collection(t.Context(), "sshakku", "sshakku")
 		assert.Error(t, err, "a prompt result that is not an object path must be reported")
 	})
 }
@@ -108,7 +108,7 @@ func TestFindCollectionByLabelErrors(t *testing.T) {
 		svc.failCollectionsProp = true
 		svc.mu.Unlock()
 
-		_, err := client.findCollectionByLabel("sshakku")
+		_, err := client.findCollectionByLabel(t.Context(), "sshakku")
 		assert.Error(t, err, "a Collections property read that fails must be reported")
 	})
 
@@ -119,7 +119,7 @@ func TestFindCollectionByLabelErrors(t *testing.T) {
 		svc.collectionsProp = "not-a-list"
 		svc.mu.Unlock()
 
-		_, err := client.findCollectionByLabel("sshakku")
+		_, err := client.findCollectionByLabel(t.Context(), "sshakku")
 		assert.Error(t, err, "a Collections property of the wrong type must be reported")
 	})
 
@@ -132,7 +132,7 @@ func TestFindCollectionByLabelErrors(t *testing.T) {
 		svc.collectionsProp = []dbus.ObjectPath{"/org/freedesktop/secrets/collection/bogus"}
 		svc.mu.Unlock()
 
-		got, err := client.findCollectionByLabel("sshakku")
+		got, err := client.findCollectionByLabel(t.Context(), "sshakku")
 		require.NoError(t, err, "a label read that fails must be skipped, not reported")
 		assert.Equal(t, noPrompt, got, "nothing matched")
 	})
@@ -148,43 +148,43 @@ func TestClientCallErrors(t *testing.T) {
 
 	t.Run("unlockOrLock call failure surfaces", func(t *testing.T) {
 		client, _ := newTestClient(t, "")
-		err := client.unlockOrLock(serviceIface+".NoSuchMethod", []dbus.ObjectPath{bogusCollection})
+		err := client.unlockOrLock(t.Context(), serviceIface+".NoSuchMethod", []dbus.ObjectPath{bogusCollection})
 		assert.Error(t, err, "an unknown service method must be reported")
 	})
 
 	t.Run("SearchItems call failure surfaces", func(t *testing.T) {
 		client, _ := newTestClient(t, "")
-		_, err := client.SearchItems(bogusCollection, map[string]string{"a": "b"})
+		_, err := client.SearchItems(t.Context(), bogusCollection, map[string]string{"a": "b"})
 		assert.Error(t, err, "searching a non-existent collection must be reported")
 	})
 
 	t.Run("GetSecret call failure surfaces", func(t *testing.T) {
 		client, _ := newTestClient(t, "")
-		_, err := client.GetSecret(bogusItem)
+		_, err := client.GetSecret(t.Context(), bogusItem)
 		assert.Error(t, err, "reading a non-existent item must be reported")
 	})
 
 	t.Run("CreateItem call failure surfaces", func(t *testing.T) {
 		client, _ := newTestClient(t, "")
-		err := client.CreateItem(bogusCollection, "x", map[string]string{"s": "v"}, "p", true)
+		err := client.CreateItem(t.Context(), bogusCollection, "x", map[string]string{"s": "v"}, "p", true)
 		assert.Error(t, err, "creating an item in a non-existent collection must be reported")
 	})
 
 	t.Run("Items property read failure surfaces", func(t *testing.T) {
 		client, _ := newTestClient(t, "")
-		_, err := client.Items(bogusCollection)
+		_, err := client.Items(t.Context(), bogusCollection)
 		assert.Error(t, err, "listing a non-existent collection must be reported")
 	})
 
 	t.Run("ItemAttributes property read failure surfaces", func(t *testing.T) {
 		client, _ := newTestClient(t, "")
-		_, err := client.ItemAttributes(bogusItem)
+		_, err := client.ItemAttributes(t.Context(), bogusItem)
 		assert.Error(t, err, "reading attributes of a non-existent item must be reported")
 	})
 
 	t.Run("DeleteItem call failure surfaces", func(t *testing.T) {
 		client, _ := newTestClient(t, "")
-		err := client.DeleteItem(bogusItem)
+		err := client.DeleteItem(t.Context(), bogusItem)
 		assert.Error(t, err, "deleting a non-existent item must be reported")
 	})
 }
@@ -194,7 +194,7 @@ func TestClientWrongTypeProperties(t *testing.T) {
 		client, svc := newTestClient(t, "")
 		const path = dbus.ObjectPath("/org/freedesktop/secrets/badprop/items")
 		exportProp(t, svc, path, "not-a-list")
-		_, err := client.Items(path)
+		_, err := client.Items(t.Context(), path)
 		assert.Error(t, err, "a wrong-typed Items property must be reported")
 	})
 
@@ -202,7 +202,7 @@ func TestClientWrongTypeProperties(t *testing.T) {
 		client, svc := newTestClient(t, "")
 		const path = dbus.ObjectPath("/org/freedesktop/secrets/badprop/attrs")
 		exportProp(t, svc, path, "not-a-map")
-		_, err := client.ItemAttributes(path)
+		_, err := client.ItemAttributes(t.Context(), path)
 		assert.Error(t, err, "a wrong-typed Attributes property must be reported")
 	})
 }
@@ -211,7 +211,7 @@ func TestCompletePromptErrors(t *testing.T) {
 	t.Run("watching the prompt can fail", func(t *testing.T) {
 		client, _ := newTestClient(t, "")
 		_ = client.conn.Close() // AddMatchSignal now fails on the closed conn
-		_, err := client.completePrompt("/org/freedesktop/secrets/prompt/x")
+		_, err := client.completePrompt(t.Context(), "/org/freedesktop/secrets/prompt/x")
 		assert.Error(t, err, "a prompt match that cannot be registered must be reported")
 	})
 
@@ -219,7 +219,7 @@ func TestCompletePromptErrors(t *testing.T) {
 		client, _ := newTestClient(t, "")
 		// A prompt path the fake never exported: the match registers, but the
 		// Prompt() call has no object to land on.
-		_, err := client.completePrompt("/org/freedesktop/secrets/prompt/unexported")
+		_, err := client.completePrompt(t.Context(), "/org/freedesktop/secrets/prompt/unexported")
 		assert.Error(t, err, "a Prompt() call with no object must be reported")
 	})
 
@@ -228,7 +228,7 @@ func TestCompletePromptErrors(t *testing.T) {
 		path := dbus.ObjectPath("/org/freedesktop/secrets/prompt/short")
 		p := &fakePrompt{conn: svc.conn, path: path, behavior: "short"}
 		require.NoError(t, svc.conn.Export(p, path, promptIface), "export prompt")
-		_, err := client.completePrompt(path)
+		_, err := client.completePrompt(t.Context(), path)
 		assert.Error(t, err, "a Completed signal with the wrong shape must be reported")
 	})
 
@@ -237,7 +237,7 @@ func TestCompletePromptErrors(t *testing.T) {
 		path := dbus.ObjectPath("/org/freedesktop/secrets/prompt/malformed")
 		p := &fakePrompt{conn: svc.conn, path: path, behavior: "malformed"}
 		require.NoError(t, svc.conn.Export(p, path, promptIface), "export prompt")
-		_, err := client.completePrompt(path)
+		_, err := client.completePrompt(t.Context(), path)
 		assert.Error(t, err, "a malformed Completed signal must be reported")
 	})
 }

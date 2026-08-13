@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"runtime"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
@@ -17,7 +18,7 @@ import (
 // The OS wallets have no case of their own: each exists on one platform, where
 // it is that platform's default, and the configuration layer never yields a
 // name this system has not got.
-func newSecretBackend(user string, log keys.Logger, settings config.Settings) (keys.SecretBackend, func()) {
+func newSecretBackend(ctx context.Context, user string, log keys.Logger, settings config.Settings) (keys.SecretBackend, func()) {
 	switch settings.SecretBackend {
 	case config.SecretBackendOnePassword:
 		return &keys.OnePasswordBackend{
@@ -35,9 +36,9 @@ func newSecretBackend(user string, log keys.Logger, settings config.Settings) (k
 			ServicePrefix: settings.ServicePrefix,
 		}, func() {}
 	case config.SecretBackendKeePassXC:
-		return newKeePassXCBackend(runtime.GOOS, user, log, settings)
+		return newKeePassXCBackend(ctx, runtime.GOOS, user, log, settings)
 	default:
-		return newDefaultSecretBackend(user, log, settings)
+		return newDefaultSecretBackend(ctx, user, log, settings)
 	}
 }
 

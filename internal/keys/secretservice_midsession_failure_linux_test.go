@@ -78,11 +78,11 @@ const (
 func establishLiveSession(t *testing.T) *SecretServiceBackend {
 	t.Helper()
 
-	client, err := secretservice.NewClient()
+	client, err := secretservice.NewClient(t.Context())
 	if err != nil {
 		t.Skipf("no real Secret Service daemon reachable on the ambient D-Bus session bus: %v", err)
 	}
-	t.Cleanup(func() { _ = client.Close() })
+	t.Cleanup(func() { _ = client.Close(t.Context()) })
 
 	backend := &SecretServiceBackend{Client: client, User: midSessionUser}
 	require.NoError(t, backend.Unlock(t.Context()), "the wallet must open before anything can be broken underneath it")

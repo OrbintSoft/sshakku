@@ -44,11 +44,11 @@ func TestSecretServiceBackendRealDaemon(t *testing.T) {
 		t.Skipf("skipping: set %s=1 to run against a real Secret Service daemon (only safe in a disposable environment, e.g. a desktop-stack container)", allowRealSecretServiceEnv)
 	}
 
-	client, err := secretservice.NewClient()
+	client, err := secretservice.NewClient(t.Context())
 	if err != nil {
 		t.Skipf("no real Secret Service daemon reachable on the ambient D-Bus session bus: %v", err)
 	}
-	t.Cleanup(func() { _ = client.Close() })
+	t.Cleanup(func() { _ = client.Close(t.Context()) })
 
 	const (
 		testUser    = "sshakku-integration-test-user"

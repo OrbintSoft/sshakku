@@ -21,7 +21,7 @@ func TestNewSecretBackend(t *testing.T) {
 
 	t.Run("1password", func(t *testing.T) {
 		s := config.Settings{SecretBackend: config.SecretBackendOnePassword, OnePasswordVault: "sshakku-vault"}
-		backend, closeFn := newSecretBackend("alice", fakeLogger{}, s)
+		backend, closeFn := newSecretBackend(t.Context(), "alice", fakeLogger{}, s)
 		defer closeFn()
 		op, ok := backend.(*keys.OnePasswordBackend)
 		require.Truef(t, ok, "the wallet chosen must be the one built, got %T", backend)
@@ -34,7 +34,7 @@ func TestNewSecretBackend(t *testing.T) {
 			BitwardenEmail:  "alice@example.com",
 			BitwardenServer: "https://vault.example",
 		}
-		backend, closeFn := newSecretBackend("alice", fakeLogger{}, s)
+		backend, closeFn := newSecretBackend(t.Context(), "alice", fakeLogger{}, s)
 		defer closeFn()
 		bw, ok := backend.(*keys.BitwardenBackend)
 		require.Truef(t, ok, "the wallet chosen must be the one built, got %T", backend)
