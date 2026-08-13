@@ -2287,7 +2287,7 @@ backends, WSL2 (Linux with an agent story of its own), Cygwin, MSI packaging
 
 → rules 12, 15, 23, 26; no feature in `docs/FEATURES.md` gained or lost a promise
 
-### Phase 36 — The context that every call started over
+### Phase 36 — The context that every call started over ✅ Done
 
 This program waits on other people's software — a D-Bus daemon that may not
 answer, `ssh-add`, a wallet CLI, a socket nobody is listening on — and it did so
@@ -2348,6 +2348,34 @@ the wait; a context ends the work.
   trusted (rule 23 applied to a linter: a check that has never reported is
   indistinguishable from one that is not running), then `make lint` on every
   build, `make test`, `make build-cross`.
+
+**Two of them reported on this tree rather than on a throwaway.** `noctx`
+named twenty-five calls, all of them real: the agent's dial, the wallet's,
+the handoff's, the `$EDITOR`, the cross-user re-exec, and the processes the
+integration tests start and used to leave behind. `contextcheck` caught a
+defect in code written for this phase — a stubbed `execOutput` that was handed
+a context and ran its command on the test's own instead, which is exactly the
+shape rule 28 exists to stop, three days old and already there. `fatcontext`
+and `containedctx` had nothing to say about this tree and were made to fire in
+a throwaway package (a context re-wrapped in a loop, a context kept in a struct
+field) before being trusted, then it was deleted.
+
+**One behaviour changed underneath, and it is not a promise.** The Secret
+Service prompt wait — the longest wait in the program, a person in front of a
+dialog — watched only its own budget; the context reached it and was not read.
+It now ends with the caller and dismisses the dialog on the way out, so a
+prompt nobody is waiting for is taken off the user's screen. No user can
+observe that yet, because nothing cancels the root: it is what makes a future
+`signal.NotifyContext` a promise rather than a rewrite.
+
+**Verified**: `make lint` clean on every build, `make test` green across all
+thirteen packages, `make build-cross`. And, since a linter is not evidence that
+a program works (rule 25), the real binary driven through a login's worth of
+work in a disposable HOME: `ensure-agent` and `shell-init` adopted a healthy
+agent and printed the assignments, `doctor` reported the agent, the keys and
+the wallet — reached over the live session bus, compartment found — and
+`load-keys` looked a passphrase up in the wallet, missed, raised the dialog,
+and gave up on a dismissal without hanging the shell.
 
 → goals 14, 16.
 
