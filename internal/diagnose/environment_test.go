@@ -66,7 +66,7 @@ func TestAnUnreadableEnvironmentIsNotReportedAsUnset(t *testing.T) {
 	src := fakeSource{procs: []agent.AgentProc{{PID: 100, UID: 1000, Socket: fixed}}}
 	prober := fakeProber{up: map[string]bool{fixed: true}}
 
-	r := Gather(Inputs{
+	r := Gather(t.Context(), Inputs{
 		FixedSock:     fixed,
 		OurUID:        1000,
 		EnvUnreadable: true,

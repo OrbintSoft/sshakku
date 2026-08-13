@@ -20,7 +20,7 @@ type recordingRunner struct {
 	calls   []Cmd
 }
 
-func (r *recordingRunner) Run(c Cmd) (Result, error) {
+func (r *recordingRunner) Run(_ context.Context, c Cmd) (Result, error) {
 	r.calls = append(r.calls, c)
 	i := len(r.calls) - 1
 	if i < len(r.errs) && r.errs[i] != nil {

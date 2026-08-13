@@ -29,11 +29,11 @@ type SecretToolBackend struct {
 }
 
 // run bounds every secret-tool call.
-func (b SecretToolBackend) run(c Cmd) (Result, error) {
+func (b SecretToolBackend) run(ctx context.Context, c Cmd) (Result, error) {
 	if c.Timeout <= 0 {
 		c.Timeout = b.Timeout
 	}
-	return b.Runner.Run(c)
+	return b.Runner.Run(ctx, c)
 }
 
 // Lookup runs `secret-tool lookup service <service> username <user>`. secret-tool
@@ -41,7 +41,7 @@ func (b SecretToolBackend) run(c Cmd) (Result, error) {
 // the earlier shell version) is trimmed. A non-zero exit means no entry — handled
 // as a miss, not an error, so the loader falls back to prompting.
 func (b SecretToolBackend) Lookup(ctx context.Context, service string) (string, bool, error) {
-	res, err := b.run(Cmd{
+	res, err := b.run(ctx, Cmd{
 		Name: secretToolBin,
 		Args: []string{"lookup", "service", service, "username", b.User},
 	})
@@ -58,7 +58,7 @@ func (b SecretToolBackend) Lookup(ctx context.Context, service string) (string, 
 // <user>`, feeding the passphrase on stdin. Unlike the earlier `echo | …`, no
 // trailing newline is appended, so the secret is stored exactly.
 func (b SecretToolBackend) Store(ctx context.Context, service, label, passphrase string) error {
-	res, err := b.run(Cmd{
+	res, err := b.run(ctx, Cmd{
 		Name:  secretToolBin,
 		Args:  []string{"store", "--label=" + label, "service", service, "username", b.User},
 		Stdin: passphrase,
@@ -80,7 +80,7 @@ func (b SecretToolBackend) Store(ctx context.Context, service, label, passphrase
 // fallback path (it exists only because the D-Bus session itself was
 // unreachable).
 func (b SecretToolBackend) Delete(ctx context.Context, service string) error {
-	res, err := b.run(Cmd{
+	res, err := b.run(ctx, Cmd{
 		Name: secretToolBin,
 		Args: []string{"clear", "service", service, "username", b.User},
 	})

@@ -60,9 +60,9 @@ func TestLoadKeysHeadlessVaultHit(t *testing.T) {
 	require.NoError(t, loader.LoadKeys(t.Context()), "a login with a stored passphrase must load the key")
 
 	runner := ExecRunner{}
-	fp, err := FileFingerprint(runner, keyfile)
+	fp, err := FileFingerprint(t.Context(), runner, keyfile)
 	require.NoError(t, err, "reading the key's fingerprint must succeed")
-	loaded, err := AgentFingerprints(runner)
+	loaded, err := AgentFingerprints(t.Context(), runner)
 	require.NoError(t, err, "asking the agent what it holds must succeed")
 	assert.Containsf(t, loaded, fp,
 		"the key must be in the agent, and it got there with no dialog anywhere: a session with no screen "+
@@ -139,16 +139,17 @@ func runLoadKeysNoTerminalHelper() {
 	// This runs in the re-executed child, which is a process of its own with
 	// no test to belong to: the root context is created here because here is
 	// where the program starts.
-	if err := loader.LoadKeys(context.Background()); err != nil {
+	ctx := context.Background()
+	if err := loader.LoadKeys(ctx); err != nil {
 		os.Exit(1)
 	}
 
 	runner := ExecRunner{}
-	fp, err := FileFingerprint(runner, keyfile)
+	fp, err := FileFingerprint(ctx, runner, keyfile)
 	if err != nil {
 		os.Exit(2)
 	}
-	loaded, err := AgentFingerprints(runner)
+	loaded, err := AgentFingerprints(ctx, runner)
 	if err != nil {
 		os.Exit(3)
 	}

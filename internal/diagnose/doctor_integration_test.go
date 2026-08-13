@@ -129,7 +129,7 @@ func TestDoctorDetectsAndFixesDeadOursAgent(t *testing.T) {
 		EnvAskpass: "/usr/local/bin/sshakku", EnvAskpassRequire: "force",
 	}
 
-	before := Gather(in, agent.Inspector{}, agent.SocketProber{}, nil, nil, nil, nil)
+	before := Gather(t.Context(), in, agent.Inspector{}, agent.SocketProber{}, nil, nil, nil, nil)
 	require.Equal(t, StateOursHealthy, before.State, "the agent this test then crashes must be healthy to start with")
 
 	// Simulate a real crash: SIGKILL, no graceful socket cleanup by ssh-agent
@@ -139,7 +139,7 @@ func TestDoctorDetectsAndFixesDeadOursAgent(t *testing.T) {
 	_ = syscall.Kill(res1.Started, syscall.SIGKILL)
 	waitDead(t, res1.Started)
 
-	after := Gather(in, agent.Inspector{}, agent.SocketProber{}, nil, nil, nil, nil)
+	after := Gather(t.Context(), in, agent.Inspector{}, agent.SocketProber{}, nil, nil, nil, nil)
 	assert.Equal(t, StateOursZombie, after.State, "an agent of ours that died leaves its state behind")
 	assert.Falsef(t, hasFinding(after, "no problems detected"),
 		"a report over a crashed agent must not call the machine clean: %v", after.Findings)
@@ -151,7 +151,7 @@ func TestDoctorDetectsAndFixesDeadOursAgent(t *testing.T) {
 	t.Cleanup(func() { _ = syscall.Kill(res2.Started, syscall.SIGTERM) })
 	assert.Equal(t, agent.SituationZombie, res2.Situation, "the fix must recognise what it is repairing")
 
-	fixed := Gather(in, agent.Inspector{}, agent.SocketProber{}, nil, nil, nil, nil)
+	fixed := Gather(t.Context(), in, agent.Inspector{}, agent.SocketProber{}, nil, nil, nil, nil)
 	assert.Equal(t, StateOursHealthy, fixed.State, "the fix must leave a healthy agent behind")
 	assert.Truef(t, hasFinding(fixed, "no problems detected"),
 		"a repaired machine must be reported as clean: %v", fixed.Findings)

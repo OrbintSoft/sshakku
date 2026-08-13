@@ -45,7 +45,7 @@ type KeyLister interface {
 type KeyAdder interface {
 	// AddWithAskpass adds keyfile, handing passphrase to ssh-add out of band
 	// through the keyring + SSH_ASKPASS helper, so it never appears in argv.
-	AddWithAskpass(keyfile, passphrase string) (int, error)
+	AddWithAskpass(ctx context.Context, keyfile, passphrase string) (int, error)
 }
 
 // GiveupStore persists, per key, that loading was abandoned after the bounded
@@ -152,7 +152,7 @@ func (l Loader) LoadKeys(ctx context.Context) error {
 		l.logf("INFO", "no keys to load")
 		return nil
 	}
-	loaded, err := AgentFingerprints(l.Runner)
+	loaded, err := AgentFingerprints(ctx, l.Runner)
 	if err != nil {
 		return fmt.Errorf("read agent fingerprints: %w", err)
 	}
@@ -220,7 +220,7 @@ func (l Loader) loadOne(ctx context.Context, keyfile string, loaded map[string]b
 		return false
 	}
 
-	fp, err := FileFingerprint(l.Runner, keyfile)
+	fp, err := FileFingerprint(ctx, l.Runner, keyfile)
 	if err != nil {
 		// ssh-keygen could not run; dedup is impossible, but ssh-add may still
 		// add the key, so press on rather than skip it.
@@ -284,7 +284,7 @@ func (l Loader) loadViaVaultThenPrompt(ctx context.Context, keyfile, keyname str
 	service := l.servicePrefix() + "-" + keyname
 
 	if pass, ok := l.storedPassphrase(ctx, service, keyname); ok {
-		rc, err := l.Adder.AddWithAskpass(keyfile, pass)
+		rc, err := l.Adder.AddWithAskpass(ctx, keyfile, pass)
 		if err != nil {
 			l.failAdd(keyname, err)
 			return keyAbandoned
@@ -332,7 +332,7 @@ func (l Loader) loadViaVaultThenPrompt(ctx context.Context, keyfile, keyname str
 			l.logf("ERROR", "empty passphrase for %s (attempt %d/%d)", keyname, attempt, max)
 			continue
 		}
-		rc, err := l.Adder.AddWithAskpass(keyfile, pass)
+		rc, err := l.Adder.AddWithAskpass(ctx, keyfile, pass)
 		if err != nil {
 			l.failAdd(keyname, err)
 			return keyAbandoned

@@ -24,7 +24,7 @@ func TestAddWithAskpassStashError(t *testing.T) {
 	saveKeyaddSeams(t)
 	stashPass = func(string, time.Duration) (string, error) { return "", errors.New("no keyring") }
 	a := ExecKeyAdder{AskpassProg: "/usr/bin/sshakku"}
-	_, err := a.AddWithAskpass("/home/u/.ssh/id_rsa", "pw")
+	_, err := a.AddWithAskpass(t.Context(), "/home/u/.ssh/id_rsa", "pw")
 	assert.Error(t, err,
 		"with nowhere to put the passphrase for the helper, ssh-add would prompt on a terminal nobody is watching")
 }
@@ -35,7 +35,7 @@ func TestAddWithAskpassRunsSSHAdd(t *testing.T) {
 	stashPass = func(_ string, ttl time.Duration) (string, error) { stashedTTL = ttl; return "token", nil }
 	runCmd = func(*exec.Cmd) error { return nil }
 	a := ExecKeyAdder{AskpassProg: "/usr/bin/sshakku"}
-	rc, err := a.AddWithAskpass("/home/u/.ssh/id_rsa", "pw")
+	rc, err := a.AddWithAskpass(t.Context(), "/home/u/.ssh/id_rsa", "pw")
 	require.NoError(t, err, "running ssh-add must succeed")
 	assert.Zero(t, rc, "and a key that opened exits zero")
 	assert.Equal(t, defaultKeyTTL, stashedTTL,
@@ -53,7 +53,7 @@ func TestRunSSHAddExitCode(t *testing.T) {
 	}
 	runCmd = func(*exec.Cmd) error { return realExit }
 
-	rc, err := (ExecKeyAdder{}).runSSHAdd(nil, "/home/u/.ssh/id_rsa")
+	rc, err := (ExecKeyAdder{}).runSSHAdd(t.Context(), nil, "/home/u/.ssh/id_rsa")
 	require.NoError(t, err,
 		"a wrong passphrase is what ssh-add exiting non-zero means, and the loader retries on it rather than giving up")
 	assert.Equal(t, 3, rc, "so the exit code must be handed back as it was")
@@ -62,7 +62,7 @@ func TestRunSSHAddExitCode(t *testing.T) {
 func TestRunSSHAddStartFailure(t *testing.T) {
 	saveKeyaddSeams(t)
 	runCmd = func(*exec.Cmd) error { return errors.New("fork/exec: permission denied") }
-	rc, err := (ExecKeyAdder{}).runSSHAdd(nil, "/home/u/.ssh/id_rsa")
+	rc, err := (ExecKeyAdder{}).runSSHAdd(t.Context(), nil, "/home/u/.ssh/id_rsa")
 	assert.Error(t, err, "ssh-add not running at all is not a wrong passphrase, and retrying would not help")
 	assert.Zero(t, rc, "so there is no exit code to report")
 }

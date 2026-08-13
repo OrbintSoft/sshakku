@@ -1,6 +1,7 @@
 package diagnose
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -27,11 +28,11 @@ type fakeKeyFingerprinter struct {
 	agentErr error
 }
 
-func (f fakeKeyFingerprinter) FileFingerprint(path string) (string, error) {
+func (f fakeKeyFingerprinter) FileFingerprint(_ context.Context, path string) (string, error) {
 	return f.byPath[path], nil
 }
 
-func (f fakeKeyFingerprinter) AgentFingerprints() (map[string]bool, error) {
+func (f fakeKeyFingerprinter) AgentFingerprints(context.Context) (map[string]bool, error) {
 	return f.agentFP, f.agentErr
 }
 
@@ -64,7 +65,7 @@ func TestGatherKeysLoadedAndTracked(t *testing.T) {
 			"id_ed25519": keystate.Record{AddedAt: fixedNow.Add(-1 * time.Hour), Lifetime: 8 * time.Hour},
 		},
 	}
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, fakeSource{}, fakeProber{}, nil, nil, ks, nil)
+	r := Gather(t.Context(), Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, fakeSource{}, fakeProber{}, nil, nil, ks, nil)
 
 	require.Len(t, r.Keys, 1, "the one key the directory held")
 	kv := r.Keys[0]
@@ -91,7 +92,7 @@ func TestGatherKeysNotLoaded(t *testing.T) {
 			agentFP: map[string]bool{},
 		},
 	}
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, fakeSource{}, fakeProber{}, nil, nil, ks, nil)
+	r := Gather(t.Context(), Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, fakeSource{}, fakeProber{}, nil, nil, ks, nil)
 
 	require.Len(t, r.Keys, 1, "the one key the directory held")
 	assert.False(t, r.Keys[0].Loaded, "the agent did not report this key's fingerprint")
@@ -113,7 +114,7 @@ func TestGatherKeysLoadedNoExpiry(t *testing.T) {
 			"id_rsa": keystate.Record{AddedAt: time.Now(), Lifetime: 0},
 		},
 	}
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, fakeSource{}, fakeProber{}, nil, nil, ks, nil)
+	r := Gather(t.Context(), Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, fakeSource{}, fakeProber{}, nil, nil, ks, nil)
 
 	require.Len(t, r.Keys, 1, "the one key the directory held")
 	assert.True(t, r.Keys[0].Loaded, "the agent reported this key's fingerprint")
@@ -133,7 +134,7 @@ func TestGatherKeysLoadedUntracked(t *testing.T) {
 		},
 		// no State collaborator: even a loaded key's TTL is unknown.
 	}
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, fakeSource{}, fakeProber{}, nil, nil, ks, nil)
+	r := Gather(t.Context(), Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, fakeSource{}, fakeProber{}, nil, nil, ks, nil)
 
 	require.Len(t, r.Keys, 1, "the one key the directory held")
 	assert.True(t, r.Keys[0].Loaded, "the agent reported this key's fingerprint")
@@ -158,7 +159,7 @@ func TestGatherKeysExpired(t *testing.T) {
 			"id_rsa": keystate.Record{AddedAt: fixedNow.Add(-9 * time.Hour), Lifetime: 8 * time.Hour},
 		},
 	}
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, fakeSource{}, fakeProber{}, nil, nil, ks, nil)
+	r := Gather(t.Context(), Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, fakeSource{}, fakeProber{}, nil, nil, ks, nil)
 
 	var b strings.Builder
 	Format(&b, r)
@@ -176,7 +177,7 @@ func TestGatherKeysExpired(t *testing.T) {
 
 func TestGatherKeysEnumerateError(t *testing.T) {
 	ks := &KeySource{Lister: fakeKeyLister{err: errors.New("boom")}}
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, fakeSource{}, fakeProber{}, nil, nil, ks, nil)
+	r := Gather(t.Context(), Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, fakeSource{}, fakeProber{}, nil, nil, ks, nil)
 
 	assert.Error(t, r.KeysErr, "a directory that could not be listed must be reported")
 	assert.Empty(t, r.Keys, "nothing may be listed from a directory that could not be read")
@@ -184,7 +185,7 @@ func TestGatherKeysEnumerateError(t *testing.T) {
 
 func TestFormatNamesTheDirectoryItReadWhenItHeldNoKey(t *testing.T) {
 	ks := &KeySource{Dir: "/home/u/work-keys", Lister: fakeKeyLister{}}
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, fakeSource{}, fakeProber{}, nil, nil, ks, nil)
+	r := Gather(t.Context(), Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, fakeSource{}, fakeProber{}, nil, nil, ks, nil)
 
 	var b strings.Builder
 	Format(&b, r)
@@ -196,7 +197,7 @@ func TestFormatNamesTheDirectoryItReadWhenItHeldNoKey(t *testing.T) {
 }
 
 func TestGatherNilKeySourceSkipsKeysSection(t *testing.T) {
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, fakeSource{}, fakeProber{}, nil, nil, nil, nil)
+	r := Gather(t.Context(), Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, fakeSource{}, fakeProber{}, nil, nil, nil, nil)
 	assert.Nil(t, r.Keys, "with nowhere to look, no key is listed")
 	assert.NoError(t, r.KeysErr, "not looking is not a failure to look")
 

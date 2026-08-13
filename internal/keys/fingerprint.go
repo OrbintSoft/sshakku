@@ -1,6 +1,7 @@
 package keys
 
 import (
+	"context"
 	"strings"
 	"time"
 )
@@ -16,8 +17,8 @@ const fingerprintTimeout = 5 * time.Second
 // `ssh-keygen -lf <path>`. A key ssh-keygen cannot read (wrong format, no such
 // file) yields an empty fingerprint and no error — the loader then treats it as
 // not-yet-loaded rather than aborting the whole run.
-func FileFingerprint(r Runner, path string) (string, error) {
-	res, err := r.Run(Cmd{Name: "ssh-keygen", Args: []string{"-lf", path}, Timeout: fingerprintTimeout})
+func FileFingerprint(ctx context.Context, r Runner, path string) (string, error) {
+	res, err := r.Run(ctx, Cmd{Name: "ssh-keygen", Args: []string{"-lf", path}, Timeout: fingerprintTimeout})
 	if err != nil {
 		return "", err
 	}
@@ -31,8 +32,8 @@ func FileFingerprint(r Runner, path string) (string, error) {
 // agent, read with `ssh-add -l`. An empty agent (exit 1) or no agent at all
 // (exit 2) yields an empty set, not an error — mirroring the bash snapshot, where
 // a missing or empty agent simply means nothing is loaded yet.
-func AgentFingerprints(r Runner) (map[string]bool, error) {
-	res, err := r.Run(Cmd{Name: "ssh-add", Args: []string{"-l"}, Timeout: fingerprintTimeout})
+func AgentFingerprints(ctx context.Context, r Runner) (map[string]bool, error) {
+	res, err := r.Run(ctx, Cmd{Name: "ssh-add", Args: []string{"-l"}, Timeout: fingerprintTimeout})
 	if err != nil {
 		return nil, err
 	}
@@ -51,13 +52,13 @@ func AgentFingerprints(r Runner) (map[string]bool, error) {
 type RunnerFingerprinter struct{ Runner Runner }
 
 // FileFingerprint returns path's fingerprint via FileFingerprint(r.Runner, path).
-func (r RunnerFingerprinter) FileFingerprint(path string) (string, error) {
-	return FileFingerprint(r.Runner, path)
+func (r RunnerFingerprinter) FileFingerprint(ctx context.Context, path string) (string, error) {
+	return FileFingerprint(ctx, r.Runner, path)
 }
 
 // AgentFingerprints returns the agent's loaded set via AgentFingerprints(r.Runner).
-func (r RunnerFingerprinter) AgentFingerprints() (map[string]bool, error) {
-	return AgentFingerprints(r.Runner)
+func (r RunnerFingerprinter) AgentFingerprints(ctx context.Context) (map[string]bool, error) {
+	return AgentFingerprints(ctx, r.Runner)
 }
 
 // fingerprintField extracts the hash field of a single `ssh-keygen -lf` /

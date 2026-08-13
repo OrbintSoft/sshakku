@@ -108,7 +108,7 @@ func TestGatherReparentedToInitCgroupFallback(t *testing.T) {
 		1:   {ppid: 0, name: "systemd"},
 	}
 	cg := fakeCgroup{200: "app-gpg-agent.service"}
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000}, src, prober, anc, cg, nil, nil)
+	r := Gather(t.Context(), Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000}, src, prober, anc, cg, nil, nil)
 
 	assert.Truef(t, hasFinding(r, "systemd unit: app-gpg-agent.service"),
 		"an agent whose parent is gone must still be named by its unit: %v", r.Findings)

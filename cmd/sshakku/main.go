@@ -88,7 +88,7 @@ type deps struct {
 	// gatherReport), reading the real procfs, sockets, and process tree. Injected
 	// so doctor's report-printing and self-heal paths run against a synthetic
 	// report instead of this host's live agent state.
-	gather func(env paths.Env, layout paths.Layout, settings config.Settings) diagnose.Report
+	gather func(ctx context.Context, env paths.Env, layout paths.Layout, settings config.Settings) diagnose.Report
 	// tokenSource reads another user's per-login socket token for a cross-user
 	// doctor run (see execTokenSource). The production value re-executes this
 	// binary under the target's credentials; a fake lets doctorCrossUser run

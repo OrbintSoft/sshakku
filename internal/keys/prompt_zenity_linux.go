@@ -30,7 +30,7 @@ func (p ZenityPrompter) Prompt(ctx context.Context, keyname string) (string, err
 	if timeout <= 0 {
 		timeout = DefaultInteractiveTimeout
 	}
-	res, err := p.Runner.Run(Cmd{
+	res, err := p.Runner.Run(ctx, Cmd{
 		Name: zenityBin,
 		// zenity has no argument for the text above the field, so the key being
 		// asked about goes in the title, which is the only place it can be read.

@@ -90,7 +90,7 @@ func TestGatherForeignAttribution(t *testing.T) {
 		8:   {ppid: 1, name: "sshd"},
 		1:   {ppid: 0, name: "init"},
 	}
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000}, src, prober, anc, nil, nil, nil)
+	r := Gather(t.Context(), Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000}, src, prober, anc, nil, nil, nil)
 
 	require.Len(t, r.Agents, 1, "the one agent that was found")
 	assert.Len(t, r.Agents[0].Ancestry, 3, "the chain walked up from the agent")
@@ -112,7 +112,7 @@ func TestGatherRecordsWhatTheCgroupSourceReports(t *testing.T) {
 	anc := fakeAncestry{200: {ppid: 1, name: "ssh-agent"}, 1: {ppid: 0, name: "init"}}
 	cg := fakeCgroup{200: "app-gpg-agent.service"}
 
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000}, src, prober, anc, cg, nil, nil)
+	r := Gather(t.Context(), Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000}, src, prober, anc, cg, nil, nil)
 
 	require.Len(t, r.Agents, 1, "the one agent that was found")
 	assert.Equal(t, "app-gpg-agent.service", r.Agents[0].Cgroup, "the report carries what the cgroup source answered")

@@ -18,7 +18,7 @@ func (f fakeHostSource) Checks() HostChecks { return f.hc }
 // HostSource and records its result in the report.
 func TestGatherRunsHostChecks(t *testing.T) {
 	enc := true
-	r := Gather(Inputs{}, fakeSource{}, fakeProber{}, nil, nil, nil, fakeHostSource{hc: HostChecks{DiskEncrypted: &enc}})
+	r := Gather(t.Context(), Inputs{}, fakeSource{}, fakeProber{}, nil, nil, nil, fakeHostSource{hc: HostChecks{DiskEncrypted: &enc}})
 	assert.Equal(t, &enc, r.Host.DiskEncrypted, "the report must carry what the host source answered")
 }
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -33,7 +34,7 @@ var _ TargetTokenSource = fakeTokenSource{}
 // returns report; tokenSource yields a fixed token; geteuid reports euid.
 func doctorDeps(report diagnose.Report, ts TargetTokenSource, euid int) deps {
 	d := depsWithEnsurer(fakeEnsurer{})
-	d.gather = func(paths.Env, paths.Layout, config.Settings) diagnose.Report { return report }
+	d.gather = func(context.Context, paths.Env, paths.Layout, config.Settings) diagnose.Report { return report }
 	d.tokenSource = ts
 	d.geteuid = func() int { return euid }
 	return d
@@ -103,7 +104,9 @@ func TestDoctorReadOnly(t *testing.T) {
 func TestDoctorTestBackend(t *testing.T) {
 	tempRuntimeEnv(t)
 	d := depsReturning(newMemoryBackend())
-	d.gather = func(paths.Env, paths.Layout, config.Settings) diagnose.Report { return diagnose.Report{} }
+	d.gather = func(context.Context, paths.Env, paths.Layout, config.Settings) diagnose.Report {
+		return diagnose.Report{}
+	}
 	d.tokenSource = fakeTokenSource{}
 	d.geteuid = func() int { return 1000 }
 	var out, errOut bytes.Buffer
@@ -195,7 +198,7 @@ func TestGatherReport(t *testing.T) {
 	tempRuntimeEnv(t)
 	env := paths.FromOS()
 	layout := paths.Resolve(env, paths.ProbeDir)
-	report := gatherReport(env, layout, config.Settings{})
+	report := gatherReport(t.Context(), env, layout, config.Settings{})
 	assert.Equal(t, layout.AgentSock, report.FixedSock,
 		"the report must be about the socket this layout resolves to")
 }

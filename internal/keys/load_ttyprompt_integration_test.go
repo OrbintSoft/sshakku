@@ -400,9 +400,9 @@ func assertKeyInAgent(t *testing.T, keyfile string, want bool) {
 	t.Helper()
 
 	runner := ExecRunner{}
-	fp, err := FileFingerprint(runner, keyfile)
+	fp, err := FileFingerprint(t.Context(), runner, keyfile)
 	require.NoError(t, err, "reading the key's fingerprint must succeed")
-	loaded, err := AgentFingerprints(runner)
+	loaded, err := AgentFingerprints(t.Context(), runner)
 	require.NoError(t, err, "asking the agent what it holds must succeed")
 	assert.Equalf(t, want, loaded[fp],
 		"whether the key is in the agent is the whole outcome of what the user just typed: %v", loaded)

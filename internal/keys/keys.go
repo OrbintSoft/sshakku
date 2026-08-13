@@ -6,7 +6,10 @@
 // drives the OpenSSH tools and the secret store through the seams below.
 package keys
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 // EnvPassHandoffToken names the environment variable carrying the one-shot
 // passphrase-handoff token from the loader to the askpass helper — a kernel
@@ -42,5 +45,5 @@ type Result struct {
 // Runner runs an external command and returns its result. It is the seam that
 // lets the loader be tested without spawning real ssh-add/ssh-keygen/secret-tool.
 type Runner interface {
-	Run(Cmd) (Result, error)
+	Run(ctx context.Context, c Cmd) (Result, error)
 }

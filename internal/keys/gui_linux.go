@@ -26,6 +26,6 @@ func HasGraphicalSession(ctx context.Context, env GUIEnv, r Runner) bool {
 	if env.Display == "" {
 		return false
 	}
-	res, err := r.Run(Cmd{Name: "xset", Args: []string{"q"}})
+	res, err := r.Run(ctx, Cmd{Name: "xset", Args: []string{"q"}})
 	return err == nil && res.Code == 0
 }

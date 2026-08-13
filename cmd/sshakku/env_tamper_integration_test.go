@@ -32,7 +32,7 @@ func TestTamperedEnvVarsHandledSafely(t *testing.T) {
 		t.Setenv("SSH_AUTH_SOCK", bogus)
 
 		env := paths.FromOS()
-		report := gatherReport(env, paths.Resolve(env, paths.ProbeDir), config.Settings{})
+		report := gatherReport(t.Context(), env, paths.Resolve(env, paths.ProbeDir), config.Settings{})
 
 		assert.Equal(t, bogus, report.EnvSock, "the report must show the value the shell really carries")
 		assert.False(t, report.EnvReachable, "a socket nothing is listening on is not a live agent")
@@ -47,7 +47,7 @@ func TestTamperedEnvVarsHandledSafely(t *testing.T) {
 		t.Setenv("SSH_AUTH_SOCK", "")
 
 		env := paths.FromOS()
-		report := gatherReport(env, paths.Resolve(env, paths.ProbeDir), config.Settings{})
+		report := gatherReport(t.Context(), env, paths.Resolve(env, paths.ProbeDir), config.Settings{})
 
 		assert.Empty(t, report.EnvSock, "a shell that exported nothing has nothing to show")
 		assert.Truef(t, findingContains(report.Findings, "SSH_AUTH_SOCK is unset"),

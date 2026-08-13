@@ -30,7 +30,7 @@ func (p KDialogPrompter) Prompt(ctx context.Context, keyname string) (string, er
 	if timeout <= 0 {
 		timeout = DefaultInteractiveTimeout
 	}
-	res, err := p.Runner.Run(Cmd{
+	res, err := p.Runner.Run(ctx, Cmd{
 		Name:    kdialogBin,
 		Args:    []string{"--password", "Enter passphrase for " + keyname},
 		Timeout: timeout,

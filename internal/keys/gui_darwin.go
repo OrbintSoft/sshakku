@@ -24,7 +24,7 @@ const aquaSession = "Aqua"
 // there is a login shell waiting on something that can never arrive. When it
 // is false the caller falls back to asking on the terminal.
 func GraphicalSession(ctx context.Context, r Runner) bool {
-	res, err := r.Run(Cmd{Name: launchctlBin, Args: []string{"managername"}})
+	res, err := r.Run(ctx, Cmd{Name: launchctlBin, Args: []string{"managername"}})
 	if err != nil || res.Code != 0 {
 		return false
 	}

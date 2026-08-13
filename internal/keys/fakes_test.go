@@ -24,7 +24,7 @@ func (f *fakeRunner) on(name string, h func(Cmd) (Result, error)) *fakeRunner {
 	return f
 }
 
-func (f *fakeRunner) Run(c Cmd) (Result, error) {
+func (f *fakeRunner) Run(_ context.Context, c Cmd) (Result, error) {
 	f.calls = append(f.calls, c)
 	if h, ok := f.handlers[c.Name]; ok {
 		return h(c)
@@ -130,7 +130,7 @@ type addCall struct {
 	passphrase string
 }
 
-func (a *fakeKeyAdder) AddWithAskpass(keyfile, passphrase string) (int, error) {
+func (a *fakeKeyAdder) AddWithAskpass(_ context.Context, keyfile, passphrase string) (int, error) {
 	a.calls = append(a.calls, addCall{keyfile: keyfile, passphrase: passphrase})
 	if a.err != nil {
 		return 0, a.err

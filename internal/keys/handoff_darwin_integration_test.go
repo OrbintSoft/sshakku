@@ -43,14 +43,14 @@ func TestAddWithAskpassRealBinaryDarwin(t *testing.T) {
 	t.Setenv("HOME", shortDir(t))
 
 	adder := ExecKeyAdder{AskpassProg: askpass}
-	rc, err := adder.AddWithAskpass(keyfile, passphrase)
+	rc, err := adder.AddWithAskpass(t.Context(), keyfile, passphrase)
 	require.NoError(t, err, "loading the key through the real handoff must succeed")
 	require.Zero(t, rc, "and ssh-add must accept the passphrase it collected")
 
 	runner := ExecRunner{}
-	fp, err := FileFingerprint(runner, keyfile)
+	fp, err := FileFingerprint(t.Context(), runner, keyfile)
 	require.NoError(t, err, "reading the key's fingerprint must succeed")
-	loaded, err := AgentFingerprints(runner)
+	loaded, err := AgentFingerprints(t.Context(), runner)
 	require.NoError(t, err, "asking the agent what it holds must succeed")
 	assert.Containsf(t, loaded, fp,
 		"the key must be in the agent: the passphrase travelled from here to a detached ssh-add through the "+

@@ -32,7 +32,7 @@ func TestReportNamesTheKeyDirectoryItRead(t *testing.T) {
 
 func formatGathered(t *testing.T, ks *KeySource) string {
 	t.Helper()
-	r := Gather(Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, fakeSource{}, fakeProber{}, nil, nil, ks, nil)
+	r := Gather(t.Context(), Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, fakeSource{}, fakeProber{}, nil, nil, ks, nil)
 	var b strings.Builder
 	Format(&b, r)
 	return b.String()

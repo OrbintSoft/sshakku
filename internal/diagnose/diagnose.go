@@ -6,6 +6,7 @@
 package diagnose
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -56,8 +57,8 @@ type KeyLister interface {
 // KeyFingerprinter resolves a key file's fingerprint and the set currently
 // loaded in the agent; keys.RunnerFingerprinter satisfies it.
 type KeyFingerprinter interface {
-	FileFingerprint(path string) (string, error)
-	AgentFingerprints() (map[string]bool, error)
+	FileFingerprint(ctx context.Context, path string) (string, error)
+	AgentFingerprints(ctx context.Context) (map[string]bool, error)
 }
 
 // KeyStateSource looks up the lifetime sshakku recorded for a key it added;
@@ -239,7 +240,7 @@ type Report struct {
 // environment-hardening section entirely (Report.Host stays its zero value,
 // which Format and findings both already treat as "nothing to say"). It
 // mutates nothing.
-func Gather(in Inputs, src AgentSource, prober agent.Prober, anc AncestrySource, cg CgroupSource, keys *KeySource, host HostSource) Report {
+func Gather(ctx context.Context, in Inputs, src AgentSource, prober agent.Prober, anc AncestrySource, cg CgroupSource, keys *KeySource, host HostSource) Report {
 	r := Report{
 		FixedSock:     in.FixedSock,
 		EnvSock:       in.EnvSock,
@@ -284,7 +285,7 @@ func Gather(in Inputs, src AgentSource, prober agent.Prober, anc AncestrySource,
 	r.Findings = findings(in, r)
 	if keys != nil {
 		r.KeysDir = keys.Dir
-		r.Keys, r.KeysErr = gatherKeys(*keys)
+		r.Keys, r.KeysErr = gatherKeys(ctx, *keys)
 	}
 	return r
 }
@@ -295,7 +296,7 @@ func Gather(in Inputs, src AgentSource, prober agent.Prober, anc AncestrySource,
 // State collaborator degrades gracefully: fingerprints/loaded state or
 // tracked/TTL info is simply left at its zero value rather than failing the
 // whole report.
-func gatherKeys(ks KeySource) ([]KeyView, error) {
+func gatherKeys(ctx context.Context, ks KeySource) ([]KeyView, error) {
 	files, err := ks.Lister.Keys()
 	if err != nil {
 		return nil, err
@@ -303,14 +304,14 @@ func gatherKeys(ks KeySource) ([]KeyView, error) {
 
 	var agentFPs map[string]bool
 	if ks.Fingerprint != nil {
-		agentFPs, _ = ks.Fingerprint.AgentFingerprints()
+		agentFPs, _ = ks.Fingerprint.AgentFingerprints(ctx)
 	}
 
 	views := make([]KeyView, 0, len(files))
 	for _, f := range files {
 		kv := KeyView{Name: filepath.Base(f)}
 		if ks.Fingerprint != nil {
-			kv.Fingerprint, _ = ks.Fingerprint.FileFingerprint(f)
+			kv.Fingerprint, _ = ks.Fingerprint.FileFingerprint(ctx, f)
 		}
 		kv.Loaded = kv.Fingerprint != "" && agentFPs[kv.Fingerprint]
 		if kv.Loaded && ks.State != nil {

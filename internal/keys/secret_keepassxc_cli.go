@@ -108,7 +108,7 @@ func (b *KeePassXCCLIBackend) run(ctx context.Context, args []string, extraInput
 	for _, extra := range extraInput {
 		input += extra + "\n"
 	}
-	res, err := b.Runner.Run(Cmd{
+	res, err := b.Runner.Run(ctx, Cmd{
 		Name:    keepassxcCLIBin,
 		Args:    full,
 		Stdin:   input,

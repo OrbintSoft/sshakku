@@ -252,7 +252,7 @@ func (d deps) doctor(ctx context.Context, stdout, stderr io.Writer, args []strin
 // — a section present in one and absent from the other would leave anything it
 // covers unshowable as repaired.
 func (d deps) reportWithWallet(ctx context.Context, env paths.Env, layout paths.Layout, settings config.Settings) diagnose.Report {
-	report := d.gather(env, layout, settings)
+	report := d.gather(ctx, env, layout, settings)
 	report.Wallet = d.wallet(ctx, settings)
 	report.Findings = append(report.Findings, diagnose.WalletFindings(report.Wallet)...)
 	return report
@@ -433,7 +433,7 @@ func (d deps) doctorCrossUser(ctx context.Context, stdout, stderr io.Writer, inv
 	// it must reflect what target could reach, not what this elevated caller
 	// can bypass into.
 	shownEnv, secretEnv := environmentNames()
-	diagnose.Format(stdout, diagnose.Gather(diagnose.Inputs{
+	diagnose.Format(stdout, diagnose.Gather(ctx, diagnose.Inputs{
 		FixedSock:     layout.AgentSock,
 		LegacyDir:     filepath.Join(targetEnv.Home, ".ssh", "agent"),
 		StatePath:     filepath.Join(filepath.Dir(layout.AgentSock), "agent.state"),
@@ -452,7 +452,7 @@ func (d deps) doctorCrossUser(ctx context.Context, stdout, stderr io.Writer, inv
 // gatherReport builds the diagnostic report for the resolved layout, reading the
 // real procfs, sockets, and process tree. Both the read-only and --fix paths use
 // it so they present the situation identically.
-func gatherReport(env paths.Env, layout paths.Layout, settings config.Settings) diagnose.Report {
+func gatherReport(ctx context.Context, env paths.Env, layout paths.Layout, settings config.Settings) diagnose.Report {
 	runner := keys.ExecRunner{}
 	// One enumerator, read for the keys and named in the report: the set
 	// SSHakku acts on and the set it describes are then the same set.
@@ -464,7 +464,7 @@ func gatherReport(env paths.Env, layout paths.Layout, settings config.Settings) 
 		State:       keystate.Store{Dir: keystateDir(layout)},
 	}
 	shownEnv, secretEnv := environmentReport()
-	return diagnose.Gather(diagnose.Inputs{
+	return diagnose.Gather(ctx, diagnose.Inputs{
 		FixedSock:         layout.AgentSock,
 		LegacyDir:         filepath.Join(env.Home, ".ssh", "agent"),
 		StatePath:         filepath.Join(filepath.Dir(layout.AgentSock), "agent.state"),

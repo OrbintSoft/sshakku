@@ -83,7 +83,7 @@ func (p OsascriptPrompter) Prompt(ctx context.Context, keyname string) (string, 
 	if timeout <= 0 {
 		timeout = DefaultInteractiveTimeout
 	}
-	res, err := p.Runner.Run(Cmd{
+	res, err := p.Runner.Run(ctx, Cmd{
 		Name:    osascriptBin,
 		Args:    []string{script, keyname},
 		Timeout: timeout,
