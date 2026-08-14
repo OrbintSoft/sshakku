@@ -35,7 +35,9 @@ func (TTYPrompter) Prompt(context.Context, string) (string, error) { return "", 
 func (TTYPrompter) Available(context.Context) bool { return false }
 
 // Name is what to call this prompter in a message: the place the user would be
-// asked, not a program they could go and install.
-func (TTYPrompter) Name() string { return "the console" }
+// asked, not a program they could go and install. It is the same word here as
+// everywhere else — a message that named this system's console while the rest
+// of SSHakku says "the terminal" would read as a second, different place.
+func (TTYPrompter) Name() string { return "the terminal" }
 
 var _ Prompter = TTYPrompter{}
