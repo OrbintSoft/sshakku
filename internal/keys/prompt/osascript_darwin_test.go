@@ -1,6 +1,6 @@
 //go:build darwin
 
-package keys
+package prompt
 
 import (
 	"errors"
@@ -59,10 +59,10 @@ func TestOsascriptPrompt(t *testing.T) {
 		assert.ErrorIsf(t, err, os.ErrNotExist, "and the script must not outlive the prompt: %s", path)
 	})
 
-	t.Run("a dismissed dialog is ErrPromptCanceled", func(t *testing.T) {
+	t.Run("a dismissed dialog is ErrCanceled", func(t *testing.T) {
 		r := runtest.NewRunner().On(osascriptBin, runtest.Stdout("", 1))
 		_, err := OsascriptPrompter{Runner: r}.Prompt(t.Context(), "id_rsa")
-		assert.ErrorIs(t, err, ErrPromptCanceled,
+		assert.ErrorIs(t, err, ErrCanceled,
 			"closing a dialog is an answer, and must be passed on as one rather than as a failure")
 	})
 

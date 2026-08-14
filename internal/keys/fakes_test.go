@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// fakePrompter is a Prompter whose availability and answer are scripted.
+// fakePrompter is a prompt.Prompter whose availability and answer are scripted.
 type fakePrompter struct {
 	avail bool
 	pass  string

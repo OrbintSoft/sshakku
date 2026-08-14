@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/OrbintSoft/sshakku/internal/keys/prompt"
 	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
@@ -16,7 +17,7 @@ import (
 // system-auth integration), bw has no non-interactive unlock path today — a
 // biometric/system-auth CLI integration is only a community wrapper, not an
 // official bw feature — so BitwardenBackend prompts for the master password
-// itself via Prompter every time it unlocks. It is never cached or written
+// itself via prompt.Prompter every time it unlocks. It is never cached or written
 // anywhere: only the resulting, short-lived bw session key is held in
 // memory (Session), the same way the passphrases this backend stores never
 // touch argv or disk.
@@ -86,7 +87,7 @@ type bitwardenItemRef struct {
 // SSH key passphrase.
 type BitwardenBackend struct {
 	Runner   run.Runner
-	Prompter Prompter
+	Prompter prompt.Prompter
 	// Email identifies the Bitwarden account to log into.
 	Email string
 	// Server, if set, points bw at a self-hosted Vaultwarden instance via
@@ -132,7 +133,7 @@ func (b *BitwardenBackend) env() []string {
 	return []string{"BW_SESSION=" + b.Session}
 }
 
-// Unlock prompts for the master password via Prompter, logs into Email if
+// Unlock prompts for the master password via prompt.Prompter, logs into Email if
 // not already logged in, and unlocks to obtain a fresh session key — never
 // caching or storing the password itself. The password reaches bw only via
 // --passwordenv, never argv.

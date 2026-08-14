@@ -1,6 +1,6 @@
-//go:build linux
+//go:build darwin
 
-package keys
+package prompt
 
 import "os/exec"
 

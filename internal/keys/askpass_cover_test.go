@@ -6,6 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OrbintSoft/sshakku/internal/keys/prompt"
 )
 
 // TestParsePassphrasePromptWhitespaceKeyfile covers the empty-keyfile guard:
@@ -22,7 +24,7 @@ func TestParsePassphrasePromptWhitespaceKeyfile(t *testing.T) {
 // answered with a declined (ok=false) reply.
 func TestBrokerNonPassphraseNoTerminalLogsInfo(t *testing.T) {
 	log := &fakeLogger{}
-	tty := &fakeTTY{err: ErrNoTerminal}
+	tty := &fakeTTY{err: prompt.ErrNoTerminal}
 	b := Broker{Secret: &fakeSecret{}, TTY: tty, Log: log}
 
 	reply, ok := b.Answer(t.Context(), "Please enter your login password:")

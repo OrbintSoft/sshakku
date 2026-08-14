@@ -7,6 +7,7 @@ import (
 
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/OrbintSoft/sshakku/internal/keys/prompt"
 	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
@@ -17,7 +18,7 @@ import (
 //
 // Nothing here decides anything on its own — see chooseDialog.
 func darwinDialogs(settings config.Settings) []dialog {
-	return []dialog{{config.GUIPrompterOsascript, keys.OsascriptPrompter{
+	return []dialog{{config.GUIPrompterOsascript, prompt.OsascriptPrompter{
 		Runner:  run.ExecRunner{Timeout: settings.InteractiveTimeout},
 		Timeout: settings.InteractiveTimeout,
 	}}}
@@ -34,12 +35,12 @@ func darwinDialogs(settings config.Settings) []dialog {
 //
 // Which dialog is not much of a choice here — the system has one — but "none"
 // is still the user's to write, and it means the terminal wherever it appears.
-func newGraphicalPrompter(ctx context.Context, settings config.Settings, log keys.Logger) keys.Prompter {
+func newGraphicalPrompter(ctx context.Context, settings config.Settings, log keys.Logger) prompt.Prompter {
 	if settings.GUIPrompter == config.GUIPrompterNone {
 		return nil
 	}
-	if !keys.GraphicalSession(ctx, run.ExecRunner{Timeout: settings.CommandTimeout}) {
+	if !prompt.GraphicalSession(ctx, run.ExecRunner{Timeout: settings.CommandTimeout}) {
 		return nil
 	}
-	return chooseDialog(ctx, darwinDialogs(settings), settings.GUIPrompter, keys.TTYPrompter{}, log)
+	return chooseDialog(ctx, darwinDialogs(settings), settings.GUIPrompter, prompt.TTYPrompter{}, log)
 }

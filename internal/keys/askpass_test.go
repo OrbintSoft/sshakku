@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OrbintSoft/sshakku/internal/keys/prompt"
 )
 
 // fakeTTY scripts one terminal answer and records how it was prompted.
@@ -160,7 +162,7 @@ func TestBrokerABlankWalletEntryIsNoPassphrase(t *testing.T) {
 // without ok, and is logged at INFO, not ERROR.
 func TestBrokerNoTerminal(t *testing.T) {
 	secret := &fakeSecret{lookupFound: false}
-	tty := &fakeTTY{err: ErrNoTerminal}
+	tty := &fakeTTY{err: prompt.ErrNoTerminal}
 	log := &fakeLogger{}
 	b := Broker{Secret: secret, TTY: tty, Log: log}
 

@@ -16,6 +16,7 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/diagnose"
 	"github.com/OrbintSoft/sshakku/internal/keys"
 	"github.com/OrbintSoft/sshakku/internal/keys/handoff"
+	"github.com/OrbintSoft/sshakku/internal/keys/prompt"
 	"github.com/OrbintSoft/sshakku/internal/paths"
 )
 
@@ -109,7 +110,7 @@ type deps struct {
 	// both branches run regardless of what the test host has, and platform-bound
 	// in production (newGraphicalPrompter): what counts as a usable graphical
 	// session, and what draws the dialog, are each platform's own answers.
-	graphicalPrompter func(context.Context, config.Settings, keys.Logger) keys.Prompter
+	graphicalPrompter func(context.Context, config.Settings, keys.Logger) prompt.Prompter
 	// fetchHandoff redeems a one-shot passphrase-handoff token (handoff.Fetch).
 	// Injected so askpass's handoff path is testable without a live kernel
 	// keyring, which many containers and CI runners lack.
@@ -118,7 +119,7 @@ type deps struct {
 	// misses the wallet (see askpassBroker). The production value reads
 	// /dev/tty; a fake lets the broker's decline path run without a controlling
 	// terminal.
-	tty keys.TTY
+	tty prompt.TTY
 	// wallet describes the configured wallet as this machine actually is: which
 	// one would be opened, how it would be reached, and what of that is here.
 	// Injected so a test decides what the machine has instead of asking the one

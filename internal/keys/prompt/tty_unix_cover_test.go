@@ -1,6 +1,6 @@
 //go:build unix
 
-package keys
+package prompt
 
 import (
 	"errors"
@@ -123,7 +123,7 @@ func TestReadTTYLineEndOfInputIsARefusal(t *testing.T) {
 	// branch.
 	require.NoError(t, unix.Shutdown(int(peer.Fd()), unix.SHUT_WR), "the user presses Ctrl-D")
 	_, err := ReadTTYLine("Answer: ", false)
-	assert.ErrorIs(t, err, ErrPromptCanceled,
+	assert.ErrorIs(t, err, ErrCanceled,
 		"input that ended without an answer is the user turning the question down, not the terminal failing them")
 }
 
@@ -139,7 +139,7 @@ func TestReadTTYLineReadErrorOnEmpty(t *testing.T) {
 	openTTY = func() (*os.File, error) { return os.OpenFile(path, os.O_WRONLY, 0) }
 	_, err := ReadTTYLine("Answer: ", false)
 	require.Error(t, err, "a terminal that could not be read must be reported")
-	assert.NotErrorIs(t, err, ErrPromptCanceled,
+	assert.NotErrorIs(t, err, ErrCanceled,
 		"but not as a refusal: the terminal let the user down, and they never got to decline anything")
 }
 
@@ -164,7 +164,7 @@ func TestReadTTYLinePromptWriteError(t *testing.T) {
 	openTTY = func() (*os.File, error) { return os.OpenFile(path, os.O_RDONLY, 0) }
 	_, err := ReadTTYLine("Answer: ", false)
 	require.Error(t, err, "a question that never appeared cannot be waited on for an answer")
-	assert.NotErrorIs(t, err, ErrPromptCanceled,
+	assert.NotErrorIs(t, err, ErrCanceled,
 		"and not as a refusal: the user was never asked, so they declined nothing, and the caller would stop "+
 			"asking about a key they still want")
 }

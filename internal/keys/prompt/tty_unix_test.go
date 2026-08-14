@@ -1,6 +1,6 @@
 //go:build unix
 
-package keys
+package prompt
 
 import (
 	"context"

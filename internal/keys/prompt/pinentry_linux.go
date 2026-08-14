@@ -1,6 +1,6 @@
 //go:build linux
 
-package keys
+package prompt
 
 import (
 	"bufio"
@@ -64,7 +64,7 @@ type PinentryPrompter struct {
 }
 
 // Prompt asks for keyname's passphrase and returns what was typed into the
-// dialog, or ErrPromptCanceled if it was dismissed.
+// dialog, or ErrCanceled if it was dismissed.
 //
 // pinentry inherits this process's environment, which is how it finds the
 // display to draw on. It is deliberately not told about a terminal: a pinentry
@@ -245,7 +245,7 @@ func assuanError(rest string) error {
 	}
 	switch code & gpgErrCodeMask {
 	case gpgErrCanceled, gpgErrFullyCanceled:
-		return ErrPromptCanceled
+		return ErrCanceled
 	}
 	if desc == "" {
 		return fmt.Errorf("pinentry: error %d", code)

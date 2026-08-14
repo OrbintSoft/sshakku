@@ -1,6 +1,6 @@
 //go:build darwin
 
-package keys
+package prompt
 
 import (
 	"context"
@@ -22,7 +22,7 @@ const osascriptBin = "osascript"
 // inside a Go string. It is carried in the binary rather than installed beside
 // it: an asset that has to be found at runtime is an asset that can be missing.
 //
-//go:embed prompt_darwin.applescript
+//go:embed osascript_darwin.applescript
 var passphraseDialog string
 
 // OsascriptPrompter prompts with a macOS dialog drawn by AppleScript. The
@@ -94,7 +94,7 @@ func (p OsascriptPrompter) Prompt(ctx context.Context, keyname string) (string, 
 		return "", err
 	}
 	if res.Code != 0 {
-		return "", ErrPromptCanceled
+		return "", ErrCanceled
 	}
 	return strings.TrimRight(string(res.Stdout), "\n"), nil
 }

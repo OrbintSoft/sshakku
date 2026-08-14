@@ -214,7 +214,7 @@ const (
 	KeePassXCRouteCLI = "cli"
 )
 
-// Prompter choices for Settings.GUIPrompter that mean the same thing on every
+// prompt.Prompter choices for Settings.GUIPrompter that mean the same thing on every
 // system, because they name no program at all. The dialogs themselves are
 // declared beside the platform that can have them, in the per-platform
 // prompters_*.go, along with the list of what can be chosen here.

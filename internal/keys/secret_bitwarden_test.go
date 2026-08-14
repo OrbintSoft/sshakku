@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/OrbintSoft/sshakku/internal/keys/prompt"
 	"github.com/OrbintSoft/sshakku/internal/run"
 	"github.com/OrbintSoft/sshakku/internal/run/runtest"
 )
@@ -306,9 +307,9 @@ func TestBitwardenUnlock(t *testing.T) {
 
 	t.Run("a canceled prompt is returned as-is, no bw call made", func(t *testing.T) {
 		r := runtest.NewRunner()
-		p := &fakePrompter{err: ErrPromptCanceled}
+		p := &fakePrompter{err: prompt.ErrCanceled}
 		b := &BitwardenBackend{Runner: r, Prompter: p}
-		assert.ErrorIs(t, b.Unlock(t.Context()), ErrPromptCanceled, "a user who dismissed the prompt has answered, and must be obeyed")
+		assert.ErrorIs(t, b.Unlock(t.Context()), prompt.ErrCanceled, "a user who dismissed the prompt has answered, and must be obeyed")
 		assert.Emptyf(t, r.Calls, "and nothing may be attempted on a vault they declined to open: %+v", r.Calls)
 	})
 

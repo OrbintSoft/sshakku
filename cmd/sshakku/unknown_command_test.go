@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/OrbintSoft/sshakku/internal/keys/prompt"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -23,7 +23,7 @@ func (t *recordingTTY) Prompt(prompt string, _ bool) (string, error) {
 	return t.answer, nil
 }
 
-var _ keys.TTY = (*recordingTTY)(nil)
+var _ prompt.TTY = (*recordingTTY)(nil)
 
 // wiredShell puts the test in the environment a login shell has once SSHakku is
 // wired into it — the same variables askpass-env exports — so what runs

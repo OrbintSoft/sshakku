@@ -1,6 +1,6 @@
 //go:build linux
 
-package keys
+package prompt
 
 import "golang.org/x/sys/unix"
 

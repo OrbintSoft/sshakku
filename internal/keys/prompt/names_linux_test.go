@@ -1,4 +1,4 @@
-package keys
+package prompt
 
 import (
 	"errors"
@@ -34,7 +34,7 @@ func TestADialogThatFailsIsNamedByItsOwnName(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			assert.Equal(t, c.name, PrompterName(c.prompter),
+			assert.Equal(t, c.name, Name(c.prompter),
 				"the name a message uses has to be the one gui_prompter accepts, or it sends the user "+
 					"looking for a program under a name nothing takes")
 

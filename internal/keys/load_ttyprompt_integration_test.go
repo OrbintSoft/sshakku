@@ -16,6 +16,7 @@ import (
 
 	"github.com/OrbintSoft/sshakku/internal/giveup"
 	"github.com/OrbintSoft/sshakku/internal/keyring"
+	"github.com/OrbintSoft/sshakku/internal/keys/prompt"
 	"github.com/OrbintSoft/sshakku/internal/run"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -45,7 +46,7 @@ const (
 	ttyHelperTimeout = 3 * time.Minute
 )
 
-// ttyPromptLine is what TTYPrompter writes to the terminal for the test key;
+// ttyPromptLine is what prompt.TTYPrompter writes to the terminal for the test key;
 // the tests count these to see how many times the user was asked.
 const ttyPromptLine = "Enter passphrase for id_test: "
 
@@ -68,7 +69,7 @@ func buildAskpassHelper(t *testing.T, dir string) string {
 
 // TestLoadKeysFirstTimePromptRealTerminal drives the first-time passphrase
 // prompt over a real pseudo-terminal: an empty vault, no graphical prompter, a
-// real ssh-agent, and the real TTYPrompter reading from a genuine controlling
+// real ssh-agent, and the real prompt.TTYPrompter reading from a genuine controlling
 // terminal rather than the socketpair the unit tests substitute for one.
 //
 // The child is this test binary re-executed into its own session with the pty
@@ -317,7 +318,7 @@ func startTTYPromptHelper(t *testing.T, env ttyPromptEnv, slave *os.File) *exec.
 }
 
 // runTTYPromptHelper is the child half: a real Loader — real ssh-agent, real
-// ssh-add through the real handoff, real TTYPrompter on the controlling
+// ssh-add through the real handoff, real prompt.TTYPrompter on the controlling
 // terminal — with an empty vault, so every passphrase must come from the
 // terminal. It exits non-zero only when LoadKeys itself fails; every other
 // outcome is left for the parent to observe from the agent, the give-up
@@ -328,7 +329,7 @@ func runTTYPromptHelper() {
 		Keys:   fakeLister{paths: []string{os.Getenv(envTTYKeyfile)}},
 		Runner: run.ExecRunner{},
 		Secret: secret,
-		Prompt: TTYPrompter{},
+		Prompt: prompt.TTYPrompter{},
 		Adder:  ExecKeyAdder{AskpassProg: os.Getenv(envTTYAskpass)},
 		Log:    &fakeLogger{},
 		Notify: stderrNotifier{},

@@ -34,7 +34,7 @@ const allowRealBitwardenEnv = "SSHAKKU_TEST_ALLOW_REAL_BITWARDEN"
 
 // TestBitwardenBackendRealAccount exercises BitwardenBackend end to end
 // against a real bw CLI, driving Unlock/Lock itself (via a fixed-answer
-// Prompter, never a real interactive one) rather than receiving an
+// prompt.Prompter, never a real interactive one) rather than receiving an
 // already-unlocked session — unlike secret_bitwarden_test.go, which only
 // ever talks to a fake run.Runner. It creates its own throwaway item, named
 // with a timestamp so it can never collide with or touch an existing one,

@@ -1,4 +1,4 @@
-package keys
+package prompt
 
 import (
 	"testing"
@@ -17,12 +17,12 @@ func (p *explainedFake) WhyUnavailable() string { return "is not installed, or c
 // true of their machine, and most prompters have exactly one thing it can be.
 func TestPrompterUnavailable(t *testing.T) {
 	t.Run("a program that is either there or not", func(t *testing.T) {
-		assert.Equal(t, "is not installed", PrompterUnavailable(&namedFake{name: "kdialog"}),
+		assert.Equal(t, "is not installed", Unavailable(&namedFake{name: "kdialog"}),
 			"for a program that is either there or not, that is the only thing it can be")
 	})
 
 	t.Run("one that knows better says so itself", func(t *testing.T) {
-		assert.Contains(t, PrompterUnavailable(&explainedFake{}), "cannot draw here",
+		assert.Contains(t, Unavailable(&explainedFake{}), "cannot draw here",
 			"a prompter that knows more than one reason must give its own: a sentence that is not true of the machine "+
 				"it is read on is worse than none")
 	})

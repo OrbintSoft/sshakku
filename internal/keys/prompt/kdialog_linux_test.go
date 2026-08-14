@@ -1,6 +1,6 @@
 //go:build linux
 
-package keys
+package prompt
 
 import (
 	"errors"
@@ -24,10 +24,10 @@ func TestKDialogPrompt(t *testing.T) {
 			"asked as a password, so the characters do not appear on screen, and naming the key it is for")
 	})
 
-	t.Run("a dismissed dialog is ErrPromptCanceled", func(t *testing.T) {
+	t.Run("a dismissed dialog is ErrCanceled", func(t *testing.T) {
 		r := runtest.NewRunner().On("kdialog", runtest.Stdout("", 1))
 		_, err := KDialogPrompter{Runner: r}.Prompt(t.Context(), "id_rsa")
-		assert.ErrorIs(t, err, ErrPromptCanceled,
+		assert.ErrorIs(t, err, ErrCanceled,
 			"closing a dialog is an answer, and must be passed on as one rather than as a failure")
 	})
 

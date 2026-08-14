@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
-	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/OrbintSoft/sshakku/internal/keys/prompt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -72,9 +72,9 @@ func TestGraphicalPromptWithOnlyZenity(t *testing.T) {
 	t.Setenv("WAYLAND_DISPLAY", "wayland-0")
 
 	p := newGraphicalPrompter(t.Context(), config.Settings{}, nil)
-	fallback, ok := p.(keys.FallbackPrompter)
+	fallback, ok := p.(prompt.FallbackPrompter)
 	require.Truef(t, ok, "a dialog must be paired with the terminal to fall back to, got %T", p)
-	assert.IsType(t, keys.ZenityPrompter{}, fallback.Primary,
+	assert.IsType(t, prompt.ZenityPrompter{}, fallback.Primary,
 		"zenity is what is installed, so zenity is what asks")
 }
 
@@ -98,9 +98,9 @@ func TestGraphicalPromptWhereTheOnlyPinentryIsAConsoleOne(t *testing.T) {
 	t.Setenv("SSHAKKU_TEST_PINENTRY_FLAVOR", "curses")
 
 	p := newGraphicalPrompter(t.Context(), config.Settings{}, nil)
-	fallback, ok := p.(keys.FallbackPrompter)
+	fallback, ok := p.(prompt.FallbackPrompter)
 	require.Truef(t, ok, "a dialog must be paired with the terminal to fall back to, got %T", p)
-	assert.IsType(t, keys.ZenityPrompter{}, fallback.Primary,
+	assert.IsType(t, prompt.ZenityPrompter{}, fallback.Primary,
 		"a pinentry that draws on a terminal is not a dialog, and taking the prompt from one that is leaves the screen empty")
 }
 
@@ -132,9 +132,9 @@ func TestGraphicalPrompterHonoursTheConfiguration(t *testing.T) {
 		install(t, "pinentry", "kdialog")
 
 		p := newGraphicalPrompter(t.Context(), config.Settings{GUIPrompter: config.GUIPrompterKDialog}, nil)
-		fallback, ok := p.(keys.FallbackPrompter)
+		fallback, ok := p.(prompt.FallbackPrompter)
 		require.Truef(t, ok, "a dialog must be paired with the terminal to fall back to, got %T", p)
-		assert.IsType(t, keys.KDialogPrompter{}, fallback.Primary, "naming one dialog must not get another")
+		assert.IsType(t, prompt.KDialogPrompter{}, fallback.Primary, "naming one dialog must not get another")
 	})
 
 	t.Run("a named dialog that is not installed goes to the terminal, not to another", func(t *testing.T) {
@@ -208,8 +208,8 @@ func TestGraphicalPrompterWithASessionAndKDialog(t *testing.T) {
 
 	p := newGraphicalPrompter(t.Context(), config.Settings{}, nil)
 	require.NotNil(t, p, "a compositor is advertised and kdialog is installed, so there is a dialog to ask in")
-	fallback, ok := p.(keys.FallbackPrompter)
+	fallback, ok := p.(prompt.FallbackPrompter)
 	require.Truef(t, ok, "a dialog must be paired with the terminal to fall back to, got %T", p)
-	assert.IsType(t, keys.KDialogPrompter{}, fallback.Primary,
+	assert.IsType(t, prompt.KDialogPrompter{}, fallback.Primary,
 		"a KDE session must not lose the dialog it already had")
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/OrbintSoft/sshakku/internal/keys/prompt"
 	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
@@ -22,9 +23,9 @@ import (
 func linuxDialogs(settings config.Settings) []dialog {
 	runner := run.ExecRunner{Timeout: settings.CommandTimeout}
 	return []dialog{
-		{config.GUIPrompterPinentry, keys.PinentryPrompter{Timeout: settings.InteractiveTimeout, ProbeTimeout: settings.CommandTimeout}},
-		{config.GUIPrompterKDialog, keys.KDialogPrompter{Runner: runner, Timeout: settings.InteractiveTimeout}},
-		{config.GUIPrompterZenity, keys.ZenityPrompter{Runner: runner, Timeout: settings.InteractiveTimeout}},
+		{config.GUIPrompterPinentry, prompt.PinentryPrompter{Timeout: settings.InteractiveTimeout, ProbeTimeout: settings.CommandTimeout}},
+		{config.GUIPrompterKDialog, prompt.KDialogPrompter{Runner: runner, Timeout: settings.InteractiveTimeout}},
+		{config.GUIPrompterZenity, prompt.ZenityPrompter{Runner: runner, Timeout: settings.InteractiveTimeout}},
 	}
 }
 
@@ -39,16 +40,16 @@ func linuxDialogs(settings config.Settings) []dialog {
 // must be there to ask in — which is more than being installed, since one of
 // pinentry's builds draws on a terminal and would take the question somewhere
 // nobody is looking.
-func newGraphicalPrompter(ctx context.Context, settings config.Settings, log keys.Logger) keys.Prompter {
+func newGraphicalPrompter(ctx context.Context, settings config.Settings, log keys.Logger) prompt.Prompter {
 	if settings.GUIPrompter == config.GUIPrompterNone {
 		return nil
 	}
-	guiEnv := keys.GUIEnv{
+	guiEnv := prompt.GUIEnv{
 		WaylandDisplay: os.Getenv("WAYLAND_DISPLAY"),
 		Display:        os.Getenv("DISPLAY"),
 	}
-	if !keys.HasGraphicalSession(ctx, guiEnv, run.ExecRunner{}) {
+	if !prompt.HasGraphicalSession(ctx, guiEnv, run.ExecRunner{}) {
 		return nil
 	}
-	return chooseDialog(ctx, linuxDialogs(settings), settings.GUIPrompter, keys.TTYPrompter{}, log)
+	return chooseDialog(ctx, linuxDialogs(settings), settings.GUIPrompter, prompt.TTYPrompter{}, log)
 }

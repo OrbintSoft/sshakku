@@ -1,6 +1,6 @@
 //go:build darwin
 
-package keys
+package prompt
 
 import (
 	"errors"
@@ -30,7 +30,7 @@ func TestTheDialogThatFailsIsNamedByItsOwnName(t *testing.T) {
 	})
 	prompter := OsascriptPrompter{Runner: wontRun}
 
-	assert.Equal(t, osascriptBin, PrompterName(prompter),
+	assert.Equal(t, osascriptBin, Name(prompter),
 		"the name a message uses has to be the one gui_prompter accepts, or it sends the user "+
 			"looking for a program under a name nothing takes")
 

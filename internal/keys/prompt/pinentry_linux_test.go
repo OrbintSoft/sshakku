@@ -1,6 +1,6 @@
 //go:build linux
 
-package keys
+package prompt
 
 import (
 	"bufio"
@@ -17,7 +17,7 @@ import (
 
 // fakePinentry is the path to a program that speaks the protocol for real, so
 // these tests drive a process and a pipe rather than a stand-in for one.
-const fakePinentry = "../../test/fakes/pinentry.sh"
+const fakePinentry = "../../../test/fakes/pinentry.sh"
 
 func TestPinentryPrompt(t *testing.T) {
 	t.Run("returns what was typed", func(t *testing.T) {
@@ -28,11 +28,11 @@ func TestPinentryPrompt(t *testing.T) {
 		assert.Equal(t, "correct horse", pass, "and it must be what they typed")
 	})
 
-	t.Run("a dismissed dialog is ErrPromptCanceled", func(t *testing.T) {
+	t.Run("a dismissed dialog is ErrCanceled", func(t *testing.T) {
 		t.Setenv("SSHAKKU_TEST_PINENTRY_CANCEL", "1")
 
 		_, err := PinentryPrompter{Bin: fakePinentry}.Prompt(t.Context(), "id_rsa")
-		assert.ErrorIs(t, err, ErrPromptCanceled,
+		assert.ErrorIs(t, err, ErrCanceled,
 			"closing a dialog is an answer, and must be passed on as one rather than as a failure")
 	})
 
@@ -68,7 +68,7 @@ func TestPinentryPrompt(t *testing.T) {
 	t.Run("a pinentry that cannot be started is an error, not a hang", func(t *testing.T) {
 		_, err := PinentryPrompter{Bin: "/nonexistent/pinentry"}.Prompt(t.Context(), "id_rsa")
 		require.Error(t, err, "a dialog that cannot be started cannot ask, and that must be said")
-		assert.NotErrorIs(t, err, ErrPromptCanceled,
+		assert.NotErrorIs(t, err, ErrCanceled,
 			"but not as a dismissal: nobody was there to dismiss anything, and the question can still go elsewhere")
 	})
 }
@@ -118,12 +118,12 @@ func TestPinentryAvailable(t *testing.T) {
 	})
 
 	t.Run("names the program a message would send the user to look for", func(t *testing.T) {
-		assert.Equal(t, pinentryBin, PrompterName(PinentryPrompter{}),
+		assert.Equal(t, pinentryBin, Name(PinentryPrompter{}),
 			"the name in a message is what the user goes looking for")
 	})
 
 	t.Run("says both of the things it may be", func(t *testing.T) {
-		why := PrompterUnavailable(PinentryPrompter{})
+		why := Unavailable(PinentryPrompter{})
 		assert.Contains(t, why, "not installed", "it may not be there")
 		assert.Contains(t, why, "terminal",
 			"or it may be a build that draws on a terminal; a user told only the first would go and install what they have")
@@ -145,7 +145,7 @@ func TestPinentryAvailable(t *testing.T) {
 func TestAssuanErrorDescribesWhatFailed(t *testing.T) {
 	t.Run("a cancellation, whichever component reports it", func(t *testing.T) {
 		for _, line := range []string{"83886179 Operation cancelled", "83886180 Operation fully cancelled"} {
-			assert.ErrorIsf(t, assuanError(line), ErrPromptCanceled,
+			assert.ErrorIsf(t, assuanError(line), ErrCanceled,
 				"%q is the user closing the dialog, whichever component reports it", line)
 		}
 	})
@@ -212,5 +212,40 @@ func TestPinentryConversationWithNoPipesToTalkOver(t *testing.T) {
 		stdoutPipe = func(*exec.Cmd) (io.ReadCloser, error) { return nil, errors.New("stdout already set") }
 		_, err := PinentryPrompter{Bin: fakePinentry}.Prompt(t.Context(), "id_rsa")
 		assert.Error(t, err, "with no way to hear the answer, no dialog may be left running with nobody reading it")
+	})
+}
+
+// TestPinentryAvailableDefaultLookPath covers what a caller that supplies no
+// lookup gets: the real PATH. Naming a program nobody has is what makes the
+// answer the lookup's rather than this machine's.
+func TestPinentryAvailableDefaultLookPath(t *testing.T) {
+	p := PinentryPrompter{Bin: "sshakku-no-such-pinentry"}
+	assert.False(t, p.Available(t.Context()),
+		"with no lookup supplied the real PATH is what answers, and a program that is not on it "+
+			"cannot put a dialog anywhere")
+}
+
+// TestAssuanGreetingNeverArrives covers what each half of the conversation
+// makes of a pinentry that starts, says nothing and exits — one too old for the
+// protocol, or a name on PATH that turned out to be something else. Both halves
+// fail either way; what is judged here is that they fail saying so, because
+// "the greeting never came" and "the pipe broke while asking" send whoever
+// reads the log to different places.
+func TestAssuanGreetingNeverArrives(t *testing.T) {
+	silent := func() *assuanConv {
+		return &assuanConv{w: io.Discard, r: bufio.NewReader(strings.NewReader(""))}
+	}
+
+	t.Run("asking for a passphrase", func(t *testing.T) {
+		_, err := silent().getpin("id_rsa")
+		require.Error(t, err, "a dialog that never spoke cannot have taken an answer")
+		assert.Contains(t, err.Error(), "greeting",
+			"and the line has to say the program never announced itself, or it reads as a dialog that broke mid-question")
+	})
+
+	t.Run("asking what it draws with", func(t *testing.T) {
+		_, err := silent().flavor()
+		require.Error(t, err, "a pinentry that never spoke said nothing about what it draws with either")
+		assert.Contains(t, err.Error(), "greeting", "and the line has to say which of the two it was")
 	})
 }

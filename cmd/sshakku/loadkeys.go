@@ -8,6 +8,7 @@ import (
 
 	"github.com/OrbintSoft/sshakku/internal/giveup"
 	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/OrbintSoft/sshakku/internal/keys/prompt"
 	"github.com/OrbintSoft/sshakku/internal/keystate"
 	"github.com/OrbintSoft/sshakku/internal/paths"
 	"github.com/OrbintSoft/sshakku/internal/run"
@@ -54,7 +55,7 @@ func (d deps) loadKeys(ctx context.Context, stderr io.Writer) int {
 	// picked (see Loader.loadViaVaultThenPrompt); this only chooses how to
 	// ask when it misses — the platform's dialog where there is one, otherwise
 	// the terminal, which needs no external binary.
-	var prompter keys.Prompter = keys.TTYPrompter{}
+	var prompter prompt.Prompter = prompt.TTYPrompter{}
 	if graphical := d.graphicalPrompter(ctx, settings, log); graphical != nil {
 		prompter = graphical
 	}

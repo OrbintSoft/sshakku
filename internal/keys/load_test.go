@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/OrbintSoft/sshakku/internal/keys/prompt"
 	"github.com/OrbintSoft/sshakku/internal/run"
 	"github.com/OrbintSoft/sshakku/internal/run/runtest"
 )
@@ -274,7 +275,7 @@ func TestLoadKeysNotifiesOnGiveup(t *testing.T) {
 func TestLoadKeysPromptCanceled(t *testing.T) {
 	r := runtest.NewRunner().On("ssh-add", agentEmpty()).On("ssh-keygen", keygen("SHA256:NEW"))
 	secret := &fakeSecret{lookupFound: false}
-	prompter := &fakePrompter{err: ErrPromptCanceled}
+	prompter := &fakePrompter{err: prompt.ErrCanceled}
 	adder := &fakeKeyAdder{}
 	notifier := &fakeNotifier{}
 	log := &fakeLogger{}
@@ -299,7 +300,7 @@ func TestLoadKeysPromptCanceled(t *testing.T) {
 // given up — the next login shell asks again from the first key.
 func TestLoadKeysDismissedDialogEndsTheAsking(t *testing.T) {
 	r := runtest.NewRunner().On("ssh-add", agentEmpty()).On("ssh-keygen", keygen("SHA256:NEW"))
-	prompter := &fakePrompter{err: ErrPromptCanceled}
+	prompter := &fakePrompter{err: prompt.ErrCanceled}
 	adder := &fakeKeyAdder{}
 	notifier := &fakeNotifier{}
 	give := newFakeGiveup()
@@ -322,7 +323,7 @@ func TestLoadKeysDismissedDialogEndsTheAsking(t *testing.T) {
 // says so, and is asked about every one of them.
 func TestLoadKeysDismissedDialogSkipsOnlyThatKey(t *testing.T) {
 	r := runtest.NewRunner().On("ssh-add", agentEmpty()).On("ssh-keygen", keygen("SHA256:NEW"))
-	prompter := &fakePrompter{err: ErrPromptCanceled}
+	prompter := &fakePrompter{err: prompt.ErrCanceled}
 	notifier := &fakeNotifier{}
 	give := newFakeGiveup()
 	l := Loader{
@@ -343,7 +344,7 @@ func TestLoadKeysDismissedDialogSkipsOnlyThatKey(t *testing.T) {
 // never opened ends — told once, and left alone.
 func TestLoadKeysDismissedDialogCountsAsAWrongAnswer(t *testing.T) {
 	r := runtest.NewRunner().On("ssh-add", agentEmpty()).On("ssh-keygen", keygen("SHA256:NEW"))
-	prompter := &fakePrompter{err: ErrPromptCanceled}
+	prompter := &fakePrompter{err: prompt.ErrCanceled}
 	notifier := &fakeNotifier{}
 	give := newFakeGiveup()
 	l := Loader{
@@ -385,7 +386,7 @@ func TestLoadKeysNoGUIStillUsesVault(t *testing.T) {
 func TestLoadKeysNoTerminalSkipsSilently(t *testing.T) {
 	r := runtest.NewRunner().On("ssh-add", agentEmpty()).On("ssh-keygen", keygen("SHA256:NEW"))
 	secret := &fakeSecret{lookupFound: false}
-	prompter := &fakePrompter{err: ErrNoTerminal}
+	prompter := &fakePrompter{err: prompt.ErrNoTerminal}
 	adder := &fakeKeyAdder{}
 	notifier := &fakeNotifier{}
 	log := &fakeLogger{}

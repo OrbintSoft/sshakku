@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/OrbintSoft/sshakku/internal/keys/prompt"
 	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
@@ -47,7 +48,7 @@ var ErrPasswordNotAccepted = errors.New("keepassxc: keepassxc-cli would not take
 // cannot be read out of the process table.
 type KeePassXCCLIBackend struct {
 	Runner   run.Runner
-	Prompter Prompter
+	Prompter prompt.Prompter
 	// Database is the .kdbx file to open.
 	Database string
 	// KeyFile is an optional key file the database also requires.

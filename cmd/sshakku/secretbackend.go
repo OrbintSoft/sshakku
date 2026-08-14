@@ -6,6 +6,7 @@ import (
 
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/OrbintSoft/sshakku/internal/keys/prompt"
 	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
@@ -53,7 +54,7 @@ func newSecretBackend(ctx context.Context, user string, log keys.Logger, setting
 // directly instead.
 type walletPasswordPrompter struct {
 	// graphical is the platform's dialog, or nil where this build has none.
-	graphical keys.Prompter
+	graphical prompt.Prompter
 }
 
 func (p walletPasswordPrompter) Prompt(ctx context.Context, keyname string) (string, error) {
@@ -68,6 +69,6 @@ func (p walletPasswordPrompter) Prompt(ctx context.Context, keyname string) (str
 
 func (walletPasswordPrompter) Available(context.Context) bool { return true }
 
-func newWalletPasswordPrompter(ctx context.Context, settings config.Settings, log keys.Logger) keys.Prompter {
+func newWalletPasswordPrompter(ctx context.Context, settings config.Settings, log keys.Logger) prompt.Prompter {
 	return walletPasswordPrompter{graphical: newGraphicalPrompter(ctx, settings, log)}
 }

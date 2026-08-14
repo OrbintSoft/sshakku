@@ -1,4 +1,4 @@
-package keys
+package prompt
 
 import (
 	"context"
@@ -25,6 +25,31 @@ func (p *namedFake) Prompt(context.Context, string) (string, error) {
 }
 func (p *namedFake) Available(context.Context) bool { return p.avail }
 func (p *namedFake) Name() string                   { return p.name }
+
+// unnamedFake is a prompter that says nothing about what it is — the case a
+// message still has to have something to put in front of a user for.
+type unnamedFake struct{}
+
+func (unnamedFake) Prompt(context.Context, string) (string, error) { return "", nil }
+func (unnamedFake) Available(context.Context) bool                 { return true }
+
+// fakeLogger records the level-tagged lines a prompter emits, which is where a
+// dialog that could not ask says so.
+type fakeLogger struct{ lines []string }
+
+func (f *fakeLogger) Log(level, message string) error {
+	f.lines = append(f.lines, level+" "+message)
+	return nil
+}
+
+func (f *fakeLogger) contains(sub string) bool {
+	for _, l := range f.lines {
+		if strings.Contains(l, sub) {
+			return true
+		}
+	}
+	return false
+}
 
 func TestFallbackPrompter(t *testing.T) {
 	t.Run("an answer from the dialog is the answer", func(t *testing.T) {
@@ -59,11 +84,11 @@ func TestFallbackPrompter(t *testing.T) {
 	})
 
 	t.Run("a dismissed dialog is not asked again elsewhere", func(t *testing.T) {
-		dialog := &namedFake{name: "pinentry", err: ErrPromptCanceled}
+		dialog := &namedFake{name: "pinentry", err: ErrCanceled}
 		terminal := &namedFake{answer: "typed on the terminal"}
 
 		_, err := FallbackPrompter{Primary: dialog, Fallback: terminal}.Prompt(t.Context(), "id_rsa")
-		assert.ErrorIs(t, err, ErrPromptCanceled, "closing a dialog is an answer, and must be passed on as one")
+		assert.ErrorIs(t, err, ErrCanceled, "closing a dialog is an answer, and must be passed on as one")
 		assert.Zero(t, terminal.calls,
 			"so the same question must not be put again somewhere else the user was not looking")
 	})
@@ -108,13 +133,13 @@ func TestFallbackPrompter(t *testing.T) {
 }
 
 func TestPrompterName(t *testing.T) {
-	assert.Equal(t, "pinentry", PrompterName(&namedFake{name: "pinentry"}),
+	assert.Equal(t, "pinentry", Name(&namedFake{name: "pinentry"}),
 		"a prompter that says what it is called is called that")
 	// The terminal is not a program anyone could go and install, so a message
 	// that hands the question to it has to name the place rather than a binary
 	// the reader would then fail to find.
-	assert.Contains(t, PrompterName(TTYPrompter{}), "terminal",
+	assert.Contains(t, Name(TTYPrompter{}), "terminal",
 		"the terminal is a place, not a program: naming a binary would send the reader looking for one that does not exist")
-	assert.NotEmpty(t, PrompterName(&fakePrompter{}),
+	assert.NotEmpty(t, Name(unnamedFake{}),
 		"and one that says nothing about itself still needs something a message can put in front of a user")
 }

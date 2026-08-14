@@ -311,7 +311,9 @@ ZSH_SCRIPTS = $(wildcard *.zsh)
 BAT_FILES = $(wildcard cmd/*/testdata/*.cmd)
 DOCKERFILES = $(wildcard test/containers/*.Dockerfile)
 
-APPLESCRIPTS = $(wildcard internal/keys/*.applescript)
+# Found rather than globbed at a fixed depth: a script that moves to another
+# package must not stop being linted without anything saying so.
+APPLESCRIPTS = $(shell find internal -name '*.applescript')
 XML_FILES = $(wildcard internal/*/testdata/*.xml)
 
 lint: lint-sh lint-zsh lint-bat lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go lint-docker lint-applescript lint-xml

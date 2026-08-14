@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
-	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/OrbintSoft/sshakku/internal/keys/prompt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -135,7 +135,7 @@ func TestWritingAutoIsTheSameAsNamingNoDialogAtAll(t *testing.T) {
 // the prompt would otherwise be answering the same question once per program
 // their desktop happens to have installed.
 func TestClosingTheFirstDialogDoesNotRaiseTheNext(t *testing.T) {
-	closed := &fakeDialog{name: "pinentry", installed: true, err: keys.ErrPromptCanceled}
+	closed := &fakeDialog{name: "pinentry", installed: true, err: prompt.ErrCanceled}
 	next := &fakeDialog{name: "zenity", installed: true, answer: "the-one-nobody-asked-for"}
 	terminal := &fakeDialog{name: "the terminal", installed: true, answer: "the-one-typed-on-the-terminal"}
 
@@ -145,7 +145,7 @@ func TestClosingTheFirstDialogDoesNotRaiseTheNext(t *testing.T) {
 	}, "", terminal, nil)
 
 	_, err := p.Prompt(t.Context(), "id_a")
-	assert.ErrorIs(t, err, keys.ErrPromptCanceled, "closing a dialog is an answer, and must be passed on as one")
+	assert.ErrorIs(t, err, prompt.ErrCanceled, "closing a dialog is an answer, and must be passed on as one")
 	assert.Zero(t, next.asked, "the next dialog must not be raised over a window the user just shut")
 	assert.Zero(t, terminal.asked, "nor the terminal")
 }
@@ -182,4 +182,4 @@ func (d *fakeDialog) Available(context.Context) bool { return d.installed }
 
 func (d *fakeDialog) Name() string { return d.name }
 
-var _ keys.Prompter = (*fakeDialog)(nil)
+var _ prompt.Prompter = (*fakeDialog)(nil)

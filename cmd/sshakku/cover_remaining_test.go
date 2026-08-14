@@ -11,6 +11,7 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/keys"
 	"github.com/OrbintSoft/sshakku/internal/keys/handoff"
+	"github.com/OrbintSoft/sshakku/internal/keys/prompt"
 	"github.com/OrbintSoft/sshakku/internal/paths"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,7 +19,7 @@ import (
 
 // fakeTTY stands in for the /dev/tty prompter so the broker's terminal-fallback
 // decisions run without a controlling terminal: it returns a canned reply, or an
-// error (e.g. keys.ErrNoTerminal) to drive the decline path.
+// error (e.g. prompt.ErrNoTerminal) to drive the decline path.
 type fakeTTY struct {
 	reply string
 	err   error
@@ -26,7 +27,7 @@ type fakeTTY struct {
 
 func (f fakeTTY) Prompt(string, bool) (string, error) { return f.reply, f.err }
 
-var _ keys.TTY = fakeTTY{}
+var _ prompt.TTY = fakeTTY{}
 
 // TestForgetSession covers forget's up-front unlock/lock of a session-capable
 // backend: a clean session unlocks and re-locks around the sweep, an unlock
@@ -133,9 +134,9 @@ func TestDispatchRoutesToAskpass(t *testing.T) {
 	t.Setenv(handoff.EnvToken, "")
 
 	d := depsReturning(&fakeProbeBackend{lookupVal: "wallet-pass", lookupOK: true})
-	prompt := "Enter passphrase for key '/home/u/.ssh/id_ed25519': "
+	question := "Enter passphrase for key '/home/u/.ssh/id_ed25519': "
 	var out bytes.Buffer
-	require.Zero(t, dispatch(t.Context(), d, &out, io.Discard, "/usr/local/bin/"+askpassProgName, []string{prompt}),
+	require.Zero(t, dispatch(t.Context(), d, &out, io.Discard, "/usr/local/bin/"+askpassProgName, []string{question}),
 		"run under the helper's name, arguments are a prompt to answer")
 	assert.Equal(t, "wallet-pass\n", out.String(), "answered from the wallet, not from a terminal")
 }
@@ -184,7 +185,7 @@ func TestRunDispatch(t *testing.T) {
 	// mechanism, so asserting only the exit code would pass either way.
 	t.Run("askpass-env headless", func(t *testing.T) {
 		d := realDeps()
-		d.graphicalPrompter = func(context.Context, config.Settings, keys.Logger) keys.Prompter { return nil }
+		d.graphicalPrompter = func(context.Context, config.Settings, keys.Logger) prompt.Prompter { return nil }
 		d.self = func() (string, error) { return "/opt/sshakku/bin/sshakku", nil }
 		var out, errOut bytes.Buffer
 		require.Zerof(t, d.run(t.Context(), &out, &errOut, []string{"askpass-env"}),
@@ -195,7 +196,7 @@ func TestRunDispatch(t *testing.T) {
 }
 
 // TestAskpassBrokerTerminal covers askpassBroker's two remaining branches through
-// the injected TTY seam: a wallet hit whose reply cannot be written surfaces as a
+// the injected prompt.TTY seam: a wallet hit whose reply cannot be written surfaces as a
 // write error, and a wallet miss with no terminal declines the prompt.
 // HOME/XDG_STATE_HOME point at a temp dir so the session log stays off the real
 // state dir.
@@ -203,18 +204,18 @@ func TestAskpassBrokerTerminal(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
 	t.Setenv("XDG_STATE_HOME", tmp)
-	prompt := "Enter passphrase for key '/home/u/.ssh/id_ed25519': "
+	question := "Enter passphrase for key '/home/u/.ssh/id_ed25519': "
 
 	t.Run("write error on a wallet hit returns 1", func(t *testing.T) {
 		d := depsReturning(&fakeProbeBackend{lookupVal: "wallet-pass", lookupOK: true})
-		assert.Equal(t, 1, d.askpassBroker(t.Context(), errWriter{}, []string{prompt}),
+		assert.Equal(t, 1, d.askpassBroker(t.Context(), errWriter{}, []string{question}),
 			"a passphrase ssh never received must not be reported as given")
 	})
 
 	t.Run("wallet miss with no terminal declines", func(t *testing.T) {
 		d := depsReturning(&fakeProbeBackend{lookupOK: false})
-		d.tty = fakeTTY{err: keys.ErrNoTerminal}
-		assert.Equal(t, 1, d.askpassBroker(t.Context(), io.Discard, []string{prompt}),
+		d.tty = fakeTTY{err: prompt.ErrNoTerminal}
+		assert.Equal(t, 1, d.askpassBroker(t.Context(), io.Discard, []string{question}),
 			"with nothing in the wallet and nowhere to ask, the prompt is declined rather than answered blank")
 	})
 }
@@ -260,7 +261,7 @@ func TestLoadKeysSeams(t *testing.T) {
 	t.Run("a platform with a dialog selects it over the terminal", func(t *testing.T) {
 		tempRuntimeEnv(t)
 		d := depsReturning(newMemoryBackend())
-		d.graphicalPrompter = func(context.Context, config.Settings, keys.Logger) keys.Prompter {
+		d.graphicalPrompter = func(context.Context, config.Settings, keys.Logger) prompt.Prompter {
 			return fixedPrompter{answer: "from the dialog"}
 		}
 		var errOut bytes.Buffer

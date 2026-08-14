@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/OrbintSoft/sshakku/internal/keys/prompt"
 	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
@@ -127,7 +128,7 @@ type Loader struct {
 	Keys     KeyLister
 	Runner   run.Runner
 	Secret   SecretBackend
-	Prompt   Prompter
+	Prompt   prompt.Prompter
 	Adder    KeyAdder
 	Log      Logger
 	Notify   Notifier
@@ -302,7 +303,7 @@ func (l Loader) loadViaVaultThenPrompt(ctx context.Context, keyfile, keyname str
 		pass, err := l.Prompt.Prompt(ctx, keyname)
 		if err != nil {
 			switch {
-			case errors.Is(err, ErrPromptCanceled):
+			case errors.Is(err, prompt.ErrCanceled):
 				// Turning the question down is an answer, not a fault: it is
 				// logged the way the other expected outcomes are, and what it
 				// means for the keys still to come is the user's to configure.
@@ -317,7 +318,7 @@ func (l Loader) loadViaVaultThenPrompt(ctx context.Context, keyfile, keyname str
 					l.logf("INFO", "passphrase prompt dismissed for %s, asking about no further key this session", keyname)
 					return askingEnded
 				}
-			case errors.Is(err, ErrNoTerminal):
+			case errors.Is(err, prompt.ErrNoTerminal):
 				// No GUI and no controlling terminal are both normal, expected
 				// deployments — not surfaced to the user, and not logged as an
 				// operator problem.

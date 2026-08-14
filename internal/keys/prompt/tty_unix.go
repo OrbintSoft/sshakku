@@ -1,6 +1,6 @@
 //go:build unix
 
-package keys
+package prompt
 
 import (
 	"bufio"
@@ -35,7 +35,7 @@ var (
 // it works even when the caller has been detached from its original stdin;
 // with no controlling terminal at all the open fails immediately — it never
 // blocks waiting for one to appear — reported as ErrNoTerminal. A user who
-// closes the input instead of answering gets ErrPromptCanceled.
+// closes the input instead of answering gets ErrCanceled.
 func ReadTTYLine(prompt string, secret bool) (string, error) {
 	f, err := openTTY()
 	if err != nil {
@@ -69,7 +69,7 @@ func ReadTTYLine(prompt string, secret bool) (string, error) {
 		// Closing the input instead of answering — Ctrl-D — is how a question is
 		// turned down on a terminal, the same gesture as closing a dialog. It is
 		// the user's decision, not a failure to read from the terminal.
-		return "", ErrPromptCanceled
+		return "", ErrCanceled
 	}
 	if readErr != nil && line == "" {
 		return "", readErr

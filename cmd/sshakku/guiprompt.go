@@ -6,12 +6,13 @@ import (
 
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/OrbintSoft/sshakku/internal/keys/prompt"
 )
 
 // dialog pairs a prompter with the name gui_prompter chooses it by.
 type dialog struct {
 	name     string
-	prompter keys.Prompter
+	prompter prompt.Prompter
 }
 
 // chooseDialog returns the prompter a session with a screen is asked in, given
@@ -29,7 +30,7 @@ type dialog struct {
 // installed programs can tell in advance. One that cannot draw must not take
 // the question past the ones that can, and the terminal a login shell started
 // from is the last resort rather than the first.
-func chooseDialog(ctx context.Context, dialogs []dialog, want string, terminal keys.Prompter, log keys.Logger) keys.Prompter {
+func chooseDialog(ctx context.Context, dialogs []dialog, want string, terminal prompt.Prompter, log keys.Logger) prompt.Prompter {
 	if want != "" && want != config.GUIPrompterAuto {
 		return namedDialog(ctx, dialogs, want, terminal, log)
 	}
@@ -40,7 +41,7 @@ func chooseDialog(ctx context.Context, dialogs []dialog, want string, terminal k
 		if !dialogs[i].prompter.Available(ctx) {
 			continue
 		}
-		asked, found = keys.FallbackPrompter{Primary: dialogs[i].prompter, Fallback: asked, Log: log}, true
+		asked, found = prompt.FallbackPrompter{Primary: dialogs[i].prompter, Fallback: asked, Log: log}, true
 	}
 	if !found {
 		return nil
@@ -50,17 +51,17 @@ func chooseDialog(ctx context.Context, dialogs []dialog, want string, terminal k
 
 // namedDialog returns the one dialog the configuration asked for, paired with
 // the terminal, or nil when it cannot ask here.
-func namedDialog(ctx context.Context, dialogs []dialog, want string, terminal keys.Prompter, log keys.Logger) keys.Prompter {
+func namedDialog(ctx context.Context, dialogs []dialog, want string, terminal prompt.Prompter, log keys.Logger) prompt.Prompter {
 	for _, d := range dialogs {
 		if d.name != want {
 			continue
 		}
 		if d.prompter.Available(ctx) {
-			return keys.FallbackPrompter{Primary: d.prompter, Fallback: terminal, Log: log}
+			return prompt.FallbackPrompter{Primary: d.prompter, Fallback: terminal, Log: log}
 		}
 		// Saying which one could not ask, and why, is the difference between
 		// something the user can act on and a prompt that simply never came.
-		logGUI(log, "gui_prompter names %s, which %s; asking on the terminal", d.name, keys.PrompterUnavailable(d.prompter))
+		logGUI(log, "gui_prompter names %s, which %s; asking on the terminal", d.name, prompt.Unavailable(d.prompter))
 		return nil
 	}
 	return nil

@@ -1,6 +1,6 @@
 //go:build darwin
 
-package keys
+package prompt
 
 import (
 	"context"
