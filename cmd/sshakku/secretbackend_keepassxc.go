@@ -7,6 +7,7 @@ import (
 
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
 	"github.com/OrbintSoft/sshakku/internal/paths"
 	"github.com/OrbintSoft/sshakku/internal/run"
 )
@@ -22,13 +23,13 @@ import (
 // Taking the platform as an argument, as the route decisions below do, keeps
 // every route checkable from any platform — including the one route that only
 // exists on Linux, which no test running elsewhere could otherwise reach.
-func newKeePassXCBackend(ctx context.Context, goos, user string, log keys.Logger, settings config.Settings) (keys.SecretBackend, func()) {
+func newKeePassXCBackend(ctx context.Context, goos, user string, log keys.Logger, settings config.Settings) (wallet.Backend, func()) {
 	route := settings.KeePassXCRoute
 	if route == "" || route == config.KeePassXCRouteAuto {
 		route = keepassxcRouteFor(goos)
 	}
 	if reason := keepassxcRouteUnavailable(route, goos, settings.KeePassXCDatabase); reason != nil {
-		return keys.UnavailableBackend{Reason: reason}, func() {}
+		return wallet.Unavailable{Reason: reason}, func() {}
 	}
 	switch route {
 	case config.KeePassXCRouteNative:
@@ -84,8 +85,8 @@ func keepassxcRouteUnavailable(route, goos, database string) error {
 // KeePassXC running. It asks for the database password, so it is bounded by the
 // interactive budget — the one for a command waiting on a person — rather than
 // the shorter budget for a command expected to answer on its own.
-func newKeePassXCCLIRoute(ctx context.Context, settings config.Settings, log keys.Logger) keys.SecretBackend {
-	return &keys.KeePassXCCLIBackend{
+func newKeePassXCCLIRoute(ctx context.Context, settings config.Settings, log keys.Logger) wallet.Backend {
+	return &wallet.KeePassXCCLI{
 		Runner:   run.ExecRunner{Timeout: settings.CommandTimeout},
 		Prompter: newWalletPasswordPrompter(ctx, settings, log),
 		Database: settings.KeePassXCDatabase,
@@ -101,9 +102,9 @@ func newKeePassXCCLIRoute(ctx context.Context, settings config.Settings, log key
 // Two budgets, because there are two kinds of wait: KeePassXC answers a lookup
 // by itself and quickly, while the one-time approval it raises is answered by
 // the user, at their own pace.
-func newKeePassXCNativeRoute(settings config.Settings) keys.SecretBackend {
-	return keys.KeePassXCBackend{
-		Associations:       keys.FileAssociationStore{Path: keepassxcAssociationPath()},
+func newKeePassXCNativeRoute(settings config.Settings) wallet.Backend {
+	return wallet.KeePassXC{
+		Associations:       wallet.FileAssociationStore{Path: keepassxcAssociationPath()},
 		Group:              settings.SecretContainer,
 		Timeout:            settings.CommandTimeout,
 		InteractiveTimeout: settings.InteractiveTimeout,

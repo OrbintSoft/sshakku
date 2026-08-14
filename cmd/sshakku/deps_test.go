@@ -12,6 +12,7 @@ import (
 
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
 	"github.com/OrbintSoft/sshakku/internal/paths"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -21,15 +22,15 @@ import (
 // command body can be exercised against a fake secret store without opening
 // the real D-Bus/CLI-backed one. The other seams keep their production wiring
 // (harmless for the secret-store paths this helper serves).
-func depsReturning(backend keys.SecretBackend) deps {
+func depsReturning(backend wallet.Backend) deps {
 	d := realDeps()
-	d.newSecret = func(context.Context, string, keys.Logger, config.Settings) (keys.SecretBackend, func()) {
+	d.newSecret = func(context.Context, string, keys.Logger, config.Settings) (wallet.Backend, func()) {
 		return backend, func() {}
 	}
 	return d
 }
 
-// memoryBackend is an in-process keys.SecretBackend that actually records what
+// memoryBackend is an in-process wallet.Backend that actually records what
 // is stored, so a store-then-lookup round-trip (testSecretBackend's probe) and
 // a list-then-delete sweep (forget --all) behave like a real wallet without one.
 type memoryBackend struct{ stored map[string]string }
@@ -60,7 +61,7 @@ func (m *memoryBackend) List(context.Context) ([]string, error) {
 	return names, nil
 }
 
-var _ keys.SecretBackend = (*memoryBackend)(nil)
+var _ wallet.Backend = (*memoryBackend)(nil)
 
 // TestTestSecretBackend covers testSecretBackend end to end against a fake
 // backend: the store/lookup/delete round-trip passes with a recording backend
@@ -172,14 +173,14 @@ func TestForget(t *testing.T) {
 		d := depsReturning(newMemoryBackend())
 		var out, errOut bytes.Buffer
 		require.Zerof(t, d.forget(t.Context(), &out, &errOut, []string{"id_rsa"}), "forget id_rsa; stderr=%q", errOut.String())
-		assert.Contains(t, out.String(), "forgot "+keys.DefaultServicePrefix+"-id_rsa",
+		assert.Contains(t, out.String(), "forgot "+wallet.DefaultServicePrefix+"-id_rsa",
 			"the entry that was removed must be named, under the prefix it was stored with")
 	})
 
 	t.Run("--all lists then deletes every managed entry", func(t *testing.T) {
 		backend := newMemoryBackend()
-		backend.stored[keys.DefaultServicePrefix+"-a"] = "x"
-		backend.stored[keys.DefaultServicePrefix+"-b"] = "y"
+		backend.stored[wallet.DefaultServicePrefix+"-a"] = "x"
+		backend.stored[wallet.DefaultServicePrefix+"-b"] = "y"
 		d := depsReturning(backend)
 		var out, errOut bytes.Buffer
 		require.Zerof(t, d.forget(t.Context(), &out, &errOut, []string{"--all"}), "forget --all; stderr=%q", errOut.String())

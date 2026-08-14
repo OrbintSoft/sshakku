@@ -8,7 +8,7 @@ import (
 
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/diagnose"
-	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
 	"github.com/OrbintSoft/sshakku/internal/secretservice"
 )
 
@@ -38,7 +38,7 @@ func (p walletProbe) platformWalletView(ctx context.Context, settings config.Set
 
 	// The compartment is asked about under the names entries would be stored
 	// under, so what the report describes is the one that would be used.
-	alias, label := keys.SecretServiceCollectionNames(settings.SecretContainer)
+	alias, label := wallet.SecretServiceCollectionNames(settings.SecretContainer)
 	look := p.look(ctx, alias, label)
 	view.Requirements = append(view.Requirements,
 		serviceRequirement(look),
@@ -83,7 +83,7 @@ func (p walletProbe) sessionBus() diagnose.Requirement {
 // caller decides whether there was anything to make: what this reports is what
 // it resolved, not what it created.
 func realMakeCompartment(ctx context.Context, settings config.Settings) (string, error) {
-	alias, label := keys.SecretServiceCollectionNames(settings.SecretContainer)
+	alias, label := wallet.SecretServiceCollectionNames(settings.SecretContainer)
 
 	client, err := secretservice.NewClient(ctx)
 	if err != nil {

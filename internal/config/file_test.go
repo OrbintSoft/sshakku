@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
 	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
@@ -134,7 +135,7 @@ func TestResolveDefaults(t *testing.T) {
 		// Resolved even with nothing configured: every path that builds an
 		// entry name reads it from here, so an empty one would leave each of
 		// them to supply a default of its own.
-		ServicePrefix: keys.DefaultServicePrefix,
+		ServicePrefix: wallet.DefaultServicePrefix,
 		// No route named means SSHakku chooses one per platform; only this
 		// value ever falls back.
 		KeePassXCRoute: KeePassXCRouteAuto,
@@ -167,7 +168,7 @@ func TestResolveFileWins(t *testing.T) {
 		WalletStoreMode:    WalletStoreModeAll,
 		AutoLoadMode:       AutoLoadModeAll,
 		SecretBackend:      platformDefaultSecretBackend,
-		ServicePrefix:      keys.DefaultServicePrefix,
+		ServicePrefix:      wallet.DefaultServicePrefix,
 		KeePassXCRoute:     KeePassXCRouteAuto,
 		GUIPrompter:        GUIPrompterAuto,
 		OnDismiss:          keys.OnDismissStop,

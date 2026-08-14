@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -17,7 +17,7 @@ type fakeLogger struct{}
 
 func (fakeLogger) Log(string, string) error { return nil }
 
-// fakeProbeBackend is a keys.SecretBackend whose Store/Lookup/Delete/Unlock/
+// fakeProbeBackend is a wallet.Backend whose Store/Lookup/Delete/Unlock/
 // Lock behaviour is configured per test, letting probeSecretBackend's
 // pass/fail logic be exercised without a real secret store.
 type fakeProbeBackend struct {
@@ -40,7 +40,7 @@ func (f *fakeProbeBackend) Store(context.Context, string, string, string) error 
 func (f *fakeProbeBackend) Delete(context.Context, string) error                { return f.deleteErr }
 func (f *fakeProbeBackend) List(context.Context) ([]string, error)              { return f.listVal, f.listErr }
 
-// fakeProbeSession wraps fakeProbeBackend to also implement keys.SecretSession.
+// fakeProbeSession wraps fakeProbeBackend to also implement wallet.Session.
 type fakeProbeSession struct{ *fakeProbeBackend }
 
 func (f fakeProbeSession) Unlock(context.Context) error { return f.unlockErr }
@@ -130,6 +130,6 @@ func TestProbeSecretBackendUnlocksAndLocks(t *testing.T) {
 }
 
 // keysSecretBackendAssertion pins probeSecretBackend's parameter type against
-// keys.SecretBackend so a future interface change here is caught at compile
+// wallet.Backend so a future interface change here is caught at compile
 // time, not by a silent test skip.
-var _ keys.SecretBackend = (*fakeProbeBackend)(nil)
+var _ wallet.Backend = (*fakeProbeBackend)(nil)

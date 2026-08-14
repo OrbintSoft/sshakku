@@ -7,6 +7,7 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/keys"
 	"github.com/OrbintSoft/sshakku/internal/keys/prompt"
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
 	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
@@ -20,16 +21,16 @@ import (
 // The OS wallets have no case of their own: each exists on one platform, where
 // it is that platform's default, and the configuration layer never yields a
 // name this system has not got.
-func newSecretBackend(ctx context.Context, user string, log keys.Logger, settings config.Settings) (keys.SecretBackend, func()) {
+func newSecretBackend(ctx context.Context, user string, log keys.Logger, settings config.Settings) (wallet.Backend, func()) {
 	switch settings.SecretBackend {
 	case config.SecretBackendOnePassword:
-		return &keys.OnePasswordBackend{
+		return &wallet.OnePassword{
 			Runner:  run.ExecRunner{Timeout: settings.CommandTimeout},
 			Vault:   settings.OnePasswordVault,
 			Timeout: settings.InteractiveTimeout,
 		}, func() {}
 	case config.SecretBackendBitwarden:
-		return &keys.BitwardenBackend{
+		return &wallet.Bitwarden{
 			Runner:        run.ExecRunner{Timeout: settings.CommandTimeout},
 			Prompter:      newWalletPasswordPrompter(ctx, settings, log),
 			Email:         settings.BitwardenEmail,

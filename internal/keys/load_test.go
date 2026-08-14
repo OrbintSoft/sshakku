@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/OrbintSoft/sshakku/internal/keys/prompt"
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
 	"github.com/OrbintSoft/sshakku/internal/run"
 	"github.com/OrbintSoft/sshakku/internal/run/runtest"
 )
@@ -84,7 +85,7 @@ func TestLoadKeysPromptThenStore(t *testing.T) {
 	assert.Equal(t, "typed-pass", adder.calls[0].passphrase, "opened with the passphrase the user typed")
 	require.Lenf(t, secret.stored, 1, "and a passphrase typed once must be saved once: %v", secret.stored)
 	got := secret.stored[0]
-	assert.Equal(t, defaultServicePrefix+"-id_rsa", got.service, "under the name a later lookup goes by")
+	assert.Equal(t, wallet.DefaultServicePrefix+"-id_rsa", got.service, "under the name a later lookup goes by")
 	assert.Equal(t, "SSH Passphrase for id_rsa", got.label, "labelled with what a person sees in their wallet")
 	assert.Equal(t, "typed-pass", got.passphrase, "and holding what they typed, so the next login is silent")
 }

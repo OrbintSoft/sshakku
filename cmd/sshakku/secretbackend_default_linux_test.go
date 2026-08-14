@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
-	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
 	"github.com/OrbintSoft/sshakku/internal/secretservice"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -14,14 +14,14 @@ import (
 // TestNewSecretBackendFallback covers the default secret-service branch's
 // fallback: with the session bus pointed at an unreachable address,
 // secretservice.NewClient fails and newSecretBackend hands back a
-// SecretToolBackend so lookups can still go through the desktop's default
+// wallet.SecretTool so lookups can still go through the desktop's default
 // collection. The live-bus success return needs a real D-Bus session and is
 // left to integration coverage.
 func TestNewSecretBackendFallback(t *testing.T) {
 	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent/sshakku-no-such-bus")
 	backend, closeFn := newSecretBackend(t.Context(), "alice", fakeLogger{}, config.Settings{SecretBackend: config.SecretBackendSecretService})
 	defer closeFn()
-	tool, ok := backend.(keys.SecretToolBackend)
+	tool, ok := backend.(wallet.SecretTool)
 	require.Truef(t, ok, "a bus that cannot be reached must fall back rather than fail outright, got %T", backend)
 	assert.Equal(t, "alice", tool.User, "scoped to the account it is being opened for")
 }

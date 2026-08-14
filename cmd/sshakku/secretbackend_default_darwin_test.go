@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
-	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -19,7 +19,7 @@ import (
 func TestNewSecretBackendDefaultKeychain(t *testing.T) {
 	backend, closeFn := newSecretBackend(t.Context(), "alice", fakeLogger{}, config.Settings{SecretBackend: config.DefaultSecretBackend()})
 	defer closeFn()
-	kc, ok := backend.(*keys.KeychainBackend)
+	kc, ok := backend.(*wallet.Keychain)
 	require.Truef(t, ok, "an unconfigured machine off Linux opens the OS keychain, got %T", backend)
 	assert.Equal(t, "alice", kc.Account, "scoped to the account it is being opened for")
 }
@@ -45,7 +45,7 @@ func TestTheKeychainIsGivenTheBudgetForAWaitOnAPerson(t *testing.T) {
 	backend, closeFn := newSecretBackend(t.Context(), "alice", fakeLogger{}, settings)
 	defer closeFn()
 
-	kc, ok := backend.(*keys.KeychainBackend)
+	kc, ok := backend.(*wallet.Keychain)
 	require.Truef(t, ok, "an unconfigured machine off Linux opens the OS keychain, got %T", backend)
 	assert.Equalf(t, settings.InteractiveTimeout, kc.Timeout,
 		"a keychain showing its approval dialog is waiting on a person, not on the %s given to something that answers by itself",

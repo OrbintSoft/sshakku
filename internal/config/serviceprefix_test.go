@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
 )
 
 // TestResolveServicePrefix covers the setting that names SSHakku's entries in
@@ -26,14 +26,14 @@ func TestResolveServicePrefix(t *testing.T) {
 		for _, file := range []File{{}, {ServicePrefix: ptr("")}} {
 			s, errs := Resolve(file, lookupFrom(nil))
 			require.Emptyf(t, errs, "unexpected errors for %+v", file)
-			assert.Equalf(t, keys.DefaultServicePrefix, s.ServicePrefix, "ServicePrefix for %+v", file)
+			assert.Equalf(t, wallet.DefaultServicePrefix, s.ServicePrefix, "ServicePrefix for %+v", file)
 		}
 	})
 
 	t.Run("whitespace or a slash is refused, and said so", func(t *testing.T) {
 		for _, bad := range []string{"my wallet", "sshakku/keys", "tab\there", "trailing "} {
 			s, errs := Resolve(File{ServicePrefix: ptr(bad)}, lookupFrom(nil))
-			assert.Equalf(t, keys.DefaultServicePrefix, s.ServicePrefix, "ServicePrefix for %q must be the default", bad)
+			assert.Equalf(t, wallet.DefaultServicePrefix, s.ServicePrefix, "ServicePrefix for %q must be the default", bad)
 			// The value must be named in the report: a login shell writes this
 			// to the session log and nowhere else, so an error that does not
 			// quote what was rejected leaves nothing to search the config for.

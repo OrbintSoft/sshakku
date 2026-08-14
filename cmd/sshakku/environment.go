@@ -4,8 +4,8 @@ import (
 	"os"
 
 	"github.com/OrbintSoft/sshakku/internal/diagnose"
-	"github.com/OrbintSoft/sshakku/internal/keys"
 	"github.com/OrbintSoft/sshakku/internal/keys/handoff"
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
 )
 
 // shownEnvVars names every environment variable SSHakku reads whose value can
@@ -33,7 +33,7 @@ var shownEnvVars = []string{
 // setting. Either way the report only ever says whether it is set.
 var secretEnvVars = []string{
 	handoff.EnvToken,
-	keys.EnvBitwardenPassword,
+	wallet.EnvBitwardenPassword,
 }
 
 // environmentReport reads the variables above from this process's environment.

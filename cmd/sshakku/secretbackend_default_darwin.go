@@ -7,6 +7,7 @@ import (
 
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
 )
 
 // newDefaultSecretBackend resolves the default (secret-service) backend off
@@ -21,6 +22,6 @@ import (
 // can put up its own approval dialog first, and from the outside those two are
 // the same call. Waiting the shorter time means giving up while someone is still
 // typing.
-func newDefaultSecretBackend(_ context.Context, user string, log keys.Logger, settings config.Settings) (keys.SecretBackend, func()) {
+func newDefaultSecretBackend(_ context.Context, user string, log keys.Logger, settings config.Settings) (wallet.Backend, func()) {
 	return newKeychainBackend(user, settings.InteractiveTimeout, settings.ServicePrefix), func() {}
 }

@@ -9,23 +9,11 @@ import (
 	"time"
 
 	"github.com/OrbintSoft/sshakku/internal/keys/prompt"
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
 	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
-const (
-	defaultMaxAttempts = 3
-	// defaultServicePrefix names sshakku's own entries in a shared store, and
-	// is how they are told apart from everyone else's there — so it names who
-	// put the entry there, not what the entry holds. A prefix of the second
-	// kind would be one any program keeping an SSH passphrase might pick too.
-	defaultServicePrefix = "SSHakku-Key"
-)
-
-// DefaultServicePrefix is the secret-store service prefix used when no
-// per-config override is set. It is what an unset Config.ServicePrefix resolves
-// to, and nothing else may resolve one: a store that writes an entry and a
-// sweep that enumerates one must not each supply a default of their own.
-const DefaultServicePrefix = defaultServicePrefix
+const defaultMaxAttempts = 3
 
 // DefaultMaxAttempts is how many passphrase attempts a key gets when the
 // configuration asks for no particular number. The loader applies it; anything
@@ -127,7 +115,7 @@ const (
 type Loader struct {
 	Keys     KeyLister
 	Runner   run.Runner
-	Secret   SecretBackend
+	Secret   wallet.Backend
 	Prompt   prompt.Prompter
 	Adder    KeyAdder
 	Log      Logger
@@ -142,7 +130,7 @@ type Loader struct {
 // rest still run). It returns an error only when the keys cannot be enumerated or
 // the agent cannot be queried.
 //
-// When the secret backend supports it (SecretSession), the whole batch shares a
+// When the secret backend supports it (wallet.Session), the whole batch shares a
 // single wallet unlock instead of one per key: the wallet opens lazily on the
 // first key that actually needs it and closes once the batch is done, rather
 // than once per key or waiting out the wallet's own idle timeout.
@@ -160,8 +148,8 @@ func (l Loader) LoadKeys(ctx context.Context) error {
 		return fmt.Errorf("read agent fingerprints: %w", err)
 	}
 
-	if sess, ok := l.Secret.(SecretSession); ok {
-		sb := &sessionBackend{SecretBackend: l.Secret, sess: sess}
+	if sess, ok := l.Secret.(wallet.Session); ok {
+		sb := &sessionBackend{Backend: l.Secret, sess: sess}
 		l.Secret = sb
 		defer func() {
 			if !sb.unlocked {
@@ -181,13 +169,13 @@ func (l Loader) LoadKeys(ctx context.Context) error {
 	return nil
 }
 
-// sessionBackend wraps a SecretBackend so the first Lookup or Store made
-// through it unlocks the underlying SecretSession, and every call after that
+// sessionBackend wraps a wallet.Backend so the first Lookup or Store made
+// through it unlocks the underlying wallet.Session, and every call after that
 // reuses the same unlock instead of triggering its own. The holder (LoadKeys)
 // locks it back up once, after the whole batch — not after each call.
 type sessionBackend struct {
-	SecretBackend
-	sess     SecretSession
+	wallet.Backend
+	sess     wallet.Session
 	unlocked bool
 }
 
@@ -205,12 +193,12 @@ func (s *sessionBackend) ensureUnlocked(ctx context.Context) {
 
 func (s *sessionBackend) Lookup(ctx context.Context, service string) (string, bool, error) {
 	s.ensureUnlocked(ctx)
-	return s.SecretBackend.Lookup(ctx, service)
+	return s.Backend.Lookup(ctx, service)
 }
 
 func (s *sessionBackend) Store(ctx context.Context, service, label, passphrase string) error {
 	s.ensureUnlocked(ctx)
-	return s.SecretBackend.Store(ctx, service, label, passphrase)
+	return s.Backend.Store(ctx, service, label, passphrase)
 }
 
 // loadOne loads a single key unless its fingerprint is already in the agent. It

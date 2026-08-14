@@ -278,7 +278,7 @@ test-leakprofile:
 # a wrong signature in the keychain client — and it has to catch it in the
 # configuration the shipped binary is built in.
 test-keychain:
-	SSHAKKU_TEST_ALLOW_REAL_KEYCHAIN=1 CGO_ENABLED=0 $(GO) test -count=1 -run TestDarwinKeychainClientRealRoundTrip ./internal/keys/
+	SSHAKKU_TEST_ALLOW_REAL_KEYCHAIN=1 CGO_ENABLED=0 $(GO) test -count=1 -run TestDarwinKeychainClientRealRoundTrip ./internal/keys/...
 
 # Shell-level login-hook and agent-lifecycle regression suite. Requires
 # bats-core; only safe in a disposable environment (the container test suite

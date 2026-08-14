@@ -16,6 +16,7 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/diagnose"
 	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
 	"github.com/OrbintSoft/sshakku/internal/keystate"
 	"github.com/OrbintSoft/sshakku/internal/paths"
 	"github.com/OrbintSoft/sshakku/internal/run"
@@ -334,12 +335,12 @@ func (d deps) testSecretBackend(ctx context.Context, stdout, stderr io.Writer, l
 // probeSecretBackend runs the unlock/store/lookup/delete probe against
 // secret, reporting a clear pass/fail per step. Split out from
 // testSecretBackend so the probe logic is testable against a fake
-// keys.SecretBackend, independent of which real backend newSecretBackend
+// wallet.Backend, independent of which real backend newSecretBackend
 // would construct. The probe entry is always deleted before returning, even
 // after an earlier step failed, so no leftover test data survives in the
 // wallet.
-func probeSecretBackend(ctx context.Context, stdout io.Writer, log keys.Logger, secret keys.SecretBackend, probe string) int {
-	if sess, ok := secret.(keys.SecretSession); ok {
+func probeSecretBackend(ctx context.Context, stdout io.Writer, log keys.Logger, secret wallet.Backend, probe string) int {
+	if sess, ok := secret.(wallet.Session); ok {
 		if err := sess.Unlock(ctx); err != nil {
 			_, _ = fmt.Fprintf(stdout, "  unlock: FAILED: %v\n", err)
 			_, _ = fmt.Fprintln(stdout, "backend test: FAIL")

@@ -29,8 +29,8 @@ type fakeLister struct {
 
 func (l fakeLister) Keys() ([]string, error) { return l.paths, l.err }
 
-// fakeSecret is a scripted SecretBackend that records every Store. It also
-// implements SecretSession (Unlock/Lock), recording call counts, so Loader
+// fakeSecret is a scripted wallet.Backend that records every Store. It also
+// implements wallet.Session (Unlock/Lock), recording call counts, so Loader
 // batch-unlock tests can assert on them without a real Secret Service.
 type fakeSecret struct {
 	lookupPass   string

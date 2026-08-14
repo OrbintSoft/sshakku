@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
-	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -24,7 +24,7 @@ func TestNewSecretBackend(t *testing.T) {
 		s := config.Settings{SecretBackend: config.SecretBackendOnePassword, OnePasswordVault: "sshakku-vault"}
 		backend, closeFn := newSecretBackend(t.Context(), "alice", fakeLogger{}, s)
 		defer closeFn()
-		op, ok := backend.(*keys.OnePasswordBackend)
+		op, ok := backend.(*wallet.OnePassword)
 		require.Truef(t, ok, "the wallet chosen must be the one built, got %T", backend)
 		assert.Equal(t, "sshakku-vault", op.Vault, "the vault the configuration named")
 	})
@@ -37,7 +37,7 @@ func TestNewSecretBackend(t *testing.T) {
 		}
 		backend, closeFn := newSecretBackend(t.Context(), "alice", fakeLogger{}, s)
 		defer closeFn()
-		bw, ok := backend.(*keys.BitwardenBackend)
+		bw, ok := backend.(*wallet.Bitwarden)
 		require.Truef(t, ok, "the wallet chosen must be the one built, got %T", backend)
 		assert.Equal(t, "alice@example.com", bw.Email, "the account the configuration named")
 		assert.Equal(t, "https://vault.example", bw.Server, "the server the configuration named")

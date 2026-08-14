@@ -12,6 +12,7 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/keys"
 	"github.com/OrbintSoft/sshakku/internal/keys/handoff"
 	"github.com/OrbintSoft/sshakku/internal/keys/prompt"
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
 	"github.com/OrbintSoft/sshakku/internal/paths"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -84,7 +85,7 @@ func TestForgetErrors(t *testing.T) {
 	})
 
 	t.Run("--all with an unsupported List reports the hint", func(t *testing.T) {
-		d := depsReturning(&fakeProbeBackend{listErr: keys.ErrListUnsupported})
+		d := depsReturning(&fakeProbeBackend{listErr: wallet.ErrListUnsupported})
 		var out, errOut bytes.Buffer
 		assert.Equal(t, 1, d.forget(t.Context(), &out, &errOut, []string{"--all"}),
 			"a wallet that cannot be listed cannot be swept, and must not be reported as swept")

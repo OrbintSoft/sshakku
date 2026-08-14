@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/OrbintSoft/sshakku/internal/keys/prompt"
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
 	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
@@ -44,13 +45,13 @@ func platformBlockingCases(ctx context.Context, brief time.Duration) []blockingC
 			prompt.PinentryPrompter{ProbeTimeout: brief}.Available(ctx)
 		}},
 		{"secret-tool Lookup", func() {
-			_, _, _ = SecretToolBackend{Runner: run.ExecRunner{}, User: "u", Timeout: brief}.Lookup(ctx, defaultServicePrefix+"-id_test")
+			_, _, _ = wallet.SecretTool{Runner: run.ExecRunner{}, User: "u", Timeout: brief}.Lookup(ctx, wallet.DefaultServicePrefix+"-id_test")
 		}},
 		{"secret-tool Store", func() {
-			_ = SecretToolBackend{Runner: run.ExecRunner{}, User: "u", Timeout: brief}.Store(ctx, defaultServicePrefix+"-id_test", "label", "s3cret")
+			_ = wallet.SecretTool{Runner: run.ExecRunner{}, User: "u", Timeout: brief}.Store(ctx, wallet.DefaultServicePrefix+"-id_test", "label", "s3cret")
 		}},
 		{"secret-tool Delete", func() {
-			_ = SecretToolBackend{Runner: run.ExecRunner{}, User: "u", Timeout: brief}.Delete(ctx, defaultServicePrefix+"-id_test")
+			_ = wallet.SecretTool{Runner: run.ExecRunner{}, User: "u", Timeout: brief}.Delete(ctx, wallet.DefaultServicePrefix+"-id_test")
 		}},
 	}
 }

@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -17,7 +17,7 @@ import (
 // secret backend is the one given. Only the wallet and the configuration's
 // location are stood in for; which entry name a command addresses is what these
 // tests judge, and nothing here supplies it.
-func configuredPrefix(t *testing.T, prefix string, backend keys.SecretBackend) deps {
+func configuredPrefix(t *testing.T, prefix string, backend wallet.Backend) deps {
 	t.Helper()
 
 	root := t.TempDir()

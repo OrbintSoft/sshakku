@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/OrbintSoft/sshakku/internal/keys/prompt"
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
 )
 
 // passphrasePromptRe matches OpenSSH's key-passphrase prompt in both the ssh
@@ -40,7 +41,7 @@ func ParsePassphrasePrompt(question string) (keyfile string, ok bool) {
 // terminal. It never reads or writes the keyring: that one-shot path belongs to
 // the proactive key-loading flow, not to this reactive broker.
 type Broker struct {
-	Secret SecretBackend
+	Secret wallet.Backend
 	TTY    prompt.TTY
 	Log    Logger
 	Config Config
@@ -129,22 +130,12 @@ func (b Broker) logf(level, format string, args ...any) {
 
 // servicePrefixOf returns the per-key secret-store service prefix for c.
 func servicePrefixOf(c Config) string {
-	return servicePrefixOrDefault(c.ServicePrefix)
-}
-
-// servicePrefixOrDefault resolves an unset prefix to the default. It is the one
-// place that decides what "unset" means, so a store that writes an entry and a
-// sweep that enumerates one cannot resolve it differently.
-func servicePrefixOrDefault(prefix string) string {
-	if prefix != "" {
-		return prefix
-	}
-	return defaultServicePrefix
+	return wallet.ServicePrefixOrDefault(c.ServicePrefix)
 }
 
 // storeInWallet saves passphrase under service with the standard label, so the
 // loader and the broker write entries the same way.
-func storeInWallet(ctx context.Context, secret SecretBackend, service, keyname, passphrase string) error {
+func storeInWallet(ctx context.Context, secret wallet.Backend, service, keyname, passphrase string) error {
 	return secret.Store(ctx, service, "SSH Passphrase for "+keyname, passphrase)
 }
 

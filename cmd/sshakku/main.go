@@ -17,6 +17,7 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/keys"
 	"github.com/OrbintSoft/sshakku/internal/keys/handoff"
 	"github.com/OrbintSoft/sshakku/internal/keys/prompt"
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
 	"github.com/OrbintSoft/sshakku/internal/paths"
 )
 
@@ -81,7 +82,7 @@ func main() {
 type deps struct {
 	// newSecret opens the secret backend settings.SecretBackend selects, with a
 	// cleanup func that releases whatever it opened (see newSecretBackend).
-	newSecret func(ctx context.Context, user string, log keys.Logger, settings config.Settings) (keys.SecretBackend, func())
+	newSecret func(ctx context.Context, user string, log keys.Logger, settings config.Settings) (wallet.Backend, func())
 	// ensurer drives the fixed socket to a healthy ssh-agent (see runEnsure). The
 	// production value is the concrete agent.Manager; tests substitute a fake so
 	// the shell-init/ensure-agent bodies run without spawning a real agent.

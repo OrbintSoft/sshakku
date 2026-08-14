@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
 	"github.com/OrbintSoft/sshakku/internal/paths"
 	"github.com/OrbintSoft/sshakku/internal/sessionlog"
 )
@@ -43,7 +43,7 @@ func (d deps) forget(ctx context.Context, stdout, stderr io.Writer, args []strin
 	// unlike load-keys, which unlocks lazily since some keys may need no wallet
 	// access at all — it unlocks once up front for the whole operation instead
 	// of once per List/Delete call.
-	if sess, ok := secret.(keys.SecretSession); ok {
+	if sess, ok := secret.(wallet.Session); ok {
 		if err := sess.Unlock(ctx); err != nil {
 			_ = log.Log("ERROR", fmt.Sprintf("forget: unlock secret store: %v", err))
 		} else {
@@ -59,7 +59,7 @@ func (d deps) forget(ctx context.Context, stdout, stderr io.Writer, args []strin
 	if all {
 		list, err := secret.List(ctx)
 		if err != nil {
-			if errors.Is(err, keys.ErrListUnsupported) {
+			if errors.Is(err, wallet.ErrListUnsupported) {
 				_, _ = fmt.Fprintln(stderr, "sshakku: forget --all needs the native Secret Service backend; name keys explicitly instead")
 			} else {
 				_, _ = fmt.Fprintf(stderr, "sshakku: forget: %v\n", err)
