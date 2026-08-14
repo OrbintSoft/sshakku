@@ -9,6 +9,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
 // blockingTools puts a never-answering stand-in ahead of every external program
@@ -71,11 +73,11 @@ func TestNoCommandBlocksIndefinitely(t *testing.T) {
 
 	cases := []blockingCase{
 		{"1Password Lookup", func() {
-			_, _, _ = (&OnePasswordBackend{Runner: ExecRunner{}, Vault: "sshakku", Timeout: brief}).Lookup(t.Context(), defaultServicePrefix+"-id_test")
+			_, _, _ = (&OnePasswordBackend{Runner: run.ExecRunner{}, Vault: "sshakku", Timeout: brief}).Lookup(t.Context(), defaultServicePrefix+"-id_test")
 		}},
 		{"Bitwarden Lookup", func() {
 			_, _, _ = (&BitwardenBackend{
-				Runner: ExecRunner{}, Prompter: fixedPrompter{}, Email: "u@example.invalid", Timeout: brief,
+				Runner: run.ExecRunner{}, Prompter: fixedPrompter{}, Email: "u@example.invalid", Timeout: brief,
 			}).Lookup(t.Context(), defaultServicePrefix+"-id_test")
 		}},
 	}
@@ -102,14 +104,4 @@ func TestNoCommandBlocksIndefinitely(t *testing.T) {
 			}
 		})
 	}
-}
-
-// TestTimeoutDefaults guards the other half of the guarantee: a call site that
-// chooses no budget must still get a finite one. A zero default would restore
-// the unbounded wait everywhere at once, and every other test here would still
-// pass, since they all pass a budget of their own.
-func TestTimeoutDefaults(t *testing.T) {
-	assert.Positive(t, DefaultCommandTimeout,
-		"a call site that chose no budget must still get a finite one, or the unbounded wait comes back everywhere at once")
-	assert.Positive(t, DefaultInteractiveTimeout, "and so must one that waits on a person")
 }

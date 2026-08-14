@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/OrbintSoft/sshakku/internal/keyring"
+	"github.com/OrbintSoft/sshakku/internal/run"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -51,7 +52,7 @@ func TestLoadKeysHeadlessVaultHit(t *testing.T) {
 
 	loader := Loader{
 		Keys:   fakeLister{paths: []string{keyfile}},
-		Runner: ExecRunner{},
+		Runner: run.ExecRunner{},
 		Secret: &fakeSecret{lookupPass: passphrase, lookupFound: true},
 		Prompt: &fakePrompter{err: errors.New("must not be prompted: a vault hit should never reach the prompt step")},
 		Adder:  ExecKeyAdder{AskpassProg: askpassScript},
@@ -59,7 +60,7 @@ func TestLoadKeysHeadlessVaultHit(t *testing.T) {
 	}
 	require.NoError(t, loader.LoadKeys(t.Context()), "a login with a stored passphrase must load the key")
 
-	runner := ExecRunner{}
+	runner := run.ExecRunner{}
 	fp, err := FileFingerprint(t.Context(), runner, keyfile)
 	require.NoError(t, err, "reading the key's fingerprint must succeed")
 	loaded, err := AgentFingerprints(t.Context(), runner)
@@ -130,7 +131,7 @@ func runLoadKeysNoTerminalHelper() {
 	keyfile := os.Getenv("SSHAKKU_TEST_KEYFILE")
 	loader := Loader{
 		Keys:   fakeLister{paths: []string{keyfile}},
-		Runner: ExecRunner{},
+		Runner: run.ExecRunner{},
 		Secret: &fakeSecret{lookupFound: false},
 		Prompt: TTYPrompter{},
 		Adder:  ExecKeyAdder{},
@@ -144,7 +145,7 @@ func runLoadKeysNoTerminalHelper() {
 		os.Exit(1)
 	}
 
-	runner := ExecRunner{}
+	runner := run.ExecRunner{}
 	fp, err := FileFingerprint(ctx, runner, keyfile)
 	if err != nil {
 		os.Exit(2)

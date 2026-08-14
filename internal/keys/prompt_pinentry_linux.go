@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
 // pinentryBin is the passphrase dialog that comes with GnuPG. Which toolkit it
@@ -50,11 +52,11 @@ type PinentryPrompter struct {
 	Bin string
 	// Timeout bounds the dialog. It is a person's budget, not a machine's, but
 	// still finite: a dialog nobody answers must not strand the shell that
-	// raised it. Zero selects DefaultInteractiveTimeout.
+	// raised it. Zero selects run.DefaultInteractiveTimeout.
 	Timeout time.Duration
 	// ProbeTimeout bounds asking pinentry about itself. Nobody is being waited
 	// on there, so it is an ordinary command's budget rather than a person's.
-	// Zero selects DefaultCommandTimeout.
+	// Zero selects run.DefaultCommandTimeout.
 	ProbeTimeout time.Duration
 	// lookPath resolves a binary on PATH; nil uses the os/exec default. Injectable
 	// for tests.
@@ -71,7 +73,7 @@ type PinentryPrompter struct {
 func (p PinentryPrompter) Prompt(ctx context.Context, keyname string) (string, error) {
 	timeout := p.Timeout
 	if timeout <= 0 {
-		timeout = DefaultInteractiveTimeout
+		timeout = run.DefaultInteractiveTimeout
 	}
 	return p.converse(ctx, timeout, func(c *assuanConv) (string, error) { return c.getpin(keyname) })
 }
@@ -86,8 +88,7 @@ func (p PinentryPrompter) converse(ctx context.Context, timeout time.Duration, a
 	// The deadline has to end the wait, not merely the process: a dialog that
 	// left a child behind keeps the pipe this conversation is read from open,
 	// and the read would outlast the budget by however long that child lives.
-	cmd.WaitDelay = commandWaitDelay
-	boundToProcessGroup(cmd)
+	run.BoundToDeadline(cmd)
 	stdin, err := stdinPipe(cmd)
 	if err != nil {
 		return "", err
@@ -132,7 +133,7 @@ func (p PinentryPrompter) Available(ctx context.Context) bool {
 	}
 	timeout := p.ProbeTimeout
 	if timeout <= 0 {
-		timeout = DefaultCommandTimeout
+		timeout = run.DefaultCommandTimeout
 	}
 	flavor, err := p.converse(ctx, timeout, (*assuanConv).flavor)
 	if err != nil {

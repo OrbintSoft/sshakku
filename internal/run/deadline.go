@@ -1,4 +1,4 @@
-package keys
+package run
 
 import (
 	"errors"
@@ -11,7 +11,7 @@ import (
 // whatever was being waited on may well still be going on.
 var ErrTimedOut = errors.New("timed out")
 
-// withDeadline runs call on a goroutine of its own and returns what it
+// WithDeadline runs call on a goroutine of its own and returns what it
 // produced, or gives up on it once timeout has elapsed. what names the thing
 // being waited on, so a session log says which one ran out of time.
 //
@@ -25,7 +25,7 @@ var ErrTimedOut = errors.New("timed out")
 //
 // A caller that can cancel what it waits on should do that instead; this is the
 // last resort for one that cannot.
-func withDeadline[T any](what string, timeout time.Duration, call func() (T, error)) (T, error) {
+func WithDeadline[T any](what string, timeout time.Duration, call func() (T, error)) (T, error) {
 	type answer struct {
 		value T
 		err   error

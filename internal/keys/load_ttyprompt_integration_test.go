@@ -16,6 +16,7 @@ import (
 
 	"github.com/OrbintSoft/sshakku/internal/giveup"
 	"github.com/OrbintSoft/sshakku/internal/keyring"
+	"github.com/OrbintSoft/sshakku/internal/run"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -325,7 +326,7 @@ func runTTYPromptHelper() {
 	secret := &fakeSecret{lookupFound: false}
 	loader := Loader{
 		Keys:   fakeLister{paths: []string{os.Getenv(envTTYKeyfile)}},
-		Runner: ExecRunner{},
+		Runner: run.ExecRunner{},
 		Secret: secret,
 		Prompt: TTYPrompter{},
 		Adder:  ExecKeyAdder{AskpassProg: os.Getenv(envTTYAskpass)},
@@ -399,7 +400,7 @@ func drain(t *testing.T, master *os.File) string {
 func assertKeyInAgent(t *testing.T, keyfile string, want bool) {
 	t.Helper()
 
-	runner := ExecRunner{}
+	runner := run.ExecRunner{}
 	fp, err := FileFingerprint(t.Context(), runner, keyfile)
 	require.NoError(t, err, "reading the key's fingerprint must succeed")
 	loaded, err := AgentFingerprints(t.Context(), runner)

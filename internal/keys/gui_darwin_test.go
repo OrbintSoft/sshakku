@@ -7,6 +7,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/OrbintSoft/sshakku/internal/run"
+	"github.com/OrbintSoft/sshakku/internal/run/runtest"
 )
 
 // TestGraphicalSession verifies the half of F29 that decides where the asking
@@ -33,10 +36,10 @@ func TestGraphicalSession(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			r := newFakeRunner().on(launchctlBin, func(cmd Cmd) (Result, error) {
+			r := runtest.NewRunner().On(launchctlBin, func(cmd run.Cmd) (run.Result, error) {
 				assert.Equal(t, []string{"managername"}, cmd.Args,
 					"what kind of session this is is the only thing launchctl is being asked")
-				return Result{Stdout: []byte(c.out), Code: c.code}, c.err
+				return run.Result{Stdout: []byte(c.out), Code: c.code}, c.err
 			})
 			assert.Equalf(t, c.want, GraphicalSession(t.Context(), r),
 				"being on a Mac is not the condition; every answer that is not plainly \"there is a screen\" must "+

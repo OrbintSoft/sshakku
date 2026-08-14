@@ -6,44 +6,9 @@
 // drives the OpenSSH tools and the secret store through the seams below.
 package keys
 
-import (
-	"context"
-	"time"
-)
-
 // EnvPassHandoffToken names the environment variable carrying the one-shot
 // passphrase-handoff token from the loader to the askpass helper — a kernel
 // keyring serial on Linux, a private Unix socket path on Darwin (see
 // handoff_linux.go/handoff_darwin.go). Only the token — a handle — crosses
 // the env; the passphrase itself never does.
 const EnvPassHandoffToken = "SSHAKKU_HANDOFF_TOKEN"
-
-// Cmd describes one external command invocation. Env entries are appended to the
-// current environment; Stdin, when non-empty, is fed to the process — the way a
-// passphrase reaches secret-tool without ever appearing in argv. Timeout, when
-// positive, bounds how long the process may run before it is killed; zero means
-// unbounded, the right default for a call that waits on a human (e.g. a GUI
-// unlock prompt) rather than a plain status query.
-type Cmd struct {
-	Name    string
-	Args    []string
-	Stdin   string
-	Env     []string
-	Timeout time.Duration
-}
-
-// Result is the outcome of running a Cmd. A non-zero Code is reported here, not
-// as an error: callers distinguish meaningful exit codes (e.g. ssh-add -l exits 1
-// for an empty agent, secret-tool exits non-zero for a miss) from a failure to
-// start the process, which is returned as the error.
-type Result struct {
-	Stdout []byte
-	Stderr []byte
-	Code   int
-}
-
-// Runner runs an external command and returns its result. It is the seam that
-// lets the loader be tested without spawning real ssh-add/ssh-keygen/secret-tool.
-type Runner interface {
-	Run(ctx context.Context, c Cmd) (Result, error)
-}

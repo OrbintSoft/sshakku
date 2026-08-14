@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
 const (
@@ -123,7 +125,7 @@ const (
 // pulling passphrases from the secret store (or prompting) when needed.
 type Loader struct {
 	Keys     KeyLister
-	Runner   Runner
+	Runner   run.Runner
 	Secret   SecretBackend
 	Prompt   Prompter
 	Adder    KeyAdder

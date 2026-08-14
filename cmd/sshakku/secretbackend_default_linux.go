@@ -7,6 +7,7 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/config"
 
 	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/OrbintSoft/sshakku/internal/run"
 	"github.com/OrbintSoft/sshakku/internal/secretservice"
 )
 
@@ -31,7 +32,7 @@ func newDefaultSecretBackend(ctx context.Context, user string, log keys.Logger, 
 	client, err := secretservice.NewClient(ctx)
 	if err != nil {
 		_ = log.Log("ERROR", fmt.Sprintf("secret service: %v; falling back to secret-tool", err))
-		return keys.SecretToolBackend{Runner: keys.ExecRunner{}, User: user, Timeout: settings.CommandTimeout}, func() {}
+		return keys.SecretToolBackend{Runner: run.ExecRunner{}, User: user, Timeout: settings.CommandTimeout}, func() {}
 	}
 	// Reached only when the session bus is live; the returned client is a
 	// concrete *secretservice.Client that a unit test cannot stand in for

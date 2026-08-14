@@ -13,6 +13,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
 // allowRealOnePasswordEnv opts this test into creating and deleting a real
@@ -40,7 +42,7 @@ const opSetupTimeout = 30 * time.Second
 
 // TestOnePasswordBackendRealAccount exercises OnePasswordBackend end to end
 // against a real 1Password account via the op CLI — unlike
-// secret_onepassword_test.go, which only ever talks to a fake Runner. It
+// secret_onepassword_test.go, which only ever talks to a fake run.Runner. It
 // creates its own throwaway vault, named with a timestamp so it can never
 // collide with or touch an existing one, runs the backend's Store / Lookup /
 // Delete / List against only that vault, and deletes the vault when the test
@@ -79,7 +81,7 @@ func TestOnePasswordBackendRealAccount(t *testing.T) {
 		}
 	})
 
-	backend := &OnePasswordBackend{Runner: ExecRunner{}, Vault: vault.ID}
+	backend := &OnePasswordBackend{Runner: run.ExecRunner{}, Vault: vault.ID}
 
 	const (
 		testService = "sshakku-integration-test-probe"
@@ -104,7 +106,7 @@ func TestOnePasswordBackendRealAccount(t *testing.T) {
 	assert.False(t, found, "and it must be gone from the vault")
 }
 
-// opRun runs the op CLI directly (not through a Runner) for test setup and
+// opRun runs the op CLI directly (not through a run.Runner) for test setup and
 // teardown that is outside what OnePasswordBackend itself does — creating
 // and deleting the throwaway vault.
 func opRun(t *testing.T, args ...string) (string, error) {

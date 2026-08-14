@@ -7,17 +7,19 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/OrbintSoft/sshakku/internal/run/runtest"
 )
 
 func TestHasGraphicalSession(t *testing.T) {
-	xsetOK := func() *fakeRunner { return newFakeRunner().on("xset", stdout("", 0)) }
-	xsetDead := func() *fakeRunner { return newFakeRunner().on("xset", stdout("", 1)) }
-	xsetMissing := func() *fakeRunner { return newFakeRunner().on("xset", fails(errors.New("not found"))) }
+	xsetOK := func() *runtest.Runner { return runtest.NewRunner().On("xset", runtest.Stdout("", 0)) }
+	xsetDead := func() *runtest.Runner { return runtest.NewRunner().On("xset", runtest.Stdout("", 1)) }
+	xsetMissing := func() *runtest.Runner { return runtest.NewRunner().On("xset", runtest.Fails(errors.New("not found"))) }
 
 	cases := []struct {
 		name    string
 		env     GUIEnv
-		runner  *fakeRunner
+		runner  *runtest.Runner
 		want    bool
 		noXcall bool // xset must not be consulted
 	}{
@@ -35,7 +37,7 @@ func TestHasGraphicalSession(t *testing.T) {
 			if !c.noXcall {
 				return
 			}
-			for _, call := range c.runner.calls {
+			for _, call := range c.runner.Calls {
 				assert.NotEqual(t, "xset", call.Name,
 					"the answer was already settled, and running an X client to confirm it costs the login a process")
 			}

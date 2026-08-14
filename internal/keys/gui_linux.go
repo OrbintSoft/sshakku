@@ -2,7 +2,11 @@
 
 package keys
 
-import "context"
+import (
+	"context"
+
+	"github.com/OrbintSoft/sshakku/internal/run"
+)
 
 // GUIEnv is the subset of the environment that GUI detection reads. Both
 // variables are freedesktop display-server conventions, which is why this
@@ -19,13 +23,13 @@ type GUIEnv struct {
 //
 // It answers only whether there is a screen. Whether anything is installed to
 // draw a dialog on it is a separate question, asked of the dialogs themselves.
-func HasGraphicalSession(ctx context.Context, env GUIEnv, r Runner) bool {
+func HasGraphicalSession(ctx context.Context, env GUIEnv, r run.Runner) bool {
 	if env.WaylandDisplay != "" {
 		return true
 	}
 	if env.Display == "" {
 		return false
 	}
-	res, err := r.Run(ctx, Cmd{Name: "xset", Args: []string{"q"}})
+	res, err := r.Run(ctx, run.Cmd{Name: "xset", Args: []string{"q"}})
 	return err == nil && res.Code == 0
 }

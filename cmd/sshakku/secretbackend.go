@@ -6,6 +6,7 @@ import (
 
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
 // newSecretBackend opens the secret backend settings.SecretBackend selects
@@ -22,13 +23,13 @@ func newSecretBackend(ctx context.Context, user string, log keys.Logger, setting
 	switch settings.SecretBackend {
 	case config.SecretBackendOnePassword:
 		return &keys.OnePasswordBackend{
-			Runner:  keys.ExecRunner{Timeout: settings.CommandTimeout},
+			Runner:  run.ExecRunner{Timeout: settings.CommandTimeout},
 			Vault:   settings.OnePasswordVault,
 			Timeout: settings.InteractiveTimeout,
 		}, func() {}
 	case config.SecretBackendBitwarden:
 		return &keys.BitwardenBackend{
-			Runner:        keys.ExecRunner{Timeout: settings.CommandTimeout},
+			Runner:        run.ExecRunner{Timeout: settings.CommandTimeout},
 			Prompter:      newWalletPasswordPrompter(ctx, settings, log),
 			Email:         settings.BitwardenEmail,
 			Server:        settings.BitwardenServer,

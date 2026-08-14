@@ -1,4 +1,4 @@
-package keys
+package run
 
 import (
 	"errors"
@@ -11,7 +11,7 @@ import (
 
 func TestWithDeadline(t *testing.T) {
 	t.Run("an answer inside the budget is the answer", func(t *testing.T) {
-		got, err := withDeadline("the store", time.Minute, func() (string, error) {
+		got, err := WithDeadline("the store", time.Minute, func() (string, error) {
 			return "hunter2", nil
 		})
 		require.NoError(t, err, "a call that answered in time must not be reported as having failed")
@@ -20,7 +20,7 @@ func TestWithDeadline(t *testing.T) {
 
 	t.Run("a failure inside the budget is that failure, not a timeout", func(t *testing.T) {
 		wantErr := errors.New("no such item")
-		_, err := withDeadline("the store", time.Minute, func() (string, error) {
+		_, err := WithDeadline("the store", time.Minute, func() (string, error) {
 			return "", wantErr
 		})
 		assert.ErrorIs(t, err, wantErr, "the failure the call reported is the one the caller must see")
@@ -35,7 +35,7 @@ func TestWithDeadline(t *testing.T) {
 		t.Cleanup(func() { close(release) })
 
 		start := time.Now()
-		_, err := withDeadline("the keychain", 20*time.Millisecond, func() (string, error) {
+		_, err := WithDeadline("the keychain", 20*time.Millisecond, func() (string, error) {
 			<-release
 			return "too late", nil
 		})
@@ -56,7 +56,7 @@ func TestWithDeadline(t *testing.T) {
 		// blocked forever trying to hand one over.
 		release := make(chan struct{})
 		finished := make(chan struct{})
-		_, err := withDeadline("the keychain", 20*time.Millisecond, func() (string, error) {
+		_, err := WithDeadline("the keychain", 20*time.Millisecond, func() (string, error) {
 			<-release
 			defer close(finished)
 			return "too late", nil

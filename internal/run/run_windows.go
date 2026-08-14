@@ -1,6 +1,6 @@
 //go:build windows
 
-package keys
+package run
 
 import "os/exec"
 

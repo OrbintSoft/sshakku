@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
 // onePasswordBin is the 1Password CLI. It authenticates out of band — either
@@ -60,22 +62,22 @@ type onePasswordItemTemplate struct {
 // by title with no separate attribute search, the same simplification the
 // dedicated Secret Service collection design made.
 type OnePasswordBackend struct {
-	Runner Runner
+	Runner run.Runner
 	Vault  string
 	// Timeout bounds each op call. op can defer to the 1Password desktop app
 	// for approval, so the budget is a person's, not a machine's; zero selects
-	// DefaultInteractiveTimeout.
+	// run.DefaultInteractiveTimeout.
 	Timeout time.Duration
 }
 
 // run bounds every op call, so an approval nobody grants ends as an error
 // rather than as a shell that never comes back.
-func (b *OnePasswordBackend) run(ctx context.Context, c Cmd) (Result, error) {
+func (b *OnePasswordBackend) run(ctx context.Context, c run.Cmd) (run.Result, error) {
 	if c.Timeout <= 0 {
 		c.Timeout = b.Timeout
 	}
 	if c.Timeout <= 0 {
-		c.Timeout = DefaultInteractiveTimeout
+		c.Timeout = run.DefaultInteractiveTimeout
 	}
 	return b.Runner.Run(ctx, c)
 }
@@ -86,7 +88,7 @@ func (b *OnePasswordBackend) run(ctx context.Context, c Cmd) (Result, error) {
 // failures by exit code alone, the same ambiguity SecretToolBackend accepts.
 func (b *OnePasswordBackend) Lookup(ctx context.Context, service string) (string, bool, error) {
 	ref := fmt.Sprintf("op://%s/%s/password", b.Vault, service)
-	res, err := b.run(ctx, Cmd{Name: onePasswordBin, Args: []string{"read", ref, "--no-newline"}})
+	res, err := b.run(ctx, run.Cmd{Name: onePasswordBin, Args: []string{"read", ref, "--no-newline"}})
 	if err != nil {
 		return "", false, err
 	}
@@ -117,7 +119,7 @@ func (b *OnePasswordBackend) Store(ctx context.Context, service, label, passphra
 		return err
 	}
 
-	res, err := b.run(ctx, Cmd{
+	res, err := b.run(ctx, run.Cmd{
 		Name:  onePasswordBin,
 		Args:  []string{"item", "create", "--vault", b.Vault, "-"},
 		Stdin: string(payload),
@@ -136,7 +138,7 @@ func (b *OnePasswordBackend) Store(ctx context.Context, service, label, passphra
 // with a real deletion failure, the same shape SecretServiceBackend.Delete
 // uses (search, then delete only what search found).
 func (b *OnePasswordBackend) Delete(ctx context.Context, service string) error {
-	res, err := b.run(ctx, Cmd{Name: onePasswordBin, Args: []string{"item", "get", service, "--vault", b.Vault, "--format", "json"}})
+	res, err := b.run(ctx, run.Cmd{Name: onePasswordBin, Args: []string{"item", "get", service, "--vault", b.Vault, "--format", "json"}})
 	if err != nil {
 		return err
 	}
@@ -144,7 +146,7 @@ func (b *OnePasswordBackend) Delete(ctx context.Context, service string) error {
 		return nil
 	}
 
-	res, err = b.run(ctx, Cmd{Name: onePasswordBin, Args: []string{"item", "delete", service, "--vault", b.Vault}})
+	res, err = b.run(ctx, run.Cmd{Name: onePasswordBin, Args: []string{"item", "delete", service, "--vault", b.Vault}})
 	if err != nil {
 		return err
 	}
@@ -157,7 +159,7 @@ func (b *OnePasswordBackend) Delete(ctx context.Context, service string) error {
 // List enumerates every sshakku-tagged item's title in Vault. Since Vault is
 // dedicated to sshakku (see the type doc), every title is a service string.
 func (b *OnePasswordBackend) List(ctx context.Context) ([]string, error) {
-	res, err := b.run(ctx, Cmd{Name: onePasswordBin, Args: []string{"item", "list", "--vault", b.Vault, "--tags", onePasswordTag, "--format", "json"}})
+	res, err := b.run(ctx, run.Cmd{Name: onePasswordBin, Args: []string{"item", "list", "--vault", b.Vault, "--tags", onePasswordTag, "--format", "json"}})
 	if err != nil {
 		return nil, err
 	}

@@ -10,6 +10,7 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/keys"
 	"github.com/OrbintSoft/sshakku/internal/keystate"
 	"github.com/OrbintSoft/sshakku/internal/paths"
+	"github.com/OrbintSoft/sshakku/internal/run"
 	"github.com/OrbintSoft/sshakku/internal/sessionlog"
 )
 
@@ -48,7 +49,7 @@ func (d deps) loadKeys(ctx context.Context, stderr io.Writer) int {
 		notifier = stderrNotifier{w: stderr}
 	}
 
-	runner := keys.ExecRunner{Timeout: settings.CommandTimeout}
+	runner := run.ExecRunner{Timeout: settings.CommandTimeout}
 	// The vault is always consulted first regardless of which of these is
 	// picked (see Loader.loadViaVaultThenPrompt); this only chooses how to
 	// ask when it misses — the platform's dialog where there is one, otherwise

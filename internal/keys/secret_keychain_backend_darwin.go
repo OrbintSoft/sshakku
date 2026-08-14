@@ -5,6 +5,8 @@ package keys
 import (
 	"context"
 	"time"
+
+	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
 // KeychainClient is the subset of macOS's Security.framework generic-password
@@ -43,7 +45,7 @@ type KeychainBackend struct {
 	// authorization nobody is there to grant, and something is waiting on the
 	// answer — a login shell, or an ssh at a passphrase prompt — so the wait is
 	// finite and the caller falls back to asking on the terminal. Zero selects
-	// DefaultInteractiveTimeout: when the framework does put up its approval
+	// run.DefaultInteractiveTimeout: when the framework does put up its approval
 	// dialog, what this call is waiting for is a person deciding, and from out
 	// here that call looks no different from one that answers by itself.
 	//
@@ -71,9 +73,9 @@ type keychainSecret struct {
 func bounded[T any](b *KeychainBackend, call func() (T, error)) (T, error) {
 	timeout := b.Timeout
 	if timeout <= 0 {
-		timeout = DefaultInteractiveTimeout
+		timeout = run.DefaultInteractiveTimeout
 	}
-	return withDeadline("the keychain", timeout, call)
+	return run.WithDeadline("the keychain", timeout, call)
 }
 
 // boundedErr runs one keychain call that answers with nothing but an error.

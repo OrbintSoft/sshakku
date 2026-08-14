@@ -9,6 +9,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OrbintSoft/sshakku/internal/run"
+	"github.com/OrbintSoft/sshakku/internal/run/runtest"
 )
 
 // TestTheDialogThatFailsIsNamedByItsOwnName verifies the part of F37 that only
@@ -22,8 +25,8 @@ import (
 func TestTheDialogThatFailsIsNamedByItsOwnName(t *testing.T) {
 	// A dialog whose interpreter is not there at all: the runner answers the
 	// way it does when exec fails, which is what the fallback exists for.
-	wontRun := newFakeRunner().on(osascriptBin, func(Cmd) (Result, error) {
-		return Result{}, errors.New("exec: \"" + osascriptBin + "\": executable file not found in $PATH")
+	wontRun := runtest.NewRunner().On(osascriptBin, func(run.Cmd) (run.Result, error) {
+		return run.Result{}, errors.New("exec: \"" + osascriptBin + "\": executable file not found in $PATH")
 	})
 	prompter := OsascriptPrompter{Runner: wontRun}
 

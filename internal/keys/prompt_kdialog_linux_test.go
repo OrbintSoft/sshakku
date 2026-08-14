@@ -8,22 +8,24 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OrbintSoft/sshakku/internal/run/runtest"
 )
 
 func TestKDialogPrompt(t *testing.T) {
 	t.Run("returns the entered passphrase, newline trimmed", func(t *testing.T) {
-		r := newFakeRunner().on("kdialog", stdout("typed-pass\n", 0))
+		r := runtest.NewRunner().On("kdialog", runtest.Stdout("typed-pass\n", 0))
 		got, err := KDialogPrompter{Runner: r}.Prompt(t.Context(), "id_rsa")
 		require.NoError(t, err, "a dialog the user answered must hand the answer back")
 		assert.Equal(t, "typed-pass", got,
 			"and it must be what they typed: the newline the dialog prints is not part of the passphrase")
-		require.NotEmpty(t, r.calls, "the dialog must actually be run")
-		assert.Equal(t, []string{"--password", "Enter passphrase for id_rsa"}, r.calls[0].Args,
+		require.NotEmpty(t, r.Calls, "the dialog must actually be run")
+		assert.Equal(t, []string{"--password", "Enter passphrase for id_rsa"}, r.Calls[0].Args,
 			"asked as a password, so the characters do not appear on screen, and naming the key it is for")
 	})
 
 	t.Run("a dismissed dialog is ErrPromptCanceled", func(t *testing.T) {
-		r := newFakeRunner().on("kdialog", stdout("", 1))
+		r := runtest.NewRunner().On("kdialog", runtest.Stdout("", 1))
 		_, err := KDialogPrompter{Runner: r}.Prompt(t.Context(), "id_rsa")
 		assert.ErrorIs(t, err, ErrPromptCanceled,
 			"closing a dialog is an answer, and must be passed on as one rather than as a failure")
@@ -31,7 +33,7 @@ func TestKDialogPrompt(t *testing.T) {
 
 	t.Run("a failure to start kdialog is an error", func(t *testing.T) {
 		wantErr := errors.New("boom")
-		r := newFakeRunner().on("kdialog", fails(wantErr))
+		r := runtest.NewRunner().On("kdialog", runtest.Fails(wantErr))
 		_, err := KDialogPrompter{Runner: r}.Prompt(t.Context(), "id_rsa")
 		assert.ErrorIs(t, err, wantErr,
 			"a dialog that could not be started must be reported as that, not as one the user dismissed")

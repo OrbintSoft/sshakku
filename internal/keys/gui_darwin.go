@@ -5,6 +5,8 @@ package keys
 import (
 	"context"
 	"strings"
+
+	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
 // launchctlBin reports which kind of session a process belongs to. It is the
@@ -23,8 +25,8 @@ const aquaSession = "Aqua"
 // or booted into single user mode, has no window server, and a dialog raised
 // there is a login shell waiting on something that can never arrive. When it
 // is false the caller falls back to asking on the terminal.
-func GraphicalSession(ctx context.Context, r Runner) bool {
-	res, err := r.Run(ctx, Cmd{Name: launchctlBin, Args: []string{"managername"}})
+func GraphicalSession(ctx context.Context, r run.Runner) bool {
+	res, err := r.Run(ctx, run.Cmd{Name: launchctlBin, Args: []string{"managername"}})
 	if err != nil || res.Code != 0 {
 		return false
 	}

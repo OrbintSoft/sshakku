@@ -8,6 +8,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
 // osascriptBin is macOS's AppleScript interpreter. Unlike the Linux dialog
@@ -26,10 +28,10 @@ var passphraseDialog string
 // OsascriptPrompter prompts with a macOS dialog drawn by AppleScript. The
 // typed text comes back on stdout; a dialog the user dismisses exits non-zero.
 type OsascriptPrompter struct {
-	Runner Runner
+	Runner run.Runner
 	// Timeout bounds the dialog. It is a person's budget, not a machine's, but
 	// still finite: a dialog nobody answers must not strand the shell that
-	// raised it. Zero selects DefaultInteractiveTimeout.
+	// raised it. Zero selects run.DefaultInteractiveTimeout.
 	Timeout time.Duration
 	// lookPath resolves a binary on PATH; nil uses the os/exec default.
 	// Injectable for tests.
@@ -81,9 +83,9 @@ func (p OsascriptPrompter) Prompt(ctx context.Context, keyname string) (string, 
 
 	timeout := p.Timeout
 	if timeout <= 0 {
-		timeout = DefaultInteractiveTimeout
+		timeout = run.DefaultInteractiveTimeout
 	}
-	res, err := p.Runner.Run(ctx, Cmd{
+	res, err := p.Runner.Run(ctx, run.Cmd{
 		Name:    osascriptBin,
 		Args:    []string{script, keyname},
 		Timeout: timeout,

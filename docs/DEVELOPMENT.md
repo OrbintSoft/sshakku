@@ -21,6 +21,7 @@ composed by it. One line each:
 | `internal/keys` | Loads SSH keys into the agent: enumerates the key directory, skips keys already loaded, pulls each passphrase from the configured secret backend, and drives `ssh-add` out of band. The pluggable `SecretBackend`s (Secret Service, `secret-tool`, 1Password, Bitwarden) and the askpass broker live here. |
 | `internal/keystate` | Records when a key was added to the agent and for how long, so `doctor` can report remaining lifetime without relying on the ssh-agent protocol (which has no such query). |
 | `internal/paths` | Computes and creates the per-user runtime layout: config under the XDG config dir, the session log under the XDG state dir, the agent socket in per-user tmpfs — always outside `~/.ssh`. |
+| `internal/run` | Runs the external programs SSHakku drives — `ssh-add`, `ssh-keygen`, a wallet's CLI, a passphrase dialog — and bounds how long anything outside the process may keep a caller waiting, so a tool that neither answers nor fails becomes an error to fall back from. `internal/run/runtest` holds the stand-ins that let a component driving one of those be tested without it. |
 | `internal/secretservice` | A native client for the freedesktop Secret Service D-Bus API (`org.freedesktop.secrets`), used instead of shelling out to `secret-tool` so a dedicated collection can be created and locked/unlocked around a single lookup or store. |
 | `internal/sessionlog` | Appends timestamped, level-tagged lines to the owner-only session log, bounded to a fixed number of recent lines. |
 

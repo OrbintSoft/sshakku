@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
 // TestEnumeratorReadDirHardError covers Keys's non-missing-directory error
@@ -25,11 +27,11 @@ func TestEnumeratorReadDirHardError(t *testing.T) {
 // branch (a binary that does not exist, which is a real error rather than a
 // non-zero exit code).
 func TestExecRunnerRunStdinEnvAndStartFailure(t *testing.T) {
-	res, err := ExecRunner{}.Run(t.Context(), Cmd{Name: "cat", Stdin: "hello", Env: []string{"SSHAKKU_X=1"}})
+	res, err := run.ExecRunner{}.Run(t.Context(), run.Cmd{Name: "cat", Stdin: "hello", Env: []string{"SSHAKKU_X=1"}})
 	require.NoError(t, err, "running a command must succeed")
 	assert.Equal(t, "hello", string(res.Stdout),
 		"and what it was given on standard input must reach it: that is where every secret travels")
 
-	_, err = ExecRunner{}.Run(t.Context(), Cmd{Name: "sshakku-no-such-binary-xyz"})
+	_, err = run.ExecRunner{}.Run(t.Context(), run.Cmd{Name: "sshakku-no-such-binary-xyz"})
 	assert.Error(t, err, "a program that is not installed must be reported as that, not as one that ran and failed")
 }

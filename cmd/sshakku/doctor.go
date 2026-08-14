@@ -18,6 +18,7 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/keys"
 	"github.com/OrbintSoft/sshakku/internal/keystate"
 	"github.com/OrbintSoft/sshakku/internal/paths"
+	"github.com/OrbintSoft/sshakku/internal/run"
 	"github.com/OrbintSoft/sshakku/internal/sessionlog"
 )
 
@@ -453,7 +454,7 @@ func (d deps) doctorCrossUser(ctx context.Context, stdout, stderr io.Writer, inv
 // real procfs, sockets, and process tree. Both the read-only and --fix paths use
 // it so they present the situation identically.
 func gatherReport(ctx context.Context, env paths.Env, layout paths.Layout, settings config.Settings) diagnose.Report {
-	runner := keys.ExecRunner{}
+	runner := run.ExecRunner{}
 	// One enumerator, read for the keys and named in the report: the set
 	// SSHakku acts on and the set it describes are then the same set.
 	enumerator := settings.KeyEnumerator(env.Home)

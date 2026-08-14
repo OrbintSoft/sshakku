@@ -1,4 +1,4 @@
-package keys
+package run
 
 import (
 	"strings"
@@ -44,4 +44,47 @@ func TestExecRunnerRun(t *testing.T) {
 		assert.Equal(t, "fast", strings.TrimSpace(string(res.Stdout)),
 			"and a budget nobody reached must not change what it said")
 	})
+
+	t.Run("Stdin is fed to the program", func(t *testing.T) {
+		res, err := ExecRunner{}.Run(t.Context(), Cmd{
+			Name: "sh", Args: []string{"-c", `read line; echo "$line"`}, Stdin: "hunter2\n",
+		})
+		require.NoError(t, err, "a command reading its standard input must still run")
+		assert.Equal(t, "hunter2", strings.TrimSpace(string(res.Stdout)),
+			"a passphrase is handed over on stdin precisely so it never appears in argv, "+
+				"and what the program reads there has to be what the caller sent")
+	})
+
+	t.Run("Env is added to the inherited environment, not put in its place", func(t *testing.T) {
+		res, err := ExecRunner{}.Run(t.Context(), Cmd{
+			Name: "sh", Args: []string{"-c", `echo "$SSHAKKU_TEST_TOKEN"; echo "$PATH"`},
+			Env: []string{"SSHAKKU_TEST_TOKEN=set"},
+		})
+		require.NoError(t, err, "a command given an extra environment entry must still run")
+		lines := strings.SplitN(strings.TrimSpace(string(res.Stdout)), "\n", 2)
+		require.Len(t, lines, 2, "the program has to have answered about both")
+		assert.Equal(t, "set", lines[0], "the entry the caller added has to reach the program")
+		assert.NotEmpty(t, strings.TrimSpace(lines[1]),
+			"and the environment it was added to has to survive: a wallet handed a session token "+
+				"still needs the PATH that finds the tools it runs")
+	})
+
+	t.Run("a program that cannot be started is an error, not an exit code", func(t *testing.T) {
+		res, err := ExecRunner{}.Run(t.Context(), Cmd{Name: "sshakku-no-such-program"})
+		require.Error(t, err,
+			"a tool that is not installed is not a tool that refused, and a caller deciding whether to "+
+				"fall back to another backend has to be able to tell the two apart")
+		assert.Zero(t, res.Code,
+			"and it must not be given an exit code either, since nothing ever exited")
+	})
+}
+
+// TestTimeoutDefaults guards the floor under every call site: one that chose no
+// budget of its own must still get a finite one. A zero default would restore
+// the unbounded wait everywhere at once, and no other test would notice, since
+// they all pass a budget of their own.
+func TestTimeoutDefaults(t *testing.T) {
+	assert.Positive(t, DefaultCommandTimeout,
+		"a call site that chose no budget must still get a finite one, or the unbounded wait comes back everywhere at once")
+	assert.Positive(t, DefaultInteractiveTimeout, "and so must one that waits on a person")
 }

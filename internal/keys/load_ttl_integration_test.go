@@ -11,6 +11,7 @@ import (
 
 	"github.com/OrbintSoft/sshakku/internal/keyring"
 	"github.com/OrbintSoft/sshakku/internal/keystate"
+	"github.com/OrbintSoft/sshakku/internal/run"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -48,7 +49,7 @@ func TestLoadKeysReloadsAfterRealExpiry(t *testing.T) {
 	require.NoError(t, os.WriteFile(askpassScript, []byte(script), 0o755), "a helper to collect the stashed passphrase")
 
 	const lifetime = 2 * time.Second
-	runner := ExecRunner{}
+	runner := run.ExecRunner{}
 	stateDir := filepath.Join(dir, "keystate")
 	state := keystate.Store{Dir: stateDir}
 

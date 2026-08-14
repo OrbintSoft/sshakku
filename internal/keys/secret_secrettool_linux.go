@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
 // secretToolBin is the libsecret CLI shared by KDE Wallet and GNOME Keyring,
@@ -17,19 +19,19 @@ const secretToolBin = "secret-tool"
 // The passphrase travels on the process's stdin, never in argv, so it cannot leak
 // through `ps` or /proc/<pid>/cmdline.
 type SecretToolBackend struct {
-	Runner Runner
+	Runner run.Runner
 	// User is the "username" attribute, constant for the login session.
 	User string
 	// Timeout bounds each secret-tool call. The wallet may be locked behind an
 	// unlock prompt that nobody can answer, and something is waiting on the
 	// answer — a login shell, or an ssh at a passphrase prompt — so the wait is
 	// finite and the caller falls back to asking on the terminal. Zero selects
-	// DefaultCommandTimeout.
+	// run.DefaultCommandTimeout.
 	Timeout time.Duration
 }
 
 // run bounds every secret-tool call.
-func (b SecretToolBackend) run(ctx context.Context, c Cmd) (Result, error) {
+func (b SecretToolBackend) run(ctx context.Context, c run.Cmd) (run.Result, error) {
 	if c.Timeout <= 0 {
 		c.Timeout = b.Timeout
 	}
@@ -41,7 +43,7 @@ func (b SecretToolBackend) run(ctx context.Context, c Cmd) (Result, error) {
 // the earlier shell version) is trimmed. A non-zero exit means no entry — handled
 // as a miss, not an error, so the loader falls back to prompting.
 func (b SecretToolBackend) Lookup(ctx context.Context, service string) (string, bool, error) {
-	res, err := b.run(ctx, Cmd{
+	res, err := b.run(ctx, run.Cmd{
 		Name: secretToolBin,
 		Args: []string{"lookup", "service", service, "username", b.User},
 	})
@@ -58,7 +60,7 @@ func (b SecretToolBackend) Lookup(ctx context.Context, service string) (string, 
 // <user>`, feeding the passphrase on stdin. Unlike the earlier `echo | …`, no
 // trailing newline is appended, so the secret is stored exactly.
 func (b SecretToolBackend) Store(ctx context.Context, service, label, passphrase string) error {
-	res, err := b.run(ctx, Cmd{
+	res, err := b.run(ctx, run.Cmd{
 		Name:  secretToolBin,
 		Args:  []string{"store", "--label=" + label, "service", service, "username", b.User},
 		Stdin: passphrase,
@@ -80,7 +82,7 @@ func (b SecretToolBackend) Store(ctx context.Context, service, label, passphrase
 // fallback path (it exists only because the D-Bus session itself was
 // unreachable).
 func (b SecretToolBackend) Delete(ctx context.Context, service string) error {
-	res, err := b.run(ctx, Cmd{
+	res, err := b.run(ctx, run.Cmd{
 		Name: secretToolBin,
 		Args: []string{"clear", "service", service, "username", b.User},
 	})

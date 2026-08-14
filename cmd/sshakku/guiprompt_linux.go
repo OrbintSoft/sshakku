@@ -8,6 +8,7 @@ import (
 
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
 // linuxDialogs is the order a graphical session is offered a dialog in. It is a
@@ -19,7 +20,7 @@ import (
 //
 // Nothing here decides anything on its own — see chooseDialog.
 func linuxDialogs(settings config.Settings) []dialog {
-	runner := keys.ExecRunner{Timeout: settings.CommandTimeout}
+	runner := run.ExecRunner{Timeout: settings.CommandTimeout}
 	return []dialog{
 		{config.GUIPrompterPinentry, keys.PinentryPrompter{Timeout: settings.InteractiveTimeout, ProbeTimeout: settings.CommandTimeout}},
 		{config.GUIPrompterKDialog, keys.KDialogPrompter{Runner: runner, Timeout: settings.InteractiveTimeout}},
@@ -46,7 +47,7 @@ func newGraphicalPrompter(ctx context.Context, settings config.Settings, log key
 		WaylandDisplay: os.Getenv("WAYLAND_DISPLAY"),
 		Display:        os.Getenv("DISPLAY"),
 	}
-	if !keys.HasGraphicalSession(ctx, guiEnv, keys.ExecRunner{}) {
+	if !keys.HasGraphicalSession(ctx, guiEnv, run.ExecRunner{}) {
 		return nil
 	}
 	return chooseDialog(ctx, linuxDialogs(settings), settings.GUIPrompter, keys.TTYPrompter{}, log)

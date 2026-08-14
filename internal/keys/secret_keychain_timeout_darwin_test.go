@@ -8,6 +8,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
 // blockingKeychainClient is a keychain that neither answers nor fails: every
@@ -75,7 +77,7 @@ func TestKeychainGivesUpOnAKeychainThatNeverAnswers(t *testing.T) {
 			// ends at all, not how punctually.
 			select {
 			case err := <-done:
-				assert.ErrorIsf(t, err, ErrTimedOut,
+				assert.ErrorIsf(t, err, run.ErrTimedOut,
 					"%s against a keychain that never answered must be reported as not having answered", op.name)
 			case <-time.After(2 * time.Second):
 				require.FailNowf(t, "the wait never ended",

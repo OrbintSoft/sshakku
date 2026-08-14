@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
 // DefaultKeyLifetime caps how long an added key stays in the agent before it
@@ -62,7 +62,7 @@ func GiveupTTL(raw string) (time.Duration, error) {
 
 // CommandTimeout parses the budget for something that is not waiting on a
 // person — reading the wallet, probing the display — expressed as a Go
-// duration, defaulting to keys.DefaultCommandTimeout when raw is empty. Most of
+// duration, defaulting to run.DefaultCommandTimeout when raw is empty. Most of
 // what it bounds is an external command, but whether something is run or called
 // into is not what decides: who is being waited for is.
 //
@@ -71,17 +71,17 @@ func GiveupTTL(raw string) (time.Duration, error) {
 // as long as it likes. They fall back to the default and are returned with an
 // error for the caller to log.
 func CommandTimeout(raw string) (time.Duration, error) {
-	return positiveDuration(raw, keys.DefaultCommandTimeout, "command timeout")
+	return positiveDuration(raw, run.DefaultCommandTimeout, "command timeout")
 }
 
 // InteractiveTimeout parses the budget for something that is waiting on a
 // person — a password dialog, a CLI deferring to a desktop app for approval, an
 // OS keychain that has put up an approval dialog of its own — defaulting to
-// keys.DefaultInteractiveTimeout when raw is empty. It is
-// generous, since the limit is human, but finite for the same reason as
-// CommandTimeout: a dialog nobody answers must not strand the shell.
+// run.DefaultInteractiveTimeout when raw is empty. It is generous, since the
+// limit is human, but finite for the same reason as CommandTimeout: a dialog
+// nobody answers must not strand the shell.
 func InteractiveTimeout(raw string) (time.Duration, error) {
-	return positiveDuration(raw, keys.DefaultInteractiveTimeout, "interactive timeout")
+	return positiveDuration(raw, run.DefaultInteractiveTimeout, "interactive timeout")
 }
 
 // positiveDuration parses raw as a Go duration that must be greater than zero,

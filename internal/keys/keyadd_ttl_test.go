@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/OrbintSoft/sshakku/internal/keyring"
+	"github.com/OrbintSoft/sshakku/internal/run"
 	"github.com/stretchr/testify/require"
 )
 
@@ -77,7 +78,7 @@ func TestAddWithAskpassAppliesKeyLifetime(t *testing.T) {
 	require.NoError(t, err, "loading the key through the real handoff must succeed")
 	require.Zero(t, rc, "and ssh-add must accept the passphrase it collected")
 
-	runner := ExecRunner{}
+	runner := run.ExecRunner{}
 	fp, err := FileFingerprint(t.Context(), runner, keyfile)
 	require.NoError(t, err, "reading the key's fingerprint must succeed")
 

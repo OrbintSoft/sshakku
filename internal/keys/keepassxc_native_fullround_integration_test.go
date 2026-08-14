@@ -14,6 +14,7 @@ import (
 
 	"github.com/OrbintSoft/sshakku/internal/keepassxc"
 	"github.com/OrbintSoft/sshakku/internal/keyring"
+	"github.com/OrbintSoft/sshakku/internal/run"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -260,7 +261,7 @@ func clearAgent(t *testing.T) {
 func waitForAgentToDropKey(t *testing.T, keyfile string) {
 	t.Helper()
 
-	runner := ExecRunner{}
+	runner := run.ExecRunner{}
 	fp, err := FileFingerprint(t.Context(), runner, keyfile)
 	require.NoError(t, err, "reading the key's fingerprint must succeed")
 	deadline := time.Now().Add(nativeKeyLifetime + 15*time.Second)

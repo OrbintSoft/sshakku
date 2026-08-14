@@ -7,6 +7,7 @@ import (
 
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
 // darwinDialogs is what this platform may have to ask in. The interpreter that
@@ -17,7 +18,7 @@ import (
 // Nothing here decides anything on its own — see chooseDialog.
 func darwinDialogs(settings config.Settings) []dialog {
 	return []dialog{{config.GUIPrompterOsascript, keys.OsascriptPrompter{
-		Runner:  keys.ExecRunner{Timeout: settings.InteractiveTimeout},
+		Runner:  run.ExecRunner{Timeout: settings.InteractiveTimeout},
 		Timeout: settings.InteractiveTimeout,
 	}}}
 }
@@ -37,7 +38,7 @@ func newGraphicalPrompter(ctx context.Context, settings config.Settings, log key
 	if settings.GUIPrompter == config.GUIPrompterNone {
 		return nil
 	}
-	if !keys.GraphicalSession(ctx, keys.ExecRunner{Timeout: settings.CommandTimeout}) {
+	if !keys.GraphicalSession(ctx, run.ExecRunner{Timeout: settings.CommandTimeout}) {
 		return nil
 	}
 	return chooseDialog(ctx, darwinDialogs(settings), settings.GUIPrompter, keys.TTYPrompter{}, log)

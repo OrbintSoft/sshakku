@@ -8,6 +8,7 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/keys"
 	"github.com/OrbintSoft/sshakku/internal/paths"
+	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
 // newKeePassXCBackend opens KeePassXC by whichever route settings names.
@@ -85,7 +86,7 @@ func keepassxcRouteUnavailable(route, goos, database string) error {
 // the shorter budget for a command expected to answer on its own.
 func newKeePassXCCLIRoute(ctx context.Context, settings config.Settings, log keys.Logger) keys.SecretBackend {
 	return &keys.KeePassXCCLIBackend{
-		Runner:   keys.ExecRunner{Timeout: settings.CommandTimeout},
+		Runner:   run.ExecRunner{Timeout: settings.CommandTimeout},
 		Prompter: newWalletPasswordPrompter(ctx, settings, log),
 		Database: settings.KeePassXCDatabase,
 		KeyFile:  settings.KeePassXCKeyFile,

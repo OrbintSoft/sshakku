@@ -10,6 +10,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
 // allowRealBitwardenEnv opts this test into driving a real bw CLI through
@@ -23,7 +25,7 @@ import (
 // server, SSHAKKU_TEST_BW_SERVER. It never runs `op signin`-equivalent setup
 // itself beyond that: Unlock is the exact production code path, exercised
 // here for real rather than assumed correct because it round-trips through
-// a fake Runner in secret_bitwarden_test.go. A Bitwarden/Vaultwarden account
+// a fake run.Runner in secret_bitwarden_test.go. A Bitwarden/Vaultwarden account
 // needs a server to talk to, unlike the local `op` app-integration case, so
 // something has to stand one up: the container's own session script on Linux,
 // or test/vaultwarden-server.sh, which puts the server in a container and
@@ -34,7 +36,7 @@ const allowRealBitwardenEnv = "SSHAKKU_TEST_ALLOW_REAL_BITWARDEN"
 // against a real bw CLI, driving Unlock/Lock itself (via a fixed-answer
 // Prompter, never a real interactive one) rather than receiving an
 // already-unlocked session — unlike secret_bitwarden_test.go, which only
-// ever talks to a fake Runner. It creates its own throwaway item, named
+// ever talks to a fake run.Runner. It creates its own throwaway item, named
 // with a timestamp so it can never collide with or touch an existing one,
 // and deletes it in t.Cleanup regardless of outcome.
 func TestBitwardenBackendRealAccount(t *testing.T) {
@@ -51,7 +53,7 @@ func TestBitwardenBackendRealAccount(t *testing.T) {
 	}
 
 	backend := &BitwardenBackend{
-		Runner:   ExecRunner{},
+		Runner:   run.ExecRunner{},
 		Prompter: &fakePrompter{pass: password},
 		Email:    email,
 		Server:   os.Getenv("SSHAKKU_TEST_BW_SERVER"),

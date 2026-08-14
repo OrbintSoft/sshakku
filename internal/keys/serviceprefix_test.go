@@ -5,6 +5,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OrbintSoft/sshakku/internal/run/runtest"
 )
 
 // TestOwnServicesGoesByThePrefixItIsGiven pins the half of the entry name that
@@ -51,7 +53,7 @@ func TestServicePrefixOrDefault(t *testing.T) {
 // this configuration is another program's name as much as "Bank" is.
 func TestBitwardenListGoesByTheBackendsOwnPrefix(t *testing.T) {
 	const mine = "wallet-of-mine"
-	r := newFakeRunner().on(bitwardenBin, stdout(
+	r := runtest.NewRunner().On(bitwardenBin, runtest.Stdout(
 		`[{"name":"Bank"},{"name":"`+mine+`-id_ed25519"},{"name":"`+defaultServicePrefix+`-id_rsa"}]`, 0))
 	b := &BitwardenBackend{Runner: r, Session: "sess-token", held: true, ServicePrefix: mine}
 

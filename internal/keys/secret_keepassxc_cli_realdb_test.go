@@ -10,6 +10,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
 // This exercises the product against a real KeePassXC database, created by the
@@ -42,7 +44,7 @@ func TestKeePassXCCLIRealDatabase(t *testing.T) {
 	createRealDatabase(t, db, dbPassword)
 
 	b := &KeePassXCCLIBackend{
-		Runner:   ExecRunner{Timeout: 30 * time.Second},
+		Runner:   run.ExecRunner{Timeout: 30 * time.Second},
 		Prompter: &countingPrompter{password: dbPassword},
 		Database: db,
 		Timeout:  30 * time.Second,

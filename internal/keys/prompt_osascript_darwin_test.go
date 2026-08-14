@@ -10,18 +10,21 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OrbintSoft/sshakku/internal/run"
+	"github.com/OrbintSoft/sshakku/internal/run/runtest"
 )
 
 func TestOsascriptPrompt(t *testing.T) {
 	t.Run("returns the entered passphrase, newline trimmed", func(t *testing.T) {
-		r := newFakeRunner().on(osascriptBin, stdout("typed-pass\n", 0))
+		r := runtest.NewRunner().On(osascriptBin, runtest.Stdout("typed-pass\n", 0))
 		got, err := OsascriptPrompter{Runner: r}.Prompt(t.Context(), "id_rsa")
 		require.NoError(t, err, "a dialog the user answered must hand the answer back")
 		assert.Equal(t, "typed-pass", got,
 			"and it must be what they typed: the newline the dialog prints is not part of the passphrase")
 
-		require.NotEmpty(t, r.calls, "osascript must actually be run")
-		args := r.calls[0].Args
+		require.NotEmpty(t, r.Calls, "osascript must actually be run")
+		args := r.Calls[0].Args
 		require.Lenf(t, args, 2, "with a script to run and the key name to put in it: %v", args)
 		// The key name is an argument, not part of the script: a name that
 		// closed the string it had been pasted into would otherwise continue
@@ -34,9 +37,9 @@ func TestOsascriptPrompt(t *testing.T) {
 
 	t.Run("the script really is there while the dialog runs", func(t *testing.T) {
 		var body []byte
-		r := newFakeRunner().on(osascriptBin, func(c Cmd) (Result, error) {
+		r := runtest.NewRunner().On(osascriptBin, func(c run.Cmd) (run.Result, error) {
 			body, _ = os.ReadFile(c.Args[0])
-			return Result{Stdout: []byte("x")}, nil
+			return run.Result{Stdout: []byte("x")}, nil
 		})
 		_, err := OsascriptPrompter{Runner: r}.Prompt(t.Context(), "id_rsa")
 		require.NoError(t, err, "putting the dialog on the screen must succeed")
@@ -46,9 +49,9 @@ func TestOsascriptPrompt(t *testing.T) {
 
 	t.Run("the script does not outlive the prompt", func(t *testing.T) {
 		var path string
-		r := newFakeRunner().on(osascriptBin, func(c Cmd) (Result, error) {
+		r := runtest.NewRunner().On(osascriptBin, func(c run.Cmd) (run.Result, error) {
 			path = c.Args[0]
-			return Result{Stdout: []byte("x")}, nil
+			return run.Result{Stdout: []byte("x")}, nil
 		})
 		_, err := OsascriptPrompter{Runner: r}.Prompt(t.Context(), "id_rsa")
 		require.NoError(t, err, "putting the dialog on the screen must succeed")
@@ -57,7 +60,7 @@ func TestOsascriptPrompt(t *testing.T) {
 	})
 
 	t.Run("a dismissed dialog is ErrPromptCanceled", func(t *testing.T) {
-		r := newFakeRunner().on(osascriptBin, stdout("", 1))
+		r := runtest.NewRunner().On(osascriptBin, runtest.Stdout("", 1))
 		_, err := OsascriptPrompter{Runner: r}.Prompt(t.Context(), "id_rsa")
 		assert.ErrorIs(t, err, ErrPromptCanceled,
 			"closing a dialog is an answer, and must be passed on as one rather than as a failure")
@@ -65,7 +68,7 @@ func TestOsascriptPrompt(t *testing.T) {
 
 	t.Run("a failure to start osascript is an error", func(t *testing.T) {
 		wantErr := errors.New("boom")
-		r := newFakeRunner().on(osascriptBin, fails(wantErr))
+		r := runtest.NewRunner().On(osascriptBin, runtest.Fails(wantErr))
 		_, err := OsascriptPrompter{Runner: r}.Prompt(t.Context(), "id_rsa")
 		assert.ErrorIs(t, err, wantErr,
 			"a dialog that could not be started must be reported as that, not as one the user dismissed")
@@ -75,12 +78,12 @@ func TestOsascriptPrompt(t *testing.T) {
 		wantErr := errors.New("read-only file system")
 		defer stubCreateDialogScript(t, func() (*os.File, error) { return nil, wantErr })()
 
-		r := newFakeRunner().on(osascriptBin, stdout("typed-pass\n", 0))
+		r := runtest.NewRunner().On(osascriptBin, runtest.Stdout("typed-pass\n", 0))
 		_, err := OsascriptPrompter{Runner: r}.Prompt(t.Context(), "id_rsa")
 		assert.ErrorIs(t, err, wantErr,
 			"with no script to put on the screen the question cannot be asked, and that must be said rather than "+
 				"answered as though nobody was there")
-		assert.Emptyf(t, r.calls, "and osascript must not be run with nothing to run: %+v", r.calls)
+		assert.Emptyf(t, r.Calls, "and osascript must not be run with nothing to run: %+v", r.Calls)
 	})
 
 	t.Run("a script that cannot be written is an error, and leaves nothing behind", func(t *testing.T) {
@@ -96,10 +99,10 @@ func TestOsascriptPrompt(t *testing.T) {
 			return f, f.Close()
 		})()
 
-		r := newFakeRunner().on(osascriptBin, stdout("typed-pass\n", 0))
+		r := runtest.NewRunner().On(osascriptBin, runtest.Stdout("typed-pass\n", 0))
 		_, err := OsascriptPrompter{Runner: r}.Prompt(t.Context(), "id_rsa")
 		assert.Error(t, err, "a script that could not be written cannot be run, and that must be said")
-		assert.Emptyf(t, r.calls, "osascript must not be run with a script that was never written: %+v", r.calls)
+		assert.Emptyf(t, r.Calls, "osascript must not be run with a script that was never written: %+v", r.Calls)
 		_, statErr := os.Stat(path)
 		assert.ErrorIsf(t, statErr, os.ErrNotExist, "and nothing may be left behind: %s", path)
 	})

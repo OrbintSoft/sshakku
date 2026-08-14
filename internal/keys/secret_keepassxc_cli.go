@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
 // keepassxcCLIBin is KeePassXC's command-line interface. It works on the
@@ -44,7 +46,7 @@ var ErrPasswordNotAccepted = errors.New("keepassxc: keepassxc-cli would not take
 // The password travels on the child's standard input, never in argv, so it
 // cannot be read out of the process table.
 type KeePassXCCLIBackend struct {
-	Runner   Runner
+	Runner   run.Runner
 	Prompter Prompter
 	// Database is the .kdbx file to open.
 	Database string
@@ -95,10 +97,10 @@ func (b *KeePassXCCLIBackend) unlock(ctx context.Context) (string, error) {
 
 // run invokes keepassxc-cli with the database password — and anything else the
 // subcommand will ask for — on standard input, in the order it asks.
-func (b *KeePassXCCLIBackend) run(ctx context.Context, args []string, extraInput ...string) (Result, error) {
+func (b *KeePassXCCLIBackend) run(ctx context.Context, args []string, extraInput ...string) (run.Result, error) {
 	password, err := b.unlock(ctx)
 	if err != nil {
-		return Result{}, err
+		return run.Result{}, err
 	}
 	full := append([]string{args[0], "-q"}, args[1:]...)
 	if b.KeyFile != "" {
@@ -108,14 +110,14 @@ func (b *KeePassXCCLIBackend) run(ctx context.Context, args []string, extraInput
 	for _, extra := range extraInput {
 		input += extra + "\n"
 	}
-	res, err := b.Runner.Run(ctx, Cmd{
+	res, err := b.Runner.Run(ctx, run.Cmd{
 		Name:    keepassxcCLIBin,
 		Args:    full,
 		Stdin:   input,
 		Timeout: b.Timeout,
 	})
 	if err != nil {
-		return Result{}, err
+		return run.Result{}, err
 	}
 	return res, nil
 }
@@ -124,7 +126,7 @@ func (b *KeePassXCCLIBackend) run(ctx context.Context, args []string, extraInput
 // the password on standard input rather than the password being wrong. The two
 // deserve different words: one is a mistyped password, the other is SSHakku
 // relying on an interface that changed under it.
-func refusedPassword(res Result) bool {
+func refusedPassword(res run.Result) bool {
 	text := strings.ToLower(string(res.Stderr))
 	return strings.Contains(text, "failed to open") && strings.Contains(text, "terminal")
 }

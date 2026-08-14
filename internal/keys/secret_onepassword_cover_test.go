@@ -5,12 +5,15 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/OrbintSoft/sshakku/internal/run"
+	"github.com/OrbintSoft/sshakku/internal/run/runtest"
 )
 
 func TestOnePasswordStoreDeleteErrorPropagates(t *testing.T) {
 	boom := errors.New("op exec boom")
-	r := newFakeRunner().on(onePasswordBin, opCall(map[string]func(Cmd) (Result, error){
-		"item get": fails(boom),
+	r := runtest.NewRunner().On(onePasswordBin, opCall(map[string]func(run.Cmd) (run.Result, error){
+		"item get": runtest.Fails(boom),
 	}))
 	b := &OnePasswordBackend{Runner: r, Vault: "sshakku"}
 	assert.ErrorIs(t, b.Store(t.Context(), "svc", "label", "pass"), boom,
@@ -20,8 +23,8 @@ func TestOnePasswordStoreDeleteErrorPropagates(t *testing.T) {
 func TestOnePasswordStoreMarshalError(t *testing.T) {
 	saveJSONMarshal(t)
 	jsonMarshal = func(any) ([]byte, error) { return nil, errors.New("marshal boom") }
-	r := newFakeRunner().on(onePasswordBin, opCall(map[string]func(Cmd) (Result, error){
-		"item get": stdout("", 1), // nothing to delete
+	r := runtest.NewRunner().On(onePasswordBin, opCall(map[string]func(run.Cmd) (run.Result, error){
+		"item get": runtest.Stdout("", 1), // nothing to delete
 	}))
 	b := &OnePasswordBackend{Runner: r, Vault: "sshakku"}
 	assert.Error(t, b.Store(t.Context(), "svc", "label", "pass"),
@@ -30,9 +33,9 @@ func TestOnePasswordStoreMarshalError(t *testing.T) {
 
 func TestOnePasswordStoreCreateRunError(t *testing.T) {
 	boom := errors.New("op exec boom")
-	r := newFakeRunner().on(onePasswordBin, opCall(map[string]func(Cmd) (Result, error){
-		"item get":    stdout("", 1), // nothing to delete
-		"item create": fails(boom),
+	r := runtest.NewRunner().On(onePasswordBin, opCall(map[string]func(run.Cmd) (run.Result, error){
+		"item get":    runtest.Stdout("", 1), // nothing to delete
+		"item create": runtest.Fails(boom),
 	}))
 	b := &OnePasswordBackend{Runner: r, Vault: "sshakku"}
 	assert.ErrorIs(t, b.Store(t.Context(), "svc", "label", "pass"), boom,
@@ -41,9 +44,9 @@ func TestOnePasswordStoreCreateRunError(t *testing.T) {
 
 func TestOnePasswordDeleteItemDeleteRunError(t *testing.T) {
 	boom := errors.New("op exec boom")
-	r := newFakeRunner().on(onePasswordBin, opCall(map[string]func(Cmd) (Result, error){
-		"item get":    stdout(`{"id":"abc"}`, 0), // found
-		"item delete": fails(boom),
+	r := runtest.NewRunner().On(onePasswordBin, opCall(map[string]func(run.Cmd) (run.Result, error){
+		"item get":    runtest.Stdout(`{"id":"abc"}`, 0), // found
+		"item delete": runtest.Fails(boom),
 	}))
 	b := &OnePasswordBackend{Runner: r, Vault: "sshakku"}
 	assert.ErrorIs(t, b.Delete(t.Context(), "svc"), boom,
@@ -53,8 +56,8 @@ func TestOnePasswordDeleteItemDeleteRunError(t *testing.T) {
 func TestOnePasswordListErrorBranches(t *testing.T) {
 	t.Run("item list fails to run", func(t *testing.T) {
 		boom := errors.New("op exec boom")
-		r := newFakeRunner().on(onePasswordBin, opCall(map[string]func(Cmd) (Result, error){
-			"item list": fails(boom),
+		r := runtest.NewRunner().On(onePasswordBin, opCall(map[string]func(run.Cmd) (run.Result, error){
+			"item list": runtest.Fails(boom),
 		}))
 		b := &OnePasswordBackend{Runner: r, Vault: "sshakku"}
 		_, err := b.List(t.Context())
@@ -62,8 +65,8 @@ func TestOnePasswordListErrorBranches(t *testing.T) {
 	})
 
 	t.Run("item list returns unparseable JSON", func(t *testing.T) {
-		r := newFakeRunner().on(onePasswordBin, opCall(map[string]func(Cmd) (Result, error){
-			"item list": stdout("not json", 0),
+		r := runtest.NewRunner().On(onePasswordBin, opCall(map[string]func(run.Cmd) (run.Result, error){
+			"item list": runtest.Stdout("not json", 0),
 		}))
 		b := &OnePasswordBackend{Runner: r, Vault: "sshakku"}
 		_, err := b.List(t.Context())

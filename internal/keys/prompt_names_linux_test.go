@@ -7,6 +7,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OrbintSoft/sshakku/internal/run"
+	"github.com/OrbintSoft/sshakku/internal/run/runtest"
 )
 
 // TestADialogThatFailsIsNamedByItsOwnName verifies the part of F37 that only
@@ -17,9 +20,9 @@ import (
 func TestADialogThatFailsIsNamedByItsOwnName(t *testing.T) {
 	// A dialog whose program is not there at all: the runner answers the way it
 	// does when exec fails, which is what the fallback exists for.
-	wontRun := func(name string) *fakeRunner {
-		return newFakeRunner().on(name, func(Cmd) (Result, error) {
-			return Result{}, errors.New("exec: \"" + name + "\": executable file not found in $PATH")
+	wontRun := func(name string) *runtest.Runner {
+		return runtest.NewRunner().On(name, func(run.Cmd) (run.Result, error) {
+			return run.Result{}, errors.New("exec: \"" + name + "\": executable file not found in $PATH")
 		})
 	}
 	cases := []struct {

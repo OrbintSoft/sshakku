@@ -8,14 +8,17 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OrbintSoft/sshakku/internal/run"
+	"github.com/OrbintSoft/sshakku/internal/run/runtest"
 )
 
-// bwCall dispatches a fakeRunner "bw" handler by its first two arguments
+// bwCall dispatches a runtest.Runner "bw" handler by its first two arguments
 // (e.g. "get item", "get password", "create item"), since BitwardenBackend
-// issues several different bw subcommands and the shared fakeRunner keys
+// issues several different bw subcommands and the shared runtest.Runner keys
 // handlers by binary name alone.
-func bwCall(handlers map[string]func(Cmd) (Result, error)) func(Cmd) (Result, error) {
-	return func(c Cmd) (Result, error) {
+func bwCall(handlers map[string]func(run.Cmd) (run.Result, error)) func(run.Cmd) (run.Result, error) {
+	return func(c run.Cmd) (run.Result, error) {
 		verb := c.Args[0]
 		switch {
 		case verb == "login" && len(c.Args) > 1 && c.Args[1] == "--check":
@@ -27,7 +30,7 @@ func bwCall(handlers map[string]func(Cmd) (Result, error)) func(Cmd) (Result, er
 		}
 		h, ok := handlers[verb]
 		if !ok {
-			return Result{}, errors.New("unexpected bw verb " + verb)
+			return run.Result{}, errors.New("unexpected bw verb " + verb)
 		}
 		return h(c)
 	}
@@ -36,15 +39,15 @@ func bwCall(handlers map[string]func(Cmd) (Result, error)) func(Cmd) (Result, er
 // bwVerbs is the sequence of bw subcommands that were run, which is what
 // several cases below are about: which of login/unlock/lock happened, and in
 // what order.
-func bwVerbs(r *fakeRunner) []string {
+func bwVerbs(r *runtest.Runner) []string {
 	var verbs []string
-	for _, c := range r.calls {
+	for _, c := range r.Calls {
 		verbs = append(verbs, c.Args[0])
 	}
 	return verbs
 }
 
-func hasSessionEnv(c Cmd, session string) bool {
+func hasSessionEnv(c run.Cmd, session string) bool {
 	want := "BW_SESSION=" + session
 	for _, e := range c.Env {
 		if e == want {
@@ -56,14 +59,14 @@ func hasSessionEnv(c Cmd, session string) bool {
 
 func TestBitwardenLookup(t *testing.T) {
 	t.Run("hit reads the password", func(t *testing.T) {
-		r := newFakeRunner().on(bitwardenBin, stdout("hunter2", 0))
+		r := runtest.NewRunner().On(bitwardenBin, runtest.Stdout("hunter2", 0))
 		b := &BitwardenBackend{Runner: r, Session: "sess-token", held: true}
 		pass, found, err := b.Lookup(t.Context(), "sshakku-id_rsa")
 		require.NoError(t, err, "a stored passphrase must come back")
 		assert.True(t, found, "the item is in the vault, so it must be reported found")
 		assert.Equal(t, "hunter2", pass, "and the passphrase read out must be the one that was stored")
-		require.NotEmpty(t, r.calls, "the vault must actually be asked")
-		call := r.calls[0]
+		require.NotEmpty(t, r.Calls, "the vault must actually be asked")
+		call := r.Calls[0]
 		assert.Equal(t, []string{"get", "password", "sshakku-id_rsa"}, call.Args,
 			"the vault must be asked for the password of exactly the entry named")
 		assert.True(t, hasSessionEnv(call, "sess-token"),
@@ -75,7 +78,7 @@ func TestBitwardenLookup(t *testing.T) {
 	})
 
 	t.Run("miss is found=false, no error", func(t *testing.T) {
-		r := newFakeRunner().on(bitwardenBin, stdout("Not found.", 1))
+		r := runtest.NewRunner().On(bitwardenBin, runtest.Stdout("Not found.", 1))
 		b := &BitwardenBackend{Runner: r, Session: "sess-token", held: true}
 		_, found, err := b.Lookup(t.Context(), "sshakku-id_rsa")
 		require.NoError(t, err, "a passphrase that was never stored is not an error")
@@ -84,7 +87,7 @@ func TestBitwardenLookup(t *testing.T) {
 
 	t.Run("a failure to start bw is an error", func(t *testing.T) {
 		wantErr := errors.New("boom")
-		b := &BitwardenBackend{Runner: newFakeRunner().on(bitwardenBin, fails(wantErr)), Session: "sess-token", held: true}
+		b := &BitwardenBackend{Runner: runtest.NewRunner().On(bitwardenBin, runtest.Fails(wantErr)), Session: "sess-token", held: true}
 		_, _, err := b.Lookup(t.Context(), "x")
 		assert.ErrorIs(t, err, wantErr, "a vault tool that would not run must be reported, not read as a miss")
 	})
@@ -94,16 +97,16 @@ func TestBitwardenStore(t *testing.T) {
 	const passphrase = "s3cr3t-pass"
 
 	t.Run("no existing item: creates via base64 stdin", func(t *testing.T) {
-		r := newFakeRunner().on(bitwardenBin, bwCall(map[string]func(Cmd) (Result, error){
-			"get item":    stdout("Not found.", 1),
-			"create item": stdout(`{"id":"new-id"}`, 0),
+		r := runtest.NewRunner().On(bitwardenBin, bwCall(map[string]func(run.Cmd) (run.Result, error){
+			"get item":    runtest.Stdout("Not found.", 1),
+			"create item": runtest.Stdout(`{"id":"new-id"}`, 0),
 		}))
 		b := &BitwardenBackend{Runner: r, Session: "sess-token", held: true}
 		require.NoError(t, b.Store(t.Context(), "sshakku-id_rsa", "SSH Passphrase for id_rsa", passphrase),
 			"saving a passphrase must succeed")
 
-		require.Lenf(t, r.calls, 2, "an entry that is not there is looked up, then created: %+v", r.calls)
-		create := r.calls[1]
+		require.Lenf(t, r.Calls, 2, "an entry that is not there is looked up, then created: %+v", r.Calls)
+		create := r.Calls[1]
 		assert.Equal(t, []string{"create", "item"}, create.Args, "and it must be a creation, not an edit of something else")
 		for _, a := range create.Args {
 			assert.NotContains(t, a, passphrase,
@@ -124,22 +127,22 @@ func TestBitwardenStore(t *testing.T) {
 	})
 
 	t.Run("existing item is edited in place, not deleted", func(t *testing.T) {
-		r := newFakeRunner().on(bitwardenBin, bwCall(map[string]func(Cmd) (Result, error){
-			"get item":  stdout(`{"id":"abc123"}`, 0),
-			"edit item": stdout(`{"id":"abc123"}`, 0),
+		r := runtest.NewRunner().On(bitwardenBin, bwCall(map[string]func(run.Cmd) (run.Result, error){
+			"get item":  runtest.Stdout(`{"id":"abc123"}`, 0),
+			"edit item": runtest.Stdout(`{"id":"abc123"}`, 0),
 		}))
 		b := &BitwardenBackend{Runner: r, Session: "sess-token", held: true}
 		require.NoError(t, b.Store(t.Context(), "sshakku-id_rsa", "label", passphrase), "replacing a passphrase must succeed")
-		require.Lenf(t, r.calls, 2, "an entry that is there is looked up, then edited: %+v", r.calls)
-		assert.Equal(t, []string{"edit", "item", "abc123"}, r.calls[1].Args,
+		require.Lenf(t, r.Calls, 2, "an entry that is there is looked up, then edited: %+v", r.Calls)
+		assert.Equal(t, []string{"edit", "item", "abc123"}, r.Calls[1].Args,
 			"the entry already in the vault must be edited in place; deleting and recreating it loses its history")
 	})
 
 	t.Run("a non-zero exit from create is an error", func(t *testing.T) {
-		r := newFakeRunner().on(bitwardenBin, bwCall(map[string]func(Cmd) (Result, error){
-			"get item": stdout("Not found.", 1),
-			"create item": func(Cmd) (Result, error) {
-				return Result{Stderr: []byte("vault is locked"), Code: 1}, nil
+		r := runtest.NewRunner().On(bitwardenBin, bwCall(map[string]func(run.Cmd) (run.Result, error){
+			"get item": runtest.Stdout("Not found.", 1),
+			"create item": func(run.Cmd) (run.Result, error) {
+				return run.Result{Stderr: []byte("vault is locked"), Code: 1}, nil
 			},
 		}))
 		b := &BitwardenBackend{Runner: r, Session: "sess-token", held: true}
@@ -150,32 +153,32 @@ func TestBitwardenStore(t *testing.T) {
 
 func TestBitwardenDelete(t *testing.T) {
 	t.Run("existing item: looks up id then deletes permanently", func(t *testing.T) {
-		r := newFakeRunner().on(bitwardenBin, bwCall(map[string]func(Cmd) (Result, error){
-			"get item":    stdout(`{"id":"abc123"}`, 0),
-			"delete item": stdout("", 0),
+		r := runtest.NewRunner().On(bitwardenBin, bwCall(map[string]func(run.Cmd) (run.Result, error){
+			"get item":    runtest.Stdout(`{"id":"abc123"}`, 0),
+			"delete item": runtest.Stdout("", 0),
 		}))
 		b := &BitwardenBackend{Runner: r, Session: "sess-token", held: true}
 		require.NoError(t, b.Delete(t.Context(), "sshakku-id_rsa"), "forgetting a passphrase must succeed")
-		require.Lenf(t, r.calls, 2, "an entry that is there is looked up, then deleted: %+v", r.calls)
-		assert.Equal(t, []string{"delete", "item", "abc123", "--permanent"}, r.calls[1].Args,
+		require.Lenf(t, r.Calls, 2, "an entry that is there is looked up, then deleted: %+v", r.Calls)
+		assert.Equal(t, []string{"delete", "item", "abc123", "--permanent"}, r.Calls[1].Args,
 			"a passphrase the user asked to forget must leave the vault, not sit in its trash")
 	})
 
 	t.Run("missing item is success, no delete call made", func(t *testing.T) {
-		r := newFakeRunner().on(bitwardenBin, bwCall(map[string]func(Cmd) (Result, error){
-			"get item": stdout("Not found.", 1),
+		r := runtest.NewRunner().On(bitwardenBin, bwCall(map[string]func(run.Cmd) (run.Result, error){
+			"get item": runtest.Stdout("Not found.", 1),
 		}))
 		b := &BitwardenBackend{Runner: r, Session: "sess-token", held: true}
 		require.NoError(t, b.Delete(t.Context(), "sshakku-id_rsa"),
 			"a passphrase that is already not there is the outcome that was asked for")
-		assert.Lenf(t, r.calls, 1, "and nothing may be deleted when nothing matched: %+v", r.calls)
+		assert.Lenf(t, r.Calls, 1, "and nothing may be deleted when nothing matched: %+v", r.Calls)
 	})
 
 	t.Run("a non-zero exit from delete is an error", func(t *testing.T) {
-		r := newFakeRunner().on(bitwardenBin, bwCall(map[string]func(Cmd) (Result, error){
-			"get item": stdout(`{"id":"abc123"}`, 0),
-			"delete item": func(Cmd) (Result, error) {
-				return Result{Stderr: []byte("permission denied"), Code: 1}, nil
+		r := runtest.NewRunner().On(bitwardenBin, bwCall(map[string]func(run.Cmd) (run.Result, error){
+			"get item": runtest.Stdout(`{"id":"abc123"}`, 0),
+			"delete item": func(run.Cmd) (run.Result, error) {
+				return run.Result{Stderr: []byte("permission denied"), Code: 1}, nil
 			},
 		}))
 		b := &BitwardenBackend{Runner: r, Session: "sess-token", held: true}
@@ -188,7 +191,7 @@ func TestBitwardenDelete(t *testing.T) {
 // `bw list items` answers with the whole vault, and whatever List reports is
 // what `forget --all` goes on to delete.
 func TestBitwardenListLeavesOtherItemsAlone(t *testing.T) {
-	r := newFakeRunner().on(bitwardenBin, stdout(`[{"name":"github.com"},{"name":"`+defaultServicePrefix+`-id_ed25519"},{"name":"Bank"},{"name":"`+defaultServicePrefix+`-id_rsa"},{"name":"Passport scan"}]`, 0))
+	r := runtest.NewRunner().On(bitwardenBin, runtest.Stdout(`[{"name":"github.com"},{"name":"`+defaultServicePrefix+`-id_ed25519"},{"name":"Bank"},{"name":"`+defaultServicePrefix+`-id_rsa"},{"name":"Passport scan"}]`, 0))
 	b := &BitwardenBackend{Runner: r, Session: "sess-token", held: true}
 	got, err := b.List(t.Context())
 	require.NoError(t, err, "listing what SSHakku keeps in the vault must succeed")
@@ -199,18 +202,18 @@ func TestBitwardenListLeavesOtherItemsAlone(t *testing.T) {
 
 func TestBitwardenList(t *testing.T) {
 	t.Run("returns each item's name", func(t *testing.T) {
-		r := newFakeRunner().on(bitwardenBin, stdout(`[{"name":"`+defaultServicePrefix+`-id_rsa"},{"name":"`+defaultServicePrefix+`-id_ed25519"}]`, 0))
+		r := runtest.NewRunner().On(bitwardenBin, runtest.Stdout(`[{"name":"`+defaultServicePrefix+`-id_rsa"},{"name":"`+defaultServicePrefix+`-id_ed25519"}]`, 0))
 		b := &BitwardenBackend{Runner: r, Session: "sess-token", held: true}
 		got, err := b.List(t.Context())
 		require.NoError(t, err, "listing what the vault holds must succeed")
 		assert.Equal(t, []string{defaultServicePrefix + "-id_rsa", defaultServicePrefix + "-id_ed25519"}, got,
 			"every entry must be named, by the key it belongs to")
-		require.NotEmpty(t, r.calls, "the vault must actually be asked")
-		assert.Equal(t, []string{"list", "items"}, r.calls[0].Args, "and asked for its items")
+		require.NotEmpty(t, r.Calls, "the vault must actually be asked")
+		assert.Equal(t, []string{"list", "items"}, r.Calls[0].Args, "and asked for its items")
 	})
 
 	t.Run("empty account returns an empty, non-nil slice", func(t *testing.T) {
-		r := newFakeRunner().on(bitwardenBin, stdout(`[]`, 0))
+		r := runtest.NewRunner().On(bitwardenBin, runtest.Stdout(`[]`, 0))
 		b := &BitwardenBackend{Runner: r, Session: "sess-token", held: true}
 		got, err := b.List(t.Context())
 		require.NoError(t, err, "a vault holding nothing is not an error")
@@ -218,8 +221,8 @@ func TestBitwardenList(t *testing.T) {
 	})
 
 	t.Run("a non-zero exit is an error", func(t *testing.T) {
-		r := newFakeRunner().on(bitwardenBin, func(Cmd) (Result, error) {
-			return Result{Stderr: []byte("vault is locked"), Code: 1}, nil
+		r := runtest.NewRunner().On(bitwardenBin, func(run.Cmd) (run.Result, error) {
+			return run.Result{Stderr: []byte("vault is locked"), Code: 1}, nil
 		})
 		b := &BitwardenBackend{Runner: r, Session: "sess-token", held: true}
 		_, err := b.List(t.Context())
@@ -229,9 +232,9 @@ func TestBitwardenList(t *testing.T) {
 
 func TestBitwardenUnlock(t *testing.T) {
 	t.Run("already logged in: skips login, unlocks with the prompted password", func(t *testing.T) {
-		r := newFakeRunner().on(bitwardenBin, bwCall(map[string]func(Cmd) (Result, error){
-			"login --check":        stdout("", 0), // already logged in
-			"unlock --passwordenv": stdout("fresh-session-key", 0),
+		r := runtest.NewRunner().On(bitwardenBin, bwCall(map[string]func(run.Cmd) (run.Result, error){
+			"login --check":        runtest.Stdout("", 0), // already logged in
+			"unlock --passwordenv": runtest.Stdout("fresh-session-key", 0),
 		}))
 		p := &fakePrompter{pass: "correct horse battery staple"}
 		b := &BitwardenBackend{Runner: r, Prompter: p}
@@ -241,8 +244,8 @@ func TestBitwardenUnlock(t *testing.T) {
 		assert.True(t, b.held, "and the vault must be known to be open")
 		assert.Len(t, p.calls, 1, "the master password is asked for once, not once per call")
 
-		require.NotEmpty(t, r.calls, "bw must actually be run")
-		unlockCall := r.calls[len(r.calls)-1]
+		require.NotEmpty(t, r.Calls, "bw must actually be run")
+		unlockCall := r.Calls[len(r.Calls)-1]
 		for _, a := range unlockCall.Args {
 			assert.NotContains(t, a, "correct horse battery staple",
 				"argv is world-readable on this machine: a master password there is readable by every other user")
@@ -252,10 +255,10 @@ func TestBitwardenUnlock(t *testing.T) {
 	})
 
 	t.Run("not logged in: logs in first, then unlocks", func(t *testing.T) {
-		r := newFakeRunner().on(bitwardenBin, bwCall(map[string]func(Cmd) (Result, error){
-			"login --check":        stdout("", 1), // not logged in
-			"login":                stdout("", 0),
-			"unlock --passwordenv": stdout("fresh-session-key", 0),
+		r := runtest.NewRunner().On(bitwardenBin, bwCall(map[string]func(run.Cmd) (run.Result, error){
+			"login --check":        runtest.Stdout("", 1), // not logged in
+			"login":                runtest.Stdout("", 0),
+			"unlock --passwordenv": runtest.Stdout("fresh-session-key", 0),
 		}))
 		p := &fakePrompter{pass: "hunter2"}
 		b := &BitwardenBackend{Runner: r, Prompter: p, Email: "sshakku-test@example.invalid"}
@@ -264,25 +267,25 @@ func TestBitwardenUnlock(t *testing.T) {
 
 		assert.Equal(t, []string{"login", "login", "unlock"}, bwVerbs(r),
 			"a vault nobody is logged into must be logged into before it can be unlocked")
-		require.Greaterf(t, len(r.calls), 1, "the login call must have been made: %+v", r.calls)
-		require.Greater(t, len(r.calls[1].Args), 1, "the login must name an account")
-		assert.Equal(t, "sshakku-test@example.invalid", r.calls[1].Args[1],
+		require.Greaterf(t, len(r.Calls), 1, "the login call must have been made: %+v", r.Calls)
+		require.Greater(t, len(r.Calls[1].Args), 1, "the login must name an account")
+		assert.Equal(t, "sshakku-test@example.invalid", r.Calls[1].Args[1],
 			"and it must be the account the user configured, not whichever one bw remembers")
 	})
 
 	t.Run("Server set, not yet logged in: configures the server before logging in", func(t *testing.T) {
-		r := newFakeRunner().on(bitwardenBin, bwCall(map[string]func(Cmd) (Result, error){
-			"login --check":        stdout("", 1), // not logged in
-			"config server":        stdout("", 0),
-			"login":                stdout("", 0),
-			"unlock --passwordenv": stdout("fresh-session-key", 0),
+		r := runtest.NewRunner().On(bitwardenBin, bwCall(map[string]func(run.Cmd) (run.Result, error){
+			"login --check":        runtest.Stdout("", 1), // not logged in
+			"config server":        runtest.Stdout("", 0),
+			"login":                runtest.Stdout("", 0),
+			"unlock --passwordenv": runtest.Stdout("fresh-session-key", 0),
 		}))
 		p := &fakePrompter{pass: "hunter2"}
 		b := &BitwardenBackend{Runner: r, Prompter: p, Server: "https://vault.example.invalid"}
 
 		require.NoError(t, b.Unlock(t.Context()), "unlocking a self-hosted vault must succeed")
-		require.Greaterf(t, len(r.calls), 1, "the server must be configured before logging in: %+v", r.calls)
-		assert.Equal(t, []string{"config", "server", "https://vault.example.invalid"}, r.calls[1].Args,
+		require.Greaterf(t, len(r.Calls), 1, "the server must be configured before logging in: %+v", r.Calls)
+		assert.Equal(t, []string{"config", "server", "https://vault.example.invalid"}, r.Calls[1].Args,
 			"a user who named their own server must be logged into that one, not into Bitwarden's")
 	})
 
@@ -290,9 +293,9 @@ func TestBitwardenUnlock(t *testing.T) {
 		// bw refuses to change server config while logged in ("Logout
 		// required before server config update") — a real failure this
 		// fixture would catch if Unlock called config server unconditionally.
-		r := newFakeRunner().on(bitwardenBin, bwCall(map[string]func(Cmd) (Result, error){
-			"login --check":        stdout("", 0), // already logged in
-			"unlock --passwordenv": stdout("fresh-session-key", 0),
+		r := runtest.NewRunner().On(bitwardenBin, bwCall(map[string]func(run.Cmd) (run.Result, error){
+			"login --check":        runtest.Stdout("", 0), // already logged in
+			"unlock --passwordenv": runtest.Stdout("fresh-session-key", 0),
 		}))
 		p := &fakePrompter{pass: "hunter2"}
 		b := &BitwardenBackend{Runner: r, Prompter: p, Server: "https://vault.example.invalid"}
@@ -302,18 +305,18 @@ func TestBitwardenUnlock(t *testing.T) {
 	})
 
 	t.Run("a canceled prompt is returned as-is, no bw call made", func(t *testing.T) {
-		r := newFakeRunner()
+		r := runtest.NewRunner()
 		p := &fakePrompter{err: ErrPromptCanceled}
 		b := &BitwardenBackend{Runner: r, Prompter: p}
 		assert.ErrorIs(t, b.Unlock(t.Context()), ErrPromptCanceled, "a user who dismissed the prompt has answered, and must be obeyed")
-		assert.Emptyf(t, r.calls, "and nothing may be attempted on a vault they declined to open: %+v", r.calls)
+		assert.Emptyf(t, r.Calls, "and nothing may be attempted on a vault they declined to open: %+v", r.Calls)
 	})
 
 	t.Run("a non-zero exit from unlock is an error", func(t *testing.T) {
-		r := newFakeRunner().on(bitwardenBin, bwCall(map[string]func(Cmd) (Result, error){
-			"login --check": stdout("", 0),
-			"unlock --passwordenv": func(Cmd) (Result, error) {
-				return Result{Stderr: []byte("invalid master password"), Code: 1}, nil
+		r := runtest.NewRunner().On(bitwardenBin, bwCall(map[string]func(run.Cmd) (run.Result, error){
+			"login --check": runtest.Stdout("", 0),
+			"unlock --passwordenv": func(run.Cmd) (run.Result, error) {
+				return run.Result{Stderr: []byte("invalid master password"), Code: 1}, nil
 			},
 		}))
 		p := &fakePrompter{pass: "wrong"}
@@ -324,7 +327,7 @@ func TestBitwardenUnlock(t *testing.T) {
 }
 
 func TestBitwardenLock(t *testing.T) {
-	r := newFakeRunner().on(bitwardenBin, stdout("", 0))
+	r := runtest.NewRunner().On(bitwardenBin, runtest.Stdout("", 0))
 	b := &BitwardenBackend{Runner: r, Session: "sess-token", held: true}
 	require.NoError(t, b.Lock(t.Context()), "closing the vault must succeed")
 	assert.Empty(t, b.Session, "a session key kept past the lock would reopen the vault without asking anyone")
@@ -333,11 +336,11 @@ func TestBitwardenLock(t *testing.T) {
 
 func TestBitwardenStandaloneBracket(t *testing.T) {
 	t.Run("Lookup with held=false prompts, unlocks, and locks around the call", func(t *testing.T) {
-		r := newFakeRunner().on(bitwardenBin, bwCall(map[string]func(Cmd) (Result, error){
-			"login --check":        stdout("", 0),
-			"unlock --passwordenv": stdout("fresh-session-key", 0),
-			"get password":         stdout("hunter2", 0),
-			"lock":                 stdout("", 0),
+		r := runtest.NewRunner().On(bitwardenBin, bwCall(map[string]func(run.Cmd) (run.Result, error){
+			"login --check":        runtest.Stdout("", 0),
+			"unlock --passwordenv": runtest.Stdout("fresh-session-key", 0),
+			"get password":         runtest.Stdout("hunter2", 0),
+			"lock":                 runtest.Stdout("", 0),
 		}))
 		p := &fakePrompter{pass: "hunter2"}
 		b := &BitwardenBackend{Runner: r, Prompter: p}
@@ -355,10 +358,10 @@ func TestBitwardenStandaloneBracket(t *testing.T) {
 	})
 
 	t.Run("a failed Unlock short-circuits Lookup with no get/lock call", func(t *testing.T) {
-		r := newFakeRunner().on(bitwardenBin, bwCall(map[string]func(Cmd) (Result, error){
-			"login --check": stdout("", 0),
-			"unlock --passwordenv": func(Cmd) (Result, error) {
-				return Result{Code: 1}, nil
+		r := runtest.NewRunner().On(bitwardenBin, bwCall(map[string]func(run.Cmd) (run.Result, error){
+			"login --check": runtest.Stdout("", 0),
+			"unlock --passwordenv": func(run.Cmd) (run.Result, error) {
+				return run.Result{Code: 1}, nil
 			},
 		}))
 		p := &fakePrompter{pass: "wrong"}
