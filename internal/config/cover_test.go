@@ -110,12 +110,15 @@ func TestEverySettingRendersAValueOnAMachineWithNoConfiguration(t *testing.T) {
 // for the directory they live in (F34). It is a path SSHakku resolves itself:
 // nothing expands a tilde in a file the way a shell does on a command line.
 func TestKeyDirWrittenAsHome(t *testing.T) {
-	const home = "/home/someone"
+	home := filepath.FromSlash("/home/someone")
+	absolute := filepath.Join(absRoot, "absolute", "keys")
 	for written, want := range map[string]string{
-		"~":              home,
-		"~/keys":         home + "/keys",
-		"keys":           home + "/keys",
-		"/absolute/keys": "/absolute/keys",
+		"~":      home,
+		"~/keys": filepath.Join(home, "keys"),
+		"keys":   filepath.Join(home, "keys"),
+		// What makes a path absolute is the system's answer, not a leading
+		// separator — see absRoot.
+		absolute: absolute,
 	} {
 		assert.Equalf(t, want, Settings{KeyDir: written}.KeyEnumerator(home).Dir, "key_dir %q", written)
 	}

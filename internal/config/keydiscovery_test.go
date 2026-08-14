@@ -114,9 +114,12 @@ func TestKeyEnumeratorFromSettings(t *testing.T) {
 		}
 	})
 
+	// What makes a path absolute is the system's answer, not a leading
+	// separator — see absRoot.
 	t.Run("an absolute directory is taken as it is", func(t *testing.T) {
-		e := Settings{KeyDir: "/srv/keys"}.KeyEnumerator(home)
-		assert.Equal(t, "/srv/keys", e.Dir, "an absolute path must be unchanged")
+		absolute := filepath.Join(absRoot, "srv", "keys")
+		e := Settings{KeyDir: absolute}.KeyEnumerator(home)
+		assert.Equal(t, absolute, e.Dir, "an absolute path must be unchanged")
 	})
 
 	// A directory nobody asked for can be absent; one the user named cannot,
