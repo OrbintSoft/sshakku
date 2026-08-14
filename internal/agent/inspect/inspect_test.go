@@ -1,34 +1,16 @@
-package agent
+package inspect
 
 import (
 	"encoding/binary"
 	"os"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-)
 
-// fakeProc writes a /proc/<pid> entry with the given argv and (optional) status
-// Uid line into root. A negative uid omits the status file, simulating a process
-// whose owner we cannot read.
-func fakeProc(t *testing.T, root string, pid int, argv []string, uid int) {
-	t.Helper()
-	dir := filepath.Join(root, strconv.Itoa(pid))
-	require.NoError(t, os.MkdirAll(dir, 0o755))
-	cmdline := strings.Join(argv, "\x00")
-	if len(argv) > 0 {
-		cmdline += "\x00" // the kernel NUL-terminates the final arg too
-	}
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "cmdline"), []byte(cmdline), 0o644))
-	if uid >= 0 {
-		status := "Name:\tssh-agent\nUid:\t" + strconv.Itoa(uid) + "\t" + strconv.Itoa(uid) + "\t" + strconv.Itoa(uid) + "\t" + strconv.Itoa(uid) + "\n"
-		require.NoError(t, os.WriteFile(filepath.Join(dir, "status"), []byte(status), 0o644))
-	}
-}
+	"github.com/OrbintSoft/sshakku/internal/agent/inspect/inspecttest"
+)
 
 func findPID(procs []AgentProc, pid int) (AgentProc, bool) {
 	for _, p := range procs {
@@ -41,13 +23,13 @@ func findPID(procs []AgentProc, pid int) (AgentProc, bool) {
 
 func TestInspectorAgents(t *testing.T) {
 	root := t.TempDir()
-	fakeProc(t, root, 100, []string{"ssh-agent", "-a", "/run/user/1000/sshakku/tok/agent.sock"}, 1000)
-	fakeProc(t, root, 200, []string{"/usr/bin/ssh-agent", "-a", "/home/u/.ssh/agent/ssh-agent.sock"}, 1000)
-	fakeProc(t, root, 300, []string{"ssh-agent", "-D"}, 1001)                 // foreign, no -a, other user
-	fakeProc(t, root, 400, []string{"ssh-agent", "-a/tmp/joined.sock"}, 1000) // joined -a form
-	fakeProc(t, root, 500, []string{"/bin/bash", "-l"}, 1000)                 // not an agent
-	fakeProc(t, root, 600, nil, 1000)                                         // kernel thread, empty cmdline
-	fakeProc(t, root, 700, []string{"ssh-agent", "-a", "/tmp/noid.sock"}, -1) // owner unknown
+	inspecttest.FakeProc(t, root, 100, []string{"ssh-agent", "-a", "/run/user/1000/sshakku/tok/agent.sock"}, 1000)
+	inspecttest.FakeProc(t, root, 200, []string{"/usr/bin/ssh-agent", "-a", "/home/u/.ssh/agent/ssh-agent.sock"}, 1000)
+	inspecttest.FakeProc(t, root, 300, []string{"ssh-agent", "-D"}, 1001)                 // foreign, no -a, other user
+	inspecttest.FakeProc(t, root, 400, []string{"ssh-agent", "-a/tmp/joined.sock"}, 1000) // joined -a form
+	inspecttest.FakeProc(t, root, 500, []string{"/bin/bash", "-l"}, 1000)                 // not an agent
+	inspecttest.FakeProc(t, root, 600, nil, 1000)                                         // kernel thread, empty cmdline
+	inspecttest.FakeProc(t, root, 700, []string{"ssh-agent", "-a", "/tmp/noid.sock"}, -1) // owner unknown
 
 	// A non-pid entry must be ignored.
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "net"), 0o755))

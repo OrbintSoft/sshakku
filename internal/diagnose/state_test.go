@@ -4,18 +4,19 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/OrbintSoft/sshakku/internal/agent"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/OrbintSoft/sshakku/internal/agent/inspect"
 )
 
 func TestClassifyState(t *testing.T) {
 	ours := func(reachable bool) AgentView {
-		return AgentView{Kind: agent.KindOurs, Socket: fixed, Reachable: reachable}
+		return AgentView{Kind: inspect.KindOurs, Socket: fixed, Reachable: reachable}
 	}
 	foreign := func(reachable bool) AgentView {
-		return AgentView{Kind: agent.KindForeign, Socket: "/tmp/f.sock", Reachable: reachable}
+		return AgentView{Kind: inspect.KindForeign, Socket: "/tmp/f.sock", Reachable: reachable}
 	}
-	legacyAgent := AgentView{Kind: agent.KindLegacy, Socket: legacy + "/ssh-agent.sock", Reachable: true}
+	legacyAgent := AgentView{Kind: inspect.KindLegacy, Socket: legacy + "/ssh-agent.sock", Reachable: true}
 
 	cases := []struct {
 		name string
@@ -34,7 +35,7 @@ func TestClassifyState(t *testing.T) {
 			// left nothing to clear up, and calling it a remnant would send the
 			// user to open a login shell to reap something that is not there.
 			"a dead agent that left no socket is not a remnant to reap",
-			Report{Agents: []AgentView{{Kind: agent.KindOurs, Socket: "", Reachable: false}}},
+			Report{Agents: []AgentView{{Kind: inspect.KindOurs, Socket: "", Reachable: false}}},
 			StateClean,
 		},
 		{"ours zombie, recorded pid only", Report{RecordedPID: 123}, StateOursZombie},
@@ -45,17 +46,17 @@ func TestClassifyState(t *testing.T) {
 			// and a report that quietly leaves agents out is worse than one
 			// that names an agent it is unsure about.
 			"an agent whose owner could not be determined still counts as this account's",
-			Report{OurUID: 1000, Agents: []AgentView{{Kind: agent.KindOurs, UID: -1, Socket: fixed, Reachable: true}}},
+			Report{OurUID: 1000, Agents: []AgentView{{Kind: inspect.KindOurs, UID: -1, Socket: fixed, Reachable: true}}},
 			StateOursHealthy,
 		},
 		{
 			"a different user's healthy agent doesn't make it foreign-serving",
-			Report{OurUID: 0, Agents: []AgentView{{Kind: agent.KindForeign, UID: 1000, Socket: "/tmp/f.sock", Reachable: true}}},
+			Report{OurUID: 0, Agents: []AgentView{{Kind: inspect.KindForeign, UID: 1000, Socket: "/tmp/f.sock", Reachable: true}}},
 			StateClean,
 		},
 		{
 			"a different user's agent doesn't mask our own healthy one either",
-			Report{OurUID: 0, Agents: []AgentView{ours(true), {Kind: agent.KindForeign, UID: 1000, Socket: "/tmp/f.sock", Reachable: true}}},
+			Report{OurUID: 0, Agents: []AgentView{ours(true), {Kind: inspect.KindForeign, UID: 1000, Socket: "/tmp/f.sock", Reachable: true}}},
 			StateOursHealthy,
 		},
 	}

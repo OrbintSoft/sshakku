@@ -15,6 +15,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sys/unix"
+
+	"github.com/OrbintSoft/sshakku/internal/agent/inspect"
 )
 
 // lockRealAgentTests serialises every real-ssh-agent-spawning test across
@@ -54,7 +56,7 @@ func requireIsolatedAgentEnvironment(t *testing.T) {
 		t.Skip("ssh-agent not on PATH")
 	}
 	lockRealAgentTests(t)
-	procs, err := (Inspector{}).Agents()
+	procs, err := (inspect.Inspector{}).Agents()
 	if err != nil {
 		t.Skipf("cannot enumerate /proc: %v", err)
 	}
@@ -71,7 +73,7 @@ func requireIsolatedAgentEnvironment(t *testing.T) {
 func newRealManager() Manager {
 	return Manager{
 		Prober:    SocketProber{},
-		Inspector: Inspector{},
+		Inspector: inspect.Inspector{},
 		Runner:    ExecRunner{},
 		Signaler:  SysSignaler{},
 		Locker:    FlockLocker{Wait: 2 * time.Second},

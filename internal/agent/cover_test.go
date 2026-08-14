@@ -10,6 +10,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OrbintSoft/sshakku/internal/agent/inspect"
+
+	"github.com/OrbintSoft/sshakku/internal/agent/inspect/inspecttest"
 )
 
 // errReadWriter is an in-process io.ReadWriter that fails Write with writeErr (when
@@ -74,44 +78,10 @@ func TestIdentitiesAnsweredEdges(t *testing.T) {
 	})
 }
 
-// TestReadStatusUIDMalformed covers readStatusUID's fallbacks for a status file
-// whose Uid line is missing, has too few fields, or is non-numeric — shapes the
-// real /proc never produces, so they are only reachable through a crafted file.
-func TestReadStatusUIDMalformed(t *testing.T) {
-	write := func(t *testing.T, body string) string {
-		t.Helper()
-		p := filepath.Join(t.TempDir(), "status")
-		require.NoError(t, os.WriteFile(p, []byte(body), 0o600))
-		return p
-	}
-
-	t.Run("Uid line with too few fields", func(t *testing.T) {
-		assert.Equal(t, -1, readStatusUID(write(t, "Name:\tx\nUid:\n")), "a short Uid line leaves the owner unknown")
-	})
-	t.Run("non-numeric uid", func(t *testing.T) {
-		assert.Equal(t, -1, readStatusUID(write(t, "Uid:\tnobody\tnobody\n")), "a non-numeric uid leaves the owner unknown")
-	})
-	t.Run("no Uid line at all", func(t *testing.T) {
-		assert.Equal(t, -1, readStatusUID(write(t, "Name:\tx\nState:\tS\n")), "no Uid line leaves the owner unknown")
-	})
-}
-
 // TestSituationStringUnknown covers Situation.String's default arm for a value
 // outside the defined set.
 func TestSituationStringUnknown(t *testing.T) {
 	assert.Equal(t, "unknown", Situation(99).String(), "a situation outside the defined set")
-}
-
-// TestReadProcfsTreeUnreadableCmdline covers readCmdline's read-failure path: a pid
-// directory with no cmdline file is skipped rather than reported as an error.
-func TestReadProcfsTreeUnreadableCmdline(t *testing.T) {
-	root := t.TempDir()
-	// A pid directory that exists but has no cmdline file (the process vanished
-	// mid-scan). ReadFile fails and the entry is skipped.
-	require.NoError(t, os.Mkdir(filepath.Join(root, "999"), 0o755))
-	procs, err := readProcfsTree(root)
-	require.NoError(t, err, "readProcfsTree")
-	assert.Empty(t, procs, "the cmdline-less entry must be skipped")
 }
 
 // TestEnsureAgentReapError covers EnsureAgent's error return when the reap pass
@@ -121,7 +91,7 @@ func TestEnsureAgentReapError(t *testing.T) {
 	fixed := filepath.Join(dir, "agent.sock")
 	m := Manager{
 		Prober:    mapProber{}, // fixed silent → past the fast path
-		Inspector: Inspector{ProcRoot: filepath.Join(dir, "nope")},
+		Inspector: inspect.Inspector{ProcRoot: filepath.Join(dir, "nope")},
 		Runner:    &recordRunner{},
 		Signaler:  &recordSignaler{},
 	}
@@ -132,7 +102,7 @@ func TestEnsureAgentReapError(t *testing.T) {
 // TestManagerReapInspectError covers Reap's error return when the process list
 // cannot be read (a missing procfs root).
 func TestManagerReapInspectError(t *testing.T) {
-	m := Manager{Inspector: Inspector{ProcRoot: filepath.Join(t.TempDir(), "nope")}}
+	m := Manager{Inspector: inspect.Inspector{ProcRoot: filepath.Join(t.TempDir(), "nope")}}
 	_, err := m.Reap(t.Context(), 1000)
 	assert.Error(t, err, "a process list that cannot be read must be reported")
 }
@@ -183,8 +153,8 @@ func TestEnsureAgentClearsStaleFixedSocket(t *testing.T) {
 	runner := &recordRunner{pid: 7000}
 	log := &fakeLogger{}
 	m := Manager{
-		Prober:    mapProber{},                      // fixed is silent
-		Inspector: Inspector{ProcRoot: shortDir(t)}, // no processes at all
+		Prober:    mapProber{},                              // fixed is silent
+		Inspector: inspect.Inspector{ProcRoot: shortDir(t)}, // no processes at all
 		Runner:    runner,
 		Signaler:  &recordSignaler{},
 	}
@@ -202,7 +172,7 @@ func TestEnsureAgentStartError(t *testing.T) {
 	fixed := filepath.Join(dir, "agent.sock")
 	m := Manager{
 		Prober:    mapProber{},
-		Inspector: Inspector{ProcRoot: shortDir(t)},
+		Inspector: inspect.Inspector{ProcRoot: shortDir(t)},
 		Runner:    &recordRunner{err: errors.New("no ssh-agent")},
 		Signaler:  &recordSignaler{},
 	}
@@ -220,13 +190,13 @@ func TestEnsureAgentReplacesStaleFixedOnAdopt(t *testing.T) {
 	proc := shortDir(t)
 	foreignSock := filepath.Join(dir, "foreign.sock")
 
-	makeSocketFile(t, fixed)                                               // orphan socket at the fixed path
-	fakeProc(t, proc, 300, []string{"ssh-agent", "-a", foreignSock}, 1000) // healthy foreign, unrelated socket
+	makeSocketFile(t, fixed)                                                           // orphan socket at the fixed path
+	inspecttest.FakeProc(t, proc, 300, []string{"ssh-agent", "-a", foreignSock}, 1000) // healthy foreign, unrelated socket
 
 	log := &fakeLogger{}
 	m := Manager{
 		Prober:    mapProber{foreignSock: true}, // fixed silent, foreign healthy
-		Inspector: Inspector{ProcRoot: proc},
+		Inspector: inspect.Inspector{ProcRoot: proc},
 		Runner:    &recordRunner{},
 		Signaler:  &recordSignaler{},
 	}
@@ -246,11 +216,11 @@ func TestEnsureAgentAdoptSymlinkError(t *testing.T) {
 	fixed := filepath.Join(dir, "no-such-dir", "agent.sock") // parent missing → symlink fails
 	proc := shortDir(t)
 	foreignSock := filepath.Join(dir, "foreign.sock")
-	fakeProc(t, proc, 300, []string{"ssh-agent", "-a", foreignSock}, 1000)
+	inspecttest.FakeProc(t, proc, 300, []string{"ssh-agent", "-a", foreignSock}, 1000)
 
 	m := Manager{
 		Prober:    mapProber{foreignSock: true},
-		Inspector: Inspector{ProcRoot: proc},
+		Inspector: inspect.Inspector{ProcRoot: proc},
 		Runner:    &recordRunner{},
 		Signaler:  &recordSignaler{},
 	}

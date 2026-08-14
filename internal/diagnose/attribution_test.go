@@ -7,8 +7,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/OrbintSoft/sshakku/internal/agent"
 	"github.com/OrbintSoft/sshakku/internal/diagnose/launcher"
+
+	"github.com/OrbintSoft/sshakku/internal/agent/inspect"
 )
 
 // procParent, fakeAncestry and fakeCgroup stand in for what a report reads
@@ -53,7 +54,7 @@ var (
 // wantSSHLauncher rather than one platform's wording.
 func TestGatherForeignAttribution(t *testing.T) {
 	const foreign = "/tmp/foreign.sock"
-	src := fakeSource{procs: []agent.AgentProc{
+	src := fakeSource{procs: []inspect.AgentProc{
 		{PID: 200, UID: 1000, Socket: foreign},
 	}}
 	prober := fakeProber{up: map[string]bool{foreign: true}}
@@ -79,7 +80,7 @@ func TestGatherForeignAttribution(t *testing.T) {
 // asserted beside each platform's own labels.
 func TestGatherRecordsWhatTheCgroupSourceReports(t *testing.T) {
 	const foreign = "/tmp/foreign.sock"
-	src := fakeSource{procs: []agent.AgentProc{{PID: 200, UID: 1000, Socket: foreign}}}
+	src := fakeSource{procs: []inspect.AgentProc{{PID: 200, UID: 1000, Socket: foreign}}}
 	prober := fakeProber{up: map[string]bool{foreign: true}}
 	anc := fakeAncestry{200: {ppid: 1, name: "ssh-agent"}, 1: {ppid: 0, name: "init"}}
 	cg := fakeCgroup{200: "app-gpg-agent.service"}

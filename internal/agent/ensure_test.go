@@ -9,6 +9,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OrbintSoft/sshakku/internal/agent/inspect"
+
+	"github.com/OrbintSoft/sshakku/internal/agent/inspect/inspecttest"
 )
 
 // fakeLogger records the level-tagged lines EnsureAgent emits.
@@ -70,7 +74,7 @@ func TestEnsureAgentClean(t *testing.T) {
 
 	m := Manager{
 		Prober:    mapProber{}, // nothing reachable
-		Inspector: Inspector{ProcRoot: shortDir(t)},
+		Inspector: inspect.Inspector{ProcRoot: shortDir(t)},
 		Runner:    runner,
 		Signaler:  &recordSignaler{},
 	}
@@ -92,12 +96,12 @@ func TestEnsureAgentZombie(t *testing.T) {
 	state := filepath.Join(dir, "agent.state")
 	proc := shortDir(t)
 
-	makeSocketFile(t, fixed)                                         // a real stale socket at our path
-	fakeProc(t, proc, 200, []string{"ssh-agent", "-a", fixed}, 1000) // dead agent of ours
+	makeSocketFile(t, fixed)                                                     // a real stale socket at our path
+	inspecttest.FakeProc(t, proc, 200, []string{"ssh-agent", "-a", fixed}, 1000) // dead agent of ours
 
 	runner := &recordRunner{pid: 7000}
 	sig := &recordSignaler{}
-	m := Manager{Prober: mapProber{}, Inspector: Inspector{ProcRoot: proc}, Runner: runner, Signaler: sig}
+	m := Manager{Prober: mapProber{}, Inspector: inspect.Inspector{ProcRoot: proc}, Runner: runner, Signaler: sig}
 	log := &fakeLogger{}
 
 	res, err := m.EnsureAgent(t.Context(), EnsureConfig{FixedSock: fixed, StatePath: state, OurUID: 1000}, log)
@@ -114,12 +118,12 @@ func TestEnsureAgentForeign(t *testing.T) {
 	proc := shortDir(t)
 	foreignSock := filepath.Join(dir, "foreign.sock")
 
-	fakeProc(t, proc, 300, []string{"ssh-agent", "-a", foreignSock}, 1000)
+	inspecttest.FakeProc(t, proc, 300, []string{"ssh-agent", "-a", foreignSock}, 1000)
 
 	runner := &recordRunner{pid: 1}
 	m := Manager{
 		Prober:    mapProber{foreignSock: true}, // fixed silent, foreign healthy
-		Inspector: Inspector{ProcRoot: proc},
+		Inspector: inspect.Inspector{ProcRoot: proc},
 		Runner:    runner,
 		Signaler:  &recordSignaler{},
 	}
@@ -148,12 +152,12 @@ func TestEnsureAgentDisasterMultiple(t *testing.T) {
 	f1 := filepath.Join(dir, "f1.sock")
 	f2 := filepath.Join(dir, "f2.sock")
 
-	fakeProc(t, proc, 400, []string{"ssh-agent", "-a", f2}, 1000)
-	fakeProc(t, proc, 300, []string{"ssh-agent", "-a", f1}, 1000)
+	inspecttest.FakeProc(t, proc, 400, []string{"ssh-agent", "-a", f2}, 1000)
+	inspecttest.FakeProc(t, proc, 300, []string{"ssh-agent", "-a", f1}, 1000)
 
 	m := Manager{
 		Prober:    mapProber{f1: true, f2: true},
-		Inspector: Inspector{ProcRoot: proc},
+		Inspector: inspect.Inspector{ProcRoot: proc},
 		Runner:    &recordRunner{},
 		Signaler:  &recordSignaler{},
 	}
@@ -174,14 +178,14 @@ func TestEnsureAgentDisasterReapAndAdopt(t *testing.T) {
 	proc := shortDir(t)
 	foreignSock := filepath.Join(dir, "foreign.sock")
 
-	makeSocketFile(t, fixed)                                               // stale socket of ours
-	fakeProc(t, proc, 200, []string{"ssh-agent", "-a", fixed}, 1000)       // dead ours
-	fakeProc(t, proc, 300, []string{"ssh-agent", "-a", foreignSock}, 1000) // healthy foreign
+	makeSocketFile(t, fixed)                                                           // stale socket of ours
+	inspecttest.FakeProc(t, proc, 200, []string{"ssh-agent", "-a", fixed}, 1000)       // dead ours
+	inspecttest.FakeProc(t, proc, 300, []string{"ssh-agent", "-a", foreignSock}, 1000) // healthy foreign
 
 	sig := &recordSignaler{}
 	m := Manager{
 		Prober:    mapProber{foreignSock: true},
-		Inspector: Inspector{ProcRoot: proc},
+		Inspector: inspect.Inspector{ProcRoot: proc},
 		Runner:    &recordRunner{},
 		Signaler:  sig,
 	}
@@ -241,7 +245,7 @@ func TestEnsureAgentLocksMutatePath(t *testing.T) {
 
 	m := Manager{
 		Prober:    mapProber{}, // silent
-		Inspector: Inspector{ProcRoot: shortDir(t)},
+		Inspector: inspect.Inspector{ProcRoot: shortDir(t)},
 		Runner:    runner,
 		Signaler:  &recordSignaler{},
 		Locker:    lk,
@@ -264,7 +268,7 @@ func TestEnsureAgentDoubleCheckUnderLock(t *testing.T) {
 	// A concurrent login starts ours while we hold the lock: the under-lock
 	// re-check must then find it healthy and neither reap nor start.
 	lk := &fakeLocker{onLock: func() { prober[fixed] = true }}
-	m := Manager{Prober: prober, Inspector: Inspector{ProcRoot: shortDir(t)}, Runner: runner, Signaler: sig, Locker: lk}
+	m := Manager{Prober: prober, Inspector: inspect.Inspector{ProcRoot: shortDir(t)}, Runner: runner, Signaler: sig, Locker: lk}
 
 	res, err := m.EnsureAgent(t.Context(), EnsureConfig{FixedSock: fixed, StatePath: filepath.Join(dir, "st"), LockPath: filepath.Join(dir, "lock"), OurUID: 1000}, nil)
 	require.NoError(t, err)
@@ -281,7 +285,7 @@ func TestEnsureAgentLockError(t *testing.T) {
 	runner := &recordRunner{pid: 1}
 	lk := &fakeLocker{err: errors.New("cannot open lock")}
 
-	m := Manager{Prober: mapProber{}, Inspector: Inspector{ProcRoot: shortDir(t)}, Runner: runner, Signaler: &recordSignaler{}, Locker: lk}
+	m := Manager{Prober: mapProber{}, Inspector: inspect.Inspector{ProcRoot: shortDir(t)}, Runner: runner, Signaler: &recordSignaler{}, Locker: lk}
 	_, err := m.EnsureAgent(t.Context(), EnsureConfig{FixedSock: fixed, LockPath: filepath.Join(dir, "lock"), OurUID: 1000}, nil)
 	assert.Error(t, err, "a lock that cannot be acquired must be reported")
 	assert.Empty(t, runner.started, "nothing must be started after a lock failure")

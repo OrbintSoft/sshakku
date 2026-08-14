@@ -1,6 +1,6 @@
 //go:build linux
 
-package agent
+package inspect
 
 // platformAgents enumerates ssh-agent processes from the real Linux procfs
 // tree at /proc.

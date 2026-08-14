@@ -7,6 +7,8 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/agent"
 	"github.com/OrbintSoft/sshakku/internal/diagnose/hostcheck"
 	"github.com/OrbintSoft/sshakku/internal/diagnose/launcher"
+
+	"github.com/OrbintSoft/sshakku/internal/agent/inspect"
 )
 
 func Gather(ctx context.Context, in Inputs, src AgentSource, prober agent.Prober, anc launcher.AncestrySource, cg launcher.CgroupSource, keys *KeySource, host hostcheck.Source) Report {
@@ -33,7 +35,7 @@ func Gather(ctx context.Context, in Inputs, src AgentSource, prober agent.Prober
 		av := AgentView{
 			PID:       p.PID,
 			UID:       p.UID,
-			Kind:      agent.Classify(p, in.FixedSock, in.LegacyDir),
+			Kind:      inspect.Classify(p, in.FixedSock, in.LegacyDir),
 			Socket:    p.Socket,
 			Reachable: p.Socket != "" && prober.Reachable(ctx, p.Socket),
 			Ancestry:  launcher.Ancestry(ctx, p.PID, anc),

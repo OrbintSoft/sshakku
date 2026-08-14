@@ -9,6 +9,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OrbintSoft/sshakku/internal/agent/inspect"
+
+	"github.com/OrbintSoft/sshakku/internal/agent/inspect/inspecttest"
 )
 
 // mapProber reports reachability from a fixed map; absent paths are unreachable.
@@ -71,14 +75,14 @@ func TestManagerReap(t *testing.T) {
 	makeSocketFile(t, deadOurs)
 	makeSocketFile(t, deadOther)
 
-	fakeProc(t, root, 100, []string{"ssh-agent", "-a", "/healthy.sock"}, ourUID) // healthy → spare
-	fakeProc(t, root, 200, []string{"ssh-agent", "-a", deadOurs}, ourUID)        // dead + ours → reap
-	fakeProc(t, root, 300, []string{"ssh-agent", "-a", deadOther}, 1001)         // dead, other user → spare
-	fakeProc(t, root, 400, []string{"ssh-agent", "-D"}, ourUID)                  // no socket → spare
+	inspecttest.FakeProc(t, root, 100, []string{"ssh-agent", "-a", "/healthy.sock"}, ourUID) // healthy → spare
+	inspecttest.FakeProc(t, root, 200, []string{"ssh-agent", "-a", deadOurs}, ourUID)        // dead + ours → reap
+	inspecttest.FakeProc(t, root, 300, []string{"ssh-agent", "-a", deadOther}, 1001)         // dead, other user → spare
+	inspecttest.FakeProc(t, root, 400, []string{"ssh-agent", "-D"}, ourUID)                  // no socket → spare
 
 	prober := mapProber{"/healthy.sock": true} // everything else is unreachable
 	sig := &recordSignaler{}
-	m := Manager{Prober: prober, Inspector: Inspector{ProcRoot: root}, Signaler: sig}
+	m := Manager{Prober: prober, Inspector: inspect.Inspector{ProcRoot: root}, Signaler: sig}
 
 	res, err := m.Reap(t.Context(), ourUID)
 	require.NoError(t, err, "Reap")

@@ -6,6 +6,8 @@ import (
 	"os"
 	"sort"
 	"strings"
+
+	"github.com/OrbintSoft/sshakku/internal/agent/inspect"
 )
 
 // Situation names the agent landscape EnsureAgent found and resolved, following
@@ -61,9 +63,9 @@ type EnsureConfig struct {
 // EnsureResult reports what EnsureAgent observed and did.
 type EnsureResult struct {
 	Situation Situation
-	LiveSock  string     // the healthy socket to expose to the shell
-	Started   int        // pid of the agent we started, or 0
-	Adopted   *AgentProc // the agent we adopted, or nil
+	LiveSock  string             // the healthy socket to expose to the shell
+	Started   int                // pid of the agent we started, or 0
+	Adopted   *inspect.AgentProc // the agent we adopted, or nil
 	Reaped    ReapResult
 	Anomaly   string // human-readable anomaly, set when we adopt a foreign agent
 }
@@ -159,7 +161,7 @@ func (m Manager) EnsureAgent(ctx context.Context, cfg EnsureConfig, log Logger) 
 	if len(foreign) > 1 || reaped {
 		sit = SituationDisaster
 	}
-	kind := Classify(adopt, cfg.FixedSock, cfg.LegacyDir)
+	kind := inspect.Classify(adopt, cfg.FixedSock, cfg.LegacyDir)
 	anomaly := fmt.Sprintf("adopted %s ssh-agent pid %d (uid %d) on %s via the fixed socket; argv: %s",
 		kind, adopt.PID, adopt.UID, adopt.Socket, strings.Join(adopt.Args, " "))
 	if len(foreign) > 1 {
@@ -177,12 +179,12 @@ func (m Manager) EnsureAgent(ctx context.Context, cfg EnsureConfig, log Logger) 
 
 // healthyForeign returns the live ssh-agents bound to a socket other than the
 // fixed one, sorted by pid for a deterministic adoption choice.
-func (m Manager) healthyForeign(ctx context.Context, fixedSock string) ([]AgentProc, error) {
+func (m Manager) healthyForeign(ctx context.Context, fixedSock string) ([]inspect.AgentProc, error) {
 	procs, err := m.Inspector.Agents()
 	if err != nil {
 		return nil, fmt.Errorf("inspect agents: %w", err)
 	}
-	var out []AgentProc
+	var out []inspect.AgentProc
 	for _, p := range procs {
 		if p.Socket == "" || p.Socket == fixedSock {
 			continue

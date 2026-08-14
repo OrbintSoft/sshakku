@@ -5,9 +5,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/OrbintSoft/sshakku/internal/agent"
 	"github.com/OrbintSoft/sshakku/internal/diagnose/hostcheck"
 	"github.com/OrbintSoft/sshakku/internal/diagnose/launcher"
+
+	"github.com/OrbintSoft/sshakku/internal/agent/inspect"
 )
 
 func findings(in Inputs, r Report) []string {
@@ -54,7 +55,7 @@ func findings(in Inputs, r Report) []string {
 		f = append(f, fmt.Sprintf("%d ssh-agent process(es) belong to a different user account — visible here, but not part of this account's session", elsewhere))
 	}
 	for _, a := range r.Agents {
-		if a.Kind != agent.KindForeign || !a.Reachable || differentUser(a, r.OurUID) {
+		if a.Kind != inspect.KindForeign || !a.Reachable || differentUser(a, r.OurUID) {
 			continue
 		}
 		if looksLikeOrphanedOurs(a.Socket) {

@@ -1,4 +1,12 @@
-package agent
+// Package inspect finds the ssh-agent processes running on this machine and
+// says which of them is which: the one listening on the socket SSHakku pins,
+// one left over from before SSHakku, or someone else's.
+//
+// Only the process list is platform-specific — Linux reads procfs, macOS asks
+// sysctl — and the reading of a procfs-shaped tree is shared, so a caller can
+// point it at a fake tree and check the same answers from any operating
+// system.
+package inspect
 
 import (
 	"bufio"

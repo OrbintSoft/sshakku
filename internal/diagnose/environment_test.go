@@ -5,8 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/OrbintSoft/sshakku/internal/agent"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/OrbintSoft/sshakku/internal/agent/inspect"
 )
 
 // envState returns what out shows for the variable name: the text after the
@@ -63,7 +64,7 @@ func TestFormatShowsEveryVariableItWasGiven(t *testing.T) {
 // have a conclusion drawn from it. "Unset" is a fact about a shell somebody
 // looked at; this report looked at none.
 func TestAnUnreadableEnvironmentIsNotReportedAsUnset(t *testing.T) {
-	src := fakeSource{procs: []agent.AgentProc{{PID: 100, UID: 1000, Socket: fixed}}}
+	src := fakeSource{procs: []inspect.AgentProc{{PID: 100, UID: 1000, Socket: fixed}}}
 	prober := fakeProber{up: map[string]bool{fixed: true}}
 
 	r := Gather(t.Context(), Inputs{

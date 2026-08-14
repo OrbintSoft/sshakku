@@ -11,6 +11,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/sys/unix"
+
+	"github.com/OrbintSoft/sshakku/internal/agent/inspect"
 )
 
 // nthErrLister wraps a ProcLister and forces the failOn-th (1-based) Agents call to
@@ -22,7 +24,7 @@ type nthErrLister struct {
 	calls  int
 }
 
-func (l *nthErrLister) Agents() ([]AgentProc, error) {
+func (l *nthErrLister) Agents() ([]inspect.AgentProc, error) {
 	l.calls++
 	if l.calls == l.failOn {
 		return nil, errors.New("process scan failed")
@@ -35,7 +37,7 @@ func (l *nthErrLister) Agents() ([]AgentProc, error) {
 func TestEnsureAgentForeignSurveyError(t *testing.T) {
 	dir := shortDir(t)
 	fixed := filepath.Join(dir, "agent.sock")
-	lister := &nthErrLister{inner: Inspector{ProcRoot: shortDir(t)}, failOn: 2}
+	lister := &nthErrLister{inner: inspect.Inspector{ProcRoot: shortDir(t)}, failOn: 2}
 	m := Manager{
 		Prober:    mapProber{}, // fixed silent
 		Inspector: lister,

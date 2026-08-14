@@ -10,10 +10,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/OrbintSoft/sshakku/internal/agent"
 	"github.com/OrbintSoft/sshakku/internal/diagnose/hostcheck"
 	"github.com/OrbintSoft/sshakku/internal/diagnose/launcher"
 	"github.com/OrbintSoft/sshakku/internal/keystate"
+
+	"github.com/OrbintSoft/sshakku/internal/agent/inspect"
 )
 
 // askpassNotWiredMsg is the finding text for the askpass-wiring check.
@@ -40,9 +41,9 @@ const logTailLines = 10
 var now = time.Now
 
 // AgentSource enumerates the ssh-agent processes currently visible.
-// agent.Inspector satisfies it; tests supply a fake.
+// inspect.Inspector satisfies it; tests supply a fake.
 type AgentSource interface {
-	Agents() ([]agent.AgentProc, error)
+	Agents() ([]inspect.AgentProc, error)
 }
 
 // KeyLister lists the private-key files to consider; keys.Enumerator
@@ -113,7 +114,7 @@ type Inputs struct {
 type AgentView struct {
 	PID       int
 	UID       int // owning uid, or -1 when it could not be read
-	Kind      agent.ProcKind
+	Kind      inspect.ProcKind
 	Socket    string
 	Reachable bool
 	Ancestry  []launcher.ProcInfo // the process chain that launched it, agent first

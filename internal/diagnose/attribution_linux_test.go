@@ -7,12 +7,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/OrbintSoft/sshakku/internal/agent"
+	"github.com/OrbintSoft/sshakku/internal/agent/inspect"
 )
 
 func TestGatherReparentedToInitCgroupFallback(t *testing.T) {
 	const foreign = "/tmp/foreign.sock"
-	src := fakeSource{procs: []agent.AgentProc{
+	src := fakeSource{procs: []inspect.AgentProc{
 		{PID: 200, UID: 1000, Socket: foreign},
 	}}
 	prober := fakeProber{up: map[string]bool{foreign: true}}
