@@ -2270,14 +2270,38 @@ the mechanism that has to work.
   to be discovered at the next login.
 - **W4 — run it** on `windows-*` runners (open decision 9) and on a real
   desktop session, driving the binary through a user's scenario (rule 25).
-  Half of it landed early, out of order, because compiling was what mattered
-  first: a `go build (windows)` job on `windows-latest` builds and vets every
-  package. The suite stays out of that job deliberately — it fails on what the
-  platform is (no uid, backslashes, no wallet) and `internal/keys` does not
-  even finish, since a re-executed test helper outlives the run holding the
-  pipe and Windows has no process group to take it down with. Making those
-  pass is its own step; a job that ran them and ignored the result would
-  report a platform as tested that nothing tests.
+  **The suite half is done.** `go test (windows)` on `windows-latest` builds,
+  vets and now runs every package under `-race`; `go test` rather than `make
+  test` because that runner has no GNU Make, so the flags are kept in step by
+  hand.
+
+  What the suite failed on was three things, and only the first was what this
+  entry originally said. Most of it was the platform's own vocabulary being
+  written into tests as if it were universal: `/`-joined path literals against
+  paths the product builds with `filepath`, `0600` asserted where mode bits are
+  synthesised, `/tmp` in fixtures, a `.sh` as a stand-in editor, `/srv/keys`
+  taken for an absolute path where a volume is what makes one. Second, and
+  genuinely absent here: no wallet, so the promises that need one are held to
+  the systems that have one, and no numeric uid, so `--user` is asked where
+  there are uids. Third, two defects the port surfaced in shared code — a
+  directory that is not there and one that is not a directory were told apart
+  by the errno, which Windows spells differently, in both `Enumerator.Keys`
+  and `dropInSources`.
+
+  **The hang this entry blamed on a re-executed test helper was not that.**
+  The three files that re-execute are all `//go:build unix` and never ran on
+  Windows at all, so that explanation cannot have been the cause. On the
+  machine where it was observed it was the antivirus: Go builds and runs test
+  binaries under `GOTMPDIR`, which defaults to `%TEMP%` on `C:`, and a
+  real-time scanner there left them started but never executing — unkillable,
+  `CPU 0.00`, hours old. Pointed at a directory the scanner does not watch, the
+  whole suite runs in three seconds, and forty-one under `-race`. Nothing in
+  the product was involved, and nothing was changed for it.
+
+  Still to do here: the real desktop session (rule 25), and Windows joining the
+  coverage and test-health reporting the other two platforms get — Phase 6
+  item 1's "Windows once it exists", which needs a report artifact, a column in
+  `tools/testreport`, and a badge, none of which this step touched.
 
 **Out of scope here, named so they are not mistaken for oversights**: the agent
 endpoint and its named pipe, Credential Manager and 1Password as Windows
