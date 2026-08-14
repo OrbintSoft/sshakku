@@ -1,3 +1,10 @@
+// The compartment is a place inside a wallet, so everything here needs this
+// system to have one SSHakku can be pointed at. Every unix does; Windows does
+// not yet — see internal/config/wallet_unix_test.go for what is missing there
+// and why these are held to this family rather than rewritten around it.
+
+//go:build unix
+
 package main
 
 import (

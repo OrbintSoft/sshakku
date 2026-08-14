@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/keys"
 	"github.com/OrbintSoft/sshakku/internal/paths"
 	"github.com/stretchr/testify/assert"
@@ -52,21 +51,8 @@ func TestRun(t *testing.T) {
 	}
 }
 
-// Every name a user may put in secret_backend has to be a name the diagnostics
-// accept too: a wallet you can choose but cannot ask about is one you cannot
-// diagnose when it stops working. The names come from the one list rather than
-// being written out again here, which is what stopped them agreeing before.
-func TestEveryChoosableWalletCanBeDiagnosed(t *testing.T) {
-	names := config.SecretBackends()
-	require.NotEmpty(t, names, "this system offers no wallet at all")
-	for _, name := range names {
-		assert.Truef(t, config.SecretBackendAvailable(name),
-			"%q can be chosen, so it must be one the diagnostics accept", name)
-	}
-	assert.False(t, config.SecretBackendAvailable("bogus"), "a name nobody offers must not be accepted")
-	assert.Truef(t, config.SecretBackendAvailable(config.DefaultSecretBackend()),
-		"the default wallet %q must be one this system offers", config.DefaultSecretBackend())
-}
+// TestEveryChoosableWalletCanBeDiagnosed needs this system to have a wallet at
+// all, so it is in walletcheck_unix_test.go beside the other wallet tests.
 
 func TestResolveTargetUser(t *testing.T) {
 	self, err := user.Current()
@@ -246,7 +232,11 @@ func TestLoadSettingsLogsErrors(t *testing.T) {
 
 	assert.GreaterOrEqual(t, log.n, 3, "each of the three failures must be logged, not swallowed")
 	// A setting untouched by the errors still resolves to its default.
-	assert.NotEmpty(t, settings.SecretBackend, "a run that could not read its config still gets working defaults")
+	// service_prefix rather than secret_backend, because every system has a
+	// built-in name for SSHakku's wallet entries and not every system has a
+	// wallet: on one with none the latter resolves to nothing, which says
+	// something true about that platform and nothing about this branch.
+	assert.NotEmpty(t, settings.ServicePrefix, "a run that could not read its config still gets working defaults")
 }
 
 func TestTail(t *testing.T) {

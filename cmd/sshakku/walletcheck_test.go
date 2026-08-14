@@ -54,33 +54,8 @@ func onlyOnPath(t *testing.T, names ...string) {
 	t.Setenv("PATH", dir)
 }
 
-func TestDoctorNamesTheWalletAndWhatIsMissing(t *testing.T) {
-	d := configuredWallet(t, "secret_backend = \"keepassxc\"\nkeepassxc_route = \"cli\"\nkeepassxc_database = \"/nowhere/vault.kdbx\"\n")
-	onlyOnPath(t)
-
-	var out, errOut bytes.Buffer
-	require.Zerof(t, d.doctor(t.Context(), &out, &errOut, nil), "a report changes nothing and cannot fail; stderr=%q", errOut.String())
-	report := out.String()
-
-	for _, want := range []string{"keepassxc", "cli", "keepassxc-cli", "missing"} {
-		assert.Containsf(t, report, want, "nothing tells the user what is wrong without %q", want)
-	}
-	assert.Contains(t, report, "/nowhere/vault.kdbx", "the report must name the database it could not find")
-}
-
-func TestDoctorSaysNothingIsMissingWhenNothingIs(t *testing.T) {
-	database := filepath.Join(t.TempDir(), "vault.kdbx")
-	require.NoError(t, os.WriteFile(database, []byte("not really a database"), 0o600), "write the database file")
-	d := configuredWallet(t, "secret_backend = \"keepassxc\"\nkeepassxc_route = \"cli\"\nkeepassxc_database = \""+database+"\"\n")
-	onlyOnPath(t, "keepassxc-cli")
-
-	var out, errOut bytes.Buffer
-	require.Zerof(t, d.doctor(t.Context(), &out, &errOut, nil), "a report changes nothing and cannot fail; stderr=%q", errOut.String())
-	report := out.String()
-
-	assert.Contains(t, report, "keepassxc-cli", "the report must name the tool it found")
-	assert.NotContains(t, report, "missing", "nothing may be called missing when everything is there")
-}
+// The two that name KeePassXC as the wallet need this system to have a wallet
+// that can be named at all, so they are in walletcheck_unix_test.go.
 
 // TestDoctorNamesTheWalletThatWouldBeUsed verifies F25 through the whole
 // command, for the machine most users have: one nobody has configured. Knowing
