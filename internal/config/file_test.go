@@ -310,30 +310,8 @@ func TestResolveInvalidEnvMaxAttemptsFallsToFile(t *testing.T) {
 	assert.Equal(t, 4, s.MaxAttempts, "an invalid environment value must fall through to the file")
 }
 
-// TestSecretBackendsIsTheOneList guards what the exported answers are for:
-// every caller that offers the user a choice of wallet, or turns one down,
-// reads them here instead of keeping a copy of its own. Two copies is how the
-// diagnostics came to accept a name the configuration would not.
-func TestSecretBackendsIsTheOneList(t *testing.T) {
-	names := SecretBackends()
-	require.NotEmpty(t, names, "this system offers no wallet at all")
-	for _, name := range names {
-		assert.Truef(t, SecretBackendAvailable(name),
-			"SecretBackendAvailable(%q) = false for a wallet the same package offers", name)
-		s, errs := Resolve(File{SecretBackend: ptr(name)}, lookupFrom(nil))
-		assert.Emptyf(t, errs, "naming the offered wallet %q must not be reported", name)
-		assert.Equalf(t, name, s.SecretBackend, "an offered wallet must be accepted")
-	}
-	assert.False(t, SecretBackendAvailable("bogus"), `SecretBackendAvailable("bogus")`)
-	assert.Truef(t, SecretBackendAvailable(DefaultSecretBackend()),
-		"the default wallet %q is not among the ones offered", DefaultSecretBackend())
-
-	// The returned slice is the caller's own: handing out the live one would
-	// let any caller reorder or empty the list every other caller reads.
-	names[0] = "tampered"
-	assert.NotEqual(t, "tampered", SecretBackends()[0],
-		"SecretBackends hands out the list itself, so a caller can change what every other caller sees")
-}
+// TestSecretBackendsIsTheOneList and the other tests that need this system to
+// have a wallet at all are in wallet_unix_test.go.
 
 func TestResolveSecretBackendDefaultsToThePlatformWallet(t *testing.T) {
 	s, errs := Resolve(File{}, lookupFrom(nil))
@@ -409,20 +387,6 @@ func TestResolveSecretBackendFromEitherPlatformsWallets(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestResolveSecretBackendAccountFieldsPassThrough(t *testing.T) {
-	file := File{
-		SecretBackend:    ptr(SecretBackendBitwarden),
-		OnePasswordVault: ptr("sshakku-vault"),
-		BitwardenEmail:   ptr("user@example.invalid"),
-		BitwardenServer:  ptr("https://vault.example.invalid"),
-	}
-	s, errs := Resolve(file, lookupFrom(nil))
-	require.Empty(t, errs, "unexpected errors")
-	assert.Equal(t, "sshakku-vault", s.OnePasswordVault, "OnePasswordVault")
-	assert.Equal(t, "user@example.invalid", s.BitwardenEmail, "BitwardenEmail")
-	assert.Equal(t, "https://vault.example.invalid", s.BitwardenServer, "BitwardenServer")
 }
 
 func TestResolveSecretBackendAccountFieldsDefaultEmpty(t *testing.T) {
