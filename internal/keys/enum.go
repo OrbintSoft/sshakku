@@ -1,12 +1,12 @@
 package keys
 
 import (
-	"errors"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/OrbintSoft/sshakku/internal/paths"
 )
 
 // Enumerator lists the candidate private-key files in a directory.
@@ -63,7 +63,7 @@ var notKeys = []string{
 func (e Enumerator) Keys() ([]string, error) {
 	entries, err := os.ReadDir(e.Dir)
 	if err != nil {
-		if !e.MustExist && absent(e.Dir) {
+		if !e.MustExist && paths.Absent(e.Dir) {
 			return nil, nil
 		}
 		return nil, err
@@ -80,23 +80,6 @@ func (e Enumerator) Keys() ([]string, error) {
 		keys = append(keys, filepath.Join(e.Dir, name))
 	}
 	return keys, nil
-}
-
-// absent reports whether there is nothing at path at all — asked of the
-// filesystem rather than read off the error the read failed with.
-//
-// The two answers a caller has to tell apart are "you have no key directory",
-// which is how most accounts start and is no error, and "what you named is not
-// a directory", which is a mistake in the configuration and has to be said.
-// Systems do not agree on which error is which: reading a regular file as a
-// directory fails with ENOTDIR on unix, but on Windows with the code for a
-// path that is not there, which Go reports as both ENOTDIR *and* fs.ErrNotExist
-// — so a key_dir pointing at a file was read there as an account with no keys.
-// Whether something is there is a question the filesystem answers the same way
-// everywhere.
-func absent(path string) bool {
-	_, err := os.Lstat(path)
-	return errors.Is(err, fs.ErrNotExist)
 }
 
 // isKeyName reports whether a file name in Dir is one of the user's keys. A
