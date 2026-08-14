@@ -306,9 +306,11 @@ print-paths:
 # the former belong to shellcheck; the rest are linted by the tool for their own
 # format (config files by taplo, via lint-toml).
 BATS_FIXTURES = $(filter-out %.toml,$(wildcard test/bats/fixtures/*))
-SH_SCRIPTS = $(wildcard *.sh) $(wildcard .githooks/*) $(wildcard .github/scripts/*.sh) $(wildcard test/*.sh) $(wildcard test/containers/*.sh) $(wildcard test/fakes/*.sh) $(wildcard test/bats/*.bats) $(wildcard test/bats/*.bash) $(wildcard cmd/*/testdata/*.sh) $(BATS_FIXTURES)
+SH_SCRIPTS = $(wildcard *.sh) $(wildcard .githooks/*) $(wildcard .github/scripts/*.sh) $(wildcard test/*.sh) $(wildcard test/containers/*.sh) $(wildcard test/fakes/*.sh) $(wildcard test/bats/*.bats) $(wildcard test/bats/*.bash) $(shell find cmd internal -path '*/testdata/*.sh') $(BATS_FIXTURES)
 ZSH_SCRIPTS = $(wildcard *.zsh)
-BAT_FILES = $(wildcard cmd/*/testdata/*.cmd)
+# Found rather than globbed at a fixed depth: a fixture that moves with the
+# package it belongs to must not stop being linted without anything saying so.
+BAT_FILES = $(shell find cmd internal -path '*/testdata/*.cmd')
 DOCKERFILES = $(wildcard test/containers/*.Dockerfile)
 
 # Found rather than globbed at a fixed depth: a script that moves to another

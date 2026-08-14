@@ -12,7 +12,13 @@ composed by it. One line each:
 
 | Package | Responsibility |
 | --- | --- |
-| `cmd/sshakku` | The single binary: subcommand dispatch, and the askpass re-entry path when invoked as `SSH_ASKPASS`. |
+| `cmd/sshakku` | The binary's entry point, and nothing else: the process's single `os.Exit` around `cli.Main`. |
+| `internal/cli` | The command itself: subcommand dispatch, the askpass re-entry path when the binary is run under its askpass name, and the wiring that hands each command the system seams it needs. A package rather than `main` so all of it can be exercised from tests. |
+| `internal/cli/backend` | Opens the wallet the settings select, per platform, and picks KeePassXC's route (its local protocol, the Secret Service, or its CLI). |
+| `internal/cli/crossuser` | Reads another user's per-login socket token for `doctor --user`, by re-executing the binary under that user's credentials — a kernel keyring is only visible to the uid that owns it. |
+| `internal/cli/dialog` | Decides where this machine can ask a person for a passphrase: the graphical dialog this platform can raise, or the controlling terminal. |
+| `internal/cli/shell` | The shell forms the eval-able commands print in: the Bourne form every POSIX shell reads, and PowerShell's. |
+| `internal/cli/walletcheck` | Describes the configured wallet as this machine actually is — which one would be opened, how it would be reached, what of that is present — for `doctor` to report and `--fix` to act on. |
 | `internal/agent` | Tends the user's `ssh-agent`: probes a socket, starts one on the fixed socket, reaps dead agents/sockets, adopts one already running. Never reimplements `ssh-agent` itself. |
 | `internal/config` | Resolves settings: environment variable, then the TOML config file, then a built-in default, per setting. Reads `config.toml` and the `config.d/` drop-ins as an ordered list of sources, so what resolved a value can be reported alongside the value. |
 | `internal/diagnose` | Builds the read-only picture `sshakku doctor` reports: which agents are running, which is ours, whether it answers, whether the shell's `SSH_AUTH_SOCK` is wired up. Never starts, signals, or reaps anything. |
@@ -37,7 +43,7 @@ per-PR test-health comment.
 
 ## How the pieces fit together
 
-`cmd/sshakku/main.go`'s `run()` dispatches on `args[0]`: `shell-init`,
+`internal/cli`'s `run()` dispatches on `args[0]`: `shell-init`,
 `ensure-agent`, `load-keys`, `askpass-env`, `doctor`, `forget`, `help`. See
 [docs/CLI.md](CLI.md) for the full command reference.
 
