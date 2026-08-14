@@ -168,9 +168,13 @@ func TestCrossUserGuard(t *testing.T) {
 // beside the binary rather than the binary itself, and REQUIRE=force is what
 // makes ssh consult it at all in a session with no DISPLAY.
 func TestAskpassExports(t *testing.T) {
-	want := "export SSH_ASKPASS='/usr/local/bin/sshakku-askpass'\n" +
+	// The helper's path is derived from the binary's with filepath, so it comes
+	// back in this system's own spelling — what is pinned verbatim is the pair
+	// of lines, not one system's separator.
+	bindir := filepath.FromSlash("/usr/local/bin")
+	want := "export SSH_ASKPASS='" + filepath.Join(bindir, "sshakku-askpass") + "'\n" +
 		"export SSH_ASKPASS_REQUIRE='force'\n"
-	assert.Equal(t, want, askpassExports(dialect(t, shellPosix), "/usr/local/bin/sshakku"),
+	assert.Equal(t, want, askpassExports(dialect(t, shellPosix), filepath.Join(bindir, "sshakku")),
 		"the two lines the shell must export, verbatim")
 }
 
@@ -329,8 +333,10 @@ func TestAskpassHandoff(t *testing.T) {
 }
 
 func TestKeystateDir(t *testing.T) {
-	got := keystateDir(paths.Layout{AgentSock: "/run/user/1000/sshakku/agent.sock"})
-	assert.Equal(t, "/run/user/1000/sshakku/keystate", got, "the key records sit beside the socket they describe")
+	socketDir := filepath.FromSlash("/run/user/1000/sshakku")
+	got := keystateDir(paths.Layout{AgentSock: filepath.Join(socketDir, "agent.sock")})
+	assert.Equal(t, filepath.Join(socketDir, "keystate"), got,
+		"the key records sit beside the socket they describe")
 }
 
 func TestCurrentUser(t *testing.T) {
