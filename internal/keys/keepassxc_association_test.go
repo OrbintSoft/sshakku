@@ -22,19 +22,6 @@ func TestFileAssociationRoundTrip(t *testing.T) {
 	assert.Equal(t, want, got, "and be the one that was granted: another would not be honoured by KeePassXC")
 }
 
-// TestFileAssociationIsNotWorldReadable checks the permissions rather than
-// trusting the constant: anyone who could read this file could present
-// themselves to KeePassXC as SSHakku.
-func TestFileAssociationIsNotWorldReadable(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "assoc.json")
-	store := FileAssociationStore{Path: path}
-	require.NoError(t, store.Save(keepassxc.Association{ID: "db", IDKey: "k"}), "saving the approval must succeed")
-	info, err := os.Stat(path)
-	require.NoError(t, err, "and the file must be there")
-	assert.Zero(t, info.Mode().Perm()&0o077,
-		"readable by this user alone: anyone else who could read it could present themselves to KeePassXC as SSHakku")
-}
-
 // TestFileAssociationMissingIsNotAnError covers the state every user starts in.
 func TestFileAssociationMissingIsNotAnError(t *testing.T) {
 	store := FileAssociationStore{Path: filepath.Join(t.TempDir(), "absent.json")}

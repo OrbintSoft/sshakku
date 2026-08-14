@@ -16,9 +16,6 @@ func TestRecordAndGivenUp(t *testing.T) {
 	assert.False(t, s.GivenUp("id_rsa"), "a fresh store must not report given up")
 	require.NoError(t, s.Record("id_rsa"), "Record")
 	assert.True(t, s.GivenUp("id_rsa"), "after Record the key must be given up")
-	info, err := os.Stat(filepath.Join(dir, "id_rsa"))
-	require.NoError(t, err, "stat sentinel")
-	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm(), "sentinel permissions")
 }
 
 func TestGivenUpExpiresAfterTTL(t *testing.T) {

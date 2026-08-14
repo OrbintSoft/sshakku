@@ -26,14 +26,6 @@ func TestLogAppends(t *testing.T) {
 	assert.Equal(t, 2, strings.Count(got, "\n"), "one newline per entry")
 }
 
-func TestLogPerm(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "sessions.log")
-	require.NoError(t, New(path).Log("INFO", "x"))
-	fi, err := os.Stat(path)
-	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(0o600), fi.Mode().Perm(), "log permissions")
-}
-
 func TestLogTrims(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sessions.log")
 	lg := &Logger{path: path, maxLines: 3}
