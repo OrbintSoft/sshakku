@@ -4,3 +4,9 @@
 # Shell scripts are always LF text.
 *.sh  text eol=lf
 *.zsh text eol=lf
+
+# Batch files are the exception to the LF rule above: cmd.exe reads a script by
+# seeking through it, and a label it has to jump back to is not reliably found
+# when the lines end in LF alone. They are checked out with CRLF for that
+# reason, and only they.
+*.cmd text eol=crlf

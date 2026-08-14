@@ -7,11 +7,9 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
-	"strconv"
 	"testing"
 	"time"
 
-	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/keys"
 	"github.com/OrbintSoft/sshakku/internal/paths"
 	"github.com/stretchr/testify/assert"
@@ -52,27 +50,13 @@ func TestRun(t *testing.T) {
 	}
 }
 
-// Every name a user may put in secret_backend has to be a name the diagnostics
-// accept too: a wallet you can choose but cannot ask about is one you cannot
-// diagnose when it stops working. The names come from the one list rather than
-// being written out again here, which is what stopped them agreeing before.
-func TestEveryChoosableWalletCanBeDiagnosed(t *testing.T) {
-	names := config.SecretBackends()
-	require.NotEmpty(t, names, "this system offers no wallet at all")
-	for _, name := range names {
-		assert.Truef(t, config.SecretBackendAvailable(name),
-			"%q can be chosen, so it must be one the diagnostics accept", name)
-	}
-	assert.False(t, config.SecretBackendAvailable("bogus"), "a name nobody offers must not be accepted")
-	assert.Truef(t, config.SecretBackendAvailable(config.DefaultSecretBackend()),
-		"the default wallet %q must be one this system offers", config.DefaultSecretBackend())
-}
+// TestEveryChoosableWalletCanBeDiagnosed needs this system to have a wallet at
+// all, so it is in walletcheck_unix_test.go beside the other wallet tests.
 
+// The subtests that resolve a real account through the user database are in
+// doctoruser_unix_test.go: they need this system to name a user by a numeric
+// uid, and Windows names one by a SID.
 func TestResolveTargetUser(t *testing.T) {
-	self, err := user.Current()
-	if err != nil {
-		t.Skipf("user.Current: %v", err)
-	}
 	selfUID := os.Getuid()
 	// resolveTargetUser answers two things: whose files to look at, and whether
 	// that is somebody other than the caller — Source is empty for the caller
@@ -86,42 +70,9 @@ func TestResolveTargetUser(t *testing.T) {
 		assert.Empty(t, got.Source, "nothing cross-user happened")
 	})
 
-	t.Run("--user names the invoking user: still self", func(t *testing.T) {
-		got, err := resolveTargetUser(self.Username, paths.Env{UID: selfUID})
-		require.NoError(t, err, "resolveTargetUser")
-		assert.Equal(t, selfUID, got.UID, "the caller's own uid")
-		assert.Empty(t, got.Source, "naming yourself is not going cross-user")
-	})
-
-	t.Run("--user names someone else: cross-user, regardless of who's actually invoking", func(t *testing.T) {
-		// selfEnv.UID is deliberately a uid nothing resolves to, so this exercises
-		// the "different from invoker" branch without depending on whether the test
-		// process happens to be root.
-		got, err := resolveTargetUser(self.Username, paths.Env{UID: -1})
-		require.NoError(t, err, "resolveTargetUser")
-		assert.Equal(t, selfUID, got.UID, "the uid of the user named")
-		assert.NotEmpty(t, got.Source, "a target that is not the caller must say how it was arrived at")
-	})
-
 	t.Run("unknown --user value errors", func(t *testing.T) {
 		_, err := resolveTargetUser("sshakku-test-no-such-user", paths.Env{UID: selfUID})
 		assert.Error(t, err, "a user nobody can resolve must be reported, not silently taken for the caller")
-	})
-
-	t.Run("SUDO_UID auto-detected only when invoking as root", func(t *testing.T) {
-		if selfUID == 0 {
-			// The test process itself is root (e.g. a container test run), so
-			// there's no non-root uid left to fake as SUDO_UID: a real sudo
-			// invocation never sets SUDO_UID=0, and resolveTargetUser correctly
-			// treats a lookup that resolves back to uid 0 as "no cross-user
-			// target", the very thing this subtest exists to rule out.
-			t.Skip("test process is already root: can't fake a distinct non-root SUDO_UID")
-		}
-		t.Setenv("SUDO_UID", strconv.Itoa(selfUID))
-		got, err := resolveTargetUser("", paths.Env{UID: 0})
-		require.NoError(t, err, "resolveTargetUser")
-		assert.Equal(t, selfUID, got.UID, "the uid sudo recorded")
-		assert.NotEmpty(t, got.Source, "a target arrived at through SUDO_UID must say so")
 	})
 
 	t.Run("SUDO_UID ignored when not invoking as root", func(t *testing.T) {
@@ -168,9 +119,13 @@ func TestCrossUserGuard(t *testing.T) {
 // beside the binary rather than the binary itself, and REQUIRE=force is what
 // makes ssh consult it at all in a session with no DISPLAY.
 func TestAskpassExports(t *testing.T) {
-	want := "export SSH_ASKPASS='/usr/local/bin/sshakku-askpass'\n" +
+	// The helper's path is derived from the binary's with filepath, so it comes
+	// back in this system's own spelling — what is pinned verbatim is the pair
+	// of lines, not one system's separator.
+	bindir := filepath.FromSlash("/usr/local/bin")
+	want := "export SSH_ASKPASS='" + filepath.Join(bindir, "sshakku-askpass") + "'\n" +
 		"export SSH_ASKPASS_REQUIRE='force'\n"
-	assert.Equal(t, want, askpassExports(dialect(t, shellPosix), "/usr/local/bin/sshakku"),
+	assert.Equal(t, want, askpassExports(dialect(t, shellPosix), filepath.Join(bindir, "sshakku")),
 		"the two lines the shell must export, verbatim")
 }
 
@@ -242,7 +197,11 @@ func TestLoadSettingsLogsErrors(t *testing.T) {
 
 	assert.GreaterOrEqual(t, log.n, 3, "each of the three failures must be logged, not swallowed")
 	// A setting untouched by the errors still resolves to its default.
-	assert.NotEmpty(t, settings.SecretBackend, "a run that could not read its config still gets working defaults")
+	// service_prefix rather than secret_backend, because every system has a
+	// built-in name for SSHakku's wallet entries and not every system has a
+	// wallet: on one with none the latter resolves to nothing, which says
+	// something true about that platform and nothing about this branch.
+	assert.NotEmpty(t, settings.ServicePrefix, "a run that could not read its config still gets working defaults")
 }
 
 func TestTail(t *testing.T) {
@@ -329,8 +288,10 @@ func TestAskpassHandoff(t *testing.T) {
 }
 
 func TestKeystateDir(t *testing.T) {
-	got := keystateDir(paths.Layout{AgentSock: "/run/user/1000/sshakku/agent.sock"})
-	assert.Equal(t, "/run/user/1000/sshakku/keystate", got, "the key records sit beside the socket they describe")
+	socketDir := filepath.FromSlash("/run/user/1000/sshakku")
+	got := keystateDir(paths.Layout{AgentSock: filepath.Join(socketDir, "agent.sock")})
+	assert.Equal(t, filepath.Join(socketDir, "keystate"), got,
+		"the key records sit beside the socket they describe")
 }
 
 func TestCurrentUser(t *testing.T) {

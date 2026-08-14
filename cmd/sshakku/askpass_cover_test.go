@@ -18,11 +18,16 @@ import (
 // surfaces as a write error.
 func TestAskpassEnv(t *testing.T) {
 	t.Run("resolved path emits the export lines", func(t *testing.T) {
+		// The helper's path is derived from the binary's with filepath, so it
+		// comes back in this system's own spelling; what is asserted is the
+		// path made of these components, not one system's separator.
+		self := filepath.Join(filepath.FromSlash("/opt/sshakku/bin"), "sshakku")
+		helper := filepath.Join(filepath.FromSlash("/opt/sshakku/bin"), "sshakku-askpass")
 		d := realDeps()
-		d.self = func() (string, error) { return "/opt/sshakku/bin/sshakku", nil }
+		d.self = func() (string, error) { return self, nil }
 		var out, errOut bytes.Buffer
 		require.Zerof(t, d.askpassEnv(&out, &errOut, nil), "askpassEnv; stderr=%q", errOut.String())
-		assert.Contains(t, out.String(), "export SSH_ASKPASS='/opt/sshakku/bin/sshakku-askpass'",
+		assert.Contains(t, out.String(), "export SSH_ASKPASS='"+helper+"'",
 			"the helper beside the binary is what ssh must be pointed at, not the binary itself")
 		assert.Contains(t, out.String(), "export SSH_ASKPASS_REQUIRE='force'",
 			"and force is what makes ssh consult it in a session with no display")

@@ -13,6 +13,12 @@ indent_size = 2
 [*.{sh,zsh,bash,bats}]
 indent_style = tab
 
+# Batch files are the one exception to the LF rule above, and .gitattributes
+# says the same: cmd.exe reads a script by seeking through it, and a label it
+# has to jump back to is not reliably found when the lines end in LF alone.
+[*.cmd]
+end_of_line = crlf
+
 # Git hooks are extensionless shell scripts; keep them tab-indented too.
 [.githooks/*]
 indent_style = tab

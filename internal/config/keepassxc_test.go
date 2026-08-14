@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestResolveKeePassXCRoute(t *testing.T) {
@@ -37,24 +36,9 @@ func TestResolveKeePassXCRoute(t *testing.T) {
 	}
 }
 
-func TestResolveAcceptsKeePassXCAsABackend(t *testing.T) {
-	s, errs := Resolve(File{SecretBackend: ptr(SecretBackendKeePassXC)}, lookupFrom(nil))
-	require.Empty(t, errs, "unexpected errors")
-	assert.Equal(t, SecretBackendKeePassXC, s.SecretBackend, "the wallet is named, not the mechanism")
-}
-
-func TestResolveCarriesTheKeePassXCSettings(t *testing.T) {
-	s, errs := Resolve(File{
-		SecretBackend:     ptr(SecretBackendKeePassXC),
-		KeePassXCRoute:    ptr(KeePassXCRouteCLI),
-		KeePassXCDatabase: ptr("/home/someone/secrets.kdbx"),
-		KeePassXCKeyFile:  ptr("/home/someone/secrets.key"),
-	}, lookupFrom(nil))
-	require.Empty(t, errs, "unexpected errors")
-	assert.Equal(t, KeePassXCRouteCLI, s.KeePassXCRoute, "route")
-	assert.Equal(t, "/home/someone/secrets.kdbx", s.KeePassXCDatabase, "database")
-	assert.Equal(t, "/home/someone/secrets.key", s.KeePassXCKeyFile, "key file")
-}
+// The two tests that name KeePassXC as the wallet — rather than only pinning
+// the route to it — need this system to have a wallet that can be named at
+// all, so they are in wallet_unix_test.go.
 
 func TestResolveReportsAnInvalidKeePassXCRoute(t *testing.T) {
 	s, errs := Resolve(File{KeePassXCRoute: ptr("browser")}, lookupFrom(nil))

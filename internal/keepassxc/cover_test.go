@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -311,8 +312,8 @@ func TestSocketPaths(t *testing.T) {
 			tempDir:    "/var/folders/ab/T",
 			runtimeDir: "/run/user/1000",
 			want: []string{
-				"/var/folders/ab/T/" + socketName,
-				"/tmp/" + socketName,
+				filepath.Join("/var/folders/ab/T", socketName),
+				filepath.Join("/tmp", socketName),
 			},
 		},
 		{
@@ -321,9 +322,9 @@ func TestSocketPaths(t *testing.T) {
 			tempDir:    "/tmp",
 			runtimeDir: "/run/user/1000",
 			want: []string{
-				"/run/user/1000/app/org.keepassxc.KeePassXC/" + socketName,
-				"/run/user/1000/" + socketName,
-				"/tmp/" + socketName,
+				filepath.Join("/run/user/1000/app/org.keepassxc.KeePassXC", socketName),
+				filepath.Join("/run/user/1000", socketName),
+				filepath.Join("/tmp", socketName),
 			},
 		},
 		{
@@ -331,14 +332,14 @@ func TestSocketPaths(t *testing.T) {
 			goos:       "linux",
 			tempDir:    "/tmp",
 			runtimeDir: "",
-			want:       []string{"/tmp/" + socketName},
+			want:       []string{filepath.Join("/tmp", socketName)},
 		},
 		{
 			name:       "macOS whose temporary directory is /tmp does not repeat it",
 			goos:       "darwin",
 			tempDir:    "/tmp",
 			runtimeDir: "",
-			want:       []string{"/tmp/" + socketName},
+			want:       []string{filepath.Join("/tmp", socketName)},
 		},
 	}
 	for _, tc := range tests {
@@ -353,5 +354,6 @@ func TestSocketPaths(t *testing.T) {
 func TestSocketPathsUsesTheRunningPlatform(t *testing.T) {
 	paths := SocketPaths()
 	require.NotEmpty(t, paths, "SocketPaths must always offer at least the fallback")
-	assert.Equal(t, "/tmp/"+socketName, paths[len(paths)-1], "the last candidate must be the /tmp fallback")
+	assert.Equal(t, filepath.Join("/tmp", socketName), paths[len(paths)-1],
+		"the last candidate must be the /tmp fallback")
 }

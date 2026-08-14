@@ -32,6 +32,7 @@ jobs:
       MARKDOWNLINT_CLI2_VERSION: 0.22.1
       TAPLO_CLI_VERSION: 0.7.0
       HADOLINT_VERSION: 2.14.0
+      BLINTER_VERSION: 1.1.17
     steps:
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -76,6 +77,12 @@ jobs:
 
       - name: Install Node-based lint tools
         run: npm install -g "markdownlint-cli2@${MARKDOWNLINT_CLI2_VERSION}" "@taplo/cli@${TAPLO_CLI_VERSION}"
+
+      # Not part of the pinned tool cache above, which holds native and
+      # Go-installed binaries only. Pinned by exact version, like the npm ones:
+      # a PyPI release is immutable, so no lock file is needed to reproduce it.
+      - name: Install the batch linter
+        run: pip install "Blinter==${BLINTER_VERSION}"
 
       - name: Run make lint
         run: make lint

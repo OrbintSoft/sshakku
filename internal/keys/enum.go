@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/OrbintSoft/sshakku/internal/paths"
 )
 
 // Enumerator lists the candidate private-key files in a directory.
@@ -61,7 +63,7 @@ var notKeys = []string{
 func (e Enumerator) Keys() ([]string, error) {
 	entries, err := os.ReadDir(e.Dir)
 	if err != nil {
-		if os.IsNotExist(err) && !e.MustExist {
+		if !e.MustExist && paths.Absent(e.Dir) {
 			return nil, nil
 		}
 		return nil, err

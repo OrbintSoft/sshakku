@@ -299,8 +299,8 @@ print-paths:
 	@echo "USER_SHELL: $(USER_SHELL)"
 
 # Linting. Requires: shellcheck, shfmt, markdownlint-cli2, taplo, checkmake,
-# actionlint, editorconfig-checker, hadolint, zsh. Each tool reads its own
-# config file where it has one.
+# actionlint, editorconfig-checker, hadolint, blinter, zsh. Each tool reads its
+# own config file where it has one.
 # The bats fixtures are a mixed bag: executable stand-ins for real tools, which
 # are shell, alongside config files a test drops in to select a backend. Only
 # the former belong to shellcheck; the rest are linted by the tool for their own
@@ -308,12 +308,13 @@ print-paths:
 BATS_FIXTURES = $(filter-out %.toml,$(wildcard test/bats/fixtures/*))
 SH_SCRIPTS = $(wildcard *.sh) $(wildcard .githooks/*) $(wildcard .github/scripts/*.sh) $(wildcard test/*.sh) $(wildcard test/containers/*.sh) $(wildcard test/fakes/*.sh) $(wildcard test/bats/*.bats) $(wildcard test/bats/*.bash) $(wildcard cmd/*/testdata/*.sh) $(BATS_FIXTURES)
 ZSH_SCRIPTS = $(wildcard *.zsh)
+BAT_FILES = $(wildcard cmd/*/testdata/*.cmd)
 DOCKERFILES = $(wildcard test/containers/*.Dockerfile)
 
 APPLESCRIPTS = $(wildcard internal/keys/*.applescript)
 XML_FILES = $(wildcard internal/*/testdata/*.xml)
 
-lint: lint-sh lint-zsh lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go lint-docker lint-applescript lint-xml
+lint: lint-sh lint-zsh lint-bat lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go lint-docker lint-applescript lint-xml
 
 lint-sh:
 	shellcheck $(SH_SCRIPTS)
@@ -323,6 +324,11 @@ lint-sh:
 # syntax-only check (no style/portability warnings).
 lint-zsh:
 	@for f in $(ZSH_SCRIPTS); do zsh -n "$$f" || exit 1; done
+
+# Windows batch. One file at a time, so the one that failed is named by the
+# line above its output rather than inferred from it.
+lint-bat:
+	@for f in $(BAT_FILES); do echo "blinter $$f"; blinter "$$f" || exit 1; done
 
 lint-md:
 	markdownlint-cli2
@@ -375,5 +381,5 @@ lint-applescript:
 lint-xml:
 	xmllint --noout $(XML_FILES)
 
-.PHONY: install uninstall install-user uninstall-user build build-cross test test-json test-leakprofile test-keychain test-bats print-paths lint lint-sh lint-zsh lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go lint-docker lint-applescript lint-xml
+.PHONY: install uninstall install-user uninstall-user build build-cross test test-json test-leakprofile test-keychain test-bats print-paths lint lint-sh lint-zsh lint-bat lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go lint-docker lint-applescript lint-xml
 .DEFAULT_GOAL := install

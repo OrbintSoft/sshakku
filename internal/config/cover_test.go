@@ -88,34 +88,24 @@ func TestTheReportShowsWhatWasWrittenWhereSomethingWasWritten(t *testing.T) {
 	}
 }
 
-// TestEverySettingRendersAValueOnAMachineWithNoConfiguration covers F35 where
-// it is easiest to break: the report is read as a statement of what is in
-// force, so a line showing nothing where a built-in value is at work reads as
-// "off" or "none". The account that has written no configuration at all is the
-// one most likely to be reading the report to find out what SSHakku does, and
-// several settings answer that with something other than their own zero — a
-// lifetime of zero means no expiry, an empty list of patterns means the
-// built-in ones.
-func TestEverySettingRendersAValueOnAMachineWithNoConfiguration(t *testing.T) {
-	settings, errs := Resolve(File{}, func(string) (string, bool) { return "", false })
-	require.Empty(t, errs, "resolving an empty configuration must report nothing")
-
-	for _, desc := range settingTable {
-		assert.NotEmptyf(t, desc.value(settings),
-			"%s renders nothing where nobody has configured anything, want the value in force spelled out", desc.key)
-	}
-}
+// TestEverySettingRendersAValueOnAMachineWithNoConfiguration is in
+// wallet_unix_test.go: one setting in that table, secret_backend, has no value
+// in force on a system with no wallet, so the whole table can only be asked
+// where there is one.
 
 // TestKeyDirWrittenAsHome covers the shorthand a person writes in a config file
 // for the directory they live in (F34). It is a path SSHakku resolves itself:
 // nothing expands a tilde in a file the way a shell does on a command line.
 func TestKeyDirWrittenAsHome(t *testing.T) {
-	const home = "/home/someone"
+	home := filepath.FromSlash("/home/someone")
+	absolute := filepath.Join(absRoot, "absolute", "keys")
 	for written, want := range map[string]string{
-		"~":              home,
-		"~/keys":         home + "/keys",
-		"keys":           home + "/keys",
-		"/absolute/keys": "/absolute/keys",
+		"~":      home,
+		"~/keys": filepath.Join(home, "keys"),
+		"keys":   filepath.Join(home, "keys"),
+		// What makes a path absolute is the system's answer, not a leading
+		// separator — see absRoot.
+		absolute: absolute,
 	} {
 		assert.Equalf(t, want, Settings{KeyDir: written}.KeyEnumerator(home).Dir, "key_dir %q", written)
 	}

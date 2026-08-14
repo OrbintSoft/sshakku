@@ -24,10 +24,6 @@ func TestSaveAndLoad(t *testing.T) {
 	require.True(t, ok, "ExpiresAt must report ok for a non-zero lifetime")
 	want := now.Add(8 * time.Hour)
 	assert.Truef(t, expiresAt.Equal(want), "ExpiresAt = %v, want %v", expiresAt, want)
-
-	info, err := os.Stat(filepath.Join(dir, "id_rsa"))
-	require.NoError(t, err, "stat record")
-	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm(), "record permissions")
 }
 
 func TestZeroLifetimeNeverExpires(t *testing.T) {

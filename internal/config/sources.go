@@ -2,11 +2,11 @@ package config
 
 import (
 	_ "embed"
-	"errors"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/OrbintSoft/sshakku/internal/paths"
 )
 
 // MainFileName is the single config file, read before any drop-in, and the one
@@ -68,12 +68,13 @@ func Merged(sources []Source) File {
 
 // dropInSources reads the *.toml files directly under dir, in filename order
 // (os.ReadDir sorts them). A directory that is not there contributes nothing,
-// which is the ordinary case; one that exists and cannot be read is reported
-// against the directory itself, since no single file can be blamed for it.
+// which is the ordinary case; one that exists and cannot be read — including a
+// plain file where somebody meant to make a directory — is reported against
+// the directory itself, since no single file can be blamed for it.
 func dropInSources(dir string) []Source {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
+		if paths.Absent(dir) {
 			return nil
 		}
 		return []Source{{Path: dir, Err: err}}
@@ -95,7 +96,7 @@ func dropInSources(dir string) []Source {
 // read cannot tell from an empty file that exists, so existence is settled
 // first.
 func fileSource(path string) (Source, bool) {
-	if _, err := os.Lstat(path); errors.Is(err, fs.ErrNotExist) {
+	if paths.Absent(path) {
 		return Source{}, false
 	}
 	f, err := Load(path)

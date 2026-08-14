@@ -78,8 +78,11 @@ func (f fakeCgroup) Cgroup(pid int) (string, bool) {
 
 // TestGatherForeignAttribution covers Gather naming whoever launched a foreign
 // agent (F13). It is deliberately not platform-bound: the walk and the
-// attribution are shared code, and `sshd` is a launcher both platforms' tables
-// recognise under the same name — so this runs, and covers Gather, on each.
+// attribution are shared code, so this runs, and covers Gather, on every
+// system. What each of them calls that launcher is theirs to say — a platform
+// whose table recognises sshd gives it a name, one whose table recognises
+// nothing falls back to the parent's own — so the expected description is
+// wantSSHLauncher rather than one platform's wording.
 func TestGatherForeignAttribution(t *testing.T) {
 	const foreign = "/tmp/foreign.sock"
 	src := fakeSource{procs: []agent.AgentProc{
@@ -95,7 +98,7 @@ func TestGatherForeignAttribution(t *testing.T) {
 
 	require.Len(t, r.Agents, 1, "the one agent that was found")
 	assert.Len(t, r.Agents[0].Ancestry, 3, "the chain walked up from the agent")
-	assert.Truef(t, hasFinding(r, "started by an SSH login session (sshd)"),
+	assert.Truef(t, hasFinding(r, "started by "+wantSSHLauncher),
 		"the report must say who started the foreign agent: %v", r.Findings)
 }
 

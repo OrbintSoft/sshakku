@@ -197,7 +197,9 @@ func TestConfigEditCannotWriteTheFileToEdit(t *testing.T) {
 //
 // It is a script rather than a stock utility because those differ between the
 // systems this suite runs on — BSD `cp` has no `-t` — and an editor is the one
-// thing here that has to behave the same on both.
+// thing here that has to behave the same on all of them. Which script is this
+// system's own answer, and the only thing behind a build tag:
+// editorFixtureName.
 func useEditor(t *testing.T, body string) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -217,7 +219,7 @@ func useEditor(t *testing.T, body string) string {
 // from the user's own working directory rather than this package's.
 func editorScript(t *testing.T) string {
 	t.Helper()
-	path, err := filepath.Abs(filepath.Join("testdata", "editor.sh"))
+	path, err := filepath.Abs(filepath.Join("testdata", editorFixtureName))
 	require.NoError(t, err, "resolve the stand-in editor's path")
 	return path
 }

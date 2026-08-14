@@ -440,6 +440,7 @@ Per-file-type lint decisions (rule 12), current as of the last file type added:
 | TOML (`*.toml`) | `taplo lint` + `taplo format --check`; runtime parser `github.com/BurntSushi/toml` (MIT) recorded in `COPYRIGHT.md` |
 | Dockerfile (`test/containers/*.Dockerfile`) | `hadolint` (config ignores DL3008 — no viable apt-pin story against a rolling suite; the base image tag is the point-in-time anchor) |
 | XML (`internal/*/testdata/*.xml`) | `xmllint --noout` (`lint-xml`) — well-formedness only; the DTD the D-Bus bus configuration names is an `http://` URL and is deliberately not fetched, so `make lint` needs no network. Ubuntu's `libxml2-utils` is installed by the workflow rather than by the pinned tool cache, which a cache hit would skip |
+| Windows batch (`cmd/*/testdata/*.cmd`) | `blinter` (`lint-bat`, config `blinter.ini`) — a static checker for `.bat`/`.cmd` with rules for syntax, security, performance and style. Python rather than a single binary, so CI pins it with `pip install Blinter==`; AGPL-3.0-or-later, which imposes nothing here on the same ground as `shellcheck` and `hadolint` (both GPL-3): CI-only, run as a separate process over the files, never bundled or distributed. Its first run reported twelve findings on the one batch file here and five of them shared a cause — a `goto` loop, which the file no longer has. Three are off in `blinter.ini` with a reason each: a stand-in editor is *told* what to do by the environment (E006) and *records the argv it was handed* (SEC013, SEC014), so both are its contract rather than defects. It is also the one file type `.gitattributes` and `.editorconfig` check out as CRLF — cmd.exe seeks through a script to find a label, and does not reliably find one when the lines end in LF alone |
 | D-Bus service file (`*.service`) | **No linter.** `desktop-file-validate` validates desktop entries and rejects this format outright (`first group is not "Desktop Entry"`), and nothing else parses it; the only checker that applies is `editorconfig-checker`. The file is exercised instead: a test that reads it asserts the bus it is given to reports the name as activatable |
 
 ### Phase 1 — Harden the primary target: shell plumbing (still bash) ✅ Done
@@ -2269,14 +2270,38 @@ the mechanism that has to work.
   to be discovered at the next login.
 - **W4 — run it** on `windows-*` runners (open decision 9) and on a real
   desktop session, driving the binary through a user's scenario (rule 25).
-  Half of it landed early, out of order, because compiling was what mattered
-  first: a `go build (windows)` job on `windows-latest` builds and vets every
-  package. The suite stays out of that job deliberately — it fails on what the
-  platform is (no uid, backslashes, no wallet) and `internal/keys` does not
-  even finish, since a re-executed test helper outlives the run holding the
-  pipe and Windows has no process group to take it down with. Making those
-  pass is its own step; a job that ran them and ignored the result would
-  report a platform as tested that nothing tests.
+  **The suite half is done.** `go test (windows)` on `windows-latest` builds,
+  vets and now runs every package under `-race`; `go test` rather than `make
+  test` because that runner has no GNU Make, so the flags are kept in step by
+  hand.
+
+  What the suite failed on was three things, and only the first was what this
+  entry originally said. Most of it was the platform's own vocabulary being
+  written into tests as if it were universal: `/`-joined path literals against
+  paths the product builds with `filepath`, `0600` asserted where mode bits are
+  synthesised, `/tmp` in fixtures, a `.sh` as a stand-in editor, `/srv/keys`
+  taken for an absolute path where a volume is what makes one. Second, and
+  genuinely absent here: no wallet, so the promises that need one are held to
+  the systems that have one, and no numeric uid, so `--user` is asked where
+  there are uids. Third, two defects the port surfaced in shared code — a
+  directory that is not there and one that is not a directory were told apart
+  by the errno, which Windows spells differently, in both `Enumerator.Keys`
+  and `dropInSources`.
+
+  **The hang this entry blamed on a re-executed test helper was not that.**
+  The three files that re-execute are all `//go:build unix` and never ran on
+  Windows at all, so that explanation cannot have been the cause. On the
+  machine where it was observed it was the antivirus: Go builds and runs test
+  binaries under `GOTMPDIR`, which defaults to `%TEMP%` on `C:`, and a
+  real-time scanner there left them started but never executing — unkillable,
+  `CPU 0.00`, hours old. Pointed at a directory the scanner does not watch, the
+  whole suite runs in three seconds, and forty-one under `-race`. Nothing in
+  the product was involved, and nothing was changed for it.
+
+  Still to do here: the real desktop session (rule 25), and Windows joining the
+  coverage and test-health reporting the other two platforms get — Phase 6
+  item 1's "Windows once it exists", which needs a report artifact, a column in
+  `tools/testreport`, and a badge, none of which this step touched.
 
 **Out of scope here, named so they are not mistaken for oversights**: the agent
 endpoint and its named pipe, Credential Manager and 1Password as Windows
