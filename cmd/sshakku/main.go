@@ -15,6 +15,7 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/diagnose"
 	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/OrbintSoft/sshakku/internal/keys/handoff"
 	"github.com/OrbintSoft/sshakku/internal/paths"
 )
 
@@ -109,7 +110,7 @@ type deps struct {
 	// in production (newGraphicalPrompter): what counts as a usable graphical
 	// session, and what draws the dialog, are each platform's own answers.
 	graphicalPrompter func(context.Context, config.Settings, keys.Logger) keys.Prompter
-	// fetchHandoff redeems a one-shot passphrase-handoff token (keys.FetchHandoff).
+	// fetchHandoff redeems a one-shot passphrase-handoff token (handoff.Fetch).
 	// Injected so askpass's handoff path is testable without a live kernel
 	// keyring, which many containers and CI runners lack.
 	fetchHandoff func(ctx context.Context, token string) (string, error)
@@ -142,7 +143,7 @@ func realDeps() deps {
 		geteuid:           os.Geteuid,
 		self:              os.Executable,
 		graphicalPrompter: newGraphicalPrompter,
-		fetchHandoff:      keys.FetchHandoff,
+		fetchHandoff:      handoff.Fetch,
 		tty:               ttyPrompter{},
 		wallet:            realWalletView,
 		makeCompartment:   realMakeCompartment,

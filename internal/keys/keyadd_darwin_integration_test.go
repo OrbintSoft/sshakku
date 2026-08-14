@@ -15,8 +15,8 @@ import (
 
 // TestAddWithAskpassRealBinaryDarwin exercises the full production path on
 // Darwin: AddWithAskpass stashes the passphrase over a private Unix socket
-// (handoff_darwin.go/handoff_socket.go), spawns a real detached ssh-add,
-// which execs the real askpass helper as its SSH_ASKPASS program, which
+// (internal/keys/handoff), spawns a real detached ssh-add, which execs the
+// real askpass helper as its SSH_ASKPASS program, which
 // fetches the passphrase back over that same socket. Unlike this package's
 // Linux equivalent (keyadd_ttl_test.go), which redeems the stash directly
 // via `keyctl pipe`, there is no standalone CLI tool to bypass the sshakku

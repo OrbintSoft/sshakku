@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/OrbintSoft/sshakku/internal/diagnose"
-	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/OrbintSoft/sshakku/internal/keys/handoff"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -44,7 +44,7 @@ func TestEnvironmentReportReadsTheShellItRunsIn(t *testing.T) {
 // report that is not about it.
 func TestTheNamesForASessionThisProcessCannotReadCarryNoValues(t *testing.T) {
 	t.Setenv("SSH_AUTH_SOCK", "/run/user/0/keyring/ssh")
-	t.Setenv(keys.EnvPassHandoffToken, "a-token-belonging-to-the-caller")
+	t.Setenv(handoff.EnvToken, "a-token-belonging-to-the-caller")
 
 	shown, secrets := environmentNames()
 
@@ -66,7 +66,7 @@ func TestTheNamesForASessionThisProcessCannotReadCarryNoValues(t *testing.T) {
 // rendered report is searched for it.
 func TestASecretsValueNeverReachesTheReport(t *testing.T) {
 	const token = "sshakku-a-token-no-report-may-ever-show"
-	t.Setenv(keys.EnvPassHandoffToken, token)
+	t.Setenv(handoff.EnvToken, token)
 	t.Setenv("SSHAKKU_BW_PASSWORD", token)
 
 	shown, secrets := environmentReport()
@@ -79,7 +79,7 @@ func TestASecretsValueNeverReachesTheReport(t *testing.T) {
 	for _, s := range secrets {
 		set[s.Name] = s.Set
 	}
-	for _, name := range []string{keys.EnvPassHandoffToken, "SSHAKKU_BW_PASSWORD"} {
+	for _, name := range []string{handoff.EnvToken, "SSHAKKU_BW_PASSWORD"} {
 		assert.Truef(t, set[name], "%s is set in this shell, and the report must say so", name)
 	}
 

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/OrbintSoft/sshakku/internal/keys/handoff"
 	"github.com/OrbintSoft/sshakku/internal/paths"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -275,13 +275,13 @@ func TestAskpassHandoff(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", tmp)
 
 	t.Run("missing token", func(t *testing.T) {
-		t.Setenv(keys.EnvPassHandoffToken, "")
+		t.Setenv(handoff.EnvToken, "")
 		assert.Equal(t, 1, realDeps().askpassFromHandoff(t.Context(), io.Discard),
 			"with no token there is no prompt to answer, and that must be reported")
 	})
 
 	t.Run("unresolvable token routed via askpass", func(t *testing.T) {
-		t.Setenv(keys.EnvPassHandoffToken, "sshakku-test-nonexistent-token")
+		t.Setenv(handoff.EnvToken, "sshakku-test-nonexistent-token")
 		assert.Equal(t, 1, realDeps().askpass(t.Context(), io.Discard, nil),
 			"a token that resolves to nothing must be reported, not answered with an empty passphrase")
 	})

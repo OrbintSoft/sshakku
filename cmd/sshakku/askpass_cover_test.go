@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/OrbintSoft/sshakku/internal/keys/handoff"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -89,7 +89,7 @@ func TestAskpassFromHandoff(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
 	t.Setenv("XDG_STATE_HOME", tmp)
-	t.Setenv(keys.EnvPassHandoffToken, "42")
+	t.Setenv(handoff.EnvToken, "42")
 
 	t.Run("resolved passphrase is written", func(t *testing.T) {
 		d := realDeps()
@@ -130,7 +130,7 @@ func TestAskpassDispatch(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", tmp)
 
 	t.Run("handoff token routes to the stash", func(t *testing.T) {
-		t.Setenv(keys.EnvPassHandoffToken, "42")
+		t.Setenv(handoff.EnvToken, "42")
 		d := realDeps()
 		d.fetchHandoff = func(context.Context, string) (string, error) { return "from-handoff", nil }
 		var out bytes.Buffer
@@ -139,7 +139,7 @@ func TestAskpassDispatch(t *testing.T) {
 	})
 
 	t.Run("no token falls through to the wallet broker", func(t *testing.T) {
-		t.Setenv(keys.EnvPassHandoffToken, "")
+		t.Setenv(handoff.EnvToken, "")
 		d := depsReturning(&fakeProbeBackend{lookupVal: "wallet-pass", lookupOK: true})
 		var out bytes.Buffer
 		prompt := "Enter passphrase for key '/home/u/.ssh/id_ed25519': "

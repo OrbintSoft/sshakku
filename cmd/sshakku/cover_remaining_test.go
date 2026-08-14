@@ -10,6 +10,7 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/agent"
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/OrbintSoft/sshakku/internal/keys/handoff"
 	"github.com/OrbintSoft/sshakku/internal/paths"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -129,7 +130,7 @@ func TestDispatchRoutesToAskpass(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
 	t.Setenv("XDG_STATE_HOME", tmp)
-	t.Setenv(keys.EnvPassHandoffToken, "")
+	t.Setenv(handoff.EnvToken, "")
 
 	d := depsReturning(&fakeProbeBackend{lookupVal: "wallet-pass", lookupOK: true})
 	prompt := "Enter passphrase for key '/home/u/.ssh/id_ed25519': "

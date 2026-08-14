@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/OrbintSoft/sshakku/internal/keys/handoff"
 	"github.com/OrbintSoft/sshakku/internal/paths"
 	"github.com/OrbintSoft/sshakku/internal/sessionlog"
 )
@@ -18,7 +19,7 @@ import (
 // Without one we are the reactive broker for an interactive ssh whose key has
 // expired, and answer the prompt in args from the wallet (or the terminal).
 func (d deps) askpass(ctx context.Context, stdout io.Writer, args []string) int {
-	if os.Getenv(keys.EnvPassHandoffToken) != "" {
+	if os.Getenv(handoff.EnvToken) != "" {
 		return d.askpassFromHandoff(ctx, stdout)
 	}
 	return d.askpassBroker(ctx, stdout, args)
@@ -61,7 +62,7 @@ func (d deps) askpassBroker(ctx context.Context, stdout io.Writer, args []string
 func (d deps) askpassFromHandoff(ctx context.Context, stdout io.Writer) int {
 	log := sessionlog.New(paths.Resolve(paths.FromOS(), paths.ProbeDir).LogFile)
 
-	token := os.Getenv(keys.EnvPassHandoffToken)
+	token := os.Getenv(handoff.EnvToken)
 	if token == "" {
 		_ = log.Log("ERROR", "askpass: missing handoff token")
 		return 1

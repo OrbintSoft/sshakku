@@ -5,6 +5,7 @@ import (
 
 	"github.com/OrbintSoft/sshakku/internal/diagnose"
 	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/OrbintSoft/sshakku/internal/keys/handoff"
 )
 
 // shownEnvVars names every environment variable SSHakku reads whose value can
@@ -31,7 +32,7 @@ var shownEnvVars = []string{
 // "master password" here and someone may well export it believing it to be a
 // setting. Either way the report only ever says whether it is set.
 var secretEnvVars = []string{
-	keys.EnvPassHandoffToken,
+	handoff.EnvToken,
 	keys.EnvBitwardenPassword,
 }
 

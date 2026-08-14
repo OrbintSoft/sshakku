@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
-	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/OrbintSoft/sshakku/internal/keys/handoff"
 	"github.com/OrbintSoft/sshakku/internal/paths"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -75,7 +75,7 @@ func TestTamperedEnvVarsHandledSafely(t *testing.T) {
 	// stash that was never made under it.
 	t.Run("malformed SSHAKKU_HANDOFF_TOKEN yields no passphrase", func(t *testing.T) {
 		tempRuntimeEnv(t)
-		t.Setenv(keys.EnvPassHandoffToken, "not-a-real-token")
+		t.Setenv(handoff.EnvToken, "not-a-real-token")
 
 		var stdout bytes.Buffer
 		code := realDeps().askpass(t.Context(), &stdout, []string{"Enter passphrase:"})

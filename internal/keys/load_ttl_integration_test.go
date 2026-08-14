@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/OrbintSoft/sshakku/internal/keyring"
+	"github.com/OrbintSoft/sshakku/internal/keys/handoff"
 	"github.com/OrbintSoft/sshakku/internal/keystate"
 	"github.com/OrbintSoft/sshakku/internal/run"
 	"github.com/stretchr/testify/assert"
@@ -45,7 +46,7 @@ func TestLoadKeysReloadsAfterRealExpiry(t *testing.T) {
 	t.Setenv("SSH_AUTH_SOCK", sock)
 
 	askpassScript := filepath.Join(dir, "askpass.sh")
-	script := "#!/bin/sh\nexec keyctl pipe \"$" + EnvPassHandoffToken + "\"\n"
+	script := "#!/bin/sh\nexec keyctl pipe \"$" + handoff.EnvToken + "\"\n"
 	require.NoError(t, os.WriteFile(askpassScript, []byte(script), 0o755), "a helper to collect the stashed passphrase")
 
 	const lifetime = 2 * time.Second

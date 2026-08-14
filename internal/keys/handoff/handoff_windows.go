@@ -1,6 +1,6 @@
 //go:build windows
 
-package keys
+package handoff
 
 import (
 	"context"
@@ -17,8 +17,8 @@ import (
 // one of the places the passphrase must never appear.
 var errNoHandoff = errors.New("passphrase handoff is not implemented on windows")
 
-// stashPassphrase reports errNoHandoff.
-func stashPassphrase(string, time.Duration) (string, error) { return "", errNoHandoff }
+// Stash reports errNoHandoff.
+func Stash(string, time.Duration) (string, error) { return "", errNoHandoff }
 
-// fetchPassphrase reports errNoHandoff.
-func fetchPassphrase(context.Context, string) (string, error) { return "", errNoHandoff }
+// Fetch reports errNoHandoff.
+func Fetch(context.Context, string) (string, error) { return "", errNoHandoff }

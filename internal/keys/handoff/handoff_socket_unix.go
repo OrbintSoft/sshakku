@@ -8,7 +8,7 @@
 
 //go:build unix
 
-package keys
+package handoff
 
 import (
 	"context"
@@ -84,7 +84,7 @@ func socketHandoffStash(passphrase string, ttl time.Duration, base func() (strin
 	if err != nil {
 		return "", err
 	}
-	name, err := randomHandoffToken()
+	name, err := randomToken()
 	if err != nil {
 		return "", err
 	}
