@@ -1,6 +1,6 @@
 //go:build linux
 
-package diagnose
+package hostcheck
 
 import "syscall"
 

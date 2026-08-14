@@ -2,22 +2,25 @@
 
 package main
 
-import "github.com/OrbintSoft/sshakku/internal/diagnose"
+import (
+	"github.com/OrbintSoft/sshakku/internal/diagnose/hostcheck"
+	"github.com/OrbintSoft/sshakku/internal/diagnose/launcher"
+)
 
-// newHostSource returns doctor's environment-hardening HostSource for this OS,
-// which determines nothing here — see diagnose.WindowsHostSource.
-func newHostSource(target string) diagnose.HostSource {
-	return diagnose.WindowsHostSource{Target: target}
+// newHostSource returns doctor's environment-hardening source for this OS,
+// which determines nothing here — see hostcheck.Windows.
+func newHostSource(target string) hostcheck.Source {
+	return hostcheck.Windows{Target: target}
 }
 
 // newAncestrySource returns how the process tree is read on this OS, which is
 // not at all: there is no procfs to walk and no `ps` to ask.
-func newAncestrySource() diagnose.AncestrySource {
-	return diagnose.NoAncestry{}
+func newAncestrySource() launcher.AncestrySource {
+	return launcher.NoAncestry{}
 }
 
 // newCgroupSource returns how a process's control-group membership is read on
 // this OS, which is not at all: Windows has no control groups.
-func newCgroupSource() diagnose.CgroupSource {
-	return diagnose.NoCgroups{}
+func newCgroupSource() launcher.CgroupSource {
+	return launcher.NoCgroups{}
 }

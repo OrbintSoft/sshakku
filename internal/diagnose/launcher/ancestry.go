@@ -1,4 +1,18 @@
-package diagnose
+// Package launcher works out what started an ssh-agent, which is the difference
+// between one SSHakku is tending and one that came from somewhere else — a
+// desktop session, an SSH login, a service unit. `sshakku doctor` names it so a
+// person looking at an agent they did not expect knows where to go and look.
+//
+// It walks the process tree upward from the agent, bounded and cycle-guarded so
+// a racing or hostile process table cannot run the report away, and stops at the
+// first ancestor this platform recognises. A daemon that double-forked has no
+// such ancestor left — it was reparented to init and its launcher is gone from
+// the tree — so its control-group membership is asked instead, which often still
+// names the unit it was started under.
+//
+// Which names are worth recognising, and what a cgroup can still say, are each
+// platform's own answers, and each platform's file holds only that table.
+package launcher
 
 import (
 	"context"
@@ -27,7 +41,7 @@ type AncestrySource interface {
 // ancestry walks the process tree from pid toward pid 1, returning the chain of
 // processes (the pid itself first, then each parent up to init). It is bounded in
 // depth and guards against a cycle, so a hostile or racing /proc cannot loop it.
-func ancestry(ctx context.Context, pid int, src AncestrySource) []ProcInfo {
+func Ancestry(ctx context.Context, pid int, src AncestrySource) []ProcInfo {
 	if src == nil {
 		return nil
 	}
@@ -58,7 +72,7 @@ func ancestry(ctx context.Context, pid int, src AncestrySource) []ProcInfo {
 // Which launchers are worth recognising by name, and what can still be said
 // when the trail ends at init, are each platform's own answers: launcherLabel
 // and reparentedLabel are supplied per platform.
-func startedBy(chain []ProcInfo, cgroupUnit string) (string, bool) {
+func StartedBy(chain []ProcInfo, cgroupUnit string) (string, bool) {
 	if len(chain) < 2 {
 		return "", false
 	}
@@ -81,7 +95,7 @@ func startedBy(chain []ProcInfo, cgroupUnit string) (string, bool) {
 }
 
 // chainString renders an ancestry chain as "name(pid) ← name(pid) ← …".
-func chainString(chain []ProcInfo) string {
+func Chain(chain []ProcInfo) string {
 	parts := make([]string, len(chain))
 	for i, p := range chain {
 		parts[i] = p.Name + "(" + strconv.Itoa(p.PID) + ")"

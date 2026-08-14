@@ -1,6 +1,6 @@
 //go:build windows
 
-package diagnose
+package launcher
 
 // NoCgroups is the CgroupSource for a system that has no control groups.
 //

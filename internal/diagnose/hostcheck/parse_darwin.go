@@ -1,6 +1,6 @@
 //go:build darwin
 
-package diagnose
+package hostcheck
 
 import (
 	"bytes"

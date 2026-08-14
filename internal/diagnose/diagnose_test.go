@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/OrbintSoft/sshakku/internal/agent"
+	"github.com/OrbintSoft/sshakku/internal/diagnose/hostcheck"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -313,48 +314,48 @@ func TestHostFindings(t *testing.T) {
 
 	// Eight independent questions about one report; assert throughout, and
 	// only look inside a finding once there is exactly one to look inside.
-	assert.Empty(t, hostFindings(HostChecks{}), "a host nothing was established about yields nothing to report")
+	assert.Empty(t, hostFindings(hostcheck.Checks{}), "a host nothing was established about yields nothing to report")
 
-	got := hostFindings(HostChecks{DiskEncrypted: &no})
+	got := hostFindings(hostcheck.Checks{DiskEncrypted: &no})
 	if assert.Len(t, got, 1, "an unencrypted disk is one finding") {
 		assert.Contains(t, got[0], "not appear to be encrypted", "the finding must say the disk is not encrypted")
 	}
 
-	assert.Empty(t, hostFindings(HostChecks{DiskEncrypted: &yes}), "an encrypted disk is nothing to report")
+	assert.Empty(t, hostFindings(hostcheck.Checks{DiskEncrypted: &yes}), "an encrypted disk is nothing to report")
 
-	got = hostFindings(HostChecks{TmpTmpfs: &no})
+	got = hostFindings(hostcheck.Checks{TmpTmpfs: &no})
 	if assert.Len(t, got, 1, "a /tmp that is not a tmpfs is one finding") {
 		assert.Contains(t, got[0], "not a dedicated tmpfs mount", "the finding must say what /tmp is not")
 	}
 
-	got = hostFindings(HostChecks{TmpTmpfs: &yes, TmpSizeBytes: 64 * 1024 * 1024})
+	got = hostFindings(hostcheck.Checks{TmpTmpfs: &yes, TmpSizeBytes: 64 * 1024 * 1024})
 	if assert.Len(t, got, 1, "a tmpfs too small to be useful is one finding") {
 		assert.Contains(t, got[0], "too small", "the finding must say the tmpfs is undersized")
 	}
 
-	assert.Empty(t, hostFindings(HostChecks{TmpTmpfs: &yes, TmpSizeBytes: 2 * 1024 * 1024 * 1024}),
+	assert.Empty(t, hostFindings(hostcheck.Checks{TmpTmpfs: &yes, TmpSizeBytes: 2 * 1024 * 1024 * 1024}),
 		"a tmpfs of adequate size is nothing to report")
 
-	got = hostFindings(HostChecks{SecureHardwarePresent: &no})
+	got = hostFindings(hostcheck.Checks{SecureHardwarePresent: &no})
 	if assert.Len(t, got, 1, "a machine with no secure hardware is one finding") {
 		assert.Contains(t, got[0], "no TPM or Secure Enclave detected", "the finding must say none was found")
 	}
 
-	assert.Empty(t, hostFindings(HostChecks{SecureHardwarePresent: &yes, SecureHardwareKind: "TPM 2.0"}),
+	assert.Empty(t, hostFindings(hostcheck.Checks{SecureHardwarePresent: &yes, SecureHardwareKind: "TPM 2.0"}),
 		"secure hardware that is present is nothing to report")
 }
 
 func TestHostChecksLine(t *testing.T) {
 	no, yes := false, true
 
-	assert.Empty(t, hostChecksLine(HostChecks{}), "a host that was never looked at has no line to print")
+	assert.Empty(t, hostChecksLine(hostcheck.Checks{}), "a host that was never looked at has no line to print")
 
-	got := hostChecksLine(HostChecks{DiskEncrypted: &yes, TmpTmpfs: &yes, TmpSizeBytes: 1024 * 1024 * 1024, SecureHardwarePresent: &yes, SecureHardwareKind: "TPM 2.0"})
+	got := hostChecksLine(hostcheck.Checks{DiskEncrypted: &yes, TmpTmpfs: &yes, TmpSizeBytes: 1024 * 1024 * 1024, SecureHardwarePresent: &yes, SecureHardwareKind: "TPM 2.0"})
 	for _, want := range []string{"disk encryption: yes", "/tmp: tmpfs, 1.0 GiB", "secure hardware: present (TPM 2.0)"} {
 		assert.Containsf(t, got, want, "the line must say %q", want)
 	}
 
-	got = hostChecksLine(HostChecks{DiskEncrypted: &no, TmpTmpfs: &no, SecureHardwarePresent: &no})
+	got = hostChecksLine(hostcheck.Checks{DiskEncrypted: &no, TmpTmpfs: &no, SecureHardwarePresent: &no})
 	for _, want := range []string{"disk encryption: no", "/tmp: not tmpfs", "secure hardware: not detected"} {
 		assert.Containsf(t, got, want, "the line must say %q", want)
 	}
@@ -377,7 +378,7 @@ func TestFormatIncludesEnvironmentSection(t *testing.T) {
 	r := Report{
 		FixedSock: fixed,
 		Findings:  []string{"no problems detected"},
-		Host:      HostChecks{DiskEncrypted: &yes, TmpTmpfs: &yes, TmpSizeBytes: 1024 * 1024 * 1024, SecureHardwarePresent: &yes, SecureHardwareKind: "TPM 2.0"},
+		Host:      hostcheck.Checks{DiskEncrypted: &yes, TmpTmpfs: &yes, TmpSizeBytes: 1024 * 1024 * 1024, SecureHardwarePresent: &yes, SecureHardwareKind: "TPM 2.0"},
 	}
 	var buf bytes.Buffer
 	Format(&buf, r)

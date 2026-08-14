@@ -1,4 +1,4 @@
-package diagnose
+package launcher
 
 // CgroupSource reports what a process's control-group membership can still
 // say about who launched it, when the process tree no longer can. Each

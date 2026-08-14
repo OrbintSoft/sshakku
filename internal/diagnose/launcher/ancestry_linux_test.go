@@ -1,13 +1,12 @@
 //go:build linux
 
-package diagnose
+package launcher
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/OrbintSoft/sshakku/internal/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -90,28 +89,11 @@ func TestStartedBy(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got, ok := startedBy(c.chain, c.cgroupUnit)
+			got, ok := StartedBy(c.chain, c.cgroupUnit)
 			assert.Equal(t, c.ok, ok, "whether anything could be said about who started it")
 			assert.Equal(t, c.want, got, "what the report says started it")
 		})
 	}
-}
-
-func TestGatherReparentedToInitCgroupFallback(t *testing.T) {
-	const foreign = "/tmp/foreign.sock"
-	src := fakeSource{procs: []agent.AgentProc{
-		{PID: 200, UID: 1000, Socket: foreign},
-	}}
-	prober := fakeProber{up: map[string]bool{foreign: true}}
-	anc := fakeAncestry{
-		200: {ppid: 1, name: "ssh-agent"},
-		1:   {ppid: 0, name: "systemd"},
-	}
-	cg := fakeCgroup{200: "app-gpg-agent.service"}
-	r := Gather(t.Context(), Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000}, src, prober, anc, cg, nil, nil)
-
-	assert.Truef(t, hasFinding(r, "systemd unit: app-gpg-agent.service"),
-		"an agent whose parent is gone must still be named by its unit: %v", r.Findings)
 }
 
 // TestLauncherLabelDisplayManagers covers the display-manager and console-login

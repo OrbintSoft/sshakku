@@ -1,6 +1,6 @@
 //go:build darwin
 
-package diagnose
+package launcher
 
 import (
 	"context"
@@ -141,7 +141,7 @@ func TestStartedByOnDarwin(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got, ok := startedBy(c.chain, "")
+			got, ok := StartedBy(c.chain, "")
 			assert.Equal(t, c.ok, ok, "whether anything could be said about who started it")
 			assert.Equal(t, c.want, got, "what the report says started it")
 		})

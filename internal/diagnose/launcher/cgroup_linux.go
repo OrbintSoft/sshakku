@@ -1,6 +1,6 @@
 //go:build linux
 
-package diagnose
+package launcher
 
 import (
 	"os"

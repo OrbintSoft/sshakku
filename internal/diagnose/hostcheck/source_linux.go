@@ -1,6 +1,6 @@
 //go:build linux
 
-package diagnose
+package hostcheck
 
 import (
 	"context"
@@ -10,26 +10,26 @@ import (
 	"strings"
 )
 
-// ProcfsHostSource reads /proc/mounts, /sys/class/block, /sys/class/tpm, and
+// Procfs reads /proc/mounts, /sys/class/block, /sys/class/tpm, and
 // resolves device-mapper symlinks under /dev. ProcRoot/SysRoot/DevRoot are
 // injectable for tests; empty means the real "/proc"/"/sys"/"/dev". Target is
 // the path whose backing filesystem is checked for encryption; empty means
 // "/".
-type ProcfsHostSource struct {
+type Procfs struct {
 	ProcRoot string
 	SysRoot  string
 	DevRoot  string
 	Target   string
 }
 
-// Checks implements HostSource.
-func (h ProcfsHostSource) Checks(context.Context) HostChecks {
+// Checks implements Source.
+func (h Procfs) Checks(context.Context) Checks {
 	procRoot := orDefault(h.ProcRoot, "/proc")
 	sysRoot := orDefault(h.SysRoot, "/sys")
 	devRoot := orDefault(h.DevRoot, "/dev")
 	target := orDefault(h.Target, "/")
 
-	var hc HostChecks
+	var hc Checks
 	if b, err := os.ReadFile(filepath.Join(procRoot, "mounts")); err == nil {
 		mounts := parseMounts(b)
 		if m, ok := findMountFor(mounts, target); ok && strings.HasPrefix(m.device, "/dev/") {

@@ -1,6 +1,6 @@
 //go:build darwin
 
-package diagnose
+package hostcheck
 
 import (
 	"context"
@@ -42,7 +42,7 @@ func TestDarwinChecksAppleSilicon(t *testing.T) {
 		},
 		func() (uint32, error) { return 1, nil },
 	)
-	hc := DarwinHostSource{}.Checks(t.Context())
+	hc := Darwin{}.Checks(t.Context())
 	assert.True(t, settled(t, hc.DiskEncrypted, "disk encryption"), "FileVault reported on means the disk is encrypted")
 	assert.False(t, settled(t, hc.TmpTmpfs, "whether /tmp is a tmpfs"), "macOS has no tmpfs on /tmp, and that is known rather than guessed")
 	assert.True(t, settled(t, hc.SecureHardwarePresent, "secure hardware"), "an Apple Silicon host carries a Secure Enclave")

@@ -1,14 +1,24 @@
-package diagnose
+// Package hostcheck reads what the machine itself does for a passphrase that
+// SSHakku cannot do for it: whether the disk a wallet is written to is
+// encrypted, whether /tmp is a filesystem in memory or one on that disk, and
+// whether there is hardware an encryption scheme could bind a key to.
+//
+// Every answer is best-effort and read-only, and "could not tell" is one of
+// them — a nil pointer, never a guess. None of it changes what SSHakku does:
+// `sshakku doctor` reports these so the person reading knows what their
+// passphrases are actually resting on, and nothing here refuses to run or
+// configures anything on their behalf.
+package hostcheck
 
 import "context"
 
-// HostChecks are best-effort, read-only observations about the host
+// Checks are best-effort, read-only observations about the host
 // environment: conditions outside sshakku's own control that materially
 // affect its threat model (a leaked wallet on an unencrypted disk, a
 // passphrase transiting a world-readable /tmp). A nil pointer means "could
 // not determine" — these checks never guess, and doctor only ever reports
 // them, never configures or refuses to run because of them.
-type HostChecks struct {
+type Checks struct {
 	// DiskEncrypted reports whether the disk backing Target is encrypted:
 	// LUKS (including one level of LUKS-under-LVM) on Linux, FileVault on
 	// macOS. nil when that could not be resolved (network filesystem,
@@ -33,9 +43,8 @@ type HostChecks struct {
 	SecureHardwareKind string
 }
 
-// HostSource gathers HostChecks. ProcfsHostSource (Linux) and
-// DarwinHostSource (macOS) are the real implementations. Tests supply a
-// fake.
-type HostSource interface {
-	Checks(ctx context.Context) HostChecks
+// Source gathers Checks. Procfs (Linux) and Darwin (macOS) are the real
+// implementations; tests supply a fake.
+type Source interface {
+	Checks(ctx context.Context) Checks
 }

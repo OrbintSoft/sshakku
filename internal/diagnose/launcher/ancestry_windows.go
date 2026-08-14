@@ -1,6 +1,6 @@
 //go:build windows
 
-package diagnose
+package launcher
 
 import "context"
 

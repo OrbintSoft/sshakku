@@ -1,6 +1,6 @@
 //go:build darwin
 
-package diagnose
+package hostcheck
 
 import (
 	"context"
@@ -10,14 +10,14 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// hostCheckTimeout bounds each of DarwinHostSource's shell-outs. These are
+// hostCheckTimeout bounds each of Darwin's shell-outs. These are
 // plain status queries, not human-facing prompts, so a wedged binary (or an
 // agent/authorization dependency it silently blocks on) must surface as an
 // undetermined check, not hang the caller (e.g. `doctor`) indefinitely.
 const hostCheckTimeout = 5 * time.Second
 
 // Seams over the macOS host-status probes — each a shell-out or sysctl side
-// effect — so DarwinHostSource.Checks and its helpers' branch logic are
+// effect — so Darwin.Checks and its helpers' branch logic are
 // unit-testable by stubbing them. Production points them at the real tools.
 var (
 	fdesetupStatus = func(ctx context.Context) ([]byte, error) {
@@ -34,18 +34,18 @@ var (
 	}
 )
 
-// DarwinHostSource gathers HostChecks via macOS-native tools: `fdesetup
+// Darwin gathers Checks via macOS-native tools: `fdesetup
 // status` for FileVault, and CPU architecture (falling back to a T1/T2 probe
 // on Intel) for Secure Enclave presence. Target is unused — FileVault status
 // is whole-volume, unlike Linux's per-mount LUKS check — kept only for
-// interface parity with ProcfsHostSource.
-type DarwinHostSource struct {
+// interface parity with Procfs.
+type Darwin struct {
 	Target string
 }
 
-// Checks implements HostSource.
-func (DarwinHostSource) Checks(ctx context.Context) HostChecks {
-	var hc HostChecks
+// Checks implements Source.
+func (Darwin) Checks(ctx context.Context) Checks {
+	var hc Checks
 	hc.DiskEncrypted = fileVaultStatus(ctx)
 	notTmpfs := false
 	hc.TmpTmpfs = &notTmpfs // macOS has no tmpfs-backed /tmp to detect
