@@ -13,20 +13,20 @@ rem   SSHAKKU_TEST_EDITOR_BODY     file to save over the last argument; unset or
 rem                                empty leaves the file exactly as it was found
 setlocal
 
-rem The redirection comes first so that arguments ending in a digit are not read
-rem as a stream number.
-if not "%SSHAKKU_TEST_EDITOR_RECORD%"=="" >>"%SSHAKKU_TEST_EDITOR_RECORD%" echo %*
+set "record=%SSHAKKU_TEST_EDITOR_RECORD%"
+set "body=%SSHAKKU_TEST_EDITOR_BODY%"
 
-rem The file to save over is the last argument, whatever came before it.
+rem The redirection comes first so that an argument ending in a digit is not
+rem read as a stream number.
+if not "%record%"=="" >>"%record%" echo %*
+
+rem The file to save over is the last argument, whatever came before it. A
+rem quoted argument stays one token here, which is how a path with a space in
+rem it survives being walked over.
 set "target="
-:lastarg
-if "%~1"=="" goto saved
-set "target=%~1"
-shift
-goto lastarg
+for %%A in (%*) do set "target=%%~A"
 
-:saved
-if not "%SSHAKKU_TEST_EDITOR_BODY%"=="" copy /y "%SSHAKKU_TEST_EDITOR_BODY%" "%target%" >nul
+if not "%body%"=="" if not "%target%"=="" copy /y "%body%" "%target%" >nul
 
 endlocal
 exit /b 0
