@@ -94,14 +94,16 @@ func newFakeServer(t *testing.T) *fakeServer {
 
 // shortSocketDir returns a directory a unix socket can actually live in.
 //
-// A socket *address* is capped at 104 bytes on Darwin (108 on Linux), and the
-// name is checked at bind, not at connect. t.TempDir() is nowhere near short
-// enough on macOS, where TMPDIR is a per-user path under /var/folders and the
-// test's own name is appended to it — so the bind fails with EINVAL and every
-// test in the file goes red at once. /tmp is short on both platforms.
+// A socket *address* is capped at 104 bytes on Darwin (108 on Linux and on
+// Windows), and the name is checked at bind, not at connect. t.TempDir() is
+// nowhere near short enough on macOS, where TMPDIR is a per-user path under
+// /var/folders and the test's own name is appended to it — so the bind fails
+// with EINVAL and every test in the file goes red at once. Which directory is
+// short enough to hold one is the platform's answer, not this function's:
+// shortSocketBase gives it.
 func shortSocketDir(t *testing.T) string {
 	t.Helper()
-	dir, err := os.MkdirTemp("/tmp", "kpxc") //nolint:usetesting // t.TempDir() is the long macOS path the comment above is about
+	dir, err := os.MkdirTemp(shortSocketBase(), "kpxc") //nolint:usetesting // t.TempDir() is the long macOS path the comment above is about
 	require.NoError(t, err, "mkdir temp")
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	return dir
