@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
-	"strconv"
 	"testing"
 	"time"
 
@@ -54,11 +53,10 @@ func TestRun(t *testing.T) {
 // TestEveryChoosableWalletCanBeDiagnosed needs this system to have a wallet at
 // all, so it is in walletcheck_unix_test.go beside the other wallet tests.
 
+// The subtests that resolve a real account through the user database are in
+// doctoruser_unix_test.go: they need this system to name a user by a numeric
+// uid, and Windows names one by a SID.
 func TestResolveTargetUser(t *testing.T) {
-	self, err := user.Current()
-	if err != nil {
-		t.Skipf("user.Current: %v", err)
-	}
 	selfUID := os.Getuid()
 	// resolveTargetUser answers two things: whose files to look at, and whether
 	// that is somebody other than the caller — Source is empty for the caller
@@ -72,42 +70,9 @@ func TestResolveTargetUser(t *testing.T) {
 		assert.Empty(t, got.Source, "nothing cross-user happened")
 	})
 
-	t.Run("--user names the invoking user: still self", func(t *testing.T) {
-		got, err := resolveTargetUser(self.Username, paths.Env{UID: selfUID})
-		require.NoError(t, err, "resolveTargetUser")
-		assert.Equal(t, selfUID, got.UID, "the caller's own uid")
-		assert.Empty(t, got.Source, "naming yourself is not going cross-user")
-	})
-
-	t.Run("--user names someone else: cross-user, regardless of who's actually invoking", func(t *testing.T) {
-		// selfEnv.UID is deliberately a uid nothing resolves to, so this exercises
-		// the "different from invoker" branch without depending on whether the test
-		// process happens to be root.
-		got, err := resolveTargetUser(self.Username, paths.Env{UID: -1})
-		require.NoError(t, err, "resolveTargetUser")
-		assert.Equal(t, selfUID, got.UID, "the uid of the user named")
-		assert.NotEmpty(t, got.Source, "a target that is not the caller must say how it was arrived at")
-	})
-
 	t.Run("unknown --user value errors", func(t *testing.T) {
 		_, err := resolveTargetUser("sshakku-test-no-such-user", paths.Env{UID: selfUID})
 		assert.Error(t, err, "a user nobody can resolve must be reported, not silently taken for the caller")
-	})
-
-	t.Run("SUDO_UID auto-detected only when invoking as root", func(t *testing.T) {
-		if selfUID == 0 {
-			// The test process itself is root (e.g. a container test run), so
-			// there's no non-root uid left to fake as SUDO_UID: a real sudo
-			// invocation never sets SUDO_UID=0, and resolveTargetUser correctly
-			// treats a lookup that resolves back to uid 0 as "no cross-user
-			// target", the very thing this subtest exists to rule out.
-			t.Skip("test process is already root: can't fake a distinct non-root SUDO_UID")
-		}
-		t.Setenv("SUDO_UID", strconv.Itoa(selfUID))
-		got, err := resolveTargetUser("", paths.Env{UID: 0})
-		require.NoError(t, err, "resolveTargetUser")
-		assert.Equal(t, selfUID, got.UID, "the uid sudo recorded")
-		assert.NotEmpty(t, got.Source, "a target arrived at through SUDO_UID must say so")
 	})
 
 	t.Run("SUDO_UID ignored when not invoking as root", func(t *testing.T) {
