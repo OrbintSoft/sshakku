@@ -1,3 +1,13 @@
+// The passphrase handoff over a private Unix socket. Darwin is what reaches
+// for it (handoff_darwin.go); Linux has the kernel keyring instead, and
+// Windows has neither and says so — see handoff_windows.go. It is built for
+// the family whose sockets carry a permission bit, because that bit is what
+// makes the rendezvous private: a system that answers "who may connect" with
+// an access-control list needs a mechanism of its own, not this one with the
+// check left out.
+
+//go:build unix
+
 package keys
 
 import (

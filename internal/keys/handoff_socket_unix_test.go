@@ -1,3 +1,5 @@
+//go:build unix
+
 package keys
 
 import (
@@ -13,20 +15,6 @@ import (
 // of the two systems this runs on, so a socket path that fits here fits
 // everywhere. The production values live with the platform that imposes them.
 const addrLimit = 103
-
-// shortDir returns a fresh temp dir under /tmp — not t.TempDir()'s nested,
-// test-name-derived path, and not os.MkdirTemp("", ...)'s default either: on
-// Darwin that resolves under $TMPDIR, itself a long per-boot randomized path
-// (/var/folders/.../T/), and a test that spends its budget on the directory
-// leading up to the socket has nothing left to say about the socket. /tmp is
-// short on both.
-func shortDir(t *testing.T) string {
-	t.Helper()
-	dir, err := os.MkdirTemp("/tmp", "sshakku") //nolint:usetesting // t.TempDir() is the long macOS path the comment above is about
-	require.NoError(t, err, "a short directory to put the socket in")
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	return dir
-}
 
 // fixedBase answers with one directory, for the tests whose subject is what
 // happens once the base is known rather than how one is chosen.
