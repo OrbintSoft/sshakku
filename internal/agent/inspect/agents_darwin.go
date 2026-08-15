@@ -9,10 +9,18 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// sysctlProcList seams the kern.proc.all sysctl so platformAgents's
-// enumeration-failure branch is testable without a way to make the real sysctl
-// fail. Production points it at the live syscall.
-var sysctlProcList = unix.SysctlKinfoProcSlice
+// sysctlProcList and sysctlProcArgs seam the two sysctls this file reads, so
+// what it decides from their answers can be checked against answers a test
+// chooses. Both point at the live syscall in production.
+//
+// They are the whole of this file's contact with the kernel: everything below
+// is the mapping from what the kernel said to what a caller is told, and a
+// mapping that can only be exercised when the machine happens to be running an
+// ssh-agent is one that goes unchecked on every machine that is not.
+var (
+	sysctlProcList = unix.SysctlKinfoProcSlice
+	sysctlProcArgs = unix.SysctlRaw
+)
 
 // platformAgents enumerates ssh-agent processes via sysctl: macOS has no
 // /proc for readProcfsTree to read, so this uses kern.proc.all for the
@@ -50,7 +58,7 @@ func platformAgents() ([]AgentProc, error) {
 // equivalent of Linux's /proc/<pid>/cmdline. See parseKernProcArgs2 for the
 // buffer layout.
 func darwinProcArgs(pid int) ([]string, error) {
-	buf, err := unix.SysctlRaw("kern.procargs2", pid)
+	buf, err := sysctlProcArgs("kern.procargs2", pid)
 	if err != nil {
 		return nil, err
 	}

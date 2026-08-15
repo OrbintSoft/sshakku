@@ -59,13 +59,19 @@ type Inspector struct {
 	ProcRoot string
 }
 
+// platformSource is what Agents asks when it was given no tree of its own. It
+// is a package variable so which of the two sources Agents chooses stays a
+// decision any platform can check, rather than one only the platform that
+// provides the source can.
+var platformSource = platformAgents
+
 // Agents returns the ssh-agent processes currently visible. A process that
 // disappears mid-scan is skipped, not reported as an error.
 func (in Inspector) Agents() ([]AgentProc, error) {
 	if in.ProcRoot != "" {
 		return readProcfsTree(in.ProcRoot)
 	}
-	return platformAgents()
+	return platformSource()
 }
 
 // readProcfsTree reads a Linux-procfs-shaped directory tree at root: one
