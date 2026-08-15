@@ -7,9 +7,10 @@ import (
 )
 
 // TestMain runs the whole package under goleak so a goroutine outliving the
-// suite fails the build. The package's own goroutines are the in-process fake
-// agents the reachability tests spin up; each is torn down with its listener in
-// a t.Cleanup, and goleak verifies none is left running.
+// suite fails the build. Nothing here starts one directly; what these tests
+// drive does — the real ssh-agent processes the lifecycle tests start and
+// reap, and the socket probes they are judged by — and a probe that never
+// finished waiting would otherwise leave the suite green.
 func TestMain(m *testing.M) {
 	goleak.VerifyTestMain(m)
 }

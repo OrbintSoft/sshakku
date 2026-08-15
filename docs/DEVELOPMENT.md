@@ -19,7 +19,8 @@ composed by it. One line each:
 | `internal/cli/dialog` | Decides where this machine can ask a person for a passphrase: the graphical dialog this platform can raise, or the controlling terminal. |
 | `internal/cli/shell` | The shell forms the eval-able commands print in: the Bourne form every POSIX shell reads, and PowerShell's. |
 | `internal/cli/walletcheck` | Describes the configured wallet as this machine actually is — which one would be opened, how it would be reached, what of that is present — for `doctor` to report and `--fix` to act on. |
-| `internal/agent` | Tends the user's `ssh-agent`: probes a socket, starts one on the fixed socket, reaps dead agents/sockets, adopts one already running. Never reimplements `ssh-agent` itself. |
+| `internal/agent` | Tends the user's `ssh-agent`: starts one on the fixed socket, reaps dead agents/sockets, adopts one already running. Never reimplements `ssh-agent` itself. |
+| `internal/agent/reach` | Answers whether an ssh-agent answers, by speaking its wire protocol on its socket the way `ssh-add -l` does — a socket file being there says nothing about what is still behind it. |
 | `internal/agent/inspect` | Finds the `ssh-agent` processes running on this machine and says which is which: the one on the socket SSHakku pins, one left over from before SSHakku, or someone else's. Only the process list is platform-specific — Linux reads procfs, macOS asks sysctl. |
 | `internal/agent/inspect/inspecttest` | Builds the procfs-shaped trees `inspect` reads, so a test decides what was running instead of asking the machine it runs on — and runs on a system that has no `/proc`. |
 | `internal/config` | Resolves settings: environment variable, then the TOML config file, then a built-in default, per setting. Reads `config.toml` and the `config.d/` drop-ins as an ordered list of sources, so what resolved a value can be reported alongside the value. |

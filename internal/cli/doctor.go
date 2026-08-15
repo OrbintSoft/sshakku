@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/OrbintSoft/sshakku/internal/agent"
 	"github.com/OrbintSoft/sshakku/internal/cli/shell"
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/diagnose"
@@ -24,6 +23,8 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/sessionlog"
 
 	"github.com/OrbintSoft/sshakku/internal/agent/inspect"
+
+	"github.com/OrbintSoft/sshakku/internal/agent/reach"
 )
 
 // targetUser identifies whose ssh-agent session `doctor` should report on.
@@ -447,7 +448,7 @@ func (d deps) doctorCrossUser(ctx context.Context, stdout, stderr io.Writer, inv
 		Env:           shownEnv,
 		SecretEnv:     secretEnv,
 		EnvUnreadable: true,
-	}, inspect.Inspector{}, agent.UIDGatedProber{UID: target.UID, Prober: agent.SocketProber{}}, newAncestrySource(), newCgroupSource(),
+	}, inspect.Inspector{}, reach.UIDGatedProber{UID: target.UID, Prober: reach.SocketProber{}}, newAncestrySource(), newCgroupSource(),
 		nil, // the keys section only covers the invoking user's own keys (see gatherReport)
 		newHostSource(targetEnv.Home),
 	))
@@ -480,7 +481,7 @@ func gatherReport(ctx context.Context, env paths.Env, layout paths.Layout, setti
 		EnvAskpassRequire: os.Getenv("SSH_ASKPASS_REQUIRE"),
 		Env:               shownEnv,
 		SecretEnv:         secretEnv,
-	}, inspect.Inspector{}, agent.SocketProber{}, newAncestrySource(), newCgroupSource(), keySource,
+	}, inspect.Inspector{}, reach.SocketProber{}, newAncestrySource(), newCgroupSource(), keySource,
 		newHostSource(env.Home))
 }
 

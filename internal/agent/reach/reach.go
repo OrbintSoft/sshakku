@@ -1,4 +1,10 @@
-package agent
+// Package reach answers one question about an ssh-agent: does it answer.
+//
+// It asks the way `ssh-add -l` does — by speaking the agent's own wire
+// protocol on its socket — because a socket file being present says nothing
+// about whether anything is still behind it, which is exactly the state a
+// crashed agent leaves behind.
+package reach
 
 import (
 	"context"
@@ -8,9 +14,22 @@ import (
 	"time"
 )
 
+// ssh-agent wire-protocol message types we use (OpenSSH PROTOCOL.agent).
+const (
+	msgRequestIdentities = 11 // SSH_AGENTC_REQUEST_IDENTITIES
+	msgIdentitiesAnswer  = 12 // SSH_AGENT_IDENTITIES_ANSWER
+)
+
 // DefaultProbeTimeout bounds a reachability probe, matching the login script's
 // `timeout 2 ssh-add -l`.
 const DefaultProbeTimeout = 2 * time.Second
+
+// Prober reports whether a usable ssh-agent answers on a unix socket path.
+// UIDGatedProber wraps one, which is why the interface is stated here as well
+// as where the agent lifecycle consumes it.
+type Prober interface {
+	Reachable(ctx context.Context, socket string) bool
+}
 
 // maxFrame caps the response length we will read, so a malformed or hostile peer
 // cannot make us allocate unbounded memory. We only need the first payload byte.

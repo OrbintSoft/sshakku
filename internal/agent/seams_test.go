@@ -4,10 +4,8 @@ package agent
 
 import (
 	"errors"
-	"net"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/sys/unix"
@@ -59,17 +57,4 @@ func TestFlockLockerFlockError(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "agent.lock")
 	_, err := (FlockLocker{}).Lock(path)
 	assert.Error(t, err, "a non-EWOULDBLOCK flock failure must be reported")
-}
-
-// TestSocketProberSetDeadlineError covers Reachable's bail-out when the dialed
-// connection's deadline cannot be set. The dial itself succeeds against a real
-// in-process agent, so only the seamed deadline call fails.
-func TestSocketProberSetDeadlineError(t *testing.T) {
-	orig := setDeadline
-	t.Cleanup(func() { setDeadline = orig })
-	setDeadline = func(net.Conn, time.Time) error { return errors.New("cannot set deadline") }
-
-	sock := fakeAgent(t, replyIdentities(1))
-	assert.False(t, (SocketProber{Timeout: time.Second}).Reachable(t.Context(), sock),
-		"a connection whose deadline cannot be set is unreachable")
 }

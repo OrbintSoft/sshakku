@@ -1,6 +1,6 @@
 //go:build unix
 
-package agent
+package reach
 
 import (
 	"os"

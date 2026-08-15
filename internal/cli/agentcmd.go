@@ -13,6 +13,8 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/sessionlog"
 
 	"github.com/OrbintSoft/sshakku/internal/agent/inspect"
+
+	"github.com/OrbintSoft/sshakku/internal/agent/reach"
 )
 
 // agentLockWait bounds how long a login blocks for the start lock before it
@@ -33,7 +35,7 @@ type agentEnsurer interface {
 // a fake.
 func realEnsurer() agentEnsurer {
 	return agent.Manager{
-		Prober:    agent.SocketProber{},
+		Prober:    reach.SocketProber{},
 		Inspector: inspect.Inspector{},
 		Runner:    agent.ExecRunner{},
 		Signaler:  agent.SysSignaler{},

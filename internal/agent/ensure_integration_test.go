@@ -17,6 +17,8 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/OrbintSoft/sshakku/internal/agent/inspect"
+
+	"github.com/OrbintSoft/sshakku/internal/agent/reach"
 )
 
 // lockRealAgentTests serialises every real-ssh-agent-spawning test across
@@ -60,7 +62,7 @@ func requireIsolatedAgentEnvironment(t *testing.T) {
 	if err != nil {
 		t.Skipf("cannot enumerate /proc: %v", err)
 	}
-	prober := SocketProber{}
+	prober := reach.SocketProber{}
 	for _, p := range procs {
 		if p.Socket != "" && prober.Reachable(t.Context(), p.Socket) {
 			t.Skipf("a real ssh-agent (pid %d, socket %s) is already reachable on this machine — "+
@@ -72,7 +74,7 @@ func requireIsolatedAgentEnvironment(t *testing.T) {
 
 func newRealManager() Manager {
 	return Manager{
-		Prober:    SocketProber{},
+		Prober:    reach.SocketProber{},
 		Inspector: inspect.Inspector{},
 		Runner:    ExecRunner{},
 		Signaler:  SysSignaler{},
@@ -159,7 +161,7 @@ func startForeignAgent(t *testing.T, sock string) int {
 	t.Cleanup(func() { stopAgent(t, pid) })
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if (SocketProber{}).Reachable(t.Context(), sock) {
+		if (reach.SocketProber{}).Reachable(t.Context(), sock) {
 			return pid
 		}
 		time.Sleep(20 * time.Millisecond)
@@ -211,7 +213,7 @@ func TestEnsureAgentRealReachableButEmptyIsHealthy(t *testing.T) {
 
 	// No keys were ever added, so the agent's own reply to
 	// SSH_AGENTC_REQUEST_IDENTITIES lists zero identities — the real-world
-	// equivalent of `ssh-add -l` exiting 1. SocketProber's handshake already
+	// equivalent of `ssh-add -l` exiting 1. reach.SocketProber's handshake already
 	// exercises exactly that round trip, so a second probe here is redundant;
 	// the point being tested is that EnsureAgent still calls this healthy.
 

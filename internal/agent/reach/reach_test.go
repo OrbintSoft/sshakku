@@ -1,4 +1,4 @@
-package agent
+package reach
 
 import (
 	"encoding/binary"
@@ -96,3 +96,33 @@ func TestSocketProberReachable(t *testing.T) {
 
 // SocketProber must satisfy Prober.
 var _ Prober = SocketProber{}
+
+// TestSocketProberDefaultsItsTimeout pins what an unset Timeout means. The
+// deadline the probe puts on the connection is where that choice becomes
+// observable, so this reads it there rather than trusting the field it came
+// from — a probe that waited forever, or not at all, would answer the same on
+// an agent that replies at once.
+func TestSocketProberDefaultsItsTimeout(t *testing.T) {
+	orig := setDeadline
+	t.Cleanup(func() { setDeadline = orig })
+	var deadline time.Time
+	setDeadline = func(conn net.Conn, dl time.Time) error {
+		deadline = dl
+		return orig(conn, dl)
+	}
+	sock := fakeAgent(t, replyIdentities(0))
+
+	t.Run("unset waits the default", func(t *testing.T) {
+		before := time.Now()
+		require.True(t, (SocketProber{}).Reachable(t.Context(), sock), "the fake agent answers")
+		assert.WithinDuration(t, before.Add(DefaultProbeTimeout), deadline, 500*time.Millisecond,
+			"a probe given no timeout waits DefaultProbeTimeout — neither forever nor not at all")
+	})
+	t.Run("a timeout the caller set is the one used", func(t *testing.T) {
+		const chosen = 30 * time.Second
+		before := time.Now()
+		require.True(t, (SocketProber{Timeout: chosen}).Reachable(t.Context(), sock), "the fake agent answers")
+		assert.WithinDuration(t, before.Add(chosen), deadline, 500*time.Millisecond,
+			"a timeout the caller set must not be replaced by the default")
+	})
+}
