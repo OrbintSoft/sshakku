@@ -17,6 +17,14 @@ import (
 // stopped answering must cost the report a pause, never the report itself.
 const lookTimeout = 2 * time.Second
 
+// lookForCollection seams the one question this file puts to the session bus,
+// so what is made of the answer can be checked against answers a test chooses.
+// What the bus says depends on which wallet the machine happens to be running,
+// and the difference between "there is none" and "one did not answer" — the
+// distinction the report exists to keep — is exactly what such a machine
+// cannot be relied on to produce.
+var lookForCollection = secretservice.LookForCollection
+
 // platformWalletView describes the wallet this operating system provides
 // itself: on Linux the freedesktop Secret Service, which is reached over the
 // session bus, needs something answering there, and keeps SSHakku's entries in
@@ -113,7 +121,7 @@ func MakeCompartment(ctx context.Context, settings config.Settings) (string, err
 // about themselves. A look that fails is reported as a wallet that could not be
 // asked, never as one that is not there: the report says what it does not know.
 func realSecretServiceLook(ctx context.Context, alias, label string) SecretServiceLook {
-	look, err := secretservice.LookForCollection(ctx, alias, label, lookTimeout)
+	look, err := lookForCollection(ctx, alias, label, lookTimeout)
 	if err != nil {
 		return SecretServiceLook{LookFailed: true}
 	}

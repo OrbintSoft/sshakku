@@ -4,11 +4,14 @@ package walletcheck
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/diagnose"
+	"github.com/OrbintSoft/sshakku/internal/secretservice"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -203,4 +206,41 @@ func TestPlatformWalletViewNamesWhateverItIsGiven(t *testing.T) {
 	assert.Equal(t, "something-else", view.Backend,
 		"naming back what was asked for is still an answer to which wallet would be used")
 	assert.Empty(t, view.Requirements, "but inventing requirements for a wallet nothing is known about would not be")
+}
+
+// TestALookThatSucceededIsReportedAsTaken verifies F41 on the other side of the
+// same seam: what the bus said has to arrive intact, and "a wallet was there to
+// ask and did not answer" must not be flattened into "the look failed". They
+// lead the report to opposite sentences, and only one of them is about the
+// wallet.
+func TestALookThatSucceededIsReportedAsTaken(t *testing.T) {
+	orig := lookForCollection
+	t.Cleanup(func() { lookForCollection = orig })
+
+	t.Run("what the bus said arrives whole", func(t *testing.T) {
+		lookForCollection = func(context.Context, string, string, time.Duration) (secretservice.Look, error) {
+			return secretservice.Look{Running: true, Activatable: true, CollectionFound: true}, nil
+		}
+
+		look := realSecretServiceLook(t.Context(), "sshakku", "sshakku")
+
+		assert.False(t, look.LookFailed, "a look that reached the bus did not fail")
+		assert.True(t, look.Running, "a wallet answering must be reported as answering")
+		assert.True(t, look.Activatable, "and one the bus would start as startable")
+		assert.True(t, look.CollectionFound, "and the compartment as found")
+		assert.False(t, look.AskFailed, "a wallet that answered did not fail to answer")
+	})
+
+	t.Run("a wallet that would not answer is not a look that failed", func(t *testing.T) {
+		lookForCollection = func(context.Context, string, string, time.Duration) (secretservice.Look, error) {
+			return secretservice.Look{Running: true, AskErr: errors.New("no reply")}, nil
+		}
+
+		look := realSecretServiceLook(t.Context(), "sshakku", "sshakku")
+
+		assert.True(t, look.AskFailed, "a wallet that was there and did not answer must be reported as such")
+		assert.False(t, look.LookFailed, "the bus itself was reached, so the look did not fail")
+		assert.False(t, look.CollectionFound,
+			"and nothing may be claimed about a compartment the wallet never spoke about")
+	})
 }
