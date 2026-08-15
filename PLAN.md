@@ -2212,11 +2212,17 @@ and what shell is asking is not something `GOOS` knows. (The other half of
 that story — `C:\…` against MSYS2's `/c/…` when a path is handed to `ssh` — is
 not answered here.)
 
-**Both PowerShells, both scopes.** Windows PowerShell 5.1 and PowerShell 7 keep
-their profiles in different directories, and system-wide and per-user are
-different files again: four wiring points, chosen by which install target runs
-and by which PowerShell the machine actually has. The hook body is rendered
-once and each point holds one dot-source line, exactly as `install-user-hook.sh`
+**Both PowerShells, both scopes — but one wiring point at a time.** Windows
+PowerShell 5.x and PowerShell 6+ keep their profiles in different directories,
+and all-users and per-user are different files again; each of those is then a
+pair, one profile for every host and one for the host in front of you. All five
+of the `$PROFILE` variants are addressable, and exactly **one** of them is
+written per install: the same hook wired into several startup files of one shell
+runs several times per session, which buys nothing and doubles what an uninstall
+has to find. The default is the all-hosts profile of the scope being installed —
+a working `ssh` is not a property of the window you are typing in — and
+`--hosts=current` selects the other. The hook body is rendered once and the
+chosen point holds one dot-source line, exactly as `install-user-hook.sh`
 already does for bash and zsh.
 
 **No PowerShell module.** It would replace four dot-source lines with four
@@ -2226,10 +2232,13 @@ moves rather than goes, and a second artefact has to be installed, versioned
 and removed. A module earns its place when SSHakku has cmdlets to export, not
 as a way to share ten lines.
 
-**A `profile.d` is honoured where the user made one**, on the same terms as
-bash: the directory's existence is the only check, and having made one is taken
-as saying it gets sourced. Not a priority — the marker block in the profile is
-the mechanism that has to work.
+**A `profile.d` is honoured where the user made one**, but not on quite the same
+terms as bash. There the directory's existence is the only check, and having
+made one is taken as saying it gets sourced — a shell or a distribution often
+sources it. PowerShell sources no such directory by itself: only the user's own
+profile can, so the profile is read for the code that does it, and where nothing
+does, the block goes into the profile and says why. Not a priority either way —
+the marker block in the profile is the mechanism that has to work.
 
 - **W1 — a binary that compiles for `GOOS=windows`. ✅ Done.** `_windows.go` files
   (rule 26 — named for the platform, never a negation of another) for what the
@@ -2257,17 +2266,124 @@ the mechanism that has to work.
   `'force'` on the posix side too: every value goes through its dialect's
   quoting, since PowerShell reads a bare word after `=` as a command to run and
   there is nothing to gain from deciding per value what may be left bare.
-- **W3 — the hook and its wiring.** The four points above; a drop-in
-  `001-sshakku.ps1` where a `profile.d` exists, a marker block in the profile
-  otherwise; `PSScriptAnalyzer` as `lint-ps1` in `make lint` and CI (rule 12;
-  MIT, so rule 16 is satisfied), `.ps1` in `.gitattributes`, and the row in
-  `docs/TEST-MATRIX.md` (rule 19). Two things this step must answer rather than
-  assume. PowerShell runs the profile for *every* session, including
-  `pwsh -Command` and `pwsh -File`, so open decision 3's silence binds harder
-  here than anywhere and the interactivity test that gates `load-keys` has no
-  `$-` to read. And ExecutionPolicy: under `Restricted` the profile is never
-  loaded at all, which the install has to detect and report rather than leave
-  to be discovered at the next login.
+- **W3 — the hook and its wiring, as a command of this program.** The wiring
+  becomes `sshakku install` / `sshakku uninstall` rather than a second
+  `install-user-hook.ps1` beside the first. The design in full is
+  `docs/INSTALLATION.md`, which is where a user reads it; what follows is why it
+  is that and not something else, and what it costs.
+
+  **Why Go and not a `.ps1` twin.** Three reasons, none of them taste. A
+  Windows machine that has PowerShell has neither `make` nor `sh`, so a
+  Makefile-driven install is unusable by exactly the person this step is for.
+  Shell wiring logic is the thing goal 14 exists to move out of shell, and a
+  second copy of it — in a third language, with its own test framework to bring
+  in — is the opposite of that move. And the wiring is where the machine's
+  variety lives (which editions, which scopes, which drop-ins, which
+  translation), which is to say it is where the tests are needed, and Go is
+  where this project can write them and run them on the Windows job that already
+  exists. The Makefile stays the entry point for putting the **binary** in
+  place, on every platform, and calls the command for the wiring; the unix
+  wiring keeps its shell scripts until a later step retires them, so this step
+  changes nothing on Linux or macOS.
+
+  **The vocabulary is `--shell=auto|bash|zsh|powershellcore|windowspowershell`,
+  and it is not the same word as `--shell` on the printing commands.** There it
+  names a *dialect* to print in (W2); here it names a *shell to wire*, and each
+  target renders in the dialect it reads. Each platform's table says which
+  targets it has: no zsh on Windows, no `windowspowershell` anywhere else. Two
+  more are possible and are deliberately not offered — PowerShell Core on
+  Linux and macOS — and two are offered but are not what the suite holds: zsh
+  on Linux, bash on macOS, which have always been wireable and are what
+  `USER_SHELL` already selects. The line is drawn by the test matrix rather
+  than by the code: every combination offered is a combination that has to be
+  exercised, and the matrix is the thing that would explode.
+
+  **Selection has two forms because the two are answers to different
+  questions.** `--shell-exe=<interpreter>` says *ask that one*; `--profile=<file>`
+  says *I know which file*. The first is what makes the design immune to the
+  variety above — the interpreter is asked for its own `$PROFILE` set, so a
+  `Documents` redirected into OneDrive, a Store or portable PowerShell, and a
+  version installed beside another are all right without a single path being
+  assembled. It is also what finds a Git Bash installation's own root, and so
+  its `etc/profile.d`, without a fixed `C:\Program Files\Git` in the source.
+  With neither flag the process's own ancestry is read until a shell is
+  recognised, which is what makes `sshakku install`, typed in a window, wire
+  that window's shell. Nothing is guessed: where the ancestry answers nothing,
+  the command asks for `--shell`.
+
+  **Asking a PowerShell host is `-EncodedCommand`, and that was measured.**
+  `-File` needs a temporary file and is itself subject to the execution policy —
+  the very thing being diagnosed. `-Command -` on standard input silently
+  swallows a multi-line script. `-EncodedCommand` (base64 of UTF-16LE) works on
+  both editions, touches no disk, and is not governed by the policy, which
+  applies to script files. The query stays a real `.ps1` file in the tree,
+  embedded and encoded at the call site, so rule 13 holds and PSScriptAnalyzer
+  reads it. Two measured traps ride along: Windows PowerShell writes a CLIXML
+  progress payload to stderr, so only stdout may be read, and its stdout is the
+  OEM code page unless the script sets it, which mangles a non-ASCII path.
+
+  **The two editions disagree about the policy on the same account**, which is
+  the measurement that settles whether one host may be asked and the other
+  assumed: on the machine this was written on, one reports `CurrentUser` as
+  `RemoteSigned` and the other as `Bypass`, from separate registry keys. Each
+  host is asked for itself, always.
+
+  **`PATH` on Windows is made persistent, and that is the one thing here that
+  outlives the shell.** Unix has a directory already on everyone's `PATH` for
+  the machine scope and a hook line for the user one; Windows has neither, so
+  the account's or the machine's environment is written. Through the registry
+  directly, not through the .NET setter: that one expands `REG_EXPAND_SZ`, so a
+  `PATH` written through it stops referring to the variables it referred to —
+  the classic way an installer damages someone else's `PATH`. The raw value and
+  its type are preserved, the entry is added once however many times an install
+  runs, the previous value is kept so it can be put back, and uninstall removes
+  our entry and nothing else. `--no-path` skips it. The registry key is a
+  parameter, so the whole of that is testable against a throwaway key rather
+  than believed.
+
+  **An install that will never be read reports itself as such.** Execution
+  policy (per edition, in force, with the command that changes it — never
+  changed for the user), a `Profile.d` that no profile actually sources
+  (PowerShell reads no such directory by itself, unlike the bash convention this
+  borrows), an all-users profile under a Store install's protected directory,
+  and constrained language mode. This is the promise with the most value in it
+  and the one that could not be made without the measurements above.
+
+  Rule 12: `.ps1` is a new file type here, and `PSScriptAnalyzer` (MIT, so rule
+  16 is satisfied) becomes `lint-ps1` in `make lint` and CI, with the honest
+  skip `lint-applescript` already models for a machine without `pwsh`. `.ps1`
+  joins `.gitattributes`, and `docs/TEST-MATRIX.md` gains the rows (rule 19).
+
+  Three promises are reserved for this work and are written into
+  `docs/FEATURES.md` by the change that implements each, not before (rule 21):
+  **F44**, installing wires the shell you ran it from, in one place, and says
+  which file it touched, and uninstalling leaves no trace; **F45**, after
+  installing, `sshakku` runs by name in a new session, and uninstalling takes
+  that back too; **F46**, a shell that will never read the hook is reported at
+  install time, with what it would take, rather than discovered at the next
+  login.
+
+  Deferred here on purpose, so they are not read as oversights: the agent
+  endpoint (see W4's findings), the askpass helper — wiring `askpass-env` on
+  Windows today would trade a working console prompt for a helper that always
+  fails, since the handoff is a stub there — the Credential Manager, MSYS2 and
+  Cygwin as verified environments rather than as a design the discovery already
+  fits, and retiring the unix shell installers in favour of this command. The
+  interactivity test that gates `load-keys` — PowerShell has no `$-`, and it
+  runs its profile for `-Command` and `-File` sessions too, so open decision 3
+  binds harder here than anywhere — moves with `load-keys` to the step that
+  wires it, since a gate on a command that is not called is untestable.
+
+  Sub-steps, each committable: (1) this design, in `docs/INSTALLATION.md`,
+  `PLAN.md` and the matrix; (2) the hook and query `.ps1` files with `lint-ps1`;
+  (3) the marker-block and drop-in primitives in Go, byte-identical to
+  `shell-hook-lib.sh` and pinned by a test that says so; (4) asking a host,
+  reading an ancestry, translating a path; (5) the Windows targets; (6) the
+  persistent `PATH`; (7) the commands themselves, with `docs/CLI.md` and F44–F46;
+  (8) `shell-init` reporting an unsupported platform through the log instead of
+  failing every shell; (9) the Makefile's `MINGW*`/`MSYS*` branch; (10) the run
+  on a real desktop (rule 25) across both editions and Git Bash, and the
+  uninstall that leaves the files as they were.
 - **W4 — run it** on `windows-*` runners (open decision 9) and on a real
   desktop session, driving the binary through a user's scenario (rule 25).
   **The suite half is done.** `go test (windows)` on `windows-latest` builds,
@@ -2305,8 +2421,12 @@ the mechanism that has to work.
 
 **Out of scope here, named so they are not mistaken for oversights**: the agent
 endpoint and its named pipe, Credential Manager and 1Password as Windows
-backends, WSL2 (Linux with an agent story of its own), Cygwin, MSI packaging
-(Phase 8's business), and path translation under MSYS2.
+backends, WSL2 (Linux with an agent story of its own), Cygwin and MSYS2 as
+environments this project has run in and checked, MSI packaging (Phase 8's
+business), and translating the paths handed to `ssh` between `C:\…` and MSYS2's
+`/c/…`. W3 translates paths for one narrower purpose — reaching the startup
+files of a bash that spells them the other way — and does it with that
+environment's own translator rather than with a rule of our own.
 
 → goals 13, 16, 17; open decisions 3, 8, 9.
 

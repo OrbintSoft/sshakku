@@ -135,12 +135,12 @@ table above has established where that backend is available at all.
 
 ## Install and uninstall methods
 
-| Case | Linux | macOS |
-| --- | --- | --- |
-| System-wide (`make install`/`uninstall`) | ✅ `test/linux-install-smoke.sh` | ✅ `test/macos-install-smoke.sh` |
-| Per-user (`make install-user`/`uninstall-user`) | ✅ `test/linux-install-smoke.sh` | ✅ same script |
-| Non-login shell wiring, opt-in (`WIRE_BASHRC=1`/`WIRE_ZSHRC=1`) (F20) | ✅ `test/linux-install-smoke.sh` (both the `bashrc.d` drop-in and the fallback-file shape) | ✅ `test/macos-install-smoke.sh` — the system-wide `/etc/zshrc` marker block and both per-user shapes (a drop-in into an existing `~/.zshrc.d`, a marker block in `~/.zshrc` when there is none), each checked to leave the login-shell wiring in place and to be removed again on uninstall |
-| User bindir put on `PATH` from the hook (`install-user`, default; `WIRE_PATH=0` opts out) | ✅ `test/linux-install-smoke.sh` | ✅ `test/macos-install-smoke.sh` |
+| Case | Linux | macOS | Windows |
+| --- | --- | --- | --- |
+| System-wide (`make install`/`uninstall`) | ✅ `test/linux-install-smoke.sh` | ✅ `test/macos-install-smoke.sh` | ❌ there is nothing to install yet: the binary builds and its suite runs, and the wiring — `sshakku install`, the shells it can wire, and the `PATH` entry it records — is what `docs/INSTALLATION.md` describes and PLAN.md's W3 implements |
+| Per-user (`make install-user`/`uninstall-user`) | ✅ `test/linux-install-smoke.sh` | ✅ same script | ❌ same, and it is the scope that has to work first: an account on Windows can install for itself without an elevated prompt, which is how most people will meet this |
+| Non-login shell wiring, opt-in (`WIRE_BASHRC=1`/`WIRE_ZSHRC=1`) (F20) | ✅ `test/linux-install-smoke.sh` (both the `bashrc.d` drop-in and the fallback-file shape) | ✅ `test/macos-install-smoke.sh` — the system-wide `/etc/zshrc` marker block and both per-user shapes (a drop-in into an existing `~/.zshrc.d`, a marker block in `~/.zshrc` when there is none), each checked to leave the login-shell wiring in place and to be removed again on uninstall | ❌ the Git Bash equivalent is the same opt-in under another name; PowerShell has no such pair, since it reads its profile for every session rather than for a login |
+| User bindir put on `PATH` from the hook (`install-user`, default; `WIRE_PATH=0` opts out) | ✅ `test/linux-install-smoke.sh` | ✅ `test/macos-install-smoke.sh` | ❌ and it is a different mechanism there, not the same one untested: Windows has no directory already on everyone's `PATH`, so the install records the entry in the account's or the machine's own environment, which is a change that outlives the shell and has to be provably reversible |
 
 ## Agent lifecycle and recovery scenarios
 
@@ -217,21 +217,43 @@ platforms in the ordinary test run.
 
 ## Windows
 
-Windows has no column in the tables above, and that is the honest state of it:
-the tree is **built** there, not tested. The `go build (windows)` job compiles
-every package on a `windows-latest` runner and vets them, which type-checks the
-test files as well — enough to catch a platform file that never supplied
-something the shared tests reach for, and nothing more than that.
+The unit suite runs there now: `go test (windows)` builds, vets and runs every
+package on a `windows-latest` runner under the race detector. Windows has a
+column in the install table above and in no other, and that is the honest state
+of it — a suite that passes says the code is consistent with itself, and this
+document asks a different question.
 
-The suite is not run there because it does not pass and, in one package, does
-not finish. A Windows host reports no uid, spells its paths with backslashes,
-and offers no wallet this project can reach, so `cmd/sshakku`, `internal/config`
-and several others fail on what the platform is rather than on what the code
-does. `internal/keys` is worse than failing: it hangs, because a re-executed
-test helper outlives the run holding the output pipe, and there is no process
-group on Windows to take it down with. Those failures are the work of turning
-this column into cells, one at a time; until then a passing Windows job would
-be a job that tested nothing.
+What made the suite fail was mostly not Windows. It was this platform's own
+vocabulary written into tests as if it were universal: `/`-joined path literals
+against paths the product builds with `filepath`, `0600` asserted where mode
+bits are synthesised, `/tmp` in a fixture, a `.sh` used as a stand-in editor.
+Two things were genuinely absent — no wallet, so the promises that need one are
+now asked only where one exists, and no numeric uid, so `--user` is asked where
+there are uids — and two were defects in shared code that this platform
+surfaced, where a directory that is not there and one that is not a directory
+were told apart by an errno Windows spells differently. The hang that this
+section used to blame on a re-executed test helper was never that: those files
+never ran here at all. It was a real-time scanner watching the directory Go
+builds and runs test binaries in, which left them started and never executing;
+pointed elsewhere, the suite runs in seconds.
+
+What has no cells here yet, and why:
+
+- **The wiring.** `sshakku install`, the shells it can wire, the one point it
+  writes, the `PATH` entry it records and takes back, and the report it makes
+  when a shell will never read the hook — the rows above, and the work
+  `docs/INSTALLATION.md` describes.
+- **The agent.** There is no row to fill because there is no mechanism yet: an
+  agent on Windows is a service behind a named pipe, not a process on a socket,
+  and `ssh-agent.exe` there ignores the flag that would bind one of its own, so
+  the fixed-endpoint model the Unix builds use has no equivalent to point at.
+  What is settled is that Win32-OpenSSH does read `SSH_AUTH_SOCK` and that what
+  it names is a pipe.
+- **The wallet, the askpass helper and the passphrase handoff**, each of which
+  reports itself unimplemented rather than behaving like an empty one.
+- **Coverage and test-health reporting**, which the other two platforms get and
+  this one does not yet: a report artifact, a column in `tools/testreport`, and
+  a badge.
 
 ## Init system (systemd/OpenRC/...)
 
