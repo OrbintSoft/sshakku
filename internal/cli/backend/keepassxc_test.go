@@ -11,6 +11,8 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/paths"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet/keepassxc"
 )
 
 // keepassxcSettings names the wallet and pins the route.
@@ -43,7 +45,7 @@ func TestKeePassXCPinnedNativeRouteIsUsedEverywhere(t *testing.T) {
 	backend, closeFn := Open(t.Context(), "alice", fakeLogger{}, keepassxcSettings(config.KeePassXCRouteNative))
 	defer closeFn()
 
-	assert.IsTypef(t, wallet.KeePassXC{}, backend,
+	assert.IsTypef(t, keepassxc.Native{}, backend,
 		"a route pinned by the user must be taken at their word on %s too", runtime.GOOS)
 }
 
@@ -64,7 +66,7 @@ func TestKeePassXCPinnedSecretServiceRouteIsHonoured(t *testing.T) {
 		assert.Error(t, err, "an unavailable route must fail rather than report an empty wallet")
 		return
 	}
-	_, isNative := backend.(wallet.KeePassXC)
+	_, isNative := backend.(keepassxc.Native)
 	assert.False(t, isNative, "pinning secret-service must not quietly hand back the native route")
 }
 
@@ -87,7 +89,7 @@ func TestKeePassXCSecretServiceRouteHandsOffToTheDefaultBackend(t *testing.T) {
 
 	assert.Equal(t, fmt.Sprintf("%T", want), fmt.Sprintf("%T", got),
 		"reaching KeePassXC through the Secret Service is reaching any other wallet behind that API")
-	_, isKeePassXC := got.(wallet.KeePassXC)
+	_, isKeePassXC := got.(keepassxc.Native)
 	assert.False(t, isKeePassXC, "it must not open KeePassXC's own protocol instead of the shared API")
 }
 
@@ -153,7 +155,7 @@ func TestKeePassXCEmptyRouteIsTheAutomaticOne(t *testing.T) {
 			backend, closeFn := newKeePassXCBackend(t.Context(), "darwin", "alice", fakeLogger{}, keepassxcSettings(route))
 			defer closeFn()
 
-			assert.IsType(t, wallet.KeePassXC{}, backend,
+			assert.IsType(t, keepassxc.Native{}, backend,
 				"a platform with no Secret Service must land on the native route, not fall through to it")
 		})
 	}
@@ -166,7 +168,7 @@ func TestKeePassXCPinnedCLIRouteIsBuiltWhenItHasADatabase(t *testing.T) {
 	backend, closeFn := Open(t.Context(), "alice", fakeLogger{}, settings)
 	defer closeFn()
 
-	cli, ok := backend.(*wallet.KeePassXCCLI)
+	cli, ok := backend.(*keepassxc.CLI)
 	require.Truef(t, ok, "the route pinned must be the one built, got %T", backend)
 	assert.Equal(t, "/somewhere/secrets.kdbx", cli.Database, "the database the configuration named")
 	assert.Equal(t, "/somewhere/secrets.key", cli.KeyFile, "the key file the configuration named")
@@ -203,11 +205,11 @@ func TestKeePassXCAssociationPathIsUnderTheStateDirectory(t *testing.T) {
 // every single run.
 func TestKeePassXCNativeBackendCarriesItsAssociationStore(t *testing.T) {
 	backend := newKeePassXCNativeRoute(keepassxcSettings(config.KeePassXCRouteNative))
-	native, ok := backend.(wallet.KeePassXC)
+	native, ok := backend.(keepassxc.Native)
 	require.Truef(t, ok, "the native route must build the native backend, got %T", backend)
 	require.NotNil(t, native.Associations,
 		"without somewhere to remember its approval the user approves a dialog on every run")
-	store, ok := native.Associations.(wallet.FileAssociationStore)
+	store, ok := native.Associations.(keepassxc.FileAssociationStore)
 	require.Truef(t, ok, "the approval must outlive the process, got %T", native.Associations)
 	assert.NotEmpty(t, store.Path, "and the store must know where to write it")
 }

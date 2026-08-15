@@ -1,4 +1,4 @@
-package wallet
+package keepassxc
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
 	"github.com/OrbintSoft/sshakku/internal/keys/wallet/keepassxc/wire"
 )
 
@@ -46,12 +47,12 @@ type AssociationStore interface {
 	Save(wire.Association) error
 }
 
-// KeePassXCSession is the part of KeePassXC's protocol this backend uses. It
+// Session is the part of KeePassXC's protocol this backend uses. It
 // is an interface so the backend's own decisions — which entry matches, when an
 // approval may be asked for — can be driven without a running KeePassXC. The
 // protocol underneath is verified separately, against a server that speaks it
 // for real.
-type KeePassXCSession interface {
+type Session interface {
 	TestAssociate(wire.Association) error
 	Associate() (wire.Association, error)
 	GetLogins(url string, a wire.Association) ([]wire.Entry, error)
@@ -59,17 +60,17 @@ type KeePassXCSession interface {
 	Close() error
 }
 
-// KeePassXC keeps passphrases in a running, unlocked KeePassXC, reached
+// Native keeps passphrases in a running, unlocked Native, reached
 // over its local socket protocol. The passphrase travels encrypted over that
 // socket and never through argv or the environment.
 //
-// It needs KeePassXC to be running with its database unlocked and browser
-// integration enabled. That is the same precondition as reaching KeePassXC
+// It needs Native to be running with its database unlocked and browser
+// integration enabled. That is the same precondition as reaching Native
 // through the Secret Service, and it is what lets a lookup stay silent.
-type KeePassXC struct {
+type Native struct {
 	// NewSession opens a session with KeePassXC. A nil NewSession dials the
 	// candidate socket paths in turn and speaks the real protocol.
-	NewSession func() (KeePassXCSession, error)
+	NewSession func() (Session, error)
 	// SocketPaths are the endpoints to try, in order. Empty means the
 	// platform's usual places.
 	SocketPaths []string
@@ -90,7 +91,7 @@ type KeePassXC struct {
 }
 
 // group is the group name to send: the configured one, else SSHakku's own.
-func (b KeePassXC) group() string {
+func (b Native) group() string {
 	if b.Group != "" {
 		return b.Group
 	}
@@ -103,7 +104,7 @@ func entryURL(service string) string {
 }
 
 // connect opens a session with KeePassXC.
-func (b KeePassXC) connect(ctx context.Context) (KeePassXCSession, error) {
+func (b Native) connect(ctx context.Context) (Session, error) {
 	if b.NewSession != nil {
 		return b.NewSession()
 	}
@@ -121,7 +122,7 @@ func (b KeePassXC) connect(ctx context.Context) (KeePassXCSession, error) {
 
 // socketPaths is where to look for KeePassXC: what the caller configured, else
 // the platform's usual places.
-func (b KeePassXC) socketPaths() []string {
+func (b Native) socketPaths() []string {
 	if len(b.SocketPaths) > 0 {
 		return b.SocketPaths
 	}
@@ -144,7 +145,7 @@ func dialKeePassXCAt(ctx context.Context, paths []string) (net.Conn, error) {
 // honours it. It never asks for a new one: associating raises a dialog, and a
 // lookup that pops a dialog is exactly the silence a stored passphrase exists
 // to preserve.
-func (b KeePassXC) association(client KeePassXCSession) (wire.Association, error) {
+func (b Native) association(client Session) (wire.Association, error) {
 	if b.Associations == nil {
 		return wire.Association{}, errors.New("keepassxc: no association store was configured")
 	}
@@ -167,7 +168,7 @@ func (b KeePassXC) association(client KeePassXCSession) (wire.Association, error
 // names differing only in case resolve to the same URL. The exact name is also
 // written to the entry's username, and that is what decides here — the URL
 // narrows the candidates, the exact comparison picks among them.
-func (b KeePassXC) Lookup(ctx context.Context, service string) (string, bool, error) {
+func (b Native) Lookup(ctx context.Context, service string) (string, bool, error) {
 	client, err := b.connect(ctx)
 	if err != nil {
 		return "", false, err
@@ -197,7 +198,7 @@ func (b KeePassXC) Lookup(ctx context.Context, service string) (string, bool, er
 // user has to approve, and this is the moment to do it: the user is already
 // present — they have just been asked for the passphrase — whereas a lookup
 // happens with nobody watching.
-func (b KeePassXC) Store(ctx context.Context, service, label, passphrase string) error {
+func (b Native) Store(ctx context.Context, service, label, passphrase string) error {
 	client, err := b.connect(ctx)
 	if err != nil {
 		return err
@@ -231,7 +232,7 @@ func (b KeePassXC) Store(ctx context.Context, service, label, passphrase string)
 }
 
 // associate registers this client and remembers the result.
-func (b KeePassXC) associate(client KeePassXCSession) (wire.Association, error) {
+func (b Native) associate(client Session) (wire.Association, error) {
 	assoc, err := client.Associate()
 	if err != nil {
 		return wire.Association{}, err
@@ -245,12 +246,12 @@ func (b KeePassXC) associate(client KeePassXCSession) (wire.Association, error) 
 // Delete reports that this route cannot remove an entry. See
 // ErrDeleteUnsupported: the protocol has no verb for it, and pretending
 // otherwise would mean telling the user a passphrase is gone while it is not.
-func (b KeePassXC) Delete(ctx context.Context, service string) error {
+func (b Native) Delete(ctx context.Context, service string) error {
 	return fmt.Errorf("%w: remove the %q entry in KeePassXC to forget it", ErrDeleteUnsupported, entryURL(service))
 }
 
 // List cannot enumerate SSHakku's entries: the protocol looks entries up by
 // URL, one URL at a time, and offers no way to ask which ones exist.
-func (b KeePassXC) List(ctx context.Context) ([]string, error) {
-	return nil, ErrListUnsupported
+func (b Native) List(ctx context.Context) ([]string, error) {
+	return nil, wallet.ErrListUnsupported
 }

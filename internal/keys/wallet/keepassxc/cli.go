@@ -1,4 +1,4 @@
-package wallet
+package keepassxc
 
 import (
 	"context"
@@ -37,7 +37,7 @@ var ErrNoDatabase = errors.New("keepassxc: no database file is configured")
 // prompt no one can answer.
 var ErrPasswordNotAccepted = errors.New("keepassxc: keepassxc-cli would not take the database password on standard input")
 
-// KeePassXCCLI reaches a KeePassXC database through keepassxc-cli,
+// CLI reaches a KeePassXC database through keepassxc-cli,
 // without a running KeePassXC.
 //
 // It cannot be silent: opening the database needs its password, and that is
@@ -46,7 +46,7 @@ var ErrPasswordNotAccepted = errors.New("keepassxc: keepassxc-cli would not take
 //
 // The password travels on the child's standard input, never in argv, so it
 // cannot be read out of the process table.
-type KeePassXCCLI struct {
+type CLI struct {
 	Runner   run.Runner
 	Prompter prompt.Prompter
 	// Database is the .kdbx file to open.
@@ -68,7 +68,7 @@ type KeePassXCCLI struct {
 
 // group is the group to keep entries in: the configured one, else the one
 // SSHakku makes for itself.
-func (b *KeePassXCCLI) group() string {
+func (b *CLI) group() string {
 	if b.Group != "" {
 		return b.Group
 	}
@@ -76,12 +76,12 @@ func (b *KeePassXCCLI) group() string {
 }
 
 // entryPath is where a key's entry lives inside the database.
-func (b *KeePassXCCLI) entryPath(service string) string {
+func (b *CLI) entryPath(service string) string {
 	return b.group() + "/" + service
 }
 
 // unlock returns the database password, asking for it the first time.
-func (b *KeePassXCCLI) unlock(ctx context.Context) (string, error) {
+func (b *CLI) unlock(ctx context.Context) (string, error) {
 	if b.password != "" {
 		return b.password, nil
 	}
@@ -98,7 +98,7 @@ func (b *KeePassXCCLI) unlock(ctx context.Context) (string, error) {
 
 // run invokes keepassxc-cli with the database password — and anything else the
 // subcommand will ask for — on standard input, in the order it asks.
-func (b *KeePassXCCLI) run(ctx context.Context, args []string, extraInput ...string) (run.Result, error) {
+func (b *CLI) run(ctx context.Context, args []string, extraInput ...string) (run.Result, error) {
 	password, err := b.unlock(ctx)
 	if err != nil {
 		return run.Result{}, err
@@ -133,7 +133,7 @@ func refusedPassword(res run.Result) bool {
 }
 
 // Lookup returns the passphrase stored for service.
-func (b *KeePassXCCLI) Lookup(ctx context.Context, service string) (string, bool, error) {
+func (b *CLI) Lookup(ctx context.Context, service string) (string, bool, error) {
 	res, err := b.run(ctx, []string{"show", "-s", "-a", "Password", b.Database, b.entryPath(service)})
 	if err != nil {
 		return "", false, err
@@ -151,7 +151,7 @@ func (b *KeePassXCCLI) Lookup(ctx context.Context, service string) (string, bool
 
 // Store saves passphrase for service, editing the entry when it already exists
 // so a re-stored passphrase does not leave a second copy in the database.
-func (b *KeePassXCCLI) Store(ctx context.Context, service, label, passphrase string) error {
+func (b *CLI) Store(ctx context.Context, service, label, passphrase string) error {
 	// label has nowhere to go: the entry is named by its path, which is built
 	// from the service identifier.
 	_ = label
@@ -192,7 +192,7 @@ func (b *KeePassXCCLI) Store(ctx context.Context, service, label, passphrase str
 
 // Delete removes the entry for service. Unlike the local-protocol route, the
 // CLI can delete, so `sshakku forget` works here.
-func (b *KeePassXCCLI) Delete(ctx context.Context, service string) error {
+func (b *CLI) Delete(ctx context.Context, service string) error {
 	res, err := b.run(ctx, []string{"rm", b.Database, b.entryPath(service)})
 	if err != nil {
 		return err
@@ -209,7 +209,7 @@ func (b *KeePassXCCLI) Delete(ctx context.Context, service string) error {
 }
 
 // List returns every entry SSHakku keeps in the database.
-func (b *KeePassXCCLI) List(ctx context.Context) ([]string, error) {
+func (b *CLI) List(ctx context.Context) ([]string, error) {
 	res, err := b.run(ctx, []string{"ls", "-f", b.Database, b.group()})
 	if err != nil {
 		return nil, err

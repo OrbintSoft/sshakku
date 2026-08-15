@@ -1,4 +1,4 @@
-package wallet
+package keepassxc
 
 import (
 	"encoding/json"

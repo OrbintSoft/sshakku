@@ -1,4 +1,4 @@
-package wallet
+package keepassxc
 
 import (
 	"os"
@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
 	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
@@ -37,13 +38,13 @@ func TestKeePassXCCLIRealDatabase(t *testing.T) {
 	require.NoErrorf(t, err, "%s is what this test drives, and it is not installed", keepassxcCLIBin)
 
 	const dbPassword = "throwaway-database-password"
-	const service = defaultServicePrefix + "-id_ed25519"
+	const service = wallet.DefaultServicePrefix + "-id_ed25519"
 	const passphrase = "the-key-passphrase"
 
 	db := filepath.Join(t.TempDir(), "throwaway.kdbx")
 	createRealDatabase(t, db, dbPassword)
 
-	b := &KeePassXCCLI{
+	b := &CLI{
 		Runner:   run.ExecRunner{Timeout: 30 * time.Second},
 		Prompter: &countingPrompter{password: dbPassword},
 		Database: db,

@@ -7,6 +7,8 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
+
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet/keepassxc"
 )
 
 // TestForgetOnAWalletThatCannotDeleteTellsTheUserWhatToDo verifies F9's second
@@ -19,7 +21,7 @@ func TestForgetOnAWalletThatCannotDeleteTellsTheUserWhatToDo(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", tmp)
 
 	var stdout, stderr bytes.Buffer
-	d := depsReturning(wallet.KeePassXC{})
+	d := depsReturning(keepassxc.Native{})
 
 	code := d.forget(t.Context(), &stdout, &stderr, []string{"id_ed25519"})
 

@@ -1,4 +1,4 @@
-package wallet
+package keepassxc
 
 import (
 	"encoding/base64"
@@ -15,29 +15,6 @@ import (
 
 	"github.com/OrbintSoft/sshakku/internal/testtmp"
 )
-
-func TestUnavailableBackendFailsEveryOperationWithItsReason(t *testing.T) {
-	reason := errors.New("the secret-service route needs an API this platform has none of")
-	b := Unavailable{Reason: reason}
-
-	_, _, err := b.Lookup(t.Context(), "k")
-	assert.ErrorIs(t, err, reason,
-		"a miss would send the loader off to prompt with no explanation of why the wallet was never consulted")
-	assert.ErrorIs(t, b.Store(t.Context(), "k", "k", "p"), reason, "and a store must not be reported as having landed anywhere")
-	assert.ErrorIs(t, b.Delete(t.Context(), "k"), reason, "nor a removal as having happened")
-	_, err = b.List(t.Context())
-	assert.ErrorIs(t, err, reason, "nor the wallet as holding nothing")
-}
-
-// TestUnavailableBackendLookupIsNotAMiss states the distinction the type
-// exists for: reporting "nothing stored" would let a later store overwrite
-// whatever is really in the wallet.
-func TestUnavailableBackendLookupIsNotAMiss(t *testing.T) {
-	_, found, err := Unavailable{Reason: errors.New("unreachable")}.Lookup(t.Context(), "k")
-	assert.False(t, found,
-		"a wallet nobody reached must not claim to have looked: a later store would overwrite what is really in it")
-	assert.Error(t, err, "and must say why it was not reached")
-}
 
 func TestDialKeePassXCNamesEveryPathItTried(t *testing.T) {
 	absent := []string{
@@ -73,9 +50,9 @@ func TestDialKeePassXCTakesTheFirstThatAnswers(t *testing.T) {
 }
 
 func TestKeePassXCBackendDefaultsToThePlatformPaths(t *testing.T) {
-	b := KeePassXC{}
+	b := Native{}
 	assert.NotEmpty(t, b.socketPaths(), "a route that configured no paths must still have the usual places to look")
-	configured := KeePassXC{SocketPaths: []string{"/somewhere/else"}}
+	configured := Native{SocketPaths: []string{"/somewhere/else"}}
 	assert.Equal(t, []string{"/somewhere/else"}, configured.socketPaths(),
 		"and one that named its own must be looked for there and nowhere else")
 }
@@ -83,7 +60,7 @@ func TestKeePassXCBackendDefaultsToThePlatformPaths(t *testing.T) {
 // TestKeePassXCConnectReportsAnUnreachableSocket drives the real construction
 // path — no session seam — against paths that cannot answer.
 func TestKeePassXCConnectReportsAnUnreachableSocket(t *testing.T) {
-	b := KeePassXC{
+	b := Native{
 		SocketPaths:  []string{filepath.Join(testtmp.ShortDir(t), "absent")},
 		Associations: &memoryAssociations{},
 	}
@@ -109,7 +86,7 @@ func TestKeePassXCConnectReportsAFailedHandshake(t *testing.T) {
 		_ = conn.Close()
 	}()
 
-	b := KeePassXC{
+	b := Native{
 		SocketPaths:  []string{path},
 		Associations: &memoryAssociations{},
 		Timeout:      2 * time.Second,
@@ -212,7 +189,7 @@ func TestKeePassXCConnectSucceedsOverARealSocket(t *testing.T) {
 		_, _ = conn.Write(reply)
 	}()
 
-	b := KeePassXC{
+	b := Native{
 		SocketPaths:  []string{path},
 		Associations: &memoryAssociations{},
 		Timeout:      5 * time.Second,

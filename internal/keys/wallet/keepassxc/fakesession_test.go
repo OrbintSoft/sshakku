@@ -1,4 +1,4 @@
-package wallet
+package keepassxc
 
 import (
 	"errors"
@@ -78,9 +78,9 @@ func (f *fakeKeePassXC) Close() error {
 }
 
 // backendFor wires a backend to this fake and the given association store.
-func (f *fakeKeePassXC) backendFor(store AssociationStore) KeePassXC {
-	return KeePassXC{
-		NewSession:   func() (KeePassXCSession, error) { return f, nil },
+func (f *fakeKeePassXC) backendFor(store AssociationStore) Native {
+	return Native{
+		NewSession:   func() (Session, error) { return f, nil },
 		Associations: store,
 	}
 }

@@ -1,9 +1,10 @@
-package wallet
+package keepassxc
 
 import (
 	"errors"
 	"testing"
 
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
 	"github.com/OrbintSoft/sshakku/internal/keys/wallet/keepassxc/wire"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -128,7 +129,7 @@ func TestKeePassXCStoreReplacesInPlace(t *testing.T) {
 }
 
 func TestKeePassXCDeleteSaysItCannot(t *testing.T) {
-	b := KeePassXC{}
+	b := Native{}
 	err := b.Delete(t.Context(), "id_ed25519")
 	require.ErrorIs(t, err, ErrDeleteUnsupported,
 		"KeePassXC's local protocol has no verb for removing an entry, and that must be said, not faked")
@@ -138,14 +139,14 @@ func TestKeePassXCDeleteSaysItCannot(t *testing.T) {
 }
 
 func TestKeePassXCListIsUnsupported(t *testing.T) {
-	_, err := (KeePassXC{}).List(t.Context())
-	assert.ErrorIs(t, err, ErrListUnsupported,
+	_, err := (Native{}).List(t.Context())
+	assert.ErrorIs(t, err, wallet.ErrListUnsupported,
 		"KeePassXC's local protocol cannot enumerate a database, and that must be said, not answered as empty")
 }
 
 func TestKeePassXCWithNoAssociationStoreIsAnError(t *testing.T) {
 	kp := &fakeKeePassXC{}
-	b := KeePassXC{NewSession: func() (KeePassXCSession, error) { return kp, nil }}
+	b := Native{NewSession: func() (Session, error) { return kp, nil }}
 	_, _, err := b.Lookup(t.Context(), "id_ed25519")
 	require.Error(t, err, "a route with nowhere to keep its approval cannot work, and must say so")
 	assert.NotErrorIs(t, err, wire.ErrNotAssociated,
@@ -154,8 +155,8 @@ func TestKeePassXCWithNoAssociationStoreIsAnError(t *testing.T) {
 }
 
 func TestKeePassXCReportsAnUnreachableKeePassXC(t *testing.T) {
-	b := KeePassXC{
-		NewSession:   func() (KeePassXCSession, error) { return nil, errNoKeePassXC },
+	b := Native{
+		NewSession:   func() (Session, error) { return nil, errNoKeePassXC },
 		Associations: &memoryAssociations{},
 	}
 	_, _, err := b.Lookup(t.Context(), "id_ed25519")

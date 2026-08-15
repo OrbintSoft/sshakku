@@ -10,6 +10,8 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
 	"github.com/OrbintSoft/sshakku/internal/paths"
 	"github.com/OrbintSoft/sshakku/internal/run"
+
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet/keepassxc"
 )
 
 // newKeePassXCBackend opens KeePassXC by whichever route settings names.
@@ -86,7 +88,7 @@ func keepassxcRouteUnavailable(route, goos, database string) error {
 // interactive budget — the one for a command waiting on a person — rather than
 // the shorter budget for a command expected to answer on its own.
 func newKeePassXCCLIRoute(ctx context.Context, settings config.Settings, log keys.Logger) wallet.Backend {
-	return &wallet.KeePassXCCLI{
+	return &keepassxc.CLI{
 		Runner:   run.ExecRunner{Timeout: settings.CommandTimeout},
 		Prompter: newWalletPasswordPrompter(ctx, settings, log),
 		Database: settings.KeePassXCDatabase,
@@ -103,8 +105,8 @@ func newKeePassXCCLIRoute(ctx context.Context, settings config.Settings, log key
 // by itself and quickly, while the one-time approval it raises is answered by
 // the user, at their own pace.
 func newKeePassXCNativeRoute(settings config.Settings) wallet.Backend {
-	return wallet.KeePassXC{
-		Associations:       wallet.FileAssociationStore{Path: keepassxcAssociationPath()},
+	return keepassxc.Native{
+		Associations:       keepassxc.FileAssociationStore{Path: keepassxcAssociationPath()},
 		Group:              settings.SecretContainer,
 		Timeout:            settings.CommandTimeout,
 		InteractiveTimeout: settings.InteractiveTimeout,
