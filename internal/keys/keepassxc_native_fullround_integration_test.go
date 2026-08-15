@@ -17,6 +17,8 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/run"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OrbintSoft/sshakku/internal/testtmp"
 )
 
 // This is the user's own scenario against a running KeePassXC, reached over its
@@ -136,7 +138,7 @@ func setupNativeFullRound(t *testing.T, passphrase string) nativeFullRoundEnv {
 
 	// The Darwin handoff names an AF_UNIX socket under $HOME, whose path the
 	// kernel caps well below what a default temp dir costs.
-	root := shortDir(t)
+	root := testtmp.ShortDir(t)
 	home := filepath.Join(root, "home")
 	require.NoError(t, os.MkdirAll(filepath.Join(home, ".ssh"), 0o700), "a throwaway account to run in")
 

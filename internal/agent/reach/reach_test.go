@@ -11,6 +11,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OrbintSoft/sshakku/internal/testtmp"
 )
 
 // fakeAgent starts an in-process unix listener that handles each connection with
@@ -21,7 +23,7 @@ import (
 // goroutine. What it serves is the subject's input, not its verdict.
 func fakeAgent(t *testing.T, reply func(net.Conn)) string {
 	t.Helper()
-	sock := filepath.Join(shortDir(t), "a.sock")
+	sock := filepath.Join(testtmp.ShortDir(t), "a.sock")
 	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "unix", sock)
 	require.NoError(t, err, "listen")
 	t.Cleanup(func() { _ = ln.Close() })
@@ -85,10 +87,10 @@ func TestSocketProberReachable(t *testing.T) {
 		assert.False(t, p.Reachable(t.Context(), ""), "an empty path is not an agent")
 	})
 	t.Run("missing socket", func(t *testing.T) {
-		assert.False(t, p.Reachable(t.Context(), filepath.Join(shortDir(t), "nope.sock")), "a missing socket is not an agent")
+		assert.False(t, p.Reachable(t.Context(), filepath.Join(testtmp.ShortDir(t), "nope.sock")), "a missing socket is not an agent")
 	})
 	t.Run("not a socket", func(t *testing.T) {
-		f := filepath.Join(shortDir(t), "regular")
+		f := filepath.Join(testtmp.ShortDir(t), "regular")
 		require.NoError(t, os.WriteFile(f, []byte("x"), 0o600))
 		assert.False(t, p.Reachable(t.Context(), f), "a regular file is not an agent")
 	})

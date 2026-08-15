@@ -7,13 +7,14 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"os"
 	"path/filepath"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/OrbintSoft/sshakku/internal/testtmp"
 )
 
 // fakeServer is a stand-in for KeePassXC that speaks the real protocol: it
@@ -76,7 +77,7 @@ func newFakeServer(t *testing.T) *fakeServer {
 	t.Helper()
 	keys, err := newKeyPair()
 	require.NoError(t, err, "generating the server key pair")
-	path := filepath.Join(shortSocketDir(t), "s")
+	path := filepath.Join(testtmp.ShortDir(t), "s")
 	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "unix", path)
 	require.NoErrorf(t, err, "listening on %s", path)
 	s := &fakeServer{
@@ -90,23 +91,6 @@ func newFakeServer(t *testing.T) *fakeServer {
 	t.Cleanup(func() { _ = ln.Close() })
 	go s.serve()
 	return s
-}
-
-// shortSocketDir returns a directory a unix socket can actually live in.
-//
-// A socket *address* is capped at 104 bytes on Darwin (108 on Linux and on
-// Windows), and the name is checked at bind, not at connect. t.TempDir() is
-// nowhere near short enough on macOS, where TMPDIR is a per-user path under
-// /var/folders and the test's own name is appended to it — so the bind fails
-// with EINVAL and every test in the file goes red at once. Which directory is
-// short enough to hold one is the platform's answer, not this function's:
-// shortSocketBase gives it.
-func shortSocketDir(t *testing.T) string {
-	t.Helper()
-	dir, err := os.MkdirTemp(shortSocketBase(), "kpxc") //nolint:usetesting // t.TempDir() is the long macOS path the comment above is about
-	require.NoError(t, err, "mkdir temp")
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	return dir
 }
 
 // rawBytes returns everything the client has sent so far.

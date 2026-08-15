@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/OrbintSoft/sshakku/internal/testtmp"
 )
 
 func TestUIDGatedProberReachable(t *testing.T) {
@@ -30,7 +32,7 @@ func TestUIDGatedProberReachable(t *testing.T) {
 	})
 	t.Run("missing socket", func(t *testing.T) {
 		g := UIDGatedProber{UID: ownerUID, Prober: real}
-		assert.False(t, g.Reachable(t.Context(), filepath.Join(shortDir(t), "nope.sock")), "a missing socket is unreachable")
+		assert.False(t, g.Reachable(t.Context(), filepath.Join(testtmp.ShortDir(t), "nope.sock")), "a missing socket is unreachable")
 	})
 }
 

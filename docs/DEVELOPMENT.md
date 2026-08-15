@@ -38,6 +38,7 @@ composed by it. One line each:
 | `internal/paths` | Computes and creates the per-user runtime layout: config under the XDG config dir, the session log under the XDG state dir, the agent socket in per-user tmpfs — always outside `~/.ssh`. |
 | `internal/run` | Runs the external programs SSHakku drives — `ssh-add`, `ssh-keygen`, a wallet's CLI, a passphrase dialog — and bounds how long anything outside the process may keep a caller waiting, so a tool that neither answers nor fails becomes an error to fall back from. `internal/run/runtest` holds the stand-ins that let a component driving one of those be tested without it. |
 | `internal/secretservice` | A native client for the freedesktop Secret Service D-Bus API (`org.freedesktop.secrets`), used instead of shelling out to `secret-tool` so a dedicated collection can be created and locked/unlocked around a single lookup or store. |
+| `internal/testtmp` | Hands a test a temporary directory short enough to bind a unix socket in — what `t.TempDir()` cannot give, since a socket address is capped at barely a hundred bytes and macOS's temp root spends most of them before the socket is named. |
 | `internal/sessionlog` | Appends timestamped, level-tagged lines to the owner-only session log, bounded to a fixed number of recent lines. |
 
 `tools/` holds CI-only helpers built and run by workflows, never by

@@ -12,6 +12,8 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/agent/inspect"
 
 	"github.com/OrbintSoft/sshakku/internal/agent/inspect/inspecttest"
+
+	"github.com/OrbintSoft/sshakku/internal/testtmp"
 )
 
 // TestSituationStringUnknown covers Situation.String's default arm for a value
@@ -23,7 +25,7 @@ func TestSituationStringUnknown(t *testing.T) {
 // TestEnsureAgentReapError covers EnsureAgent's error return when the reap pass
 // cannot enumerate processes (a missing procfs root).
 func TestEnsureAgentReapError(t *testing.T) {
-	dir := shortDir(t)
+	dir := testtmp.ShortDir(t)
 	fixed := filepath.Join(dir, "agent.sock")
 	m := Manager{
 		Prober:    mapProber{}, // fixed silent → past the fast path
@@ -46,7 +48,7 @@ func TestManagerReapInspectError(t *testing.T) {
 // TestManagerStartRunnerError covers Start's error return when the runner fails to
 // launch an agent — the state file must not be written.
 func TestManagerStartRunnerError(t *testing.T) {
-	dir := shortDir(t)
+	dir := testtmp.ShortDir(t)
 	socket := filepath.Join(dir, "agent.sock")
 	state := filepath.Join(dir, "agent.state")
 	m := Manager{Prober: mapProber{}, Runner: &recordRunner{err: errors.New("no ssh-agent")}}
@@ -60,7 +62,7 @@ func TestManagerStartRunnerError(t *testing.T) {
 // TestManagerStartStateWriteError covers Start's non-fatal path: the agent came up
 // but recording its state failed. It must still return the pid alongside the error.
 func TestManagerStartStateWriteError(t *testing.T) {
-	dir := shortDir(t)
+	dir := testtmp.ShortDir(t)
 	socket := filepath.Join(dir, "agent.sock")
 	state := filepath.Join(dir, "no-such-dir", "agent.state") // parent missing → write fails
 	m := Manager{Prober: mapProber{}, Runner: &recordRunner{pid: 4242}}
@@ -82,15 +84,15 @@ func TestWriteStateError(t *testing.T) {
 // saw one), so EnsureAgent clears it before starting a fresh agent and reports a
 // zombie recovery rather than a clean start.
 func TestEnsureAgentClearsStaleFixedSocket(t *testing.T) {
-	dir := shortDir(t)
+	dir := testtmp.ShortDir(t)
 	fixed := filepath.Join(dir, "agent.sock")
 	makeSocketFile(t, fixed) // orphan socket, no matching proc
 
 	runner := &recordRunner{pid: 7000}
 	log := &fakeLogger{}
 	m := Manager{
-		Prober:    mapProber{},                              // fixed is silent
-		Inspector: inspect.Inspector{ProcRoot: shortDir(t)}, // no processes at all
+		Prober:    mapProber{},                                      // fixed is silent
+		Inspector: inspect.Inspector{ProcRoot: testtmp.ShortDir(t)}, // no processes at all
 		Runner:    runner,
 		Signaler:  &recordSignaler{},
 	}
@@ -104,11 +106,11 @@ func TestEnsureAgentClearsStaleFixedSocket(t *testing.T) {
 // TestEnsureAgentStartError covers EnsureAgent's error return when starting the
 // fresh agent fails in the no-foreign branch.
 func TestEnsureAgentStartError(t *testing.T) {
-	dir := shortDir(t)
+	dir := testtmp.ShortDir(t)
 	fixed := filepath.Join(dir, "agent.sock")
 	m := Manager{
 		Prober:    mapProber{},
-		Inspector: inspect.Inspector{ProcRoot: shortDir(t)},
+		Inspector: inspect.Inspector{ProcRoot: testtmp.ShortDir(t)},
 		Runner:    &recordRunner{err: errors.New("no ssh-agent")},
 		Signaler:  &recordSignaler{},
 	}
@@ -121,9 +123,9 @@ func TestEnsureAgentStartError(t *testing.T) {
 // path (no process owns it, so Reap left it). adoptSymlink will replace it, and
 // EnsureAgent reports the replacement, escalating the landscape to a disaster.
 func TestEnsureAgentReplacesStaleFixedOnAdopt(t *testing.T) {
-	dir := shortDir(t)
+	dir := testtmp.ShortDir(t)
 	fixed := filepath.Join(dir, "agent.sock")
-	proc := shortDir(t)
+	proc := testtmp.ShortDir(t)
 	foreignSock := filepath.Join(dir, "foreign.sock")
 
 	makeSocketFile(t, fixed)                                                           // orphan socket at the fixed path
@@ -148,9 +150,9 @@ func TestEnsureAgentReplacesStaleFixedOnAdopt(t *testing.T) {
 // TestEnsureAgentAdoptSymlinkError covers EnsureAgent's error return when adopting
 // a foreign agent fails because the fixed socket's directory does not exist.
 func TestEnsureAgentAdoptSymlinkError(t *testing.T) {
-	dir := shortDir(t)
+	dir := testtmp.ShortDir(t)
 	fixed := filepath.Join(dir, "no-such-dir", "agent.sock") // parent missing → symlink fails
-	proc := shortDir(t)
+	proc := testtmp.ShortDir(t)
 	foreignSock := filepath.Join(dir, "foreign.sock")
 	inspecttest.FakeProc(t, proc, 300, []string{"ssh-agent", "-a", foreignSock}, 1000)
 
@@ -168,7 +170,7 @@ func TestEnsureAgentAdoptSymlinkError(t *testing.T) {
 // symlink cannot be created (missing parent directory), and the atomic rename onto
 // the fixed path fails (the target path is an existing directory).
 func TestAdoptSymlinkErrors(t *testing.T) {
-	dir := shortDir(t)
+	dir := testtmp.ShortDir(t)
 
 	t.Run("symlink fails", func(t *testing.T) {
 		fixed := filepath.Join(dir, "no-such-dir", "agent.sock")

@@ -11,6 +11,8 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/OrbintSoft/sshakku/internal/agent/inspect"
+
+	"github.com/OrbintSoft/sshakku/internal/testtmp"
 )
 
 // nthErrLister wraps a ProcLister and forces the failOn-th (1-based) Agents call to
@@ -33,9 +35,9 @@ func (l *nthErrLister) Agents() ([]inspect.AgentProc, error) {
 // TestEnsureAgentForeignSurveyError covers EnsureAgent's error return when the
 // healthy-agent survey (the second process scan, after a successful reap) fails.
 func TestEnsureAgentForeignSurveyError(t *testing.T) {
-	dir := shortDir(t)
+	dir := testtmp.ShortDir(t)
 	fixed := filepath.Join(dir, "agent.sock")
-	lister := &nthErrLister{inner: inspect.Inspector{ProcRoot: shortDir(t)}, failOn: 2}
+	lister := &nthErrLister{inner: inspect.Inspector{ProcRoot: testtmp.ShortDir(t)}, failOn: 2}
 	m := Manager{
 		Prober:    mapProber{}, // fixed silent
 		Inspector: lister,

@@ -13,6 +13,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OrbintSoft/sshakku/internal/testtmp"
 )
 
 // saveHandoffSocketSeams snapshots the RNG, listen, and chmod seams shared by
@@ -35,7 +37,7 @@ func TestSocketHandoffFetchDialError(t *testing.T) {
 func TestSocketHandoffFetchReadError(t *testing.T) {
 	saveHandoffSocketSeams(t)
 
-	token, err := socketHandoffStash("s3cr3t", 5*time.Second, fixedBase(shortDir(t)), addrLimit)
+	token, err := socketHandoffStash("s3cr3t", 5*time.Second, fixedBase(testtmp.ShortDir(t)), addrLimit)
 	require.NoError(t, err, "putting a passphrase aside must succeed")
 	readAll = func(io.Reader) ([]byte, error) { return nil, errors.New("read boom") }
 	_, err = socketHandoffFetch(t.Context(), token)
@@ -53,7 +55,7 @@ func TestSocketHandoffDirErrors(t *testing.T) {
 	t.Run("the directory cannot be made private", func(t *testing.T) {
 		saveHandoffSocketSeams(t)
 		chmodDir = func(string, os.FileMode) error { return errors.New("chmod boom") }
-		_, err := socketHandoffDir(shortDir(t))
+		_, err := socketHandoffDir(testtmp.ShortDir(t))
 		assert.Error(t, err,
 			"a directory that could not be made private must not be used: a passphrase would rendezvous in the open")
 	})
@@ -63,7 +65,7 @@ func TestSocketHandoffDirErrors(t *testing.T) {
 // for a passphrase, which nobody but its owner may enter — whatever the umask
 // of the process that created it happened to be.
 func TestSocketHandoffDirIsPrivate(t *testing.T) {
-	dir, err := socketHandoffDir(shortDir(t))
+	dir, err := socketHandoffDir(testtmp.ShortDir(t))
 	require.NoError(t, err, "making the rendezvous directory must succeed")
 	info, err := os.Stat(dir)
 	require.NoError(t, err, "and it must be there")
@@ -75,7 +77,7 @@ func TestSocketHandoffDirIsPrivate(t *testing.T) {
 // would refuse: what comes back has to name the length and the limit, since
 // the kernel's own answer ("invalid argument") names neither.
 func TestSocketHandoffAddressTooLong(t *testing.T) {
-	_, err := socketHandoffStash("s", time.Second, fixedBase(shortDir(t)), 20)
+	_, err := socketHandoffStash("s", time.Second, fixedBase(testtmp.ShortDir(t)), 20)
 	require.Error(t, err, "an address the kernel would refuse must be caught before it is offered")
 	assert.Contains(t, err.Error(), "socket address",
 		"and say what was too long: the kernel's own answer is \"invalid argument\", which names nothing")
@@ -136,21 +138,21 @@ func TestSocketHandoffStashErrors(t *testing.T) {
 	t.Run("token RNG fails", func(t *testing.T) {
 		saveHandoffSocketSeams(t)
 		randRead = func([]byte) (int, error) { return 0, errors.New("rng boom") }
-		_, err := socketHandoffStash("s", time.Second, fixedBase(shortDir(t)), addrLimit)
+		_, err := socketHandoffStash("s", time.Second, fixedBase(testtmp.ShortDir(t)), addrLimit)
 		assert.Error(t, err, "a rendezvous another process could guess the name of must not be opened")
 	})
 
 	t.Run("listen fails", func(t *testing.T) {
 		saveHandoffSocketSeams(t)
 		netListen = func(string, string) (net.Listener, error) { return nil, errors.New("listen boom") }
-		_, err := socketHandoffStash("s", time.Second, fixedBase(shortDir(t)), addrLimit)
+		_, err := socketHandoffStash("s", time.Second, fixedBase(testtmp.ShortDir(t)), addrLimit)
 		assert.Error(t, err, "a rendezvous nothing is listening at cannot hand anything over")
 	})
 
 	t.Run("chmod fails and the socket is cleaned up", func(t *testing.T) {
 		saveHandoffSocketSeams(t)
 		chmodSock = func(string, os.FileMode) error { return errors.New("chmod boom") }
-		_, err := socketHandoffStash("s", time.Second, fixedBase(shortDir(t)), addrLimit)
+		_, err := socketHandoffStash("s", time.Second, fixedBase(testtmp.ShortDir(t)), addrLimit)
 		assert.Error(t, err,
 			"a socket that could not be made private must not be left serving: anything that connects gets the passphrase")
 	})

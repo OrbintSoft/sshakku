@@ -11,6 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/OrbintSoft/sshakku/internal/run"
+
+	"github.com/OrbintSoft/sshakku/internal/testtmp"
 )
 
 // TestAddWithAskpassRealBinaryDarwin exercises the full production path on
@@ -25,7 +27,7 @@ import (
 func TestAddWithAskpassRealBinaryDarwin(t *testing.T) {
 	requireRealSSHBinaries(t)
 
-	dir := shortDir(t)
+	dir := testtmp.ShortDir(t)
 	askpass := buildAskpassHelper(t, dir)
 
 	keyfile := filepath.Join(dir, "id_test")
@@ -42,7 +44,7 @@ func TestAddWithAskpassRealBinaryDarwin(t *testing.T) {
 	})
 	waitForSocket(t, sock)
 	t.Setenv("SSH_AUTH_SOCK", sock)
-	t.Setenv("HOME", shortDir(t))
+	t.Setenv("HOME", testtmp.ShortDir(t))
 
 	adder := ExecKeyAdder{AskpassProg: askpass}
 	rc, err := adder.AddWithAskpass(t.Context(), keyfile, passphrase)

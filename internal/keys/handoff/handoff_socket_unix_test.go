@@ -9,6 +9,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OrbintSoft/sshakku/internal/testtmp"
 )
 
 // addrLimit is the address length these tests hold themselves to: the stricter
@@ -23,7 +25,7 @@ func fixedBase(dir string) func() (string, error) {
 }
 
 func TestSocketHandoffRoundTrip(t *testing.T) {
-	token, err := socketHandoffStash("s3cr3t", 5*time.Second, fixedBase(shortDir(t)), addrLimit)
+	token, err := socketHandoffStash("s3cr3t", 5*time.Second, fixedBase(testtmp.ShortDir(t)), addrLimit)
 	require.NoError(t, err, "putting a passphrase aside for the helper to collect must succeed")
 
 	info, err := os.Stat(token)
@@ -37,7 +39,7 @@ func TestSocketHandoffRoundTrip(t *testing.T) {
 }
 
 func TestSocketHandoffOneShot(t *testing.T) {
-	token, err := socketHandoffStash("s3cr3t", 5*time.Second, fixedBase(shortDir(t)), addrLimit)
+	token, err := socketHandoffStash("s3cr3t", 5*time.Second, fixedBase(testtmp.ShortDir(t)), addrLimit)
 	require.NoError(t, err, "putting a passphrase aside must succeed")
 	_, err = socketHandoffFetch(t.Context(), token)
 	require.NoError(t, err, "and the helper that was meant to have it must get it")
@@ -58,7 +60,7 @@ func TestSocketHandoffOneShot(t *testing.T) {
 }
 
 func TestSocketHandoffExpiresUnclaimed(t *testing.T) {
-	token, err := socketHandoffStash("s3cr3t", 100*time.Millisecond, fixedBase(shortDir(t)), addrLimit)
+	token, err := socketHandoffStash("s3cr3t", 100*time.Millisecond, fixedBase(testtmp.ShortDir(t)), addrLimit)
 	require.NoError(t, err, "putting a passphrase aside must succeed")
 
 	deadline := time.Now().Add(2 * time.Second)

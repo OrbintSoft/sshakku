@@ -12,6 +12,8 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/keys/wallet/keepassxc/wire"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OrbintSoft/sshakku/internal/testtmp"
 )
 
 func TestUnavailableBackendFailsEveryOperationWithItsReason(t *testing.T) {
@@ -39,8 +41,8 @@ func TestUnavailableBackendLookupIsNotAMiss(t *testing.T) {
 
 func TestDialKeePassXCNamesEveryPathItTried(t *testing.T) {
 	absent := []string{
-		filepath.Join(shortDir(t), "a"),
-		filepath.Join(shortDir(t), "b"),
+		filepath.Join(testtmp.ShortDir(t), "a"),
+		filepath.Join(testtmp.ShortDir(t), "b"),
 	}
 	_, err := dialKeePassXCAt(t.Context(), absent)
 	require.Error(t, err, "a KeePassXC nothing could reach cannot answer")
@@ -52,7 +54,7 @@ func TestDialKeePassXCNamesEveryPathItTried(t *testing.T) {
 }
 
 func TestDialKeePassXCTakesTheFirstThatAnswers(t *testing.T) {
-	dir := shortDir(t)
+	dir := testtmp.ShortDir(t)
 	live := filepath.Join(dir, "live")
 	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "unix", live)
 	require.NoError(t, err, "a socket that answers, later in the list than one that does not")
@@ -82,7 +84,7 @@ func TestKeePassXCBackendDefaultsToThePlatformPaths(t *testing.T) {
 // path — no session seam — against paths that cannot answer.
 func TestKeePassXCConnectReportsAnUnreachableSocket(t *testing.T) {
 	b := KeePassXC{
-		SocketPaths:  []string{filepath.Join(shortDir(t), "absent")},
+		SocketPaths:  []string{filepath.Join(testtmp.ShortDir(t), "absent")},
 		Associations: &memoryAssociations{},
 	}
 	_, _, err := b.Lookup(t.Context(), "id_ed25519")
@@ -94,7 +96,7 @@ func TestKeePassXCConnectReportsAnUnreachableSocket(t *testing.T) {
 // socket that accepts and then says nothing, which is not the same as nothing
 // listening.
 func TestKeePassXCConnectReportsAFailedHandshake(t *testing.T) {
-	path := filepath.Join(shortDir(t), "mute")
+	path := filepath.Join(testtmp.ShortDir(t), "mute")
 	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "unix", path)
 	require.NoError(t, err, "a socket that accepts and then says nothing")
 	t.Cleanup(func() { _ = ln.Close() })
@@ -179,7 +181,7 @@ func TestKeePassXCStoreEntersTheSSHakkuGroup(t *testing.T) {
 // does. Only the exchange is answered, so the lookup then stops at "not
 // associated" — which is the point: the connection itself was built for real.
 func TestKeePassXCConnectSucceedsOverARealSocket(t *testing.T) {
-	path := filepath.Join(shortDir(t), "s")
+	path := filepath.Join(testtmp.ShortDir(t), "s")
 	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "unix", path)
 	require.NoError(t, err, "a socket that answers the key exchange the way KeePassXC does")
 	t.Cleanup(func() { _ = ln.Close() })

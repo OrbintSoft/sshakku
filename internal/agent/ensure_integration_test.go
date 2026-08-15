@@ -19,6 +19,8 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/agent/inspect"
 
 	"github.com/OrbintSoft/sshakku/internal/agent/reach"
+
+	"github.com/OrbintSoft/sshakku/internal/testtmp"
 )
 
 // lockRealAgentTests serialises every real-ssh-agent-spawning test across
@@ -84,7 +86,7 @@ func newRealManager() Manager {
 
 func realCfg(t *testing.T) EnsureConfig {
 	t.Helper()
-	dir := shortDir(t)
+	dir := testtmp.ShortDir(t)
 	return EnsureConfig{
 		FixedSock: filepath.Join(dir, "agent.sock"),
 		LegacyDir: filepath.Join(dir, "legacy"),
@@ -282,7 +284,7 @@ func TestEnsureAgentRealForeignAdopted(t *testing.T) {
 	m := newRealManager()
 	cfg := realCfg(t)
 
-	foreignSock := filepath.Join(shortDir(t), "foreign.sock")
+	foreignSock := filepath.Join(testtmp.ShortDir(t), "foreign.sock")
 	foreignPID := startForeignAgent(t, foreignSock)
 
 	res, err := m.EnsureAgent(t.Context(), cfg, nil)
@@ -310,8 +312,8 @@ func TestEnsureAgentRealDisasterReapsAndAdoptsLowestPID(t *testing.T) {
 	require.NoError(t, err, "seed EnsureAgent")
 	killAgentLeavingSocket(t, res1.Started) // now dead-ours
 
-	sockA := filepath.Join(shortDir(t), "foreign-a.sock")
-	sockB := filepath.Join(shortDir(t), "foreign-b.sock")
+	sockA := filepath.Join(testtmp.ShortDir(t), "foreign-a.sock")
+	sockB := filepath.Join(testtmp.ShortDir(t), "foreign-b.sock")
 	pidA := startForeignAgent(t, sockA)
 	pidB := startForeignAgent(t, sockB)
 	lowest := pidA

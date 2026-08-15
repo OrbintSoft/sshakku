@@ -11,6 +11,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OrbintSoft/sshakku/internal/testtmp"
 )
 
 // waitGone polls until path is removed or the deadline passes, so the test
@@ -45,7 +47,7 @@ func TestSocketHandoffNoGoroutineLeak(t *testing.T) {
 		t.Skip("goroutineleak profile unavailable; rebuild with GOEXPERIMENT=goroutineleakprofile (make test-leakprofile)")
 	}
 
-	base := shortDir(t)
+	base := testtmp.ShortDir(t)
 
 	// Unclaimed stash: the server must time out and exit, never blocking on
 	// Accept for a connection that never comes.

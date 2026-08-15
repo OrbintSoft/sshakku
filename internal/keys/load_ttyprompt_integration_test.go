@@ -20,6 +20,8 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/run"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OrbintSoft/sshakku/internal/testtmp"
 )
 
 // Environment the parent hands its re-executed self, which runs the loader
@@ -256,7 +258,7 @@ func setupTTYPromptTest(t *testing.T, passphrase string) ttyPromptEnv {
 
 	// The Darwin handoff names an AF_UNIX socket under $HOME, whose path the
 	// kernel caps well below what a default temp dir costs.
-	dir := shortDir(t)
+	dir := testtmp.ShortDir(t)
 	t.Setenv("HOME", dir)
 
 	keyfile := filepath.Join(dir, "id_test")
