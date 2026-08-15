@@ -3,7 +3,9 @@
 package handoff
 
 import (
+	"net"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -57,6 +59,33 @@ func TestSocketHandoffOneShot(t *testing.T) {
 
 	_, err = socketHandoffFetch(t.Context(), token)
 	assert.Error(t, err, "and a second attempt must get nothing: one stash is one handoff")
+}
+
+// TestSocketHandoffServedNothingIsNotAPassphrase covers what a collector is
+// told when the rendezvous is still there to dial but hands nothing over — the
+// state a stash is in between serving its one connection and taking itself
+// away, which is what a second collector finds if it arrives inside that gap.
+// Nothing handed over and a passphrase the user left empty are the same string
+// and different events, and only the second one is an answer.
+func TestSocketHandoffServedNothingIsNotAPassphrase(t *testing.T) {
+	sock := filepath.Join(testtmp.ShortDir(t), "collected.sock")
+	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "unix", sock)
+	require.NoError(t, err, "a rendezvous to collect from must be there")
+	t.Cleanup(func() { _ = ln.Close() })
+
+	// Serves what a stash whose passphrase has already been taken serves: the
+	// connection is accepted and closed with no byte across it.
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		_ = conn.Close()
+	}()
+
+	_, err = socketHandoffFetch(t.Context(), sock)
+	assert.Error(t, err,
+		"a handoff that handed nothing over must be reported as that, not passed on as a passphrase")
 }
 
 func TestSocketHandoffExpiresUnclaimed(t *testing.T) {
