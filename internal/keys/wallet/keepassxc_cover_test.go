@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/OrbintSoft/sshakku/internal/keepassxc"
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet/keepassxc/wire"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -44,7 +44,7 @@ func TestDialKeePassXCNamesEveryPathItTried(t *testing.T) {
 	}
 	_, err := dialKeePassXCAt(t.Context(), absent)
 	require.Error(t, err, "a KeePassXC nothing could reach cannot answer")
-	assert.ErrorIs(t, err, keepassxc.ErrNotRunning, "and it must be said as an app that is not running")
+	assert.ErrorIs(t, err, wire.ErrNotRunning, "and it must be said as an app that is not running")
 	for _, path := range absent {
 		assert.Containsf(t, err.Error(), path,
 			"naming every place it looked, or the user cannot tell where to put the socket they do have")
@@ -86,7 +86,7 @@ func TestKeePassXCConnectReportsAnUnreachableSocket(t *testing.T) {
 		Associations: &memoryAssociations{},
 	}
 	_, _, err := b.Lookup(t.Context(), "id_ed25519")
-	assert.ErrorIs(t, err, keepassxc.ErrNotRunning,
+	assert.ErrorIs(t, err, wire.ErrNotRunning,
 		"a KeePassXC that is not running must be said so, not read as a database holding nothing")
 }
 
@@ -118,20 +118,20 @@ func TestKeePassXCConnectReportsAFailedHandshake(t *testing.T) {
 }
 
 func TestKeePassXCLookupReportsARevokedAssociation(t *testing.T) {
-	kp := &fakeKeePassXC{testAssociateErr: keepassxc.ErrNotAssociated}
-	b := kp.backendFor(&memoryAssociations{stored: keepassxc.Association{ID: "db", IDKey: "k"}, present: true})
+	kp := &fakeKeePassXC{testAssociateErr: wire.ErrNotAssociated}
+	b := kp.backendFor(&memoryAssociations{stored: wire.Association{ID: "db", IDKey: "k"}, present: true})
 
 	_, _, err := b.Lookup(t.Context(), "id_ed25519")
-	assert.ErrorIs(t, err, keepassxc.ErrNotAssociated,
+	assert.ErrorIs(t, err, wire.ErrNotAssociated,
 		"an approval the user revoked must be said so, not read as a database holding nothing")
 }
 
 func TestKeePassXCLookupReportsAFailedSearch(t *testing.T) {
-	kp := &fakeKeePassXC{getLoginsErr: keepassxc.ErrDatabaseLocked}
-	b := kp.backendFor(&memoryAssociations{stored: keepassxc.Association{ID: "db", IDKey: "k"}, present: true})
+	kp := &fakeKeePassXC{getLoginsErr: wire.ErrDatabaseLocked}
+	b := kp.backendFor(&memoryAssociations{stored: wire.Association{ID: "db", IDKey: "k"}, present: true})
 
 	_, _, err := b.Lookup(t.Context(), "id_ed25519")
-	assert.ErrorIs(t, err, keepassxc.ErrDatabaseLocked,
+	assert.ErrorIs(t, err, wire.ErrDatabaseLocked,
 		"a locked database is not an empty one, and telling them apart is what sends the user to unlock it")
 }
 
@@ -149,7 +149,7 @@ func TestKeePassXCStoreReportsARefusedApproval(t *testing.T) {
 // rather than giving up on saving the passphrase.
 func TestKeePassXCStoreCreatesWhenTheSearchFails(t *testing.T) {
 	kp := &fakeKeePassXC{getLoginsErr: errors.New("search unavailable")}
-	b := kp.backendFor(&memoryAssociations{stored: keepassxc.Association{ID: "db", IDKey: "k"}, present: true})
+	b := kp.backendFor(&memoryAssociations{stored: wire.Association{ID: "db", IDKey: "k"}, present: true})
 
 	require.NoError(t, b.Store(t.Context(), "id_ed25519", "", "p"),
 		"not knowing whether an entry is already there is no reason to lose the passphrase the user just typed")
@@ -159,7 +159,7 @@ func TestKeePassXCStoreCreatesWhenTheSearchFails(t *testing.T) {
 
 func TestKeePassXCStoreReportsAFailedWrite(t *testing.T) {
 	kp := &fakeKeePassXC{setLoginErr: errors.New("read-only database")}
-	b := kp.backendFor(&memoryAssociations{stored: keepassxc.Association{ID: "db", IDKey: "k"}, present: true})
+	b := kp.backendFor(&memoryAssociations{stored: wire.Association{ID: "db", IDKey: "k"}, present: true})
 
 	assert.Error(t, b.Store(t.Context(), "id_ed25519", "", "p"),
 		"a passphrase the database refused to take must not be reported as saved: the next login would expect it there")
@@ -167,7 +167,7 @@ func TestKeePassXCStoreReportsAFailedWrite(t *testing.T) {
 
 func TestKeePassXCStoreEntersTheSSHakkuGroup(t *testing.T) {
 	kp := &fakeKeePassXC{}
-	b := kp.backendFor(&memoryAssociations{stored: keepassxc.Association{ID: "db", IDKey: "k"}, present: true})
+	b := kp.backendFor(&memoryAssociations{stored: wire.Association{ID: "db", IDKey: "k"}, present: true})
 
 	require.NoError(t, b.Store(t.Context(), "id_ed25519", "", "p"), "saving a passphrase must succeed")
 	assert.Equal(t, "SSHakku", kp.lastSet.group,
@@ -216,6 +216,6 @@ func TestKeePassXCConnectSucceedsOverARealSocket(t *testing.T) {
 		Timeout:      5 * time.Second,
 	}
 	_, _, err = b.Lookup(t.Context(), "id_ed25519")
-	assert.ErrorIs(t, err, keepassxc.ErrNotAssociated,
+	assert.ErrorIs(t, err, wire.ErrNotAssociated,
 		"the session opened for real over a real socket, and stopped where it should: nothing was ever approved")
 }

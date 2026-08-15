@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/OrbintSoft/sshakku/internal/keepassxc"
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet/keepassxc/wire"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -23,7 +23,7 @@ import (
 func TestFileAssociationIsNotWorldReadable(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "assoc.json")
 	store := FileAssociationStore{Path: path}
-	require.NoError(t, store.Save(keepassxc.Association{ID: "db", IDKey: "k"}), "saving the approval must succeed")
+	require.NoError(t, store.Save(wire.Association{ID: "db", IDKey: "k"}), "saving the approval must succeed")
 	info, err := os.Stat(path)
 	require.NoError(t, err, "and the file must be there")
 	assert.Zero(t, info.Mode().Perm()&0o077,

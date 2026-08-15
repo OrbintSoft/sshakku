@@ -17,7 +17,7 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/cli/backend"
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/diagnose"
-	"github.com/OrbintSoft/sshakku/internal/keepassxc"
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet/keepassxc/wire"
 )
 
 // walletProbe is how the checks below find out whether something is here. Both
@@ -74,7 +74,7 @@ func realProbe() walletProbe {
 	return walletProbe{
 		onPath:     exec.LookPath,
 		exists:     func(path string) bool { _, err := os.Stat(path); return err == nil },
-		listening:  keepassxc.SocketPaths(),
+		listening:  wire.SocketPaths(),
 		busAddress: os.Getenv("DBUS_SESSION_BUS_ADDRESS"),
 		hasScreen:  os.Getenv("DISPLAY") != "" || os.Getenv("WAYLAND_DISPLAY") != "",
 		look:       realSecretServiceLook,

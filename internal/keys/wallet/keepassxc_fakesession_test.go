@@ -3,7 +3,7 @@ package wallet
 import (
 	"errors"
 
-	"github.com/OrbintSoft/sshakku/internal/keepassxc"
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet/keepassxc/wire"
 )
 
 // fakeKeePassXC stands in for a running KeePassXC at the protocol boundary. It
@@ -15,7 +15,7 @@ import (
 // server that speaks it with real keys and real encryption.
 type fakeKeePassXC struct {
 	// entries maps a URL to what get-logins returns for it.
-	entries map[string][]keepassxc.Entry
+	entries map[string][]wire.Entry
 
 	// associateCalls counts approval requests, which is what a lookup must
 	// never trigger.
@@ -38,24 +38,24 @@ type fakeKeePassXC struct {
 	closed bool
 }
 
-func (f *fakeKeePassXC) TestAssociate(keepassxc.Association) error { return f.testAssociateErr }
+func (f *fakeKeePassXC) TestAssociate(wire.Association) error { return f.testAssociateErr }
 
-func (f *fakeKeePassXC) Associate() (keepassxc.Association, error) {
+func (f *fakeKeePassXC) Associate() (wire.Association, error) {
 	f.associateCalls++
 	if f.associateErr != nil {
-		return keepassxc.Association{}, f.associateErr
+		return wire.Association{}, f.associateErr
 	}
-	return keepassxc.Association{ID: "granted", IDKey: "granted-key"}, nil
+	return wire.Association{ID: "granted", IDKey: "granted-key"}, nil
 }
 
-func (f *fakeKeePassXC) GetLogins(url string, _ keepassxc.Association) ([]keepassxc.Entry, error) {
+func (f *fakeKeePassXC) GetLogins(url string, _ wire.Association) ([]wire.Entry, error) {
 	if f.getLoginsErr != nil {
 		return nil, f.getLoginsErr
 	}
 	return f.entries[url], nil
 }
 
-func (f *fakeKeePassXC) SetLogin(url, login, password, uuid, group string, _ keepassxc.Association) error {
+func (f *fakeKeePassXC) SetLogin(url, login, password, uuid, group string, _ wire.Association) error {
 	if f.setLoginErr != nil {
 		return f.setLoginErr
 	}
@@ -66,9 +66,9 @@ func (f *fakeKeePassXC) SetLogin(url, login, password, uuid, group string, _ kee
 	f.lastSet.group = group
 	f.lastSet.called = true
 	if f.entries == nil {
-		f.entries = map[string][]keepassxc.Entry{}
+		f.entries = map[string][]wire.Entry{}
 	}
-	f.entries[url] = []keepassxc.Entry{{Login: login, Password: password, UUID: uuid}}
+	f.entries[url] = []wire.Entry{{Login: login, Password: password, UUID: uuid}}
 	return nil
 }
 

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OrbintSoft/sshakku/internal/keepassxc"
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet/keepassxc/wire"
 )
 
 // keepassxcURLScheme is the scheme SSHakku's entries are keyed by in the user's
@@ -42,8 +42,8 @@ var ErrDeleteUnsupported = errors.New("secret backend cannot delete a stored ent
 // AssociationStore persists the association KeePassXC hands out, so the user
 // approves this client once rather than on every run.
 type AssociationStore interface {
-	Load() (keepassxc.Association, bool, error)
-	Save(keepassxc.Association) error
+	Load() (wire.Association, bool, error)
+	Save(wire.Association) error
 }
 
 // KeePassXCSession is the part of KeePassXC's protocol this backend uses. It
@@ -52,10 +52,10 @@ type AssociationStore interface {
 // protocol underneath is verified separately, against a server that speaks it
 // for real.
 type KeePassXCSession interface {
-	TestAssociate(keepassxc.Association) error
-	Associate() (keepassxc.Association, error)
-	GetLogins(url string, a keepassxc.Association) ([]keepassxc.Entry, error)
-	SetLogin(url, login, password, uuid, group string, a keepassxc.Association) error
+	TestAssociate(wire.Association) error
+	Associate() (wire.Association, error)
+	GetLogins(url string, a wire.Association) ([]wire.Entry, error)
+	SetLogin(url, login, password, uuid, group string, a wire.Association) error
 	Close() error
 }
 
@@ -111,7 +111,7 @@ func (b KeePassXC) connect(ctx context.Context) (KeePassXCSession, error) {
 	if err != nil {
 		return nil, err
 	}
-	client, err := keepassxc.Connect(conn, b.Timeout, b.InteractiveTimeout)
+	client, err := wire.Connect(conn, b.Timeout, b.InteractiveTimeout)
 	if err != nil {
 		_ = conn.Close()
 		return nil, err
@@ -125,7 +125,7 @@ func (b KeePassXC) socketPaths() []string {
 	if len(b.SocketPaths) > 0 {
 		return b.SocketPaths
 	}
-	return keepassxc.SocketPaths()
+	return wire.SocketPaths()
 }
 
 // dialKeePassXCAt tries each candidate socket in turn and reports every path it
@@ -137,26 +137,26 @@ func dialKeePassXCAt(ctx context.Context, paths []string) (net.Conn, error) {
 			return conn, nil
 		}
 	}
-	return nil, fmt.Errorf("%w (tried %s)", keepassxc.ErrNotRunning, strings.Join(paths, ", "))
+	return nil, fmt.Errorf("%w (tried %s)", wire.ErrNotRunning, strings.Join(paths, ", "))
 }
 
 // association returns the stored association, having confirmed KeePassXC still
 // honours it. It never asks for a new one: associating raises a dialog, and a
 // lookup that pops a dialog is exactly the silence a stored passphrase exists
 // to preserve.
-func (b KeePassXC) association(client KeePassXCSession) (keepassxc.Association, error) {
+func (b KeePassXC) association(client KeePassXCSession) (wire.Association, error) {
 	if b.Associations == nil {
-		return keepassxc.Association{}, errors.New("keepassxc: no association store was configured")
+		return wire.Association{}, errors.New("keepassxc: no association store was configured")
 	}
 	stored, found, err := b.Associations.Load()
 	if err != nil {
-		return keepassxc.Association{}, err
+		return wire.Association{}, err
 	}
 	if !found {
-		return keepassxc.Association{}, keepassxc.ErrNotAssociated
+		return wire.Association{}, wire.ErrNotAssociated
 	}
 	if err := client.TestAssociate(stored); err != nil {
-		return keepassxc.Association{}, err
+		return wire.Association{}, err
 	}
 	return stored, nil
 }
@@ -205,7 +205,7 @@ func (b KeePassXC) Store(ctx context.Context, service, label, passphrase string)
 	defer func() { _ = client.Close() }()
 
 	assoc, err := b.association(client)
-	if errors.Is(err, keepassxc.ErrNotAssociated) {
+	if errors.Is(err, wire.ErrNotAssociated) {
 		assoc, err = b.associate(client)
 	}
 	if err != nil {
@@ -231,13 +231,13 @@ func (b KeePassXC) Store(ctx context.Context, service, label, passphrase string)
 }
 
 // associate registers this client and remembers the result.
-func (b KeePassXC) associate(client KeePassXCSession) (keepassxc.Association, error) {
+func (b KeePassXC) associate(client KeePassXCSession) (wire.Association, error) {
 	assoc, err := client.Associate()
 	if err != nil {
-		return keepassxc.Association{}, err
+		return wire.Association{}, err
 	}
 	if err := b.Associations.Save(assoc); err != nil {
-		return keepassxc.Association{}, err
+		return wire.Association{}, err
 	}
 	return assoc, nil
 }

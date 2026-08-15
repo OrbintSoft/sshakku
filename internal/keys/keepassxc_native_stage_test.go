@@ -20,7 +20,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/OrbintSoft/sshakku/internal/keepassxc"
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet/keepassxc/wire"
 	"github.com/stretchr/testify/require"
 )
 
@@ -172,7 +172,7 @@ func keepassxcCLI(t *testing.T, stdin string, args ...string) string {
 func dialAnyKeePassXCSocket(ctx context.Context) (net.Conn, error) {
 	var dialer net.Dialer
 	var err error
-	for _, path := range keepassxc.SocketPaths() {
+	for _, path := range wire.SocketPaths() {
 		var conn net.Conn
 		if conn, err = dialer.DialContext(ctx, "unix", path); err == nil {
 			return conn, nil
@@ -194,9 +194,9 @@ func waitForOpenDatabase(t *testing.T, app *exec.Cmd, said *lockedBuffer) {
 	for time.Now().Before(deadline) {
 		conn, err := dialAnyKeePassXCSocket(t.Context())
 		if err == nil {
-			client, connErr := keepassxc.Connect(conn, 5*time.Second, 5*time.Second)
+			client, connErr := wire.Connect(conn, 5*time.Second, 5*time.Second)
 			if connErr == nil {
-				_, last = client.GetLogins("sshakku://staging-readiness", keepassxc.Association{})
+				_, last = client.GetLogins("sshakku://staging-readiness", wire.Association{})
 				_ = client.Close()
 				// Anything but a locked database means one is open. What it
 				// answers about an unknown URL or an empty association is not

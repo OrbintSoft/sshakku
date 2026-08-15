@@ -1,4 +1,4 @@
-package keepassxc
+package wire
 
 import (
 	"testing"

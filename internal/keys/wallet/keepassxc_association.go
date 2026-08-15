@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/OrbintSoft/sshakku/internal/keepassxc"
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet/keepassxc/wire"
 )
 
 // FileAssociationStore keeps the KeePassXC association in a file under the
@@ -37,29 +37,29 @@ const associationVersion = 1
 
 // Load returns the stored association. A missing file is reported as "none
 // yet", not as an error: it is the state every user starts in.
-func (s FileAssociationStore) Load() (keepassxc.Association, bool, error) {
+func (s FileAssociationStore) Load() (wire.Association, bool, error) {
 	raw, err := os.ReadFile(s.Path)
 	if errors.Is(err, fs.ErrNotExist) {
-		return keepassxc.Association{}, false, nil
+		return wire.Association{}, false, nil
 	}
 	if err != nil {
-		return keepassxc.Association{}, false, fmt.Errorf("reading the KeePassXC association: %w", err)
+		return wire.Association{}, false, fmt.Errorf("reading the KeePassXC association: %w", err)
 	}
 	var stored storedAssociation
 	if err := json.Unmarshal(raw, &stored); err != nil {
-		return keepassxc.Association{}, false, fmt.Errorf("reading the KeePassXC association: %w", err)
+		return wire.Association{}, false, fmt.Errorf("reading the KeePassXC association: %w", err)
 	}
 	if stored.Version != associationVersion {
-		return keepassxc.Association{}, false, fmt.Errorf("the KeePassXC association is version %d, which this build does not understand", stored.Version)
+		return wire.Association{}, false, fmt.Errorf("the KeePassXC association is version %d, which this build does not understand", stored.Version)
 	}
 	if stored.ID == "" || stored.IDKey == "" {
-		return keepassxc.Association{}, false, errors.New("the KeePassXC association is incomplete")
+		return wire.Association{}, false, errors.New("the KeePassXC association is incomplete")
 	}
-	return keepassxc.Association{ID: stored.ID, IDKey: stored.IDKey}, true, nil
+	return wire.Association{ID: stored.ID, IDKey: stored.IDKey}, true, nil
 }
 
 // Save writes the association, creating the directory if needed.
-func (s FileAssociationStore) Save(a keepassxc.Association) error {
+func (s FileAssociationStore) Save(a wire.Association) error {
 	if err := os.MkdirAll(filepath.Dir(s.Path), 0o700); err != nil {
 		return fmt.Errorf("creating the directory for the KeePassXC association: %w", err)
 	}

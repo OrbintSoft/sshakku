@@ -5,14 +5,14 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/OrbintSoft/sshakku/internal/keepassxc"
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet/keepassxc/wire"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestFileAssociationRoundTrip(t *testing.T) {
 	store := FileAssociationStore{Path: filepath.Join(t.TempDir(), "nested", "assoc.json")}
-	want := keepassxc.Association{ID: "db-1", IDKey: "a-public-key"}
+	want := wire.Association{ID: "db-1", IDKey: "a-public-key"}
 
 	require.NoError(t, store.Save(want),
 		"the approval must be written down, including into a directory that is not there yet")
@@ -69,7 +69,7 @@ func TestFileAssociationReportsAnUnwritableLocation(t *testing.T) {
 	// The parent of the target is a regular file, so the directory cannot be
 	// created.
 	store := FileAssociationStore{Path: filepath.Join(blocker, "assoc.json")}
-	assert.Error(t, store.Save(keepassxc.Association{ID: "db", IDKey: "k"}),
+	assert.Error(t, store.Save(wire.Association{ID: "db", IDKey: "k"}),
 		"an approval that could not be written must be reported: the next run would raise the dialog again")
 }
 
@@ -79,6 +79,6 @@ func TestFileAssociationReportsAnUnwritableFile(t *testing.T) {
 	// A directory at the target path: the directory creation succeeds, the
 	// file write does not.
 	require.NoError(t, os.Mkdir(path, 0o700), "seed a directory at the path the file should take")
-	assert.Error(t, FileAssociationStore{Path: path}.Save(keepassxc.Association{ID: "db", IDKey: "k"}),
+	assert.Error(t, FileAssociationStore{Path: path}.Save(wire.Association{ID: "db", IDKey: "k"}),
 		"an approval that could not be written must be reported: the next run would raise the dialog again")
 }

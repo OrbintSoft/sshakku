@@ -1,6 +1,6 @@
 //go:build windows
 
-package keepassxc
+package wire
 
 import "os"
 

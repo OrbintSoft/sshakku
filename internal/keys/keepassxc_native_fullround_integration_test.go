@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/OrbintSoft/sshakku/internal/keepassxc"
 	"github.com/OrbintSoft/sshakku/internal/keyring"
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet/keepassxc/wire"
 	"github.com/OrbintSoft/sshakku/internal/run"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -315,7 +315,7 @@ func requireEverythingTheRoundDrives(t *testing.T) {
 func requireKeePassXCListening(t *testing.T) {
 	t.Helper()
 
-	candidates := keepassxc.SocketPaths()
+	candidates := wire.SocketPaths()
 	for _, p := range candidates {
 		if _, err := os.Stat(p); err == nil {
 			return

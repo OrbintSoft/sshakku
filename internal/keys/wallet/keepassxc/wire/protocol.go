@@ -1,6 +1,6 @@
-// Package keepassxc speaks the local protocol KeePassXC exposes for its browser
+// Package wire speaks the local protocol KeePassXC exposes for its browser
 // extension: JSON messages over a unix socket, every one of them encrypted with
-// NaCl box.
+// NaCl box, and knows where to find the socket they go to.
 //
 // It talks to a KeePassXC that is already running with its database unlocked,
 // so it asks the user for nothing — the same precondition, and the same silent
@@ -11,7 +11,7 @@
 //
 // The protocol is defined by KeePassXC itself, not by this project. Field names
 // and the nonce rule below are its wire format and must match it exactly.
-package keepassxc
+package wire
 
 import (
 	"crypto/rand"
