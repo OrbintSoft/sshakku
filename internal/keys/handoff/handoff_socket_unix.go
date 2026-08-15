@@ -12,6 +12,7 @@ package handoff
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -140,8 +141,18 @@ func serveSocketHandoffOnce(ln net.Listener, sockPath, passphrase string, ttl ti
 	}
 }
 
+// errNothingHandedOver is what a collector is told when the rendezvous was
+// there to dial but nothing came across it. A stash is dialable for as long as
+// it takes to close the listener and unlink the socket after serving its one
+// connection, so a second collector inside that gap is accepted and served no
+// byte — and an empty passphrase is what an empty read otherwise looks like.
+// Only one of the two is an answer: a passphrase nobody typed spends the
+// attempt ssh would have given the person who could have typed it.
+var errNothingHandedOver = errors.New("the passphrase was not handed over: the handoff had already been collected")
+
 // socketHandoffFetch dials the socket token names and reads the one
-// passphrase it serves.
+// passphrase it serves, reporting a rendezvous that served none as the failed
+// handoff it is rather than as a passphrase.
 func socketHandoffFetch(ctx context.Context, token string) (string, error) {
 	conn, err := (&net.Dialer{}).DialContext(ctx, "unix", token)
 	if err != nil {
@@ -151,6 +162,9 @@ func socketHandoffFetch(ctx context.Context, token string) (string, error) {
 	buf, err := readAll(conn)
 	if err != nil {
 		return "", err
+	}
+	if len(buf) == 0 {
+		return "", errNothingHandedOver
 	}
 	return string(buf), nil
 }
