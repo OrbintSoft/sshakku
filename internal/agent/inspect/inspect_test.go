@@ -31,8 +31,11 @@ func TestInspectorAgents(t *testing.T) {
 	inspecttest.FakeProc(t, root, 600, nil, 1000)                                         // kernel thread, empty cmdline
 	inspecttest.FakeProc(t, root, 700, []string{"ssh-agent", "-a", "/tmp/noid.sock"}, -1) // owner unknown
 
-	// A non-pid entry must be ignored.
+	// A real /proc holds more than pid directories, in both shapes: other
+	// directories (net, self, irq) and plain files (uptime, meminfo). Neither
+	// is a process and neither may be reported as one.
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "net"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "uptime"), []byte("1234.56 789.01\n"), 0o644))
 
 	in := Inspector{ProcRoot: root}
 	procs, err := in.Agents()
