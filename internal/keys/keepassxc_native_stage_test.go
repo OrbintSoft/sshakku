@@ -3,11 +3,14 @@
 package keys
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,7 +20,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/OrbintSoft/sshakku/internal/keepassxc"
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet/keepassxc/wire"
 	"github.com/stretchr/testify/require"
 )
 
@@ -162,6 +165,25 @@ func keepassxcCLI(t *testing.T, stdin string, args ...string) string {
 
 // waitForOpenDatabase blocks until KeePassXC answers for a database that is
 // actually open. The socket is not that signal: KeePassXC listens on it from
+// dialAnyKeePassXCSocket connects to the first of KeePassXC's candidate sockets
+// that answers. The staging helper only needs to know whether something is
+// listening yet, so it dials for itself rather than reaching into the wallet
+// for a lookup that reports which paths it tried.
+func dialAnyKeePassXCSocket(ctx context.Context) (net.Conn, error) {
+	var dialer net.Dialer
+	var err error
+	for _, path := range wire.SocketPaths() {
+		var conn net.Conn
+		if conn, err = dialer.DialContext(ctx, "unix", path); err == nil {
+			return conn, nil
+		}
+	}
+	if err == nil {
+		err = errors.New("keepassxc advertises no socket path on this system")
+	}
+	return nil, err
+}
+
 // startup and answers "database not opened" until one is, so a test that waited
 // on the socket alone would go on to fail for a reason it had already been told.
 func waitForOpenDatabase(t *testing.T, app *exec.Cmd, said *lockedBuffer) {
@@ -170,11 +192,11 @@ func waitForOpenDatabase(t *testing.T, app *exec.Cmd, said *lockedBuffer) {
 	deadline := time.Now().Add(45 * time.Second)
 	var last error
 	for time.Now().Before(deadline) {
-		conn, err := dialKeePassXCAt(t.Context(), keepassxc.SocketPaths())
+		conn, err := dialAnyKeePassXCSocket(t.Context())
 		if err == nil {
-			client, connErr := keepassxc.Connect(conn, 5*time.Second, 5*time.Second)
+			client, connErr := wire.Connect(conn, 5*time.Second, 5*time.Second)
 			if connErr == nil {
-				_, last = client.GetLogins("sshakku://staging-readiness", keepassxc.Association{})
+				_, last = client.GetLogins("sshakku://staging-readiness", wire.Association{})
 				_ = client.Close()
 				// Anything but a locked database means one is open. What it
 				// answers about an unknown URL or an empty association is not

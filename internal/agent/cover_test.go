@@ -1,100 +1,20 @@
 package agent
 
 import (
-	"encoding/binary"
 	"errors"
-	"io"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OrbintSoft/sshakku/internal/agent/inspect"
+
+	"github.com/OrbintSoft/sshakku/internal/agent/inspect/inspecttest"
+
+	"github.com/OrbintSoft/sshakku/internal/testtmp"
 )
-
-// errReadWriter is an in-process io.ReadWriter that fails Write with writeErr (when
-// set), otherwise serves reads from a fixed buffer. It lets identitiesAnswered be
-// exercised directly, without a real socket, for the framing edge cases.
-type errReadWriter struct {
-	writeErr error
-	readBuf  []byte
-}
-
-func (e *errReadWriter) Write(p []byte) (int, error) {
-	if e.writeErr != nil {
-		return 0, e.writeErr
-	}
-	return len(p), nil
-}
-
-func (e *errReadWriter) Read(p []byte) (int, error) {
-	if len(e.readBuf) == 0 {
-		return 0, io.EOF
-	}
-	n := copy(p, e.readBuf)
-	e.readBuf = e.readBuf[n:]
-	return n, nil
-}
-
-// TestIdentitiesAnsweredEdges covers the write-failure and malformed-frame branches
-// of identitiesAnswered that a healthy fake agent never triggers.
-func TestIdentitiesAnsweredEdges(t *testing.T) {
-	// Each buffer below carries a message type that would be accepted, so the
-	// only thing that can make these false is the check being tested. Left
-	// empty, the read simply runs out and every one of them would pass with the
-	// check deleted.
-	answer := []byte{msgIdentitiesAnswer}
-
-	t.Run("write fails", func(t *testing.T) {
-		wellFormed := append([]byte{0, 0, 0, 1}, answer...)
-		assert.False(t, identitiesAnswered(&errReadWriter{writeErr: errors.New("broken pipe"), readBuf: wellFormed}),
-			"a request that could not be written must not be believed answered")
-	})
-	t.Run("short header", func(t *testing.T) {
-		// Fewer than 4 header bytes: io.ReadFull returns before the frame is read.
-		assert.False(t, identitiesAnswered(&errReadWriter{readBuf: []byte{0, 0}}),
-			"a truncated length header is not an answer")
-	})
-	t.Run("zero length frame", func(t *testing.T) {
-		assert.False(t, identitiesAnswered(&errReadWriter{readBuf: append([]byte{0, 0, 0, 0}, answer...)}),
-			"a framed length below 1 is not an answer, whatever byte follows it")
-	})
-	t.Run("oversized length frame", func(t *testing.T) {
-		// length = maxFrame+1, above the cap.
-		hdr := make([]byte, 4)
-		binary.BigEndian.PutUint32(hdr, maxFrame+1)
-		assert.False(t, identitiesAnswered(&errReadWriter{readBuf: append(hdr, answer...)}),
-			"a framed length above the cap is not an answer, whatever byte follows it")
-	})
-	t.Run("type byte truncated", func(t *testing.T) {
-		// A valid length of 1 but no message-type byte follows: the second
-		// io.ReadFull hits EOF.
-		assert.False(t, identitiesAnswered(&errReadWriter{readBuf: []byte{0, 0, 0, 1}}),
-			"a missing message type is not an answer")
-	})
-}
-
-// TestReadStatusUIDMalformed covers readStatusUID's fallbacks for a status file
-// whose Uid line is missing, has too few fields, or is non-numeric — shapes the
-// real /proc never produces, so they are only reachable through a crafted file.
-func TestReadStatusUIDMalformed(t *testing.T) {
-	write := func(t *testing.T, body string) string {
-		t.Helper()
-		p := filepath.Join(t.TempDir(), "status")
-		require.NoError(t, os.WriteFile(p, []byte(body), 0o600))
-		return p
-	}
-
-	t.Run("Uid line with too few fields", func(t *testing.T) {
-		assert.Equal(t, -1, readStatusUID(write(t, "Name:\tx\nUid:\n")), "a short Uid line leaves the owner unknown")
-	})
-	t.Run("non-numeric uid", func(t *testing.T) {
-		assert.Equal(t, -1, readStatusUID(write(t, "Uid:\tnobody\tnobody\n")), "a non-numeric uid leaves the owner unknown")
-	})
-	t.Run("no Uid line at all", func(t *testing.T) {
-		assert.Equal(t, -1, readStatusUID(write(t, "Name:\tx\nState:\tS\n")), "no Uid line leaves the owner unknown")
-	})
-}
 
 // TestSituationStringUnknown covers Situation.String's default arm for a value
 // outside the defined set.
@@ -102,26 +22,14 @@ func TestSituationStringUnknown(t *testing.T) {
 	assert.Equal(t, "unknown", Situation(99).String(), "a situation outside the defined set")
 }
 
-// TestReadProcfsTreeUnreadableCmdline covers readCmdline's read-failure path: a pid
-// directory with no cmdline file is skipped rather than reported as an error.
-func TestReadProcfsTreeUnreadableCmdline(t *testing.T) {
-	root := t.TempDir()
-	// A pid directory that exists but has no cmdline file (the process vanished
-	// mid-scan). ReadFile fails and the entry is skipped.
-	require.NoError(t, os.Mkdir(filepath.Join(root, "999"), 0o755))
-	procs, err := readProcfsTree(root)
-	require.NoError(t, err, "readProcfsTree")
-	assert.Empty(t, procs, "the cmdline-less entry must be skipped")
-}
-
 // TestEnsureAgentReapError covers EnsureAgent's error return when the reap pass
 // cannot enumerate processes (a missing procfs root).
 func TestEnsureAgentReapError(t *testing.T) {
-	dir := shortDir(t)
+	dir := testtmp.ShortDir(t)
 	fixed := filepath.Join(dir, "agent.sock")
 	m := Manager{
 		Prober:    mapProber{}, // fixed silent → past the fast path
-		Inspector: Inspector{ProcRoot: filepath.Join(dir, "nope")},
+		Inspector: inspect.Inspector{ProcRoot: filepath.Join(dir, "nope")},
 		Runner:    &recordRunner{},
 		Signaler:  &recordSignaler{},
 	}
@@ -132,7 +40,7 @@ func TestEnsureAgentReapError(t *testing.T) {
 // TestManagerReapInspectError covers Reap's error return when the process list
 // cannot be read (a missing procfs root).
 func TestManagerReapInspectError(t *testing.T) {
-	m := Manager{Inspector: Inspector{ProcRoot: filepath.Join(t.TempDir(), "nope")}}
+	m := Manager{Inspector: inspect.Inspector{ProcRoot: filepath.Join(t.TempDir(), "nope")}}
 	_, err := m.Reap(t.Context(), 1000)
 	assert.Error(t, err, "a process list that cannot be read must be reported")
 }
@@ -140,7 +48,7 @@ func TestManagerReapInspectError(t *testing.T) {
 // TestManagerStartRunnerError covers Start's error return when the runner fails to
 // launch an agent — the state file must not be written.
 func TestManagerStartRunnerError(t *testing.T) {
-	dir := shortDir(t)
+	dir := testtmp.ShortDir(t)
 	socket := filepath.Join(dir, "agent.sock")
 	state := filepath.Join(dir, "agent.state")
 	m := Manager{Prober: mapProber{}, Runner: &recordRunner{err: errors.New("no ssh-agent")}}
@@ -154,7 +62,7 @@ func TestManagerStartRunnerError(t *testing.T) {
 // TestManagerStartStateWriteError covers Start's non-fatal path: the agent came up
 // but recording its state failed. It must still return the pid alongside the error.
 func TestManagerStartStateWriteError(t *testing.T) {
-	dir := shortDir(t)
+	dir := testtmp.ShortDir(t)
 	socket := filepath.Join(dir, "agent.sock")
 	state := filepath.Join(dir, "no-such-dir", "agent.state") // parent missing → write fails
 	m := Manager{Prober: mapProber{}, Runner: &recordRunner{pid: 4242}}
@@ -176,15 +84,15 @@ func TestWriteStateError(t *testing.T) {
 // saw one), so EnsureAgent clears it before starting a fresh agent and reports a
 // zombie recovery rather than a clean start.
 func TestEnsureAgentClearsStaleFixedSocket(t *testing.T) {
-	dir := shortDir(t)
+	dir := testtmp.ShortDir(t)
 	fixed := filepath.Join(dir, "agent.sock")
 	makeSocketFile(t, fixed) // orphan socket, no matching proc
 
 	runner := &recordRunner{pid: 7000}
 	log := &fakeLogger{}
 	m := Manager{
-		Prober:    mapProber{},                      // fixed is silent
-		Inspector: Inspector{ProcRoot: shortDir(t)}, // no processes at all
+		Prober:    mapProber{},                                      // fixed is silent
+		Inspector: inspect.Inspector{ProcRoot: testtmp.ShortDir(t)}, // no processes at all
 		Runner:    runner,
 		Signaler:  &recordSignaler{},
 	}
@@ -198,11 +106,11 @@ func TestEnsureAgentClearsStaleFixedSocket(t *testing.T) {
 // TestEnsureAgentStartError covers EnsureAgent's error return when starting the
 // fresh agent fails in the no-foreign branch.
 func TestEnsureAgentStartError(t *testing.T) {
-	dir := shortDir(t)
+	dir := testtmp.ShortDir(t)
 	fixed := filepath.Join(dir, "agent.sock")
 	m := Manager{
 		Prober:    mapProber{},
-		Inspector: Inspector{ProcRoot: shortDir(t)},
+		Inspector: inspect.Inspector{ProcRoot: testtmp.ShortDir(t)},
 		Runner:    &recordRunner{err: errors.New("no ssh-agent")},
 		Signaler:  &recordSignaler{},
 	}
@@ -215,18 +123,18 @@ func TestEnsureAgentStartError(t *testing.T) {
 // path (no process owns it, so Reap left it). adoptSymlink will replace it, and
 // EnsureAgent reports the replacement, escalating the landscape to a disaster.
 func TestEnsureAgentReplacesStaleFixedOnAdopt(t *testing.T) {
-	dir := shortDir(t)
+	dir := testtmp.ShortDir(t)
 	fixed := filepath.Join(dir, "agent.sock")
-	proc := shortDir(t)
+	proc := testtmp.ShortDir(t)
 	foreignSock := filepath.Join(dir, "foreign.sock")
 
-	makeSocketFile(t, fixed)                                               // orphan socket at the fixed path
-	fakeProc(t, proc, 300, []string{"ssh-agent", "-a", foreignSock}, 1000) // healthy foreign, unrelated socket
+	makeSocketFile(t, fixed)                                                           // orphan socket at the fixed path
+	inspecttest.FakeProc(t, proc, 300, []string{"ssh-agent", "-a", foreignSock}, 1000) // healthy foreign, unrelated socket
 
 	log := &fakeLogger{}
 	m := Manager{
 		Prober:    mapProber{foreignSock: true}, // fixed silent, foreign healthy
-		Inspector: Inspector{ProcRoot: proc},
+		Inspector: inspect.Inspector{ProcRoot: proc},
 		Runner:    &recordRunner{},
 		Signaler:  &recordSignaler{},
 	}
@@ -242,15 +150,15 @@ func TestEnsureAgentReplacesStaleFixedOnAdopt(t *testing.T) {
 // TestEnsureAgentAdoptSymlinkError covers EnsureAgent's error return when adopting
 // a foreign agent fails because the fixed socket's directory does not exist.
 func TestEnsureAgentAdoptSymlinkError(t *testing.T) {
-	dir := shortDir(t)
+	dir := testtmp.ShortDir(t)
 	fixed := filepath.Join(dir, "no-such-dir", "agent.sock") // parent missing → symlink fails
-	proc := shortDir(t)
+	proc := testtmp.ShortDir(t)
 	foreignSock := filepath.Join(dir, "foreign.sock")
-	fakeProc(t, proc, 300, []string{"ssh-agent", "-a", foreignSock}, 1000)
+	inspecttest.FakeProc(t, proc, 300, []string{"ssh-agent", "-a", foreignSock}, 1000)
 
 	m := Manager{
 		Prober:    mapProber{foreignSock: true},
-		Inspector: Inspector{ProcRoot: proc},
+		Inspector: inspect.Inspector{ProcRoot: proc},
 		Runner:    &recordRunner{},
 		Signaler:  &recordSignaler{},
 	}
@@ -262,7 +170,7 @@ func TestEnsureAgentAdoptSymlinkError(t *testing.T) {
 // symlink cannot be created (missing parent directory), and the atomic rename onto
 // the fixed path fails (the target path is an existing directory).
 func TestAdoptSymlinkErrors(t *testing.T) {
-	dir := shortDir(t)
+	dir := testtmp.ShortDir(t)
 
 	t.Run("symlink fails", func(t *testing.T) {
 		fixed := filepath.Join(dir, "no-such-dir", "agent.sock")

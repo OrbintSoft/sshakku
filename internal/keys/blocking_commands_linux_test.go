@@ -5,11 +5,19 @@ package keys
 import (
 	"context"
 	"time"
+
+	"github.com/OrbintSoft/sshakku/internal/keys/prompt"
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
+	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
 // platformBlockingTools names the programs only a Linux system runs.
+//
+// Written out rather than taken from the constants the code resolves them by:
+// this is the list of programs SSHakku is claimed to run here, and a list
+// derived from the implementation would agree with it whatever it became.
 func platformBlockingTools() []string {
-	return []string{secretToolBin, kdialogBin, zenityBin, pinentryBin, "xset"}
+	return []string{"secret-tool", "kdialog", "zenity", "pinentry", "xset"}
 }
 
 // platformBlockingCases adds the programs only a Linux system reaches: the
@@ -22,28 +30,28 @@ func platformBlockingTools() []string {
 func platformBlockingCases(ctx context.Context, brief time.Duration) []blockingCase {
 	return []blockingCase{
 		{"GUI detection (xset)", func() {
-			HasGraphicalSession(ctx, GUIEnv{Display: ":0"}, ExecRunner{})
+			prompt.HasGraphicalSession(ctx, prompt.GUIEnv{Display: ":0"}, run.ExecRunner{})
 		}},
 		{"graphical passphrase prompt (kdialog)", func() {
-			_, _ = KDialogPrompter{Runner: ExecRunner{}, Timeout: brief}.Prompt(ctx, "id_test")
+			_, _ = prompt.KDialogPrompter{Runner: run.ExecRunner{}, Timeout: brief}.Prompt(ctx, "id_test")
 		}},
 		{"graphical passphrase prompt (zenity)", func() {
-			_, _ = ZenityPrompter{Runner: ExecRunner{}, Timeout: brief}.Prompt(ctx, "id_test")
+			_, _ = prompt.ZenityPrompter{Runner: run.ExecRunner{}, Timeout: brief}.Prompt(ctx, "id_test")
 		}},
 		{"graphical passphrase prompt (pinentry)", func() {
-			_, _ = PinentryPrompter{Timeout: brief}.Prompt(ctx, "id_test")
+			_, _ = prompt.PinentryPrompter{Timeout: brief}.Prompt(ctx, "id_test")
 		}},
 		{"which pinentry is installed", func() {
-			PinentryPrompter{ProbeTimeout: brief}.Available(ctx)
+			prompt.PinentryPrompter{ProbeTimeout: brief}.Available(ctx)
 		}},
 		{"secret-tool Lookup", func() {
-			_, _, _ = SecretToolBackend{Runner: ExecRunner{}, User: "u", Timeout: brief}.Lookup(ctx, defaultServicePrefix+"-id_test")
+			_, _, _ = wallet.SecretTool{Runner: run.ExecRunner{}, User: "u", Timeout: brief}.Lookup(ctx, wallet.DefaultServicePrefix+"-id_test")
 		}},
 		{"secret-tool Store", func() {
-			_ = SecretToolBackend{Runner: ExecRunner{}, User: "u", Timeout: brief}.Store(ctx, defaultServicePrefix+"-id_test", "label", "s3cret")
+			_ = wallet.SecretTool{Runner: run.ExecRunner{}, User: "u", Timeout: brief}.Store(ctx, wallet.DefaultServicePrefix+"-id_test", "label", "s3cret")
 		}},
 		{"secret-tool Delete", func() {
-			_ = SecretToolBackend{Runner: ExecRunner{}, User: "u", Timeout: brief}.Delete(ctx, defaultServicePrefix+"-id_test")
+			_ = wallet.SecretTool{Runner: run.ExecRunner{}, User: "u", Timeout: brief}.Delete(ctx, wallet.DefaultServicePrefix+"-id_test")
 		}},
 	}
 }

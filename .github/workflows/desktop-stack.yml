@@ -68,7 +68,7 @@ jobs:
           test/containers/run-wayland-wallet.sh
           sshakku-test-desktop-stack-gnome-keyring
           gnome-keyring-wayland-session.sh
-          go test ./internal/keys -run TestSecretServiceBackendRealDaemon -count=1 -v
+          go test ./internal/keys/... -run TestSecretServiceBackendRealDaemon -count=1 -v
 
       # The same wallet again, on a machine with no screen of any kind — the one
       # its user reaches over SSH. Making the compartment takes a dialog, so it
@@ -79,7 +79,7 @@ jobs:
         run: >
           test/containers/run-headless-wallet.sh
           sshakku-test-desktop-stack-gnome-keyring
-          go test ./internal/keys -run TestSecretServiceBackendRealDaemon -count=1 -v
+          go test ./internal/keys/... -run TestSecretServiceBackendRealDaemon -count=1 -v
 
       # What that same machine does for a user whose compartment has never been
       # made: the keys still load, the asking comes back every time because
@@ -142,7 +142,7 @@ jobs:
           docker run --init --rm -v "${{ github.workspace }}":/src:ro
           -e SSHAKKU_SESSION_SCRIPT=kde-wayland-session.sh
           sshakku-test-desktop-stack-kde
-          go test ./internal/keys -run TestSecretServiceBackendRealDaemon -count=1 -v
+          go test ./internal/keys/... -run TestSecretServiceBackendRealDaemon -count=1 -v
 
       # The same wallet again, from the session most KDE users are actually
       # sitting in: an X server rather than a compositor. Same image, same test,
@@ -155,7 +155,7 @@ jobs:
           docker run --init --rm -v "${{ github.workspace }}":/src:ro
           -e SSHAKKU_SESSION_SCRIPT=kde-x11-session.sh
           sshakku-test-desktop-stack-kde
-          go test ./internal/keys -run TestSecretServiceBackendRealDaemon -count=1 -v
+          go test ./internal/keys/... -run TestSecretServiceBackendRealDaemon -count=1 -v
 
       # Where a user is asked for a passphrase on a Wayland desktop, driven
       # through the real binary in a session with a screen and no controlling
@@ -178,7 +178,7 @@ jobs:
           test/containers/run-wayland-wallet.sh
           sshakku-test-desktop-stack-keepassxc
           keepassxc-wayland-session.sh
-          go test ./internal/keys -run TestSecretServiceBackendRealDaemon -count=1 -v
+          go test ./internal/keys/... -run TestSecretServiceBackendRealDaemon -count=1 -v
 
       # The CLI route works on a database file with no KeePassXC running, so it
       # needs none of the image's X/D-Bus session — only keepassxc-cli, which
@@ -190,7 +190,7 @@ jobs:
           docker run --init --rm -v "${{ github.workspace }}":/src:ro \
             -e SSHAKKU_TEST_ALLOW_REAL_KEEPASSXC=1 -e HOME=/tmp/h -e GOCACHE=/tmp/gc \
             --entrypoint bash sshakku-test-desktop-stack-keepassxc \
-            -c 'mkdir -p /tmp/h && cd /src && go test ./internal/keys -run TestKeePassXCCLIRealDatabase -count=1 -v'
+            -c 'mkdir -p /tmp/h && cd /src && go test ./internal/keys/... -run TestKeePassXCCLIRealDatabase -count=1 -v'
 
       # The user's whole scenario over KeePassXC's local protocol, against a
       # real GUI and an ssh-agent of the test's own. It carries a passphrase
@@ -205,7 +205,7 @@ jobs:
           -e SSHAKKU_SESSION_SCRIPT=keepassxc-native-session.sh
           sshakku-test-desktop-stack-keepassxc
           keyctl session - /opt/sshakku-desktop-stack/keyring-session.sh
-          go test ./internal/keys -run TestKeePassXCNativeFullRound -count=1 -v
+          go test ./internal/keys/... -run TestKeePassXCNativeFullRound -count=1 -v
 
   keepassxc-macos:
     name: KeePassXC on macOS
@@ -230,7 +230,7 @@ jobs:
       - name: Run the real keepassxc-cli round trip
         env:
           SSHAKKU_TEST_ALLOW_REAL_KEEPASSXC: "1"
-        run: go test ./internal/keys -run TestKeePassXCCLIRealDatabase -count=1 -v
+        run: go test ./internal/keys/... -run TestKeePassXCCLIRealDatabase -count=1 -v
 
       # The same user scenario the container runs, against the same app: no
       # KeePassXC is running here, so the test is told where to find one and
@@ -239,7 +239,7 @@ jobs:
         env:
           SSHAKKU_TEST_ALLOW_REAL_KEEPASSXC_NATIVE: "1"
           SSHAKKU_TEST_KEEPASSXC_APP: /Applications/KeePassXC.app/Contents/MacOS/KeePassXC
-        run: go test ./internal/keys -run TestKeePassXCNativeFullRound -count=1 -v
+        run: go test ./internal/keys/... -run TestKeePassXCNativeFullRound -count=1 -v
 
   bitwarden-macos:
     name: Bitwarden on macOS
@@ -309,7 +309,7 @@ jobs:
           docker run --init --rm -v "${{ github.workspace }}":/src:ro
           -e SSHAKKU_DISABLE_SECRETS_ACTIVATION=${{ matrix.disable_activation }}
           sshakku-test-desktop-stack-gnome-keyring
-          go test -tags midsession_failure -count=1 -run '${{ matrix.run }}' ./internal/keys/
+          go test -tags midsession_failure -count=1 -run '${{ matrix.run }}' ./internal/keys/...
 
   unresponsive-backend:
     name: unresponsive backend (frozen daemon)
@@ -332,4 +332,4 @@ jobs:
         run: >
           docker run --init --rm -v "${{ github.workspace }}":/src:ro
           sshakku-test-desktop-stack-gnome-keyring
-          go test -tags backend_unresponsive -count=1 -run TestSecretServiceUnresponsiveDaemon ./internal/keys/
+          go test -tags backend_unresponsive -count=1 -run TestSecretServiceUnresponsiveDaemon ./internal/keys/...

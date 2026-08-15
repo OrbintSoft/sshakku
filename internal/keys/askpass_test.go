@@ -7,6 +7,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OrbintSoft/sshakku/internal/keys/prompt"
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
 )
 
 // fakeTTY scripts one terminal answer and records how it was prompted.
@@ -75,7 +78,7 @@ func TestBrokerWalletMissPromptsAndStores(t *testing.T) {
 	require.Lenf(t, tty.calls, 1, "they are asked once: %+v", tty.calls)
 	assert.True(t, tty.calls[0].secret, "with the echo off, or the passphrase is on screen for anyone behind them")
 	require.Lenf(t, secret.stored, 1, "and it must be saved once: %v", secret.stored)
-	assert.Equal(t, defaultServicePrefix+"-id_rsa", secret.stored[0].service,
+	assert.Equal(t, wallet.DefaultServicePrefix+"-id_rsa", secret.stored[0].service,
 		"under the name a later lookup goes by")
 	assert.Equal(t, "typed", secret.stored[0].passphrase, "so the next time nobody is asked at all")
 }
@@ -160,7 +163,7 @@ func TestBrokerABlankWalletEntryIsNoPassphrase(t *testing.T) {
 // without ok, and is logged at INFO, not ERROR.
 func TestBrokerNoTerminal(t *testing.T) {
 	secret := &fakeSecret{lookupFound: false}
-	tty := &fakeTTY{err: ErrNoTerminal}
+	tty := &fakeTTY{err: prompt.ErrNoTerminal}
 	log := &fakeLogger{}
 	b := Broker{Secret: secret, TTY: tty, Log: log}
 

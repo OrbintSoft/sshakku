@@ -7,6 +7,9 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/OrbintSoft/sshakku/internal/keys/prompt"
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
 )
 
 // passphrasePromptRe matches OpenSSH's key-passphrase prompt in both the ssh
@@ -19,8 +22,8 @@ var passphrasePromptRe = regexp.MustCompile(`^Enter passphrase for (?:key )?'?(.
 // recognise (a host-key confirmation, a login password, anything else) returns
 // ok=false so the broker passes it through to the terminal instead of treating it
 // as a passphrase to fetch from the wallet.
-func ParsePassphrasePrompt(prompt string) (keyfile string, ok bool) {
-	m := passphrasePromptRe.FindStringSubmatch(strings.TrimSpace(prompt))
+func ParsePassphrasePrompt(question string) (keyfile string, ok bool) {
+	m := passphrasePromptRe.FindStringSubmatch(strings.TrimSpace(question))
 	if m == nil {
 		return "", false
 	}
@@ -31,16 +34,6 @@ func ParsePassphrasePrompt(prompt string) (keyfile string, ok bool) {
 	return keyfile, true
 }
 
-// TTY prompts the user on the controlling terminal as a fallback: when the wallet
-// has no passphrase for the requested key, or for a prompt that is not a key
-// passphrase at all (host-key confirmation, login password). It returns an error
-// when no terminal is available.
-type TTY interface {
-	// Prompt writes prompt to the terminal and reads one line; when secret is
-	// true the input is not echoed.
-	Prompt(prompt string, secret bool) (string, error)
-}
-
 // Broker answers ssh's SSH_ASKPASS request when an interactive ssh hits a key
 // that has expired from the agent. A key-passphrase prompt is served from the
 // secret store (silently), falling back to the terminal — and storing what the
@@ -48,8 +41,8 @@ type TTY interface {
 // terminal. It never reads or writes the keyring: that one-shot path belongs to
 // the proactive key-loading flow, not to this reactive broker.
 type Broker struct {
-	Secret SecretBackend
-	TTY    TTY
+	Secret wallet.Backend
+	TTY    prompt.TTY
 	Log    Logger
 	Config Config
 }
@@ -57,15 +50,15 @@ type Broker struct {
 // Answer returns the reply to send back to ssh on stdout and whether the request
 // succeeded (a false ok maps to a non-zero askpass exit, which ssh treats as a
 // declined prompt).
-func (b Broker) Answer(ctx context.Context, prompt string) (reply string, ok bool) {
-	keyfile, isPassphrase := ParsePassphrasePrompt(prompt)
+func (b Broker) Answer(ctx context.Context, question string) (reply string, ok bool) {
+	keyfile, isPassphrase := ParsePassphrasePrompt(question)
 	if !isPassphrase {
-		ans, err := b.TTY.Prompt(prompt, !looksLikeConfirmation(prompt))
+		ans, err := b.TTY.Prompt(question, !looksLikeConfirmation(question))
 		if err != nil {
 			// No controlling terminal is a normal, expected condition (a
 			// non-interactive invocation with nowhere to prompt), not an
 			// operator problem; anything else prompting failed for is.
-			if errors.Is(err, ErrNoTerminal) {
+			if errors.Is(err, prompt.ErrNoTerminal) {
 				b.logf("INFO", "askpass: no terminal for prompt: %v", err)
 			} else {
 				b.logf("ERROR", "askpass: no terminal for prompt: %v", err)
@@ -92,9 +85,9 @@ func (b Broker) Answer(ctx context.Context, prompt string) (reply string, ok boo
 
 	// Wallet miss: prompt on the terminal, then store what the user types so the
 	// next expiry is silent.
-	typed, err := b.TTY.Prompt(prompt, true)
+	typed, err := b.TTY.Prompt(question, true)
 	if err != nil {
-		if errors.Is(err, ErrNoTerminal) {
+		if errors.Is(err, prompt.ErrNoTerminal) {
 			b.logf("INFO", "askpass: no terminal to prompt for %s: %v", keyname, err)
 		} else {
 			b.logf("ERROR", "askpass: no terminal to prompt for %s: %v", keyname, err)
@@ -109,8 +102,8 @@ func (b Broker) Answer(ctx context.Context, prompt string) (reply string, ok boo
 
 // looksLikeConfirmation reports whether prompt is a yes/no host-key confirmation,
 // which must be echoed (unlike a passphrase or password).
-func looksLikeConfirmation(prompt string) bool {
-	p := strings.ToLower(prompt)
+func looksLikeConfirmation(question string) bool {
+	p := strings.ToLower(question)
 	return strings.Contains(p, "(yes/no") ||
 		strings.Contains(p, "fingerprint)") ||
 		strings.Contains(p, "continue connecting")
@@ -137,22 +130,12 @@ func (b Broker) logf(level, format string, args ...any) {
 
 // servicePrefixOf returns the per-key secret-store service prefix for c.
 func servicePrefixOf(c Config) string {
-	return servicePrefixOrDefault(c.ServicePrefix)
-}
-
-// servicePrefixOrDefault resolves an unset prefix to the default. It is the one
-// place that decides what "unset" means, so a store that writes an entry and a
-// sweep that enumerates one cannot resolve it differently.
-func servicePrefixOrDefault(prefix string) string {
-	if prefix != "" {
-		return prefix
-	}
-	return defaultServicePrefix
+	return wallet.ServicePrefixOrDefault(c.ServicePrefix)
 }
 
 // storeInWallet saves passphrase under service with the standard label, so the
 // loader and the broker write entries the same way.
-func storeInWallet(ctx context.Context, secret SecretBackend, service, keyname, passphrase string) error {
+func storeInWallet(ctx context.Context, secret wallet.Backend, service, keyname, passphrase string) error {
 	return secret.Store(ctx, service, "SSH Passphrase for "+keyname, passphrase)
 }
 

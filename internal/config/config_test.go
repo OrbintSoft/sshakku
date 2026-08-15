@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
 func TestKeyLifetime(t *testing.T) {
@@ -103,11 +103,11 @@ func TestCommandTimeout(t *testing.T) {
 		want    time.Duration
 		wantErr bool
 	}{
-		{"empty takes the default", "", keys.DefaultCommandTimeout, false},
+		{"empty takes the default", "", run.DefaultCommandTimeout, false},
 		{"a duration is honoured", "3s", 3 * time.Second, false},
-		{"zero is refused", "0s", keys.DefaultCommandTimeout, true},
-		{"negative is refused", "-5s", keys.DefaultCommandTimeout, true},
-		{"malformed is refused", "soon", keys.DefaultCommandTimeout, true},
+		{"zero is refused", "0s", run.DefaultCommandTimeout, true},
+		{"negative is refused", "-5s", run.DefaultCommandTimeout, true},
+		{"malformed is refused", "soon", run.DefaultCommandTimeout, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := CommandTimeout(tc.raw)
@@ -124,7 +124,7 @@ func TestCommandTimeout(t *testing.T) {
 func TestInteractiveTimeout(t *testing.T) {
 	got, err := InteractiveTimeout("")
 	assert.NoError(t, err, `InteractiveTimeout("")`)
-	assert.Equal(t, keys.DefaultInteractiveTimeout, got, `InteractiveTimeout("")`)
+	assert.Equal(t, run.DefaultInteractiveTimeout, got, `InteractiveTimeout("")`)
 
 	got, err = InteractiveTimeout("90s")
 	assert.NoError(t, err, `InteractiveTimeout("90s")`)
@@ -132,5 +132,5 @@ func TestInteractiveTimeout(t *testing.T) {
 
 	got, err = InteractiveTimeout("0")
 	assert.Error(t, err, `InteractiveTimeout("0") must be refused`)
-	assert.Equal(t, keys.DefaultInteractiveTimeout, got, `InteractiveTimeout("0") must fall back to the default`)
+	assert.Equal(t, run.DefaultInteractiveTimeout, got, `InteractiveTimeout("0") must fall back to the default`)
 }

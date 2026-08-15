@@ -10,6 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
+	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
 func ptr[T any](v T) *T { return &v }
@@ -128,12 +130,12 @@ func TestResolveDefaults(t *testing.T) {
 	require.Empty(t, errs, "unexpected errors")
 	want := Settings{
 		KeyLifetime: DefaultKeyLifetime, GiveupTTL: DefaultGiveupTTL,
-		CommandTimeout: keys.DefaultCommandTimeout, InteractiveTimeout: keys.DefaultInteractiveTimeout,
+		CommandTimeout: run.DefaultCommandTimeout, InteractiveTimeout: run.DefaultInteractiveTimeout,
 		WalletStoreMode: WalletStoreModeAll, AutoLoadMode: AutoLoadModeAll, SecretBackend: platformDefaultSecretBackend,
 		// Resolved even with nothing configured: every path that builds an
 		// entry name reads it from here, so an empty one would leave each of
 		// them to supply a default of its own.
-		ServicePrefix: keys.DefaultServicePrefix,
+		ServicePrefix: wallet.DefaultServicePrefix,
 		// No route named means SSHakku chooses one per platform; only this
 		// value ever falls back.
 		KeePassXCRoute: KeePassXCRouteAuto,
@@ -161,12 +163,12 @@ func TestResolveFileWins(t *testing.T) {
 		Quiet:       true,
 		// Not set in the file above: every command is bounded whether or not
 		// the user configured a budget.
-		CommandTimeout:     keys.DefaultCommandTimeout,
-		InteractiveTimeout: keys.DefaultInteractiveTimeout,
+		CommandTimeout:     run.DefaultCommandTimeout,
+		InteractiveTimeout: run.DefaultInteractiveTimeout,
 		WalletStoreMode:    WalletStoreModeAll,
 		AutoLoadMode:       AutoLoadModeAll,
 		SecretBackend:      platformDefaultSecretBackend,
-		ServicePrefix:      keys.DefaultServicePrefix,
+		ServicePrefix:      wallet.DefaultServicePrefix,
 		KeePassXCRoute:     KeePassXCRouteAuto,
 		GUIPrompter:        GUIPrompterAuto,
 		OnDismiss:          keys.OnDismissStop,

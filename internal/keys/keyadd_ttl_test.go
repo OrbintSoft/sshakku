@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/OrbintSoft/sshakku/internal/keyring"
+	"github.com/OrbintSoft/sshakku/internal/keys/handoff"
+	"github.com/OrbintSoft/sshakku/internal/run"
 	"github.com/stretchr/testify/require"
 )
 
@@ -68,7 +70,7 @@ func TestAddWithAskpassAppliesKeyLifetime(t *testing.T) {
 	// A minimal askpass helper mirroring askpassFromHandoff in cmd/sshakku:
 	// print the payload AddWithAskpass stashed under $SSHAKKU_HANDOFF_TOKEN.
 	askpassScript := filepath.Join(dir, "askpass.sh")
-	script := "#!/bin/sh\nexec keyctl pipe \"$" + EnvPassHandoffToken + "\"\n"
+	script := "#!/bin/sh\nexec keyctl pipe \"$" + handoff.EnvToken + "\"\n"
 	require.NoError(t, os.WriteFile(askpassScript, []byte(script), 0o755), "a helper to collect the stashed passphrase")
 
 	const lifetime = 2 * time.Second
@@ -77,7 +79,7 @@ func TestAddWithAskpassAppliesKeyLifetime(t *testing.T) {
 	require.NoError(t, err, "loading the key through the real handoff must succeed")
 	require.Zero(t, rc, "and ssh-add must accept the passphrase it collected")
 
-	runner := ExecRunner{}
+	runner := run.ExecRunner{}
 	fp, err := FileFingerprint(t.Context(), runner, keyfile)
 	require.NoError(t, err, "reading the key's fingerprint must succeed")
 

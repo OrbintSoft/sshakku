@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+
+	"github.com/OrbintSoft/sshakku/internal/agent/inspect"
 )
 
 // Runner starts a fresh ssh-agent bound to socket and returns its pid. It is an
@@ -32,9 +34,9 @@ type Locker interface {
 
 // ProcLister enumerates the ssh-agent processes currently visible on the host. It
 // abstracts the process scan so the agent lifecycle can be tested without a real
-// process table; the production implementation is Inspector.
+// process table; the production implementation is inspect.Inspector.
 type ProcLister interface {
-	Agents() ([]AgentProc, error)
+	Agents() ([]inspect.AgentProc, error)
 }
 
 // Manager owns the ssh-agent lifecycle: start one on the fixed socket, and reap

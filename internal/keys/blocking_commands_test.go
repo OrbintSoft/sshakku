@@ -9,6 +9,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
+	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
 // blockingTools puts a never-answering stand-in ahead of every external program
@@ -25,7 +28,10 @@ func blockingTools(t *testing.T) {
 	src, err := os.ReadFile(filepath.Join("..", "..", "test", "bats", "fixtures", "blocking-secret-tool"))
 	require.NoError(t, err, "a stand-in that neither answers nor fails")
 	dir := t.TempDir()
-	tools := append([]string{bitwardenBin, onePasswordBin}, platformBlockingTools()...)
+	// Named here rather than taken from the constants the wallets resolve them
+	// by: this is the list of programs SSHakku is claimed to run, and one derived
+	// from the implementation would agree with it whatever it became.
+	tools := append([]string{"bw", "op"}, platformBlockingTools()...)
 	for _, bin := range tools {
 		require.NoErrorf(t, os.WriteFile(filepath.Join(dir, bin), src, 0o755), "install the blocking %s", bin)
 	}
@@ -71,12 +77,12 @@ func TestNoCommandBlocksIndefinitely(t *testing.T) {
 
 	cases := []blockingCase{
 		{"1Password Lookup", func() {
-			_, _, _ = (&OnePasswordBackend{Runner: ExecRunner{}, Vault: "sshakku", Timeout: brief}).Lookup(t.Context(), defaultServicePrefix+"-id_test")
+			_, _, _ = (&wallet.OnePassword{Runner: run.ExecRunner{}, Vault: "sshakku", Timeout: brief}).Lookup(t.Context(), wallet.DefaultServicePrefix+"-id_test")
 		}},
 		{"Bitwarden Lookup", func() {
-			_, _, _ = (&BitwardenBackend{
-				Runner: ExecRunner{}, Prompter: fixedPrompter{}, Email: "u@example.invalid", Timeout: brief,
-			}).Lookup(t.Context(), defaultServicePrefix+"-id_test")
+			_, _, _ = (&wallet.Bitwarden{
+				Runner: run.ExecRunner{}, Prompter: fixedPrompter{}, Email: "u@example.invalid", Timeout: brief,
+			}).Lookup(t.Context(), wallet.DefaultServicePrefix+"-id_test")
 		}},
 	}
 	// The wallets each platform reaches by running a program differ, and so does
@@ -102,14 +108,4 @@ func TestNoCommandBlocksIndefinitely(t *testing.T) {
 			}
 		})
 	}
-}
-
-// TestTimeoutDefaults guards the other half of the guarantee: a call site that
-// chooses no budget must still get a finite one. A zero default would restore
-// the unbounded wait everywhere at once, and every other test here would still
-// pass, since they all pass a budget of their own.
-func TestTimeoutDefaults(t *testing.T) {
-	assert.Positive(t, DefaultCommandTimeout,
-		"a call site that chose no budget must still get a finite one, or the unbounded wait comes back everywhere at once")
-	assert.Positive(t, DefaultInteractiveTimeout, "and so must one that waits on a person")
 }

@@ -1,6 +1,6 @@
 package diagnose
 
-import "github.com/OrbintSoft/sshakku/internal/agent"
+import "github.com/OrbintSoft/sshakku/internal/agent/inspect"
 
 // State names the agent-lifecycle situation the report observes, following the
 // five states the login path resolves (clean, ours-healthy, ours-zombie,
@@ -56,14 +56,14 @@ func classifyState(r Report) State {
 		}
 		if a.Reachable {
 			reachable++
-			if a.Kind == agent.KindOurs {
+			if a.Kind == inspect.KindOurs {
 				oursReach++
 			} else {
 				otherReach++
 			}
 			continue
 		}
-		if a.Socket != "" && (a.Kind == agent.KindOurs || a.Kind == agent.KindLegacy) {
+		if a.Socket != "" && (a.Kind == inspect.KindOurs || a.Kind == inspect.KindLegacy) {
 			deadOurs++
 		}
 	}

@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 	"time"
+
+	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
 // fingerprintTimeout bounds ssh-keygen/ssh-add lookups: plain status/read
@@ -17,8 +19,8 @@ const fingerprintTimeout = 5 * time.Second
 // `ssh-keygen -lf <path>`. A key ssh-keygen cannot read (wrong format, no such
 // file) yields an empty fingerprint and no error — the loader then treats it as
 // not-yet-loaded rather than aborting the whole run.
-func FileFingerprint(ctx context.Context, r Runner, path string) (string, error) {
-	res, err := r.Run(ctx, Cmd{Name: "ssh-keygen", Args: []string{"-lf", path}, Timeout: fingerprintTimeout})
+func FileFingerprint(ctx context.Context, r run.Runner, path string) (string, error) {
+	res, err := r.Run(ctx, run.Cmd{Name: "ssh-keygen", Args: []string{"-lf", path}, Timeout: fingerprintTimeout})
 	if err != nil {
 		return "", err
 	}
@@ -32,8 +34,8 @@ func FileFingerprint(ctx context.Context, r Runner, path string) (string, error)
 // agent, read with `ssh-add -l`. An empty agent (exit 1) or no agent at all
 // (exit 2) yields an empty set, not an error — mirroring the bash snapshot, where
 // a missing or empty agent simply means nothing is loaded yet.
-func AgentFingerprints(ctx context.Context, r Runner) (map[string]bool, error) {
-	res, err := r.Run(ctx, Cmd{Name: "ssh-add", Args: []string{"-l"}, Timeout: fingerprintTimeout})
+func AgentFingerprints(ctx context.Context, r run.Runner) (map[string]bool, error) {
+	res, err := r.Run(ctx, run.Cmd{Name: "ssh-add", Args: []string{"-l"}, Timeout: fingerprintTimeout})
 	if err != nil {
 		return nil, err
 	}
@@ -46,10 +48,10 @@ func AgentFingerprints(ctx context.Context, r Runner) (map[string]bool, error) {
 	return set, nil
 }
 
-// RunnerFingerprinter adapts a Runner to the object-style fingerprint lookups
+// RunnerFingerprinter adapts a run.Runner to the object-style fingerprint lookups
 // callers outside this package (such as the diagnostic tool) want, without
-// depending on Runner or Cmd directly.
-type RunnerFingerprinter struct{ Runner Runner }
+// depending on run.Runner or run.Cmd directly.
+type RunnerFingerprinter struct{ Runner run.Runner }
 
 // FileFingerprint returns path's fingerprint via FileFingerprint(r.Runner, path).
 func (r RunnerFingerprinter) FileFingerprint(ctx context.Context, path string) (string, error) {

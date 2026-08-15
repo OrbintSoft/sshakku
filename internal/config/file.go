@@ -13,6 +13,7 @@ import (
 	"github.com/BurntSushi/toml"
 
 	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
 )
 
 // File mirrors the on-disk TOML config. Each field is a pointer so an absent key
@@ -214,7 +215,7 @@ const (
 	KeePassXCRouteCLI = "cli"
 )
 
-// Prompter choices for Settings.GUIPrompter that mean the same thing on every
+// prompt.Prompter choices for Settings.GUIPrompter that mean the same thing on every
 // system, because they name no program at all. The dialogs themselves are
 // declared beside the platform that can have them, in the per-platform
 // prompters_*.go, along with the list of what can be chosen here.
@@ -539,9 +540,9 @@ func resolveServicePrefix(fileVal *string) (string, error) {
 	prefix := derefString(fileVal)
 	switch {
 	case prefix == "":
-		return keys.DefaultServicePrefix, nil
+		return wallet.DefaultServicePrefix, nil
 	case unusableName(prefix):
-		return keys.DefaultServicePrefix, fmt.Errorf("invalid service_prefix %q: whitespace and %q are not allowed, using %q", prefix, "/", keys.DefaultServicePrefix)
+		return wallet.DefaultServicePrefix, fmt.Errorf("invalid service_prefix %q: whitespace and %q are not allowed, using %q", prefix, "/", wallet.DefaultServicePrefix)
 	}
 	return prefix, nil
 }

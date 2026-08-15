@@ -10,17 +10,20 @@ import (
 	"testing"
 
 	"github.com/OrbintSoft/sshakku/internal/agent"
+	"github.com/OrbintSoft/sshakku/internal/diagnose/hostcheck"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OrbintSoft/sshakku/internal/agent/inspect"
 )
 
 // fakeSource returns a fixed set of agent processes and an optional error.
 type fakeSource struct {
-	procs []agent.AgentProc
+	procs []inspect.AgentProc
 	err   error
 }
 
-func (f fakeSource) Agents() ([]agent.AgentProc, error) { return f.procs, f.err }
+func (f fakeSource) Agents() ([]inspect.AgentProc, error) { return f.procs, f.err }
 
 // fakeProber reports a socket reachable iff it is in the up set.
 type fakeProber struct{ up map[string]bool }
@@ -43,7 +46,7 @@ func hasFinding(r Report, sub string) bool {
 }
 
 func TestGatherHealthy(t *testing.T) {
-	src := fakeSource{procs: []agent.AgentProc{
+	src := fakeSource{procs: []inspect.AgentProc{
 		{PID: 100, UID: 1000, Socket: fixed, Args: []string{"ssh-agent", "-a", fixed}},
 	}}
 	prober := fakeProber{up: map[string]bool{fixed: true}}
@@ -61,7 +64,7 @@ func TestGatherHealthy(t *testing.T) {
 
 	require.Len(t, r.Agents, 1, "the one agent that was running")
 	a := r.Agents[0]
-	assert.Equal(t, agent.KindOurs, a.Kind, "an agent on our fixed socket is ours")
+	assert.Equal(t, inspect.KindOurs, a.Kind, "an agent on our fixed socket is ours")
 	assert.True(t, a.Reachable, "the agent answers on its socket")
 	assert.True(t, r.EnvReachable, "the socket the shell exported answers too")
 	assert.Equal(t, StateOursHealthy, r.State, "one healthy agent of ours and nothing else")
@@ -69,7 +72,7 @@ func TestGatherHealthy(t *testing.T) {
 }
 
 func TestGatherEnvUnset(t *testing.T) {
-	src := fakeSource{procs: []agent.AgentProc{
+	src := fakeSource{procs: []inspect.AgentProc{
 		{PID: 100, UID: 1000, Socket: fixed},
 	}}
 	prober := fakeProber{up: map[string]bool{fixed: true}}
@@ -98,7 +101,7 @@ func TestGatherEnvNotAnswering(t *testing.T) {
 
 func TestGatherEnvMismatch(t *testing.T) {
 	const other = "/tmp/other.sock"
-	src := fakeSource{procs: []agent.AgentProc{
+	src := fakeSource{procs: []inspect.AgentProc{
 		{PID: 100, UID: 1000, Socket: other},
 	}}
 	prober := fakeProber{up: map[string]bool{other: true}}
@@ -110,7 +113,7 @@ func TestGatherEnvMismatch(t *testing.T) {
 
 func TestGatherMultipleAndDead(t *testing.T) {
 	const foreign = "/tmp/foreign.sock"
-	src := fakeSource{procs: []agent.AgentProc{
+	src := fakeSource{procs: []inspect.AgentProc{
 		{PID: 100, UID: 1000, Socket: fixed},                      // ours, reachable
 		{PID: 200, UID: 1000, Socket: foreign},                    // foreign, reachable
 		{PID: 300, UID: 1000, Socket: legacy + "/ssh-agent.sock"}, // legacy, dead
@@ -123,17 +126,17 @@ func TestGatherMultipleAndDead(t *testing.T) {
 	assert.Truef(t, hasFinding(r, "1 dead ssh-agent"),
 		"the report must count the ones that do not: %v", r.Findings)
 
-	kinds := map[int]agent.ProcKind{}
+	kinds := map[int]inspect.ProcKind{}
 	for _, a := range r.Agents {
 		kinds[a.PID] = a.Kind
 	}
-	assert.Equal(t, agent.KindForeign, kinds[200], "an agent on a socket of its own is somebody else's")
-	assert.Equal(t, agent.KindLegacy, kinds[300], "an agent under the legacy directory is a leftover of ours")
+	assert.Equal(t, inspect.KindForeign, kinds[200], "an agent on a socket of its own is somebody else's")
+	assert.Equal(t, inspect.KindLegacy, kinds[300], "an agent under the legacy directory is a leftover of ours")
 }
 
 func TestGatherDifferentUserAgent(t *testing.T) {
 	const other = "/run/user/1000/sshakku/tok/agent.sock"
-	src := fakeSource{procs: []agent.AgentProc{
+	src := fakeSource{procs: []inspect.AgentProc{
 		{PID: 100, UID: 1000, Socket: other}, // healthy, but not uid 0's
 	}}
 	prober := fakeProber{up: map[string]bool{other: true}}
@@ -154,7 +157,7 @@ func TestGatherDifferentUserAgent(t *testing.T) {
 // belongs to somebody else. It is named as another user's and nothing more.
 func TestGatherAnotherUsersForeignAgentIsNotThisAccountsProblem(t *testing.T) {
 	const theirs = "/tmp/theirs.sock"
-	src := fakeSource{procs: []agent.AgentProc{{PID: 200, UID: 1000, Socket: theirs}}}
+	src := fakeSource{procs: []inspect.AgentProc{{PID: 200, UID: 1000, Socket: theirs}}}
 	prober := fakeProber{up: map[string]bool{theirs: true}}
 	r := Gather(t.Context(), Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 0}, src, prober, nil, nil, nil, nil)
 
@@ -169,7 +172,7 @@ func TestGatherOrphanedOursAgent(t *testing.T) {
 	// session's own fixedSock — most likely a previous instance of our own
 	// agent, not a truly external tool.
 	const orphan = "/run/user/1000/sshakku/00112233445566778899aabbccddeeff/agent.sock"
-	src := fakeSource{procs: []agent.AgentProc{
+	src := fakeSource{procs: []inspect.AgentProc{
 		{PID: 100, UID: 1000, Socket: orphan},
 	}}
 	prober := fakeProber{up: map[string]bool{orphan: true}}
@@ -268,7 +271,7 @@ func TestGatherAskpassPartiallyWired(t *testing.T) {
 }
 
 func TestGatherAskpassWired(t *testing.T) {
-	src := fakeSource{procs: []agent.AgentProc{
+	src := fakeSource{procs: []inspect.AgentProc{
 		{PID: 100, UID: 1000, Socket: fixed, Args: []string{"ssh-agent", "-a", fixed}},
 	}}
 	r := Gather(t.Context(), Inputs{
@@ -313,48 +316,48 @@ func TestHostFindings(t *testing.T) {
 
 	// Eight independent questions about one report; assert throughout, and
 	// only look inside a finding once there is exactly one to look inside.
-	assert.Empty(t, hostFindings(HostChecks{}), "a host nothing was established about yields nothing to report")
+	assert.Empty(t, hostFindings(hostcheck.Checks{}), "a host nothing was established about yields nothing to report")
 
-	got := hostFindings(HostChecks{DiskEncrypted: &no})
+	got := hostFindings(hostcheck.Checks{DiskEncrypted: &no})
 	if assert.Len(t, got, 1, "an unencrypted disk is one finding") {
 		assert.Contains(t, got[0], "not appear to be encrypted", "the finding must say the disk is not encrypted")
 	}
 
-	assert.Empty(t, hostFindings(HostChecks{DiskEncrypted: &yes}), "an encrypted disk is nothing to report")
+	assert.Empty(t, hostFindings(hostcheck.Checks{DiskEncrypted: &yes}), "an encrypted disk is nothing to report")
 
-	got = hostFindings(HostChecks{TmpTmpfs: &no})
+	got = hostFindings(hostcheck.Checks{TmpTmpfs: &no})
 	if assert.Len(t, got, 1, "a /tmp that is not a tmpfs is one finding") {
 		assert.Contains(t, got[0], "not a dedicated tmpfs mount", "the finding must say what /tmp is not")
 	}
 
-	got = hostFindings(HostChecks{TmpTmpfs: &yes, TmpSizeBytes: 64 * 1024 * 1024})
+	got = hostFindings(hostcheck.Checks{TmpTmpfs: &yes, TmpSizeBytes: 64 * 1024 * 1024})
 	if assert.Len(t, got, 1, "a tmpfs too small to be useful is one finding") {
 		assert.Contains(t, got[0], "too small", "the finding must say the tmpfs is undersized")
 	}
 
-	assert.Empty(t, hostFindings(HostChecks{TmpTmpfs: &yes, TmpSizeBytes: 2 * 1024 * 1024 * 1024}),
+	assert.Empty(t, hostFindings(hostcheck.Checks{TmpTmpfs: &yes, TmpSizeBytes: 2 * 1024 * 1024 * 1024}),
 		"a tmpfs of adequate size is nothing to report")
 
-	got = hostFindings(HostChecks{SecureHardwarePresent: &no})
+	got = hostFindings(hostcheck.Checks{SecureHardwarePresent: &no})
 	if assert.Len(t, got, 1, "a machine with no secure hardware is one finding") {
 		assert.Contains(t, got[0], "no TPM or Secure Enclave detected", "the finding must say none was found")
 	}
 
-	assert.Empty(t, hostFindings(HostChecks{SecureHardwarePresent: &yes, SecureHardwareKind: "TPM 2.0"}),
+	assert.Empty(t, hostFindings(hostcheck.Checks{SecureHardwarePresent: &yes, SecureHardwareKind: "TPM 2.0"}),
 		"secure hardware that is present is nothing to report")
 }
 
 func TestHostChecksLine(t *testing.T) {
 	no, yes := false, true
 
-	assert.Empty(t, hostChecksLine(HostChecks{}), "a host that was never looked at has no line to print")
+	assert.Empty(t, hostChecksLine(hostcheck.Checks{}), "a host that was never looked at has no line to print")
 
-	got := hostChecksLine(HostChecks{DiskEncrypted: &yes, TmpTmpfs: &yes, TmpSizeBytes: 1024 * 1024 * 1024, SecureHardwarePresent: &yes, SecureHardwareKind: "TPM 2.0"})
+	got := hostChecksLine(hostcheck.Checks{DiskEncrypted: &yes, TmpTmpfs: &yes, TmpSizeBytes: 1024 * 1024 * 1024, SecureHardwarePresent: &yes, SecureHardwareKind: "TPM 2.0"})
 	for _, want := range []string{"disk encryption: yes", "/tmp: tmpfs, 1.0 GiB", "secure hardware: present (TPM 2.0)"} {
 		assert.Containsf(t, got, want, "the line must say %q", want)
 	}
 
-	got = hostChecksLine(HostChecks{DiskEncrypted: &no, TmpTmpfs: &no, SecureHardwarePresent: &no})
+	got = hostChecksLine(hostcheck.Checks{DiskEncrypted: &no, TmpTmpfs: &no, SecureHardwarePresent: &no})
 	for _, want := range []string{"disk encryption: no", "/tmp: not tmpfs", "secure hardware: not detected"} {
 		assert.Containsf(t, got, want, "the line must say %q", want)
 	}
@@ -377,7 +380,7 @@ func TestFormatIncludesEnvironmentSection(t *testing.T) {
 	r := Report{
 		FixedSock: fixed,
 		Findings:  []string{"no problems detected"},
-		Host:      HostChecks{DiskEncrypted: &yes, TmpTmpfs: &yes, TmpSizeBytes: 1024 * 1024 * 1024, SecureHardwarePresent: &yes, SecureHardwareKind: "TPM 2.0"},
+		Host:      hostcheck.Checks{DiskEncrypted: &yes, TmpTmpfs: &yes, TmpSizeBytes: 1024 * 1024 * 1024, SecureHardwarePresent: &yes, SecureHardwareKind: "TPM 2.0"},
 	}
 	var buf bytes.Buffer
 	Format(&buf, r)
@@ -403,9 +406,9 @@ func TestFormat(t *testing.T) {
 		RecordedPID:  4242,
 		State:        StateOursHealthy,
 		Agents: []AgentView{
-			{PID: 100, UID: 1000, Kind: agent.KindOurs, Socket: fixed, Reachable: true},
-			{PID: 200, UID: 1001, Kind: agent.KindForeign, Socket: "/tmp/f.sock", Reachable: false},
-			{PID: 300, UID: -1, Kind: agent.KindForeign, Socket: "", Reachable: false},
+			{PID: 100, UID: 1000, Kind: inspect.KindOurs, Socket: fixed, Reachable: true},
+			{PID: 200, UID: 1001, Kind: inspect.KindForeign, Socket: "/tmp/f.sock", Reachable: false},
+			{PID: 300, UID: -1, Kind: inspect.KindForeign, Socket: "", Reachable: false},
 		},
 		Findings: []string{"no problems detected"},
 		LogTail:  []string{"2026-07-01T00:00:00Z INFO started"},

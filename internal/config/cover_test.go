@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/OrbintSoft/sshakku/internal/keys"
+	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
 // TestOverruledNamesWhatDecidesInstead verifies the part of F36 a person only
@@ -300,7 +301,7 @@ func TestResolveMalformedGiveupTTLReportsAndDefaults(t *testing.T) {
 func TestResolveMalformedCommandTimeoutReportsAndDefaults(t *testing.T) {
 	s, errs := Resolve(File{}, lookupFrom(map[string]string{"SSHAKKU_COMMAND_TIMEOUT": "banana"}))
 	assert.NotEmpty(t, errs, "a malformed command timeout must be reported")
-	assert.Equal(t, keys.DefaultCommandTimeout, s.CommandTimeout, "CommandTimeout must be the default on a malformed value")
+	assert.Equal(t, run.DefaultCommandTimeout, s.CommandTimeout, "CommandTimeout must be the default on a malformed value")
 }
 
 // TestResolveMalformedInteractiveTimeoutReportsAndDefaults covers Resolve's
@@ -309,5 +310,5 @@ func TestResolveMalformedCommandTimeoutReportsAndDefaults(t *testing.T) {
 func TestResolveMalformedInteractiveTimeoutReportsAndDefaults(t *testing.T) {
 	s, errs := Resolve(File{}, lookupFrom(map[string]string{"SSHAKKU_INTERACTIVE_TIMEOUT": "banana"}))
 	assert.NotEmpty(t, errs, "a malformed interactive timeout must be reported")
-	assert.Equal(t, keys.DefaultInteractiveTimeout, s.InteractiveTimeout, "InteractiveTimeout must be the default on a malformed value")
+	assert.Equal(t, run.DefaultInteractiveTimeout, s.InteractiveTimeout, "InteractiveTimeout must be the default on a malformed value")
 }

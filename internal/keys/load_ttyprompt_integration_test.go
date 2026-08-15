@@ -16,8 +16,12 @@ import (
 
 	"github.com/OrbintSoft/sshakku/internal/giveup"
 	"github.com/OrbintSoft/sshakku/internal/keyring"
+	"github.com/OrbintSoft/sshakku/internal/keys/prompt"
+	"github.com/OrbintSoft/sshakku/internal/run"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OrbintSoft/sshakku/internal/testtmp"
 )
 
 // Environment the parent hands its re-executed self, which runs the loader
@@ -44,7 +48,7 @@ const (
 	ttyHelperTimeout = 3 * time.Minute
 )
 
-// ttyPromptLine is what TTYPrompter writes to the terminal for the test key;
+// ttyPromptLine is what prompt.TTYPrompter writes to the terminal for the test key;
 // the tests count these to see how many times the user was asked.
 const ttyPromptLine = "Enter passphrase for id_test: "
 
@@ -67,7 +71,7 @@ func buildAskpassHelper(t *testing.T, dir string) string {
 
 // TestLoadKeysFirstTimePromptRealTerminal drives the first-time passphrase
 // prompt over a real pseudo-terminal: an empty vault, no graphical prompter, a
-// real ssh-agent, and the real TTYPrompter reading from a genuine controlling
+// real ssh-agent, and the real prompt.TTYPrompter reading from a genuine controlling
 // terminal rather than the socketpair the unit tests substitute for one.
 //
 // The child is this test binary re-executed into its own session with the pty
@@ -254,7 +258,7 @@ func setupTTYPromptTest(t *testing.T, passphrase string) ttyPromptEnv {
 
 	// The Darwin handoff names an AF_UNIX socket under $HOME, whose path the
 	// kernel caps well below what a default temp dir costs.
-	dir := shortDir(t)
+	dir := testtmp.ShortDir(t)
 	t.Setenv("HOME", dir)
 
 	keyfile := filepath.Join(dir, "id_test")
@@ -316,7 +320,7 @@ func startTTYPromptHelper(t *testing.T, env ttyPromptEnv, slave *os.File) *exec.
 }
 
 // runTTYPromptHelper is the child half: a real Loader — real ssh-agent, real
-// ssh-add through the real handoff, real TTYPrompter on the controlling
+// ssh-add through the real handoff, real prompt.TTYPrompter on the controlling
 // terminal — with an empty vault, so every passphrase must come from the
 // terminal. It exits non-zero only when LoadKeys itself fails; every other
 // outcome is left for the parent to observe from the agent, the give-up
@@ -325,9 +329,9 @@ func runTTYPromptHelper() {
 	secret := &fakeSecret{lookupFound: false}
 	loader := Loader{
 		Keys:   fakeLister{paths: []string{os.Getenv(envTTYKeyfile)}},
-		Runner: ExecRunner{},
+		Runner: run.ExecRunner{},
 		Secret: secret,
-		Prompt: TTYPrompter{},
+		Prompt: prompt.TTYPrompter{},
 		Adder:  ExecKeyAdder{AskpassProg: os.Getenv(envTTYAskpass)},
 		Log:    &fakeLogger{},
 		Notify: stderrNotifier{},
@@ -399,7 +403,7 @@ func drain(t *testing.T, master *os.File) string {
 func assertKeyInAgent(t *testing.T, keyfile string, want bool) {
 	t.Helper()
 
-	runner := ExecRunner{}
+	runner := run.ExecRunner{}
 	fp, err := FileFingerprint(t.Context(), runner, keyfile)
 	require.NoError(t, err, "reading the key's fingerprint must succeed")
 	loaded, err := AgentFingerprints(t.Context(), runner)

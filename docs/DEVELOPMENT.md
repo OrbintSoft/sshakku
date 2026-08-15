@@ -12,16 +12,34 @@ composed by it. One line each:
 
 | Package | Responsibility |
 | --- | --- |
-| `cmd/sshakku` | The single binary: subcommand dispatch, and the askpass re-entry path when invoked as `SSH_ASKPASS`. |
-| `internal/agent` | Tends the user's `ssh-agent`: probes a socket, starts one on the fixed socket, reaps dead agents/sockets, adopts one already running. Never reimplements `ssh-agent` itself. |
+| `cmd/sshakku` | The binary's entry point, and nothing else: the process's single `os.Exit` around `cli.Main`. |
+| `internal/cli` | The command itself: subcommand dispatch, the askpass re-entry path when the binary is run under its askpass name, and the wiring that hands each command the system seams it needs. A package rather than `main` so all of it can be exercised from tests. |
+| `internal/cli/backend` | Opens the wallet the settings select, per platform, and picks KeePassXC's route (its local protocol, the Secret Service, or its CLI). |
+| `internal/cli/crossuser` | Reads another user's per-login socket token for `doctor --user`, by re-executing the binary under that user's credentials — a kernel keyring is only visible to the uid that owns it. |
+| `internal/cli/dialog` | Decides where this machine can ask a person for a passphrase: the graphical dialog this platform can raise, or the controlling terminal. |
+| `internal/cli/shell` | The shell forms the eval-able commands print in: the Bourne form every POSIX shell reads, and PowerShell's. |
+| `internal/cli/walletcheck` | Describes the configured wallet as this machine actually is — which one would be opened, how it would be reached, what of that is present — for `doctor` to report and `--fix` to act on. |
+| `internal/agent` | Tends the user's `ssh-agent`: starts one on the fixed socket, reaps dead agents/sockets, adopts one already running. Never reimplements `ssh-agent` itself. |
+| `internal/agent/reach` | Answers whether an ssh-agent answers, by speaking its wire protocol on its socket the way `ssh-add -l` does — a socket file being there says nothing about what is still behind it. |
+| `internal/agent/inspect` | Finds the `ssh-agent` processes running on this machine and says which is which: the one on the socket SSHakku pins, one left over from before SSHakku, or someone else's. Only the process list is platform-specific — Linux reads procfs, macOS asks sysctl. |
+| `internal/agent/inspect/inspecttest` | Builds the procfs-shaped trees `inspect` reads, so a test decides what was running instead of asking the machine it runs on — and runs on a system that has no `/proc`. |
 | `internal/config` | Resolves settings: environment variable, then the TOML config file, then a built-in default, per setting. Reads `config.toml` and the `config.d/` drop-ins as an ordered list of sources, so what resolved a value can be reported alongside the value. |
 | `internal/diagnose` | Builds the read-only picture `sshakku doctor` reports: which agents are running, which is ours, whether it answers, whether the shell's `SSH_AUTH_SOCK` is wired up. Never starts, signals, or reaps anything. |
+| `internal/diagnose/hostcheck` | Reads what the machine does for a passphrase that SSHakku cannot: whether the disk a wallet is written to is encrypted, whether `/tmp` is in memory, whether there is a TPM or Secure Enclave. Best-effort and read-only; "could not tell" is one of the answers. |
+| `internal/diagnose/launcher` | Works out what started an ssh-agent — a desktop session, an SSH login, a service unit — by walking the process tree upward, falling back to the control group when a double-forked daemon has left no ancestor to walk to. |
 | `internal/giveup` | Records, per key, that loading was abandoned after the bounded retries, so later shells skip it instead of re-prompting every time, until a TTL expires. |
-| `internal/keyring` | Wraps the Linux kernel keyring (`@u` user keyring), used on Linux for handing a passphrase from `load-keys` to the askpass re-entry without it touching argv or a file; Darwin uses a private Unix socket instead (`internal/keys/handoff_darwin.go`). |
-| `internal/keys` | Loads SSH keys into the agent: enumerates the key directory, skips keys already loaded, pulls each passphrase from the configured secret backend, and drives `ssh-add` out of band. The pluggable `SecretBackend`s (Secret Service, `secret-tool`, 1Password, Bitwarden) and the askpass broker live here. |
+| `internal/keyring` | Wraps the Linux kernel keyring (`@u` user keyring), used on Linux for handing a passphrase from `load-keys` to the askpass re-entry without it touching argv or a file; Darwin uses a private Unix socket instead (`internal/keys/handoff`). |
+| `internal/keys` | Loads SSH keys into the agent: enumerates the key directory, skips keys already loaded, pulls each passphrase from the configured wallet, and drives `ssh-add` out of band. The askpass broker, which answers `ssh` when a key has expired from the agent, lives here too. |
+| `internal/keys/handoff` | Carries one passphrase from the loader to the SSH_ASKPASS helper `ssh-add` runs, without it passing through argv, the environment or a file: only a token crosses, and the passphrase itself stays in a kernel keyring (Linux) or a socket buffer (Darwin). |
+| `internal/keys/prompt` | Asks the user for a passphrase, and works out where it can be asked at all: the pinentry/zenity/kdialog/osascript dialogs, the terminal fallback, and the graphical-session detection that decides between them. |
+| `internal/keys/wallet` | Stores and retrieves a key's passphrase: the pluggable backends (Secret Service, `secret-tool`, the macOS Keychain, 1Password, Bitwarden) behind one `wallet.Backend`, plus how SSHakku names its own entries in a store it shares with everything else. |
+| `internal/keys/wallet/keepassxc` | The KeePassXC backend, in the two shapes it comes in: `Native`, which talks to a running KeePassXC over its local protocol, and `CLI`, which works on the database file through `keepassxc-cli`. Holds the association store nothing else needs — the identity KeePassXC recognises this client by. |
+| `internal/keys/wallet/keepassxc/wire` | Speaks the local protocol KeePassXC exposes for its browser extension — JSON over a unix socket, every message sealed with NaCl box — and knows where that socket is on each platform. Talks only to a KeePassXC already running and unlocked; it asks the user for nothing. |
 | `internal/keystate` | Records when a key was added to the agent and for how long, so `doctor` can report remaining lifetime without relying on the ssh-agent protocol (which has no such query). |
 | `internal/paths` | Computes and creates the per-user runtime layout: config under the XDG config dir, the session log under the XDG state dir, the agent socket in per-user tmpfs — always outside `~/.ssh`. |
+| `internal/run` | Runs the external programs SSHakku drives — `ssh-add`, `ssh-keygen`, a wallet's CLI, a passphrase dialog — and bounds how long anything outside the process may keep a caller waiting, so a tool that neither answers nor fails becomes an error to fall back from. `internal/run/runtest` holds the stand-ins that let a component driving one of those be tested without it. |
 | `internal/secretservice` | A native client for the freedesktop Secret Service D-Bus API (`org.freedesktop.secrets`), used instead of shelling out to `secret-tool` so a dedicated collection can be created and locked/unlocked around a single lookup or store. |
+| `internal/testtmp` | Hands a test a temporary directory short enough to bind a unix socket in — what `t.TempDir()` cannot give, since a socket address is capped at barely a hundred bytes and macOS's temp root spends most of them before the socket is named. |
 | `internal/sessionlog` | Appends timestamped, level-tagged lines to the owner-only session log, bounded to a fixed number of recent lines. |
 
 `tools/` holds CI-only helpers built and run by workflows, never by
@@ -31,7 +49,7 @@ per-PR test-health comment.
 
 ## How the pieces fit together
 
-`cmd/sshakku/main.go`'s `run()` dispatches on `args[0]`: `shell-init`,
+`internal/cli`'s `run()` dispatches on `args[0]`: `shell-init`,
 `ensure-agent`, `load-keys`, `askpass-env`, `doctor`, `forget`, `help`. See
 [docs/CLI.md](CLI.md) for the full command reference.
 

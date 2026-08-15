@@ -4,13 +4,15 @@ package agent
 
 import (
 	"errors"
-	"net"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/sys/unix"
+
+	"github.com/OrbintSoft/sshakku/internal/agent/inspect"
+
+	"github.com/OrbintSoft/sshakku/internal/testtmp"
 )
 
 // nthErrLister wraps a ProcLister and forces the failOn-th (1-based) Agents call to
@@ -22,7 +24,7 @@ type nthErrLister struct {
 	calls  int
 }
 
-func (l *nthErrLister) Agents() ([]AgentProc, error) {
+func (l *nthErrLister) Agents() ([]inspect.AgentProc, error) {
 	l.calls++
 	if l.calls == l.failOn {
 		return nil, errors.New("process scan failed")
@@ -33,9 +35,9 @@ func (l *nthErrLister) Agents() ([]AgentProc, error) {
 // TestEnsureAgentForeignSurveyError covers EnsureAgent's error return when the
 // healthy-agent survey (the second process scan, after a successful reap) fails.
 func TestEnsureAgentForeignSurveyError(t *testing.T) {
-	dir := shortDir(t)
+	dir := testtmp.ShortDir(t)
 	fixed := filepath.Join(dir, "agent.sock")
-	lister := &nthErrLister{inner: Inspector{ProcRoot: shortDir(t)}, failOn: 2}
+	lister := &nthErrLister{inner: inspect.Inspector{ProcRoot: testtmp.ShortDir(t)}, failOn: 2}
 	m := Manager{
 		Prober:    mapProber{}, // fixed silent
 		Inspector: lister,
@@ -57,17 +59,4 @@ func TestFlockLockerFlockError(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "agent.lock")
 	_, err := (FlockLocker{}).Lock(path)
 	assert.Error(t, err, "a non-EWOULDBLOCK flock failure must be reported")
-}
-
-// TestSocketProberSetDeadlineError covers Reachable's bail-out when the dialed
-// connection's deadline cannot be set. The dial itself succeeds against a real
-// in-process agent, so only the seamed deadline call fails.
-func TestSocketProberSetDeadlineError(t *testing.T) {
-	orig := setDeadline
-	t.Cleanup(func() { setDeadline = orig })
-	setDeadline = func(net.Conn, time.Time) error { return errors.New("cannot set deadline") }
-
-	sock := fakeAgent(t, replyIdentities(1))
-	assert.False(t, (SocketProber{Timeout: time.Second}).Reachable(t.Context(), sock),
-		"a connection whose deadline cannot be set is unreachable")
 }

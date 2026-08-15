@@ -2,44 +2,11 @@ package keys
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 )
 
-// fakeRunner answers Run from a per-binary handler table, so a test can stub
-// ssh-keygen, ssh-add, secret-tool, etc. independently and inspect the calls.
-type fakeRunner struct {
-	handlers map[string]func(Cmd) (Result, error)
-	calls    []Cmd
-}
-
-func newFakeRunner() *fakeRunner {
-	return &fakeRunner{handlers: make(map[string]func(Cmd) (Result, error))}
-}
-
-// on registers a handler for a command name.
-func (f *fakeRunner) on(name string, h func(Cmd) (Result, error)) *fakeRunner {
-	f.handlers[name] = h
-	return f
-}
-
-func (f *fakeRunner) Run(_ context.Context, c Cmd) (Result, error) {
-	f.calls = append(f.calls, c)
-	if h, ok := f.handlers[c.Name]; ok {
-		return h(c)
-	}
-	return Result{}, fmt.Errorf("unexpected command %q", c.Name)
-}
-
-// stdout builds a handler that returns out on stdout with the given exit code.
-func stdout(out string, code int) func(Cmd) (Result, error) {
-	return func(Cmd) (Result, error) {
-		return Result{Stdout: []byte(out), Code: code}, nil
-	}
-}
-
-// fakePrompter is a Prompter whose availability and answer are scripted.
+// fakePrompter is a prompt.Prompter whose availability and answer are scripted.
 type fakePrompter struct {
 	avail bool
 	pass  string
@@ -62,8 +29,8 @@ type fakeLister struct {
 
 func (l fakeLister) Keys() ([]string, error) { return l.paths, l.err }
 
-// fakeSecret is a scripted SecretBackend that records every Store. It also
-// implements SecretSession (Unlock/Lock), recording call counts, so Loader
+// fakeSecret is a scripted wallet.Backend that records every Store. It also
+// implements wallet.Session (Unlock/Lock), recording call counts, so Loader
 // batch-unlock tests can assert on them without a real Secret Service.
 type fakeSecret struct {
 	lookupPass   string
@@ -163,11 +130,6 @@ func (f *fakeLogger) contains(sub string) bool {
 		}
 	}
 	return false
-}
-
-// fails builds a handler that reports a failure to start the process.
-func fails(err error) func(Cmd) (Result, error) {
-	return func(Cmd) (Result, error) { return Result{}, err }
 }
 
 // fakeGiveup is an in-memory GiveupStore that scripts GivenUp and records the

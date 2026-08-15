@@ -9,6 +9,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OrbintSoft/sshakku/internal/agent/inspect"
+
+	"github.com/OrbintSoft/sshakku/internal/agent/inspect/inspecttest"
+
+	"github.com/OrbintSoft/sshakku/internal/testtmp"
 )
 
 // mapProber reports reachability from a fixed map; absent paths are unreachable.
@@ -49,21 +55,8 @@ func makeSocketFile(t *testing.T, path string) {
 	_ = l.Close()
 }
 
-// shortDir returns a fresh, auto-cleaned temp directory with a short path.
-// Unlike t.TempDir(), which nests the (sub)test name under the OS temp root
-// (e.g. macOS's /var/folders/xx/.../T/TestName.../001/), it stays well under
-// the 104-byte sun_path limit unix sockets are bound under on BSD/Darwin —
-// a limit t.TempDir()'s deeper macOS layout routinely exceeds.
-func shortDir(t *testing.T) string {
-	t.Helper()
-	dir, err := os.MkdirTemp("", "sshakku") //nolint:usetesting // t.TempDir() is the long macOS path the comment above is about
-	require.NoError(t, err, "mkdir temp")
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	return dir
-}
-
 func TestManagerReap(t *testing.T) {
-	root := shortDir(t)
+	root := testtmp.ShortDir(t)
 	const ourUID = 1000
 
 	deadOurs := filepath.Join(root, "dead-ours.sock")
@@ -71,14 +64,14 @@ func TestManagerReap(t *testing.T) {
 	makeSocketFile(t, deadOurs)
 	makeSocketFile(t, deadOther)
 
-	fakeProc(t, root, 100, []string{"ssh-agent", "-a", "/healthy.sock"}, ourUID) // healthy → spare
-	fakeProc(t, root, 200, []string{"ssh-agent", "-a", deadOurs}, ourUID)        // dead + ours → reap
-	fakeProc(t, root, 300, []string{"ssh-agent", "-a", deadOther}, 1001)         // dead, other user → spare
-	fakeProc(t, root, 400, []string{"ssh-agent", "-D"}, ourUID)                  // no socket → spare
+	inspecttest.FakeProc(t, root, 100, []string{"ssh-agent", "-a", "/healthy.sock"}, ourUID) // healthy → spare
+	inspecttest.FakeProc(t, root, 200, []string{"ssh-agent", "-a", deadOurs}, ourUID)        // dead + ours → reap
+	inspecttest.FakeProc(t, root, 300, []string{"ssh-agent", "-a", deadOther}, 1001)         // dead, other user → spare
+	inspecttest.FakeProc(t, root, 400, []string{"ssh-agent", "-D"}, ourUID)                  // no socket → spare
 
 	prober := mapProber{"/healthy.sock": true} // everything else is unreachable
 	sig := &recordSignaler{}
-	m := Manager{Prober: prober, Inspector: Inspector{ProcRoot: root}, Signaler: sig}
+	m := Manager{Prober: prober, Inspector: inspect.Inspector{ProcRoot: root}, Signaler: sig}
 
 	res, err := m.Reap(t.Context(), ourUID)
 	require.NoError(t, err, "Reap")
@@ -92,7 +85,7 @@ func TestManagerReap(t *testing.T) {
 }
 
 func TestManagerStart(t *testing.T) {
-	dir := shortDir(t)
+	dir := testtmp.ShortDir(t)
 	socket := filepath.Join(dir, "agent.sock")
 	state := filepath.Join(dir, "agent.state")
 
@@ -124,7 +117,7 @@ func TestStateRoundTrip(t *testing.T) {
 }
 
 func TestRemoveSocket(t *testing.T) {
-	dir := shortDir(t)
+	dir := testtmp.ShortDir(t)
 	sock := filepath.Join(dir, "a.sock")
 	makeSocketFile(t, sock)
 	assert.True(t, removeSocket(sock), "removeSocket must remove a socket")

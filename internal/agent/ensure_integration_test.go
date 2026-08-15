@@ -15,6 +15,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sys/unix"
+
+	"github.com/OrbintSoft/sshakku/internal/agent/inspect"
+
+	"github.com/OrbintSoft/sshakku/internal/agent/reach"
+
+	"github.com/OrbintSoft/sshakku/internal/testtmp"
 )
 
 // lockRealAgentTests serialises every real-ssh-agent-spawning test across
@@ -54,11 +60,11 @@ func requireIsolatedAgentEnvironment(t *testing.T) {
 		t.Skip("ssh-agent not on PATH")
 	}
 	lockRealAgentTests(t)
-	procs, err := (Inspector{}).Agents()
+	procs, err := (inspect.Inspector{}).Agents()
 	if err != nil {
 		t.Skipf("cannot enumerate /proc: %v", err)
 	}
-	prober := SocketProber{}
+	prober := reach.SocketProber{}
 	for _, p := range procs {
 		if p.Socket != "" && prober.Reachable(t.Context(), p.Socket) {
 			t.Skipf("a real ssh-agent (pid %d, socket %s) is already reachable on this machine — "+
@@ -70,8 +76,8 @@ func requireIsolatedAgentEnvironment(t *testing.T) {
 
 func newRealManager() Manager {
 	return Manager{
-		Prober:    SocketProber{},
-		Inspector: Inspector{},
+		Prober:    reach.SocketProber{},
+		Inspector: inspect.Inspector{},
 		Runner:    ExecRunner{},
 		Signaler:  SysSignaler{},
 		Locker:    FlockLocker{Wait: 2 * time.Second},
@@ -80,7 +86,7 @@ func newRealManager() Manager {
 
 func realCfg(t *testing.T) EnsureConfig {
 	t.Helper()
-	dir := shortDir(t)
+	dir := testtmp.ShortDir(t)
 	return EnsureConfig{
 		FixedSock: filepath.Join(dir, "agent.sock"),
 		LegacyDir: filepath.Join(dir, "legacy"),
@@ -157,7 +163,7 @@ func startForeignAgent(t *testing.T, sock string) int {
 	t.Cleanup(func() { stopAgent(t, pid) })
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if (SocketProber{}).Reachable(t.Context(), sock) {
+		if (reach.SocketProber{}).Reachable(t.Context(), sock) {
 			return pid
 		}
 		time.Sleep(20 * time.Millisecond)
@@ -209,7 +215,7 @@ func TestEnsureAgentRealReachableButEmptyIsHealthy(t *testing.T) {
 
 	// No keys were ever added, so the agent's own reply to
 	// SSH_AGENTC_REQUEST_IDENTITIES lists zero identities — the real-world
-	// equivalent of `ssh-add -l` exiting 1. SocketProber's handshake already
+	// equivalent of `ssh-add -l` exiting 1. reach.SocketProber's handshake already
 	// exercises exactly that round trip, so a second probe here is redundant;
 	// the point being tested is that EnsureAgent still calls this healthy.
 
@@ -278,7 +284,7 @@ func TestEnsureAgentRealForeignAdopted(t *testing.T) {
 	m := newRealManager()
 	cfg := realCfg(t)
 
-	foreignSock := filepath.Join(shortDir(t), "foreign.sock")
+	foreignSock := filepath.Join(testtmp.ShortDir(t), "foreign.sock")
 	foreignPID := startForeignAgent(t, foreignSock)
 
 	res, err := m.EnsureAgent(t.Context(), cfg, nil)
@@ -306,8 +312,8 @@ func TestEnsureAgentRealDisasterReapsAndAdoptsLowestPID(t *testing.T) {
 	require.NoError(t, err, "seed EnsureAgent")
 	killAgentLeavingSocket(t, res1.Started) // now dead-ours
 
-	sockA := filepath.Join(shortDir(t), "foreign-a.sock")
-	sockB := filepath.Join(shortDir(t), "foreign-b.sock")
+	sockA := filepath.Join(testtmp.ShortDir(t), "foreign-a.sock")
+	sockB := filepath.Join(testtmp.ShortDir(t), "foreign-b.sock")
 	pidA := startForeignAgent(t, sockA)
 	pidB := startForeignAgent(t, sockB)
 	lowest := pidA

@@ -14,6 +14,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sys/unix"
+
+	"github.com/OrbintSoft/sshakku/internal/agent/inspect"
+
+	"github.com/OrbintSoft/sshakku/internal/agent/reach"
+
+	"github.com/OrbintSoft/sshakku/internal/testtmp"
 )
 
 // lockRealAgentTests serialises every real-ssh-agent-spawning test across
@@ -39,7 +45,7 @@ func lockRealAgentTests(t *testing.T) {
 }
 
 // requireIsolatedAgentEnvironment skips unless no ssh-agent is already
-// reachable on this machine: agent.Inspector scans the real, machine-wide
+// reachable on this machine: inspect.Inspector scans the real, machine-wide
 // /proc, which a live desktop session (or another test's leftovers) would
 // pollute — these tests need an isolated PID namespace (the container test
 // suite, or a fresh CI runner), never a live login.
@@ -49,11 +55,11 @@ func requireIsolatedAgentEnvironment(t *testing.T) {
 		t.Skip("ssh-agent not on PATH")
 	}
 	lockRealAgentTests(t)
-	procs, err := (agent.Inspector{}).Agents()
+	procs, err := (inspect.Inspector{}).Agents()
 	if err != nil {
 		t.Skipf("cannot enumerate /proc: %v", err)
 	}
-	prober := agent.SocketProber{}
+	prober := reach.SocketProber{}
 	for _, p := range procs {
 		if p.Socket != "" && prober.Reachable(t.Context(), p.Socket) {
 			t.Skipf("a real ssh-agent (pid %d, socket %s) is already reachable on this machine — "+
@@ -62,22 +68,10 @@ func requireIsolatedAgentEnvironment(t *testing.T) {
 	}
 }
 
-// shortDir returns a fresh, auto-cleaned temp directory with a short path.
-// Unlike t.TempDir(), which nests the (sub)test name under the OS temp root
-// (e.g. macOS's /var/folders/xx/.../T/TestName.../001/), it stays well under
-// the 104-byte sun_path limit unix sockets are bound under on BSD/Darwin.
-func shortDir(t *testing.T) string {
-	t.Helper()
-	dir, err := os.MkdirTemp("", "sshakku") //nolint:usetesting // t.TempDir() is the long macOS path the comment above is about
-	require.NoError(t, err, "mkdir temp")
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	return dir
-}
-
 func realManager() agent.Manager {
 	return agent.Manager{
-		Prober:    agent.SocketProber{},
-		Inspector: agent.Inspector{},
+		Prober:    reach.SocketProber{},
+		Inspector: inspect.Inspector{},
 		Runner:    agent.ExecRunner{},
 		Signaler:  agent.SysSignaler{},
 		Locker:    agent.FlockLocker{Wait: 2 * time.Second},
@@ -106,7 +100,7 @@ func waitDead(t *testing.T, pid int) {
 func TestDoctorDetectsAndFixesDeadOursAgent(t *testing.T) {
 	requireIsolatedAgentEnvironment(t)
 
-	dir := shortDir(t)
+	dir := testtmp.ShortDir(t)
 	cfg := agent.EnsureConfig{
 		FixedSock: filepath.Join(dir, "agent.sock"),
 		LegacyDir: filepath.Join(dir, "legacy"),
@@ -129,7 +123,7 @@ func TestDoctorDetectsAndFixesDeadOursAgent(t *testing.T) {
 		EnvAskpass: "/usr/local/bin/sshakku", EnvAskpassRequire: "force",
 	}
 
-	before := Gather(t.Context(), in, agent.Inspector{}, agent.SocketProber{}, nil, nil, nil, nil)
+	before := Gather(t.Context(), in, inspect.Inspector{}, reach.SocketProber{}, nil, nil, nil, nil)
 	require.Equal(t, StateOursHealthy, before.State, "the agent this test then crashes must be healthy to start with")
 
 	// Simulate a real crash: SIGKILL, no graceful socket cleanup by ssh-agent
@@ -139,7 +133,7 @@ func TestDoctorDetectsAndFixesDeadOursAgent(t *testing.T) {
 	_ = syscall.Kill(res1.Started, syscall.SIGKILL)
 	waitDead(t, res1.Started)
 
-	after := Gather(t.Context(), in, agent.Inspector{}, agent.SocketProber{}, nil, nil, nil, nil)
+	after := Gather(t.Context(), in, inspect.Inspector{}, reach.SocketProber{}, nil, nil, nil, nil)
 	assert.Equal(t, StateOursZombie, after.State, "an agent of ours that died leaves its state behind")
 	assert.Falsef(t, hasFinding(after, "no problems detected"),
 		"a report over a crashed agent must not call the machine clean: %v", after.Findings)
@@ -151,7 +145,7 @@ func TestDoctorDetectsAndFixesDeadOursAgent(t *testing.T) {
 	t.Cleanup(func() { _ = syscall.Kill(res2.Started, syscall.SIGTERM) })
 	assert.Equal(t, agent.SituationZombie, res2.Situation, "the fix must recognise what it is repairing")
 
-	fixed := Gather(t.Context(), in, agent.Inspector{}, agent.SocketProber{}, nil, nil, nil, nil)
+	fixed := Gather(t.Context(), in, inspect.Inspector{}, reach.SocketProber{}, nil, nil, nil, nil)
 	assert.Equal(t, StateOursHealthy, fixed.State, "the fix must leave a healthy agent behind")
 	assert.Truef(t, hasFinding(fixed, "no problems detected"),
 		"a repaired machine must be reported as clean: %v", fixed.Findings)

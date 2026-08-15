@@ -8,6 +8,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OrbintSoft/sshakku/internal/keys/prompt"
+	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
+	"github.com/OrbintSoft/sshakku/internal/run"
+	"github.com/OrbintSoft/sshakku/internal/run/runtest"
 )
 
 // assertNothingWentWrong reads the session log the way a user would when they
@@ -22,16 +27,18 @@ func assertNothingWentWrong(t *testing.T, log *fakeLogger, why string) {
 
 // agentEmpty answers `ssh-add -l` as an empty agent; keygen answers `ssh-keygen
 // -lf` with a fingerprint line for a key file.
-func agentEmpty() func(Cmd) (Result, error) { return stdout("The agent has no identities.\n", 1) }
+func agentEmpty() func(run.Cmd) (run.Result, error) {
+	return runtest.Stdout("The agent has no identities.\n", 1)
+}
 
-func keygen(fp string) func(Cmd) (Result, error) {
-	return stdout("256 "+fp+" comment (ED25519)\n", 0)
+func keygen(fp string) func(run.Cmd) (run.Result, error) {
+	return runtest.Stdout("256 "+fp+" comment (ED25519)\n", 0)
 }
 
 func TestLoadKeysSkipsLoaded(t *testing.T) {
-	r := newFakeRunner().
-		on("ssh-add", stdout("256 SHA256:DUP loaded (ED25519)\n", 0)).
-		on("ssh-keygen", keygen("SHA256:DUP"))
+	r := runtest.NewRunner().
+		On("ssh-add", runtest.Stdout("256 SHA256:DUP loaded (ED25519)\n", 0)).
+		On("ssh-keygen", keygen("SHA256:DUP"))
 	adder := &fakeKeyAdder{}
 	log := &fakeLogger{}
 	l := Loader{
@@ -47,7 +54,7 @@ func TestLoadKeysSkipsLoaded(t *testing.T) {
 }
 
 func TestLoadKeysStoredPassphrase(t *testing.T) {
-	r := newFakeRunner().on("ssh-add", agentEmpty()).on("ssh-keygen", keygen("SHA256:NEW"))
+	r := runtest.NewRunner().On("ssh-add", agentEmpty()).On("ssh-keygen", keygen("SHA256:NEW"))
 	secret := &fakeSecret{lookupPass: "stored-pass", lookupFound: true}
 	adder := &fakeKeyAdder{withCodes: []int{0}}
 	log := &fakeLogger{}
@@ -64,7 +71,7 @@ func TestLoadKeysStoredPassphrase(t *testing.T) {
 }
 
 func TestLoadKeysPromptThenStore(t *testing.T) {
-	r := newFakeRunner().on("ssh-add", agentEmpty()).on("ssh-keygen", keygen("SHA256:NEW"))
+	r := runtest.NewRunner().On("ssh-add", agentEmpty()).On("ssh-keygen", keygen("SHA256:NEW"))
 	secret := &fakeSecret{lookupFound: false}
 	prompter := &fakePrompter{pass: "typed-pass"}
 	adder := &fakeKeyAdder{withCodes: []int{0}}
@@ -78,7 +85,7 @@ func TestLoadKeysPromptThenStore(t *testing.T) {
 	assert.Equal(t, "typed-pass", adder.calls[0].passphrase, "opened with the passphrase the user typed")
 	require.Lenf(t, secret.stored, 1, "and a passphrase typed once must be saved once: %v", secret.stored)
 	got := secret.stored[0]
-	assert.Equal(t, defaultServicePrefix+"-id_rsa", got.service, "under the name a later lookup goes by")
+	assert.Equal(t, wallet.DefaultServicePrefix+"-id_rsa", got.service, "under the name a later lookup goes by")
 	assert.Equal(t, "SSH Passphrase for id_rsa", got.label, "labelled with what a person sees in their wallet")
 	assert.Equal(t, "typed-pass", got.passphrase, "and holding what they typed, so the next login is silent")
 }
@@ -89,7 +96,7 @@ func TestLoadKeysPromptThenStore(t *testing.T) {
 // operator-actionable ERROR the way a genuine failure later (a rejected
 // stored passphrase, an exhausted retry loop) still is.
 func TestLoadKeysLookupErrorLogsInfoNotError(t *testing.T) {
-	r := newFakeRunner().on("ssh-add", agentEmpty()).on("ssh-keygen", keygen("SHA256:NEW"))
+	r := runtest.NewRunner().On("ssh-add", agentEmpty()).On("ssh-keygen", keygen("SHA256:NEW"))
 	secret := &fakeSecret{lookupErr: errors.New("dbus: not reachable")}
 	prompter := &fakePrompter{pass: "typed-pass"}
 	adder := &fakeKeyAdder{withCodes: []int{0}}
@@ -107,7 +114,7 @@ func TestLoadKeysLookupErrorLogsInfoNotError(t *testing.T) {
 }
 
 func TestLoadKeysPromptThenStoreExcludedByPolicy(t *testing.T) {
-	r := newFakeRunner().on("ssh-add", agentEmpty()).on("ssh-keygen", keygen("SHA256:NEW"))
+	r := runtest.NewRunner().On("ssh-add", agentEmpty()).On("ssh-keygen", keygen("SHA256:NEW"))
 	secret := &fakeSecret{lookupFound: false}
 	prompter := &fakePrompter{pass: "typed-pass"}
 	adder := &fakeKeyAdder{withCodes: []int{0}}
@@ -129,7 +136,7 @@ func TestLoadKeysPromptThenStoreExcludedByPolicy(t *testing.T) {
 func TestLoadKeysAutoLoadExcludedByPolicyNeverAdded(t *testing.T) {
 	// ssh-keygen is deliberately not registered: an excluded key must never
 	// reach the fingerprint lookup, only the agent snapshot (ssh-add -l).
-	r := newFakeRunner().on("ssh-add", agentEmpty())
+	r := runtest.NewRunner().On("ssh-add", agentEmpty())
 	adder := &fakeKeyAdder{}
 	log := &fakeLogger{}
 	l := Loader{
@@ -139,14 +146,14 @@ func TestLoadKeysAutoLoadExcludedByPolicyNeverAdded(t *testing.T) {
 	}
 	require.NoError(t, l.LoadKeys(t.Context()), "loading a login's keys must not fail")
 	assert.Emptyf(t, adder.calls, "a key the user excluded from loading must not be loaded: %+v", adder.calls)
-	require.Lenf(t, r.calls, 1, "nor touched beyond the one snapshot of what the agent holds: %v", r.calls)
-	assert.Equal(t, "ssh-add", r.calls[0].Name, "and that snapshot is the only command that may run")
+	require.Lenf(t, r.Calls, 1, "nor touched beyond the one snapshot of what the agent holds: %v", r.Calls)
+	assert.Equal(t, "ssh-add", r.Calls[0].Name, "and that snapshot is the only command that may run")
 	assert.Truef(t, log.contains("auto-load policy excludes id_rsa"),
 		"the log must say why the key was left alone, or the setting looks ignored: %v", log.lines)
 }
 
 func TestLoadKeysRetriesThenGivesUp(t *testing.T) {
-	r := newFakeRunner().on("ssh-add", agentEmpty()).on("ssh-keygen", keygen("SHA256:NEW"))
+	r := runtest.NewRunner().On("ssh-add", agentEmpty()).On("ssh-keygen", keygen("SHA256:NEW"))
 	secret := &fakeSecret{lookupPass: "stale", lookupFound: true}
 	prompter := &fakePrompter{pass: "still-wrong"}
 	// The stale stored passphrase gets one try, then three prompted attempts; all fail.
@@ -176,7 +183,7 @@ func TestLoadKeysRetriesThenGivesUp(t *testing.T) {
 // ssh-add rejects it, so the same keystroke behaves differently on the two
 // systems for no reason a user could see.
 func TestLoadKeysEmptyAnswerIsAWrongAnswer(t *testing.T) {
-	r := newFakeRunner().on("ssh-add", agentEmpty()).on("ssh-keygen", keygen("SHA256:NEW"))
+	r := runtest.NewRunner().On("ssh-add", agentEmpty()).On("ssh-keygen", keygen("SHA256:NEW"))
 	prompter := &fakePrompter{pass: ""}
 	adder := &fakeKeyAdder{}
 	log := &fakeLogger{}
@@ -207,7 +214,7 @@ func TestLoadKeysEmptyAnswerIsAWrongAnswer(t *testing.T) {
 //
 // A wallet entry can end up blank; the user is not the one who would find out.
 func TestLoadKeysBlankStoredPassphraseIsNoPassphrase(t *testing.T) {
-	r := newFakeRunner().on("ssh-add", agentEmpty()).on("ssh-keygen", keygen("SHA256:NEW"))
+	r := runtest.NewRunner().On("ssh-add", agentEmpty()).On("ssh-keygen", keygen("SHA256:NEW"))
 	secret := &fakeSecret{lookupPass: "   ", lookupFound: true}
 	prompter := &fakePrompter{pass: "typed-pass"}
 	adder := &fakeKeyAdder{withCodes: []int{0}}
@@ -230,7 +237,7 @@ func TestLoadKeysBlankStoredPassphraseIsNoPassphrase(t *testing.T) {
 }
 
 func TestLoadKeysStaleStoredThenPromptStores(t *testing.T) {
-	r := newFakeRunner().on("ssh-add", agentEmpty()).on("ssh-keygen", keygen("SHA256:NEW"))
+	r := runtest.NewRunner().On("ssh-add", agentEmpty()).On("ssh-keygen", keygen("SHA256:NEW"))
 	secret := &fakeSecret{lookupPass: "stale", lookupFound: true}
 	prompter := &fakePrompter{pass: "fresh"}
 	adder := &fakeKeyAdder{withCodes: []int{1, 0}} // stored rejected, prompted accepted
@@ -251,7 +258,7 @@ func TestLoadKeysStaleStoredThenPromptStores(t *testing.T) {
 }
 
 func TestLoadKeysNotifiesOnGiveup(t *testing.T) {
-	r := newFakeRunner().on("ssh-add", agentEmpty()).on("ssh-keygen", keygen("SHA256:NEW"))
+	r := runtest.NewRunner().On("ssh-add", agentEmpty()).On("ssh-keygen", keygen("SHA256:NEW"))
 	secret := &fakeSecret{lookupFound: false}
 	prompter := &fakePrompter{pass: "wrong"}
 	adder := &fakeKeyAdder{withCodes: []int{1, 1, 1}}
@@ -267,9 +274,9 @@ func TestLoadKeysNotifiesOnGiveup(t *testing.T) {
 }
 
 func TestLoadKeysPromptCanceled(t *testing.T) {
-	r := newFakeRunner().on("ssh-add", agentEmpty()).on("ssh-keygen", keygen("SHA256:NEW"))
+	r := runtest.NewRunner().On("ssh-add", agentEmpty()).On("ssh-keygen", keygen("SHA256:NEW"))
 	secret := &fakeSecret{lookupFound: false}
-	prompter := &fakePrompter{err: ErrPromptCanceled}
+	prompter := &fakePrompter{err: prompt.ErrCanceled}
 	adder := &fakeKeyAdder{}
 	notifier := &fakeNotifier{}
 	log := &fakeLogger{}
@@ -293,8 +300,8 @@ func TestLoadKeysPromptCanceled(t *testing.T) {
 // of them per key. Nothing is added, nobody is told of a failure, and no key is
 // given up — the next login shell asks again from the first key.
 func TestLoadKeysDismissedDialogEndsTheAsking(t *testing.T) {
-	r := newFakeRunner().on("ssh-add", agentEmpty()).on("ssh-keygen", keygen("SHA256:NEW"))
-	prompter := &fakePrompter{err: ErrPromptCanceled}
+	r := runtest.NewRunner().On("ssh-add", agentEmpty()).On("ssh-keygen", keygen("SHA256:NEW"))
+	prompter := &fakePrompter{err: prompt.ErrCanceled}
 	adder := &fakeKeyAdder{}
 	notifier := &fakeNotifier{}
 	give := newFakeGiveup()
@@ -316,8 +323,8 @@ func TestLoadKeysDismissedDialogEndsTheAsking(t *testing.T) {
 // a user who would rather turn down one key and still be asked about the others
 // says so, and is asked about every one of them.
 func TestLoadKeysDismissedDialogSkipsOnlyThatKey(t *testing.T) {
-	r := newFakeRunner().on("ssh-add", agentEmpty()).on("ssh-keygen", keygen("SHA256:NEW"))
-	prompter := &fakePrompter{err: ErrPromptCanceled}
+	r := runtest.NewRunner().On("ssh-add", agentEmpty()).On("ssh-keygen", keygen("SHA256:NEW"))
+	prompter := &fakePrompter{err: prompt.ErrCanceled}
 	notifier := &fakeNotifier{}
 	give := newFakeGiveup()
 	l := Loader{
@@ -337,8 +344,8 @@ func TestLoadKeysDismissedDialogSkipsOnlyThatKey(t *testing.T) {
 // about until the attempts run out and it then ends the way F8 says a key that
 // never opened ends — told once, and left alone.
 func TestLoadKeysDismissedDialogCountsAsAWrongAnswer(t *testing.T) {
-	r := newFakeRunner().on("ssh-add", agentEmpty()).on("ssh-keygen", keygen("SHA256:NEW"))
-	prompter := &fakePrompter{err: ErrPromptCanceled}
+	r := runtest.NewRunner().On("ssh-add", agentEmpty()).On("ssh-keygen", keygen("SHA256:NEW"))
+	prompter := &fakePrompter{err: prompt.ErrCanceled}
 	notifier := &fakeNotifier{}
 	give := newFakeGiveup()
 	l := Loader{
@@ -359,7 +366,7 @@ func TestLoadKeysDismissedDialogCountsAsAWrongAnswer(t *testing.T) {
 // headless interactive session with a CLI-only backend (op, bw) must still
 // benefit from a stored passphrase, not just kdialog-equipped sessions.
 func TestLoadKeysNoGUIStillUsesVault(t *testing.T) {
-	r := newFakeRunner().on("ssh-add", agentEmpty()).on("ssh-keygen", keygen("SHA256:NEW"))
+	r := runtest.NewRunner().On("ssh-add", agentEmpty()).On("ssh-keygen", keygen("SHA256:NEW"))
 	secret := &fakeSecret{lookupPass: "stored-pass", lookupFound: true}
 	adder := &fakeKeyAdder{withCodes: []int{0}}
 	log := &fakeLogger{}
@@ -378,9 +385,9 @@ func TestLoadKeysNoGUIStillUsesVault(t *testing.T) {
 // or otherwise detached invocation — never surfaces as a user-visible notice
 // and is logged at INFO, not ERROR.
 func TestLoadKeysNoTerminalSkipsSilently(t *testing.T) {
-	r := newFakeRunner().on("ssh-add", agentEmpty()).on("ssh-keygen", keygen("SHA256:NEW"))
+	r := runtest.NewRunner().On("ssh-add", agentEmpty()).On("ssh-keygen", keygen("SHA256:NEW"))
 	secret := &fakeSecret{lookupFound: false}
-	prompter := &fakePrompter{err: ErrNoTerminal}
+	prompter := &fakePrompter{err: prompt.ErrNoTerminal}
 	adder := &fakeKeyAdder{}
 	notifier := &fakeNotifier{}
 	log := &fakeLogger{}
@@ -398,7 +405,7 @@ func TestLoadKeysNoTerminalSkipsSilently(t *testing.T) {
 }
 
 func TestLoadKeysSkipsGivenUp(t *testing.T) {
-	r := newFakeRunner().on("ssh-add", agentEmpty()).on("ssh-keygen", keygen("SHA256:NEW"))
+	r := runtest.NewRunner().On("ssh-add", agentEmpty()).On("ssh-keygen", keygen("SHA256:NEW"))
 	adder := &fakeKeyAdder{}
 	give := newFakeGiveup()
 	give.given["id_rsa"] = true
@@ -415,7 +422,7 @@ func TestLoadKeysSkipsGivenUp(t *testing.T) {
 }
 
 func TestLoadKeysRecordsGiveupAfterRetries(t *testing.T) {
-	r := newFakeRunner().on("ssh-add", agentEmpty()).on("ssh-keygen", keygen("SHA256:NEW"))
+	r := runtest.NewRunner().On("ssh-add", agentEmpty()).On("ssh-keygen", keygen("SHA256:NEW"))
 	secret := &fakeSecret{lookupPass: "stale", lookupFound: true}
 	prompter := &fakePrompter{pass: "still-wrong"}
 	adder := &fakeKeyAdder{withCodes: []int{1, 1, 1, 1}}
@@ -431,7 +438,7 @@ func TestLoadKeysRecordsGiveupAfterRetries(t *testing.T) {
 }
 
 func TestLoadKeysClearsGiveupOnSuccess(t *testing.T) {
-	r := newFakeRunner().on("ssh-add", agentEmpty()).on("ssh-keygen", keygen("SHA256:NEW"))
+	r := runtest.NewRunner().On("ssh-add", agentEmpty()).On("ssh-keygen", keygen("SHA256:NEW"))
 	secret := &fakeSecret{lookupPass: "ok", lookupFound: true}
 	adder := &fakeKeyAdder{withCodes: []int{0}}
 	give := newFakeGiveup()
@@ -446,7 +453,7 @@ func TestLoadKeysClearsGiveupOnSuccess(t *testing.T) {
 }
 
 func TestLoadKeysSavesKeyStateOnSuccess(t *testing.T) {
-	r := newFakeRunner().on("ssh-add", agentEmpty()).on("ssh-keygen", keygen("SHA256:NEW"))
+	r := runtest.NewRunner().On("ssh-add", agentEmpty()).On("ssh-keygen", keygen("SHA256:NEW"))
 	secret := &fakeSecret{lookupPass: "ok", lookupFound: true}
 	adder := &fakeKeyAdder{withCodes: []int{0}}
 	ks := &fakeKeyState{}
@@ -461,9 +468,9 @@ func TestLoadKeysSavesKeyStateOnSuccess(t *testing.T) {
 }
 
 func TestLoadKeysSkipsLoadedNeverSavesKeyState(t *testing.T) {
-	r := newFakeRunner().
-		on("ssh-add", stdout("256 SHA256:DUP loaded (ED25519)\n", 0)).
-		on("ssh-keygen", keygen("SHA256:DUP"))
+	r := runtest.NewRunner().
+		On("ssh-add", runtest.Stdout("256 SHA256:DUP loaded (ED25519)\n", 0)).
+		On("ssh-keygen", keygen("SHA256:DUP"))
 	ks := &fakeKeyState{}
 	l := Loader{
 		Keys:     fakeLister{paths: []string{"/ssh/id_x"}},
@@ -479,7 +486,7 @@ func TestLoadKeysSkipsLoadedNeverSavesKeyState(t *testing.T) {
 }
 
 func TestLoadKeysExhaustedRetriesNeverSavesKeyState(t *testing.T) {
-	r := newFakeRunner().on("ssh-add", agentEmpty()).on("ssh-keygen", keygen("SHA256:NEW"))
+	r := runtest.NewRunner().On("ssh-add", agentEmpty()).On("ssh-keygen", keygen("SHA256:NEW"))
 	secret := &fakeSecret{lookupFound: false}
 	prompter := &fakePrompter{pass: "wrong"}
 	adder := &fakeKeyAdder{withCodes: []int{1, 1, 1}}
@@ -494,7 +501,7 @@ func TestLoadKeysExhaustedRetriesNeverSavesKeyState(t *testing.T) {
 }
 
 func TestLoadKeysSessionUnlocksOnceAcrossKeys(t *testing.T) {
-	r := newFakeRunner().on("ssh-add", agentEmpty()).on("ssh-keygen", keygen("SHA256:NEW"))
+	r := runtest.NewRunner().On("ssh-add", agentEmpty()).On("ssh-keygen", keygen("SHA256:NEW"))
 	secret := &fakeSecret{lookupPass: "stored-pass", lookupFound: true}
 	adder := &fakeKeyAdder{withCodes: []int{0, 0}}
 	l := Loader{
@@ -510,9 +517,9 @@ func TestLoadKeysSessionUnlocksOnceAcrossKeys(t *testing.T) {
 }
 
 func TestLoadKeysSessionSkipsUnlockWhenNothingNeeded(t *testing.T) {
-	r := newFakeRunner().
-		on("ssh-add", stdout("256 SHA256:DUP loaded (ED25519)\n", 0)).
-		on("ssh-keygen", keygen("SHA256:DUP"))
+	r := runtest.NewRunner().
+		On("ssh-add", runtest.Stdout("256 SHA256:DUP loaded (ED25519)\n", 0)).
+		On("ssh-keygen", keygen("SHA256:DUP"))
 	secret := &fakeSecret{}
 	l := Loader{
 		Keys:   fakeLister{paths: []string{"/ssh/id_x"}},
@@ -526,7 +533,7 @@ func TestLoadKeysSessionSkipsUnlockWhenNothingNeeded(t *testing.T) {
 }
 
 func TestLoadKeysSessionUnlockFailureFallsBackPerKey(t *testing.T) {
-	r := newFakeRunner().on("ssh-add", agentEmpty()).on("ssh-keygen", keygen("SHA256:NEW"))
+	r := runtest.NewRunner().On("ssh-add", agentEmpty()).On("ssh-keygen", keygen("SHA256:NEW"))
 	secret := &fakeSecret{lookupPass: "stored-pass", lookupFound: true, unlockErr: errors.New("dismissed")}
 	adder := &fakeKeyAdder{withCodes: []int{0, 0}}
 	l := Loader{
@@ -542,22 +549,22 @@ func TestLoadKeysSessionUnlockFailureFallsBackPerKey(t *testing.T) {
 }
 
 func TestLoadKeysNoKeys(t *testing.T) {
-	r := newFakeRunner() // ssh-add must not be consulted
+	r := runtest.NewRunner() // ssh-add must not be consulted
 	log := &fakeLogger{}
 	l := Loader{Keys: fakeLister{paths: nil}, Runner: r, Log: log}
 	require.NoError(t, l.LoadKeys(t.Context()), "loading a login's keys must not fail")
 	assert.Truef(t, log.contains("no keys"), "the log must say there was nothing to do: %v", log.lines)
-	assert.Emptyf(t, r.calls, "and a login with no keys must not go asking the agent about them: %v", r.calls)
+	assert.Emptyf(t, r.Calls, "and a login with no keys must not go asking the agent about them: %v", r.Calls)
 }
 
 func TestLoadKeysEnumerateError(t *testing.T) {
-	l := Loader{Keys: fakeLister{err: errors.New("readdir boom")}, Runner: newFakeRunner()}
+	l := Loader{Keys: fakeLister{err: errors.New("readdir boom")}, Runner: runtest.NewRunner()}
 	assert.Error(t, l.LoadKeys(t.Context()),
 		"a key directory that could not be read must be reported, not read as a login with no keys")
 }
 
 func TestLoadKeysAgentSnapshotError(t *testing.T) {
-	r := newFakeRunner().on("ssh-add", fails(errors.New("no ssh-add")))
+	r := runtest.NewRunner().On("ssh-add", runtest.Fails(errors.New("no ssh-add")))
 	l := Loader{Keys: fakeLister{paths: []string{"/ssh/id_rsa"}}, Runner: r}
 	assert.Error(t, l.LoadKeys(t.Context()),
 		"an agent that could not be asked what it holds must be reported: every key would look unloaded")

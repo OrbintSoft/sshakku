@@ -13,6 +13,9 @@ import (
 	"time"
 
 	"github.com/OrbintSoft/sshakku/internal/keyring"
+	"github.com/OrbintSoft/sshakku/internal/keys/handoff"
+	"github.com/OrbintSoft/sshakku/internal/keys/prompt"
+	"github.com/OrbintSoft/sshakku/internal/run"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -20,7 +23,7 @@ import (
 // TestLoadKeysHeadlessVaultHit confirms the full proactive path — a real
 // ssh-agent, real ssh-add, and the real keyring+SSH_ASKPASS handoff — loads a
 // key from a stored passphrase with no graphical prompter involved at all: a
-// Prompter that fails the test if it is ever called proves the vault is
+// prompt.Prompter that fails the test if it is ever called proves the vault is
 // genuinely consulted headless, never skipped in favour of prompting just
 // because no GUI is available.
 func TestLoadKeysHeadlessVaultHit(t *testing.T) {
@@ -46,12 +49,12 @@ func TestLoadKeysHeadlessVaultHit(t *testing.T) {
 	t.Setenv("SSH_AUTH_SOCK", sock)
 
 	askpassScript := filepath.Join(dir, "askpass.sh")
-	script := "#!/bin/sh\nexec keyctl pipe \"$" + EnvPassHandoffToken + "\"\n"
+	script := "#!/bin/sh\nexec keyctl pipe \"$" + handoff.EnvToken + "\"\n"
 	require.NoError(t, os.WriteFile(askpassScript, []byte(script), 0o755), "a helper to collect the stashed passphrase")
 
 	loader := Loader{
 		Keys:   fakeLister{paths: []string{keyfile}},
-		Runner: ExecRunner{},
+		Runner: run.ExecRunner{},
 		Secret: &fakeSecret{lookupPass: passphrase, lookupFound: true},
 		Prompt: &fakePrompter{err: errors.New("must not be prompted: a vault hit should never reach the prompt step")},
 		Adder:  ExecKeyAdder{AskpassProg: askpassScript},
@@ -59,7 +62,7 @@ func TestLoadKeysHeadlessVaultHit(t *testing.T) {
 	}
 	require.NoError(t, loader.LoadKeys(t.Context()), "a login with a stored passphrase must load the key")
 
-	runner := ExecRunner{}
+	runner := run.ExecRunner{}
 	fp, err := FileFingerprint(t.Context(), runner, keyfile)
 	require.NoError(t, err, "reading the key's fingerprint must succeed")
 	loaded, err := AgentFingerprints(t.Context(), runner)
@@ -71,7 +74,7 @@ func TestLoadKeysHeadlessVaultHit(t *testing.T) {
 
 // TestLoadKeysNoTerminalReturnsPromptly confirms that with no stored
 // passphrase and no controlling terminal at all, the full proactive path —
-// through the real TTYPrompter, not a fake — returns promptly rather than
+// through the real prompt.TTYPrompter, not a fake — returns promptly rather than
 // hanging, leaving the key simply unloaded. It re-execs this test binary
 // detached (Setsid) into its own session against a real ssh-agent, so the
 // child genuinely has no controlling terminal regardless of what the test
@@ -123,16 +126,16 @@ func TestLoadKeysNoTerminalReturnsPromptly(t *testing.T) {
 
 // runLoadKeysNoTerminalHelper is the detached child of
 // TestLoadKeysNoTerminalReturnsPromptly: it drives a real Loader — real
-// ssh-agent (named by $SSH_AUTH_SOCK), real TTYPrompter, no stored
+// ssh-agent (named by $SSH_AUTH_SOCK), real prompt.TTYPrompter, no stored
 // passphrase — and exits with a distinct code per failure mode, since this
 // runs detached from go test's own reporting.
 func runLoadKeysNoTerminalHelper() {
 	keyfile := os.Getenv("SSHAKKU_TEST_KEYFILE")
 	loader := Loader{
 		Keys:   fakeLister{paths: []string{keyfile}},
-		Runner: ExecRunner{},
+		Runner: run.ExecRunner{},
 		Secret: &fakeSecret{lookupFound: false},
-		Prompt: TTYPrompter{},
+		Prompt: prompt.TTYPrompter{},
 		Adder:  ExecKeyAdder{},
 		Log:    &fakeLogger{},
 	}
@@ -144,7 +147,7 @@ func runLoadKeysNoTerminalHelper() {
 		os.Exit(1)
 	}
 
-	runner := ExecRunner{}
+	runner := run.ExecRunner{}
 	fp, err := FileFingerprint(ctx, runner, keyfile)
 	if err != nil {
 		os.Exit(2)

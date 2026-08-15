@@ -9,6 +9,8 @@ import (
 	"os/exec"
 	"strconv"
 	"time"
+
+	"github.com/OrbintSoft/sshakku/internal/keys/handoff"
 )
 
 const (
@@ -25,7 +27,7 @@ const (
 // exercisable without a live keyring or a real ssh-add. Production points them
 // at the real stash and os/exec run.
 var (
-	stashPass = stashPassphrase
+	stashPass = handoff.Stash
 	runCmd    = func(cmd *exec.Cmd) error {
 		// Running ssh-add is an external-process side effect; runSSHAdd's exit-code
 		// and start-failure handling around this call is unit-tested by stubbing runCmd.
@@ -67,7 +69,7 @@ func (a ExecKeyAdder) AddWithAskpass(ctx context.Context, keyfile, passphrase st
 	env := []string{
 		"SSH_ASKPASS=" + a.AskpassProg,
 		"SSH_ASKPASS_REQUIRE=force",
-		EnvPassHandoffToken + "=" + token,
+		handoff.EnvToken + "=" + token,
 	}
 	env = passThrough(env, "PATH", "HOME", "USER", "DISPLAY", "WAYLAND_DISPLAY",
 		"SSH_AUTH_SOCK", "XDG_RUNTIME_DIR", "XDG_CONFIG_HOME", "DBUS_SESSION_BUS_ADDRESS")

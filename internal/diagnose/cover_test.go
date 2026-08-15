@@ -7,19 +7,22 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/OrbintSoft/sshakku/internal/diagnose/hostcheck"
+	"github.com/OrbintSoft/sshakku/internal/diagnose/launcher"
 )
 
-// fakeHostSource returns a fixed HostChecks, so Gather's host!=nil branch can be
+// fakeHostSource returns a fixed hostcheck.Checks, so Gather's host!=nil branch can be
 // exercised without touching the real /proc or /sys.
-type fakeHostSource struct{ hc HostChecks }
+type fakeHostSource struct{ hc hostcheck.Checks }
 
-func (f fakeHostSource) Checks(context.Context) HostChecks { return f.hc }
+func (f fakeHostSource) Checks(context.Context) hostcheck.Checks { return f.hc }
 
 // TestGatherRunsHostChecks covers Gather's branch that consults a non-nil
-// HostSource and records its result in the report.
+// hostcheck.Source and records its result in the report.
 func TestGatherRunsHostChecks(t *testing.T) {
 	enc := true
-	r := Gather(t.Context(), Inputs{}, fakeSource{}, fakeProber{}, nil, nil, nil, fakeHostSource{hc: HostChecks{DiskEncrypted: &enc}})
+	r := Gather(t.Context(), Inputs{}, fakeSource{}, fakeProber{}, nil, nil, nil, fakeHostSource{hc: hostcheck.Checks{DiskEncrypted: &enc}})
 	assert.Equal(t, &enc, r.Host.DiskEncrypted, "the report must carry what the host source answered")
 }
 
@@ -33,7 +36,7 @@ func TestFormatRemainingBranches(t *testing.T) {
 		EnvReachable: false,
 		Agents: []AgentView{{
 			PID:      9,
-			Ancestry: []ProcInfo{{PID: 9, Name: "ssh-agent"}, {PID: 8, Name: "bash"}},
+			Ancestry: []launcher.ProcInfo{{PID: 9, Name: "ssh-agent"}, {PID: 8, Name: "bash"}},
 		}},
 		KeysErr: errors.New("permission denied"),
 	})
@@ -50,12 +53,12 @@ func TestFormatRemainingBranches(t *testing.T) {
 // /tmp of unknown size, a nil /tmp state, and nil secure hardware.
 func TestHostChecksLineUndeterminedFields(t *testing.T) {
 	tmpfs := true
-	got := hostChecksLine(HostChecks{TmpTmpfs: &tmpfs})
+	got := hostChecksLine(hostcheck.Checks{TmpTmpfs: &tmpfs})
 	assert.Contains(t, got, "disk encryption: undetermined", "what was not established must be said to be undetermined")
 	assert.Contains(t, got, "/tmp: tmpfs, size undetermined", "a tmpfs of unknown size is still reported as a tmpfs")
 	assert.Contains(t, got, "secure hardware: undetermined", "what was not established must be said to be undetermined")
 
 	enc := true
-	assert.Contains(t, hostChecksLine(HostChecks{DiskEncrypted: &enc}), "/tmp: undetermined",
+	assert.Contains(t, hostChecksLine(hostcheck.Checks{DiskEncrypted: &enc}), "/tmp: undetermined",
 		"a /tmp nothing was learned about must be said to be undetermined")
 }

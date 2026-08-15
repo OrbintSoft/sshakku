@@ -1,0 +1,284 @@
+//go:build linux
+
+package prompt
+
+import (
+	"bufio"
+	"context"
+	"fmt"
+	"io"
+	"os/exec"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/OrbintSoft/sshakku/internal/run"
+)
+
+// pinentryBin is the passphrase dialog that comes with GnuPG. Which toolkit it
+// draws with — Qt, GTK, GNOME — is settled by the distribution's own choice of
+// pinentry, so asking for it by this name gets a dialog that suits the desktop
+// it appears on, without SSHakku having to recognise the desktop.
+const pinentryBin = "pinentry"
+
+// consoleFlavors are the builds of pinentry that draw on a terminal: they can
+// ask, but not where someone sitting at a screen is looking.
+var consoleFlavors = map[string]bool{"curses": true, "tty": true}
+
+// Seams over the pipes a conversation runs on. Production takes the ones
+// exec.Cmd makes; a test points them at a failure, which nothing else can —
+// exec.Cmd refuses these only for a command whose streams are already set or
+// that has already been started, and the one here is neither.
+var (
+	stdinPipe  = func(cmd *exec.Cmd) (io.WriteCloser, error) { return cmd.StdinPipe() }
+	stdoutPipe = func(cmd *exec.Cmd) (io.ReadCloser, error) { return cmd.StdoutPipe() }
+)
+
+// The Assuan error codes a dismissed dialog reports. Only the low 16 bits of an
+// error number are the code itself; the rest names the component that raised it.
+const (
+	gpgErrCodeMask      = 0xFFFF
+	gpgErrCanceled      = 99
+	gpgErrFullyCanceled = 100
+)
+
+// PinentryPrompter prompts via pinentry. Unlike a dialog that takes its
+// arguments on a command line and prints the answer, pinentry is driven through
+// a conversation on its own stdin and stdout: the description and the prompt are
+// set with one request each, the passphrase is asked for with another, and every
+// request is answered before the next is sent.
+type PinentryPrompter struct {
+	// Bin is the program to run. Empty means pinentry, found on PATH.
+	Bin string
+	// Timeout bounds the dialog. It is a person's budget, not a machine's, but
+	// still finite: a dialog nobody answers must not strand the shell that
+	// raised it. Zero selects run.DefaultInteractiveTimeout.
+	Timeout time.Duration
+	// ProbeTimeout bounds asking pinentry about itself. Nobody is being waited
+	// on there, so it is an ordinary command's budget rather than a person's.
+	// Zero selects run.DefaultCommandTimeout.
+	ProbeTimeout time.Duration
+	// lookPath resolves a binary on PATH; nil uses the os/exec default. Injectable
+	// for tests.
+	lookPath func(string) (string, error)
+}
+
+// Prompt asks for keyname's passphrase and returns what was typed into the
+// dialog, or ErrCanceled if it was dismissed.
+//
+// pinentry inherits this process's environment, which is how it finds the
+// display to draw on. It is deliberately not told about a terminal: a pinentry
+// built for the console would otherwise take one over, and the terminal is the
+// other prompter's job, not this one's.
+func (p PinentryPrompter) Prompt(ctx context.Context, keyname string) (string, error) {
+	timeout := p.Timeout
+	if timeout <= 0 {
+		timeout = run.DefaultInteractiveTimeout
+	}
+	return p.converse(ctx, timeout, func(c *assuanConv) (string, error) { return c.getpin(keyname) })
+}
+
+// converse runs one pinentry, hands the conversation with it to ask, and closes
+// the dialog and reaps the process however that ends.
+func (p PinentryPrompter) converse(ctx context.Context, timeout time.Duration, ask func(*assuanConv) (string, error)) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, p.bin())
+	// The deadline has to end the wait, not merely the process: a dialog that
+	// left a child behind keeps the pipe this conversation is read from open,
+	// and the read would outlast the budget by however long that child lives.
+	run.BoundToDeadline(cmd)
+	stdin, err := stdinPipe(cmd)
+	if err != nil {
+		return "", err
+	}
+	stdout, err := stdoutPipe(cmd)
+	if err != nil {
+		return "", err
+	}
+	if err := cmd.Start(); err != nil {
+		return "", fmt.Errorf("starting %s: %w", p.bin(), err)
+	}
+	// However the conversation ends, the dialog is closed and the process
+	// reaped: one nobody answered must not outlive the shell that raised it.
+	defer func() {
+		_ = stdin.Close()
+		_ = cmd.Wait()
+	}()
+
+	return ask(&assuanConv{w: stdin, r: bufio.NewReader(stdout)})
+}
+
+// Available reports whether pinentry is installed and can put a dialog on a
+// screen. Being installed is not enough: GnuPG has builds that draw on a
+// terminal, and one of those chosen here would take the prompt away from a
+// dialog that can be drawn and then have nowhere to draw it.
+//
+// pinentry is asked which builds it draws with rather than guessed at from its
+// name. The answer is a chain, most capable first — a GTK build answers
+// "gtk2:curses", meaning it draws with GTK and falls back to the console where
+// there is no display — so what settles it is the first of them.
+//
+// An answer nobody understands, or none at all, counts as a dialog: passing over
+// one that works is the worse mistake, and one that fails when it is finally
+// asked already reaches the terminal with its name in the log.
+func (p PinentryPrompter) Available(ctx context.Context) bool {
+	look := p.lookPath
+	if look == nil {
+		look = execLookPath
+	}
+	if _, err := look(p.bin()); err != nil {
+		return false
+	}
+	timeout := p.ProbeTimeout
+	if timeout <= 0 {
+		timeout = run.DefaultCommandTimeout
+	}
+	flavor, err := p.converse(ctx, timeout, (*assuanConv).flavor)
+	if err != nil {
+		return true
+	}
+	drawsWith, _, _ := strings.Cut(flavor, ":")
+	return !consoleFlavors[strings.TrimSpace(drawsWith)]
+}
+
+// Name is what to call this prompter in a message.
+func (p PinentryPrompter) Name() string { return p.bin() }
+
+// WhyUnavailable covers both reasons there is no dialog here, since a user told
+// only the first would go and install what they already have.
+func (p PinentryPrompter) WhyUnavailable() string {
+	return "is not installed, or is a build that draws on a terminal rather than on a screen"
+}
+
+// bin is the program to run, defaulted.
+func (p PinentryPrompter) bin() string {
+	if p.Bin != "" {
+		return p.Bin
+	}
+	return pinentryBin
+}
+
+// assuanConv is one conversation with a running pinentry.
+type assuanConv struct {
+	w io.Writer
+	r *bufio.Reader
+}
+
+// getpin runs the exchange that ends in a passphrase: pinentry announces itself,
+// is told what to say and what to ask, and is then asked for the answer.
+func (c *assuanConv) getpin(keyname string) (string, error) {
+	if _, err := c.reply(); err != nil {
+		return "", fmt.Errorf("pinentry greeting: %w", err)
+	}
+	for _, req := range []string{
+		"SETTITLE " + assuanEncode("SSHakku"),
+		"SETDESC " + assuanEncode("Enter passphrase for "+keyname),
+		"SETPROMPT " + assuanEncode("Passphrase:"),
+	} {
+		if _, err := c.send(req); err != nil {
+			return "", err
+		}
+	}
+	pass, err := c.send("GETPIN")
+	if err != nil {
+		return "", err
+	}
+	// Best effort: the answer is already in hand, and a pinentry that will not
+	// say goodbye is still killed and reaped by the caller.
+	_, _ = c.send("BYE")
+	return pass, nil
+}
+
+// flavor asks pinentry which builds it can draw with, most capable first.
+func (c *assuanConv) flavor() (string, error) {
+	if _, err := c.reply(); err != nil {
+		return "", fmt.Errorf("pinentry greeting: %w", err)
+	}
+	drawsWith, err := c.send("GETINFO flavor")
+	if err != nil {
+		return "", err
+	}
+	// Best effort, as in getpin: the answer is already in hand.
+	_, _ = c.send("BYE")
+	return drawsWith, nil
+}
+
+// send writes one request and returns what it was answered with.
+func (c *assuanConv) send(req string) (string, error) {
+	if _, err := io.WriteString(c.w, req+"\n"); err != nil {
+		return "", fmt.Errorf("writing to pinentry: %w", err)
+	}
+	return c.reply()
+}
+
+// reply reads response lines until the request is answered. Data lines carry the
+// answer; status lines and comments are pinentry talking about itself and answer
+// nothing, so they are read past rather than mistaken for a passphrase.
+func (c *assuanConv) reply() (string, error) {
+	var data strings.Builder
+	for {
+		line, err := c.r.ReadString('\n')
+		if err != nil {
+			return "", fmt.Errorf("pinentry ended the conversation: %w", err)
+		}
+		line = strings.TrimRight(line, "\r\n")
+		switch {
+		case line == "OK" || strings.HasPrefix(line, "OK "):
+			return data.String(), nil
+		case strings.HasPrefix(line, "ERR "):
+			return "", assuanError(strings.TrimPrefix(line, "ERR "))
+		case strings.HasPrefix(line, "D "):
+			data.WriteString(assuanDecode(strings.TrimPrefix(line, "D ")))
+		}
+	}
+}
+
+// assuanError turns an ERR line into an error, recognising the one that is not a
+// failure at all: a dialog the user closed on purpose.
+func assuanError(rest string) error {
+	number, desc, _ := strings.Cut(rest, " ")
+	code, err := strconv.Atoi(number)
+	if err != nil {
+		return fmt.Errorf("pinentry: %s", rest)
+	}
+	switch code & gpgErrCodeMask {
+	case gpgErrCanceled, gpgErrFullyCanceled:
+		return ErrCanceled
+	}
+	if desc == "" {
+		return fmt.Errorf("pinentry: error %d", code)
+	}
+	return fmt.Errorf("pinentry: %s", desc)
+}
+
+// assuanDecode undoes the percent-escaping the protocol requires of any byte
+// that would otherwise end a line or start an escape. An escape that is not one
+// is left as it stands: a passphrase is returned as it was typed, and guessing
+// at a malformed one would be guessing at somebody's secret.
+func assuanDecode(s string) string {
+	if !strings.Contains(s, "%") {
+		return s
+	}
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] == '%' && i+2 < len(s) {
+			if v, err := strconv.ParseUint(s[i+1:i+3], 16, 8); err == nil {
+				b.WriteByte(byte(v))
+				i += 2
+				continue
+			}
+		}
+		b.WriteByte(s[i])
+	}
+	return b.String()
+}
+
+// assuanEncode escapes what a request line cannot carry literally.
+func assuanEncode(s string) string {
+	r := strings.NewReplacer("%", "%25", "\r", "%0D", "\n", "%0A")
+	return r.Replace(s)
+}
+
+var _ Prompter = PinentryPrompter{}

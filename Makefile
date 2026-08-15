@@ -278,7 +278,7 @@ test-leakprofile:
 # a wrong signature in the keychain client — and it has to catch it in the
 # configuration the shipped binary is built in.
 test-keychain:
-	SSHAKKU_TEST_ALLOW_REAL_KEYCHAIN=1 CGO_ENABLED=0 $(GO) test -count=1 -run TestDarwinKeychainClientRealRoundTrip ./internal/keys/
+	SSHAKKU_TEST_ALLOW_REAL_KEYCHAIN=1 CGO_ENABLED=0 $(GO) test -count=1 -run TestDarwinKeychainClientRealRoundTrip ./internal/keys/...
 
 # Shell-level login-hook and agent-lifecycle regression suite. Requires
 # bats-core; only safe in a disposable environment (the container test suite
@@ -306,12 +306,16 @@ print-paths:
 # the former belong to shellcheck; the rest are linted by the tool for their own
 # format (config files by taplo, via lint-toml).
 BATS_FIXTURES = $(filter-out %.toml,$(wildcard test/bats/fixtures/*))
-SH_SCRIPTS = $(wildcard *.sh) $(wildcard .githooks/*) $(wildcard .github/scripts/*.sh) $(wildcard test/*.sh) $(wildcard test/containers/*.sh) $(wildcard test/fakes/*.sh) $(wildcard test/bats/*.bats) $(wildcard test/bats/*.bash) $(wildcard cmd/*/testdata/*.sh) $(BATS_FIXTURES)
+SH_SCRIPTS = $(wildcard *.sh) $(wildcard .githooks/*) $(wildcard .github/scripts/*.sh) $(wildcard test/*.sh) $(wildcard test/containers/*.sh) $(wildcard test/fakes/*.sh) $(wildcard test/bats/*.bats) $(wildcard test/bats/*.bash) $(shell find cmd internal -path '*/testdata/*.sh') $(BATS_FIXTURES)
 ZSH_SCRIPTS = $(wildcard *.zsh)
-BAT_FILES = $(wildcard cmd/*/testdata/*.cmd)
+# Found rather than globbed at a fixed depth: a fixture that moves with the
+# package it belongs to must not stop being linted without anything saying so.
+BAT_FILES = $(shell find cmd internal -path '*/testdata/*.cmd')
 DOCKERFILES = $(wildcard test/containers/*.Dockerfile)
 
-APPLESCRIPTS = $(wildcard internal/keys/*.applescript)
+# Found rather than globbed at a fixed depth: a script that moves to another
+# package must not stop being linted without anything saying so.
+APPLESCRIPTS = $(shell find internal -name '*.applescript')
 XML_FILES = $(wildcard internal/*/testdata/*.xml)
 
 lint: lint-sh lint-zsh lint-bat lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go lint-docker lint-applescript lint-xml
