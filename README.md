@@ -138,6 +138,7 @@ why.
 | [docs/DIAGNOSTICS.md](docs/DIAGNOSTICS.md) | `sshakku doctor`: reading the report, `--fix`, `--user`, and `--test-backend`. |
 | [docs/FEATURES.md](docs/FEATURES.md) | Every behaviour SSHakku promises, stated as something you can check yourself — the list to hold it to. |
 | [docs/HARDENING.md](docs/HARDENING.md) | Practical steps outside SSHakku itself that keep your keys safer: a short key lifetime, not leaving the wallet unlocked, disk encryption, and `/tmp`. |
+| [docs/INSTALLATION.md](docs/INSTALLATION.md) | What an install actually does, where each piece goes, and how the shell it wires itself into is chosen — read this when your machine is not the ordinary case: several shells, several PowerShell editions, or a policy that decides what your shell may run. |
 | [docs/TEST-MATRIX.md](docs/TEST-MATRIX.md) | Every user-facing scenario — OS, secret backend, shell environment, configuration — and whether it's covered by an automated test today. |
 | [docs/THREAT-MODEL.md](docs/THREAT-MODEL.md) | What SSHakku protects against, what it doesn't, and why — for anyone evaluating it for a security-sensitive setup. |
 
