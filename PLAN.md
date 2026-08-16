@@ -2370,6 +2370,20 @@ the marker block in the profile is the mechanism that has to work.
   install time, with what it would take, rather than discovered at the next
   login.
 
+  **Restating the shell library in Go found a defect in the shell library**,
+  and the Go primitives deliberately do not reproduce it. `upsert_block` writes
+  through `mktemp` and renames the result into place, and a rename carries the
+  temporary file's mode with it: measured on Debian, an existing `0644` startup
+  file comes back `0600`, and one the library creates is `0600` from the start.
+  Per-user that is harmless; machine-wide it is not, since `WIRE_BASHRC=1 make
+  install` upserts into `/etc/bash.bashrc`, which every account has to read at
+  login. The Go side sets the mode explicitly — the file keeps what it had,
+  a new one gets `0644`, a drop-in gets `0755` — and three tests fail with
+  `0600` when that is removed. Fixing `shell-hook-lib.sh` itself is not folded
+  in here: this step changes nothing on Linux or macOS, and the fix wants its
+  own failing test first (rule 23). It is the one place where "byte-identical"
+  means the file's *contents* and not its mode.
+
   Deferred here on purpose, so they are not read as oversights: the agent
   endpoint (see W4's findings), the askpass helper — wiring `askpass-env` on
   Windows today would trade a working console prompt for a helper that always
