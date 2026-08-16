@@ -89,6 +89,13 @@ make build   # go build -o bin/sshakku ./cmd/sshakku
 make test    # go test -race ./...
 ```
 
+On Windows both run from Git Bash, and the binary is built as
+`bin/sshakku.exe`: that system runs a program by its extension, and the path a
+wiring writes into a shell's startup file is this one. Installing is the
+program's own job there — `bin/sshakku.exe install`, see
+[INSTALLATION.md](INSTALLATION.md) — so `make install` and `make install-user`
+say so and stop rather than writing Unix paths onto a machine that has none.
+
 `make test` is what CI runs on every push, on a plain Linux runner (with
 `dbus-daemon` installed, since some `internal/secretservice`/`internal/keys`
 tests talk to a real D-Bus session bus).
@@ -152,6 +159,19 @@ failure-injection tags — because golangci-lint only ever looks at one. You can
 run all of them from either machine: no macOS host is needed to lint the macOS
 files, and a file that only compiles under a build tag is analysed only if that
 build is in the list.
+
+The file lists the targets walk are built with `find`, and the patterns they
+match are double-quoted for a reason worth knowing before you change one: a
+`make` built for Windows runs a command without a shell when it holds nothing
+that system treats as special, and a single-quoted pattern qualifies — so
+`find` becomes Windows' own `FIND`, the list comes back empty, and the linter
+reports success having examined no files. Double quotes send it through `sh`,
+where the pattern means what it says on every platform.
+
+Linting from Windows needs more of the tools than testing does, and two are
+awkward there: `blinter` is a Python program, and Git for Windows ships no
+`xmllint`. `lint-ps1` needs `pwsh` — Windows PowerShell is not it — and says
+so rather than passing quietly when there is none.
 
 ## Recommended dev environment
 

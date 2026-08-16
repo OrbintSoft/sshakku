@@ -54,7 +54,17 @@ endif
 
 GO ?= go
 GO_MAIN = ./cmd/sshakku
+# Windows runs a program by its extension, so the name it is built under is part
+# of whether it can be run at all — and the hook a wiring writes names this path.
+# `uname` under a POSIX-emulating environment there reports the environment and
+# its kernel version (MINGW64_NT-10.0-…), so the family is matched, never the
+# whole string.
+WINDOWS_UNAME = $(filter MINGW% MSYS%,$(UNAME))
+ifeq ($(WINDOWS_UNAME),)
 GO_BIN = bin/sshakku
+else
+GO_BIN = bin/sshakku.exe
+endif
 
 # The race detector is built on cgo, and the binary this project distributes
 # must not need a C toolchain to produce. SSHAKKU_RACE picks between the two:
@@ -216,6 +226,20 @@ uninstall-user:
 	@./install-user-hook.sh uninstall "$(USER_HOME)" "$(NN)" "$(USER_SHELL)"
 	@echo "Uninstallation complete."
 
+else ifneq ($(WINDOWS_UNAME),)
+
+# Here the wiring is the program's own job rather than this file's. Which file a
+# shell reads is a question only that shell can answer — PowerShell keeps four
+# profiles and puts them where its own installation decides — so it is asked, by
+# `sshakku install`, instead of being assembled from paths written down here.
+# Building and testing work from this file as they do anywhere.
+install uninstall install-user uninstall-user:
+	@echo "On $(UNAME) the wiring is done by the program itself."
+	@echo "  make build"
+	@echo "  $(GO_BIN) install     # and 'uninstall' to take it back out"
+	@echo "See docs/INSTALLATION.md for the flags and where each piece goes."
+	@exit 1
+
 else
 
 install uninstall install-user uninstall-user:
@@ -306,21 +330,21 @@ print-paths:
 # the former belong to shellcheck; the rest are linted by the tool for their own
 # format (config files by taplo, via lint-toml).
 BATS_FIXTURES = $(filter-out %.toml,$(wildcard test/bats/fixtures/*))
-SH_SCRIPTS = $(wildcard *.sh) $(wildcard .githooks/*) $(wildcard .github/scripts/*.sh) $(wildcard test/*.sh) $(wildcard test/containers/*.sh) $(wildcard test/fakes/*.sh) $(wildcard test/bats/*.bats) $(wildcard test/bats/*.bash) $(shell find cmd internal -name '*.sh') $(BATS_FIXTURES)
+SH_SCRIPTS = $(wildcard *.sh) $(wildcard .githooks/*) $(wildcard .github/scripts/*.sh) $(wildcard test/*.sh) $(wildcard test/containers/*.sh) $(wildcard test/fakes/*.sh) $(wildcard test/bats/*.bats) $(wildcard test/bats/*.bash) $(shell find cmd internal -name "*.sh") $(BATS_FIXTURES)
 ZSH_SCRIPTS = $(wildcard *.zsh)
 # Found rather than globbed at a fixed depth: a fixture that moves with the
 # package it belongs to must not stop being linted without anything saying so.
-BAT_FILES = $(shell find cmd internal -path '*/testdata/*.cmd')
+BAT_FILES = $(shell find cmd internal -path "*/testdata/*.cmd")
 DOCKERFILES = $(wildcard test/containers/*.Dockerfile)
 
 # Found rather than globbed at a fixed depth: a script that moves to another
 # package must not stop being linted without anything saying so.
-APPLESCRIPTS = $(shell find internal -name '*.applescript')
+APPLESCRIPTS = $(shell find internal -name "*.applescript")
 XML_FILES = $(wildcard internal/*/testdata/*.xml)
 
 # The login hook lives at the top level beside its Bourne counterpart; the rest
 # are found rather than globbed at a fixed depth, for the same reason as above.
-PS1_FILES = $(wildcard *.ps1) $(shell find cmd internal tools -name '*.ps1')
+PS1_FILES = $(wildcard *.ps1) $(shell find cmd internal tools -name "*.ps1")
 
 lint: lint-sh lint-zsh lint-bat lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go lint-docker lint-applescript lint-ps1 lint-xml
 
