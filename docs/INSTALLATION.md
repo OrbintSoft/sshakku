@@ -44,11 +44,15 @@ sshakku install [--shell=auto|bash|zsh|powershellcore|windowspowershell]
                 [--profile=<file>]            # or name the file yourself
                 [--scope=user|machine]        # default: user
                 [--hosts=all|current]         # PowerShell only, default: all
-                [--rc]                        # also the non-login file (bash/zsh)
                 [--no-path]                   # skip the PATH step
-                [--dry-run]                   # print what would be written, write nothing
 sshakku uninstall [the same selectors]
 ```
+
+Two selectors described elsewhere on this page are not there yet, and asking
+for one is a usage error rather than something quietly ignored: `--rc`, for the
+opt-in non-login wiring, and `--dry-run`. On Linux and macOS the non-login
+wiring is `make install-user`'s `WIRE_BASHRC=1`/`WIRE_ZSHRC=1`, which is
+unaffected by any of this.
 
 `sshakku install` with nothing else wires **the shell you ran it from**: from a
 PowerShell window it wires that PowerShell, from Git Bash it wires that bash.
@@ -101,7 +105,9 @@ existing is taken as saying that it is read.
 
 A login shell does not fire for every new terminal — a plain tab, or a
 multiplexer pane, usually starts a non-login shell that reads the rc file
-instead. `--rc` wires that one too. It is additive, and never a replacement.
+instead. `--rc` will wire that one too, additively and never as a replacement —
+it is the selector named above as not yet there, so today the login file is the
+only one `sshakku install` writes.
 
 Under Git Bash and other MSYS-derived environments, the same files are wired,
 with two differences that are invisible once they work: the environment's own

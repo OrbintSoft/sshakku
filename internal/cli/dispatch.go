@@ -52,6 +52,13 @@ commands:
                  --test-backend [name] stores/looks up/deletes a throwaway
                  probe entry in the named (or configured) secret backend
   forget         delete stored passphrases: <keyname>... or --all
+  install        wire the login hook into one shell; uninstall takes it out.
+                 With nothing else, the shell is the one you ran it from.
+                 --shell <name> looks one up, --shell-exe <path> names the
+                 interpreter to ask about itself, --profile <file> names the
+                 file outright; --scope <user|machine>, --hosts <all|current>
+                 for a PowerShell, --no-path to skip the environment step
+  uninstall      take that wiring back out, with the same selectors
   help           show this help
 
 shell-init, ensure-agent and askpass-env print lines for a shell to run, and
@@ -191,6 +198,10 @@ func (d deps) run(ctx context.Context, stdout, stderr io.Writer, args []string) 
 		return d.doctor(ctx, stdout, stderr, args[1:])
 	case "forget":
 		return d.forget(ctx, stdout, stderr, args[1:])
+	case "install":
+		return d.install(ctx, stdout, stderr, args[1:])
+	case "uninstall":
+		return d.uninstall(ctx, stdout, stderr, args[1:])
 	case crossuser.ReadSocketTokenCmd:
 		return readSocketTokenInternal(stdout)
 	case "help", "-h", "--help":

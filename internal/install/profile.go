@@ -30,6 +30,27 @@ const (
 	CurrentHost Hosts = "current"
 )
 
+// ParseScope reads a `--scope` value, refusing one nobody serves rather than
+// carrying an unusable value down to whatever would have written a file.
+func ParseScope(name string) (Scope, error) {
+	for _, scope := range []Scope{User, Machine} {
+		if name == string(scope) {
+			return scope, nil
+		}
+	}
+	return "", unknownScope(Scope(name))
+}
+
+// ParseHosts reads a `--hosts` value.
+func ParseHosts(name string) (Hosts, error) {
+	for _, hosts := range []Hosts{AllHosts, CurrentHost} {
+		if name == string(hosts) {
+			return hosts, nil
+		}
+	}
+	return "", fmt.Errorf("no profile is selected by hosts %q; hosts is %q or %q", name, AllHosts, CurrentHost)
+}
+
 // ProfileFor names the one file a PowerShell install writes into, out of the
 // five the interpreter reports.
 //

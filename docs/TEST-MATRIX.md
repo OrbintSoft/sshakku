@@ -137,10 +137,29 @@ table above has established where that backend is available at all.
 
 | Case | Linux | macOS | Windows |
 | --- | --- | --- | --- |
-| System-wide (`make install`/`uninstall`) | ✅ `test/linux-install-smoke.sh` | ✅ `test/macos-install-smoke.sh` | ❌ there is nothing to install yet: the binary builds and its suite runs, and the wiring — `sshakku install`, the shells it can wire, and the `PATH` entry it records — is what `docs/INSTALLATION.md` describes and PLAN.md's W3 implements |
+| System-wide (`make install`/`uninstall`) | ✅ `test/linux-install-smoke.sh` | ✅ `test/macos-install-smoke.sh` | ❌ the wiring half now has a table of its own below; what has no cell is the Makefile, which does not yet know this platform, so there is no one command that puts the binary in place and wires it |
 | Per-user (`make install-user`/`uninstall-user`) | ✅ `test/linux-install-smoke.sh` | ✅ same script | ❌ same, and it is the scope that has to work first: an account on Windows can install for itself without an elevated prompt, which is how most people will meet this |
 | Non-login shell wiring, opt-in (`WIRE_BASHRC=1`/`WIRE_ZSHRC=1`) (F20) | ✅ `test/linux-install-smoke.sh` (both the `bashrc.d` drop-in and the fallback-file shape) | ✅ `test/macos-install-smoke.sh` — the system-wide `/etc/zshrc` marker block and both per-user shapes (a drop-in into an existing `~/.zshrc.d`, a marker block in `~/.zshrc` when there is none), each checked to leave the login-shell wiring in place and to be removed again on uninstall | ❌ the Git Bash equivalent is the same opt-in under another name; PowerShell has no such pair, since it reads its profile for every session rather than for a login |
 | User bindir put on `PATH` from the hook (`install-user`, default; `WIRE_PATH=0` opts out) | ✅ `test/linux-install-smoke.sh` | ✅ `test/macos-install-smoke.sh` | ❌ and it is a different mechanism there, not the same one untested: Windows has no directory already on everyone's `PATH`, so the install records the entry in the account's or the machine's own environment, which is a change that outlives the shell and has to be provably reversible |
+
+## Shell wiring (`sshakku install` / `sshakku uninstall`)
+
+The interpreter is real in every ✅ below: the shell is asked where its own
+startup files are, and where a language is judged it is judged by handing the
+file to a shell rather than by reading it here. What is not real is the process
+boundary — the command runs in-process rather than as a spawned binary — which
+is why the rows a person actually meets, at a prompt, are still marked as
+by-hand work.
+
+| Case | Linux | macOS | Windows |
+| --- | --- | --- | --- |
+| The interpreter you name is the one wired, and the report names the file written and the hook it runs (F44) | ✅ `TestTheShellYouNameIsTheOneWiredAndTheReportSaysWhereToLook`, against this machine's own `bash` | ✅ same test, against the platform's own `bash` | ✅ same test, against a real `powershell.exe` asked where its profiles are |
+| Uninstalling gives the surrounding file back byte for byte, and takes the hook with it (F19, F44) | ✅ `TestUninstallingLeavesTheFileAsItWasFound` | ✅ same | ✅ same |
+| A program that is not a shell, and an argument that is not understood, are refused with nothing written (F44) | ✅ `TestAProgramThatIsNotAShellIsRefusedRatherThanWired`, `TestAnInstallItCannotUnderstandIsAUsageErrorAndWritesNothing` | ✅ same | ✅ same |
+| With nothing named, the shell is the one that ran the command (F44) | ⚠️ `TestWithNoShellNamedTheOneThatRanTheCommandIsTheOneWired` reads the real process tree and asserts both halves of the promise — a wiring naming the shell, or a refusal asking for `--shell` — but which half it meets depends on what started the run, so neither half is asserted on its own. The half a person meets is the by-hand run | ⚠️ same | ⚠️ same |
+| Two shells of different languages on one machine, neither handed the other's file (F45) | ❌ it would take a `pwsh` beside the bash, which is a combination this project does not test — see the shell table in [INSTALLATION.md](INSTALLATION.md) | ❌ same | ✅ `TestOneMachineWiresAPowerShellAndAGitBashWithoutSwappingTheirFiles` wires both and asks a real Git Bash which of the two hooks it can read: its own, and not the other |
+| A shell that would never read the hook is refused before anything is written (F46) | — nothing here decides whether a shell may read its own startup file | — same | ❌ `TestAPowerShellThatWillNotRunItsProfileIsReportedWithTheRemedy` covers the decision against a fabricated host, and nothing sets a real machine's execution policy: doing that to the machine running the suite is what makes it a by-hand run |
+| The `PATH` entry is recorded once, and removed again leaving every other entry (F47) | — there is nothing to record: the binary goes where every session already searches | — same | ⚠️ `TestAddingIsIdempotentAndRemovingGivesBackWhatWasThere` and its neighbours drive the real registry, against a key of the test's own; `TestTheStoredEnvironmentIsLeftAloneWhenYouSaySo` covers `--no-path`. The account's own stored environment is only ever touched by hand |
 
 ## Agent lifecycle and recovery scenarios
 
@@ -262,10 +281,11 @@ Windows and the `bash.exe` that launches WSL are one name to it.
 
 What has no cells here yet, and why:
 
-- **The wiring.** `sshakku install`, the shells it can wire, the one point it
-  writes, the `PATH` entry it records and takes back, and the report it makes
-  when a shell will never read the hook — the rows above, and the work
-  `docs/INSTALLATION.md` describes.
+- **The wiring, as a person meets it.** `sshakku install` has its own table
+  above now, and what is missing from it is what cannot be asked of the machine
+  running the suite: a session started fresh and finding itself wired, an
+  execution policy set to `Restricted`, and the account's own stored `PATH`.
+  Those are by-hand runs against the built binary, not cells a suite can fill.
 - **The agent.** There is no row to fill because there is no mechanism yet: an
   agent on Windows is a service behind a named pipe, not a process on a socket,
   and `ssh-agent.exe` there ignores the flag that would bind one of its own, so

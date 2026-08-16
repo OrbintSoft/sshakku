@@ -68,6 +68,7 @@ func TestTheStoredListIsReadAndWrittenExactlyAsItIsStored(t *testing.T) {
 func TestTheKindItWasStoredAsIsTheKindItIsWrittenBackAs(t *testing.T) {
 	for _, kind := range []uint32{registry.EXPAND_SZ, registry.SZ} {
 		where := scratch(t)
+		backupIn(t)
 		require.NoError(t, writePath(where, `C:\one`, kind))
 
 		list := PersistentPathList()

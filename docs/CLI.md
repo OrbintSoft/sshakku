@@ -29,6 +29,8 @@ name it does not have is a usage error rather than a guess.
 | [`config`](#sshakku-config) | Yes | Prints the configuration in force and where each value came from; with `--edit`, opens your `config.toml`. |
 | [`doctor`](#sshakku-doctor) | Yes | Reports (and, with `--fix`, repairs) the ssh-agent situation. |
 | [`forget`](#sshakku-forget) | Yes | Deletes stored passphrases. |
+| [`install`](#sshakku-install-sshakku-uninstall) | Yes | Wires the login hook into one shell. |
+| [`uninstall`](#sshakku-install-sshakku-uninstall) | Yes | Takes that wiring back out. |
 | [`help`](#sshakku-help--h---help) | Yes | Prints the command list. |
 
 ## `sshakku shell-init`
@@ -184,6 +186,48 @@ for when to use it and the native-backend requirement `--all` has.
 
 Prints `forgot <service>` on stdout for each key actually deleted; exits `1`
 if any deletion fails (after attempting the rest), `2` on a usage error.
+
+## `sshakku install`, `sshakku uninstall`
+
+```sh
+sshakku install [selectors]
+sshakku uninstall [selectors]
+```
+
+Wires the login hook into one shell, and takes it back out again. With no
+selectors at all it wires **the shell you ran it from**: typed in a PowerShell
+window it wires that PowerShell, typed in Git Bash it wires that bash. Where
+nothing in the process tree is a shell it can wire, it stops and asks you to
+name one — it never picks.
+
+| Selector | Effect |
+| --- | --- |
+| `--shell <name>` | Wire this kind of shell, looked up on `PATH`. Which kinds exist depends on the system; a name it cannot wire is a usage error listing the ones it can. |
+| `--shell-exe <path>` | Wire this interpreter, which is also the one asked where its own startup files are. |
+| `--profile <file>` | Wire this file outright. Wins over the other two, which then only say which shell's language to write in. |
+| `--scope <user\|machine>` | Whose sessions the wiring is for. Default `user`; `machine` needs `sudo` or an elevated prompt. |
+| `--hosts <all\|current>` | PowerShell only: the profile every host reads, or the one that host's own. Default `all`. |
+| `--no-path` | Skip the step that makes `sshakku` runnable by name. |
+
+Both commands print what they did as the things you can go and look at — the
+shell, the interpreter, the file written, whether that file is one of ours or a
+marked block inside the shell's own, the hook it now runs, and what became of
+the `PATH` step. Anything worth knowing that is not a failure, such as a
+drop-in directory that was there and could not be used, follows as a `note:`
+line.
+
+`uninstall` takes the same selectors, and sweeps every file an install of that
+shell could have chosen rather than only the one today's flags select: somebody
+may have installed with one set of flags and be uninstalling with another.
+Uninstalling something that was never installed is not a failure.
+
+Exits `1` when the wiring cannot be done — an interpreter that is not a shell,
+a shell that would never read what would be written — and `2` on a usage error.
+Nothing is written in either case: everything that can refuse is asked first.
+
+[docs/INSTALLATION.md](INSTALLATION.md) has the model behind all of this: which
+file each shell reads, where the hook and the binary go, and what happens on a
+machine whose policy forbids the profile from running at all.
 
 ## `sshakku help`, `-h`, `--help`
 
