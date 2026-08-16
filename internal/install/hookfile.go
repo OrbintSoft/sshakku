@@ -124,6 +124,12 @@ func UpsertBlockFile(path, body string) error {
 // leaving every other line of it alone. A file that is not there is not an
 // error: nothing was wired into it, so there is nothing to unwire, and an
 // uninstall must be able to run over a machine that was never installed.
+//
+// A file with nothing left in it afterwards is removed rather than left empty.
+// Such a file held our wiring and nothing else, which means an install created
+// it — an account that had no startup file for that shell before has none
+// after, which is what putting things back means. A file that had a line of
+// somebody's own keeps it, and keeps existing.
 func StripBlockFile(path string) error {
 	content, err := read(path)
 	if err != nil {
@@ -132,7 +138,14 @@ func StripBlockFile(path string) error {
 	if content == nil {
 		return nil
 	}
-	return replace(path, StripBlock(content), modeOf(path, newFileMode))
+	stripped := StripBlock(content)
+	if len(bytes.TrimSpace(stripped)) == 0 {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("removing %s, which held nothing but the wiring: %w", path, err)
+		}
+		return nil
+	}
+	return replace(path, stripped, modeOf(path, newFileMode))
 }
 
 // WriteDropIn writes a wrapper into an existing drop-in directory. The

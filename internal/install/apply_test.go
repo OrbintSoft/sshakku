@@ -381,8 +381,9 @@ func TestWithNoFileNamedTheShellIsAskedWhereItLooks(t *testing.T) {
 
 			after, err := os.ReadFile(installed.Wired)
 			if c.existing == "" {
-				require.NoError(t, err)
-				assert.Empty(t, string(after), "what was created for the wiring is left empty when it goes")
+				assert.True(t, os.IsNotExist(err),
+					"a file created for the wiring goes when the wiring goes: an account that had no"+
+						" login file before has none after")
 			} else {
 				require.NoError(t, err)
 				assert.Equal(t, "# mine\n", string(after))

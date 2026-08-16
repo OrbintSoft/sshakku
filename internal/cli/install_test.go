@@ -108,6 +108,8 @@ func TestUninstallingLeavesTheFileAsItWasFound(t *testing.T) {
 	hook := reported(t, stdout)["hook"]
 	require.NotEmpty(t, hook, "the report says which hook it removed")
 	assert.NoFileExists(t, hook, "and that hook is gone")
+	assert.NoDirExists(t, filepath.Dir(hook),
+		"as is the directory it was alone in — an empty directory of ours is a trace like any other")
 }
 
 // F19, F44: where the shell already reads a drop-in directory, the wiring is a
@@ -132,6 +134,28 @@ func TestWhereTheShellReadsADropInDirectoryTheWiringIsAFileOfItsOwn(t *testing.T
 	code, stdout, stderr = wired(t, "uninstall", "--shell=bash", "--profile", profile, "--no-path")
 	require.Equalf(t, 0, code, "uninstall: %s%s", stdout, stderr)
 	assert.NoFileExists(t, dropIn, "and it is taken back out")
+}
+
+// F19: a startup file that only ever held our wiring is not left behind empty.
+//
+// The pair matters more than either half: the case above proves a file with
+// content of its own survives with that content, and this one proves a file
+// that had none does not survive at all. "Every trace" is both.
+func TestAFileThatHeldNothingButTheWiringIsNotLeftBehind(t *testing.T) {
+	exe, _ := aWiredShell(t)
+	installInto(t, t.TempDir())
+	profile := aStartupFile(t)
+	require.NoFileExists(t, profile, "this file is the install's to create")
+
+	code, stdout, stderr := wired(t, "install", "--shell-exe", exe, "--profile", profile, "--no-path")
+	require.Equalf(t, 0, code, "install: %s%s", stdout, stderr)
+	require.FileExists(t, profile)
+
+	code, stdout, stderr = wired(t, "uninstall", "--shell-exe", exe, "--profile", profile, "--no-path")
+	require.Equalf(t, 0, code, "uninstall: %s%s", stdout, stderr)
+
+	assert.NoFileExists(t, profile,
+		"a file whose whole content was ours has nothing left to preserve, and an empty one is a trace")
 }
 
 // F44: a program that is not a shell is refused by name rather than wired, and

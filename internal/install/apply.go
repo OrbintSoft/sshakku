@@ -156,6 +156,11 @@ func Uninstall(ctx context.Context, req Request, tree Ancestry) (Outcome, error)
 	if err := os.Remove(out.HookFile); err != nil && !os.IsNotExist(err) {
 		return out, fmt.Errorf("removing %s: %w", out.HookFile, err)
 	}
+	// And the directory, if the hook was the only thing in it. Something else
+	// may well be — the search list as it stood before the install is kept
+	// there on purpose — and a directory that still holds something fails to be
+	// removed, which is the answer wanted rather than an error to report.
+	_ = os.Remove(locations.HookDir)
 
 	if !req.NoPath {
 		// The entry is taken out; the recorded previous value is not put back.
