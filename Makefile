@@ -79,7 +79,7 @@ endif
 SSHAKKU_ASKPASS_NAME = sshakku-askpass
 
 ifeq ($(UNAME),Linux)
-SSH_INIT_INSTALL_SCRIPT = nn-ssh-init.sh
+SSH_INIT_INSTALL_SCRIPT = internal/install/nn-ssh-init.sh
 INSTALL_PATH = $(DESTDIR)$(BINDIR)
 SSH_INIT_NAME= $(NN)-ssh-init.sh
 SSH_INIT_BIND_PATH = $(ETC_PROFILE_D)$(SSH_INIT_NAME)
@@ -145,7 +145,7 @@ uninstall-user:
 	@echo "Uninstallation complete."
 
 else ifeq ($(UNAME),Darwin)
-SSH_INIT_INSTALL_SCRIPT = nn-ssh-init.sh
+SSH_INIT_INSTALL_SCRIPT = internal/install/nn-ssh-init.sh
 INSTALL_PATH = $(DESTDIR)$(BINDIR)
 SSH_INIT_NAME = $(NN)-sshakku-init.sh
 SSH_INIT_HOOK_RENDERED_PATH = $(DESTDIR)$(SHARE_DIR)$(SSH_INIT_NAME)

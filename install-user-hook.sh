@@ -115,7 +115,7 @@ install)
 
 	mkdir -p "$hook_dir"
 	template_dir="$(cd "$(dirname "$0")" && pwd)"
-	sed 's|/usr/local/bin/sshakku|'"$sshakku_bin"'|g' "$template_dir/nn-ssh-init.sh" >"$hook_file"
+	sed 's|/usr/local/bin/sshakku|'"$sshakku_bin"'|g' "$template_dir/internal/install/nn-ssh-init.sh" >"$hook_file"
 	chmod 755 "$hook_file"
 
 	source_line=". \"$hook_file\""

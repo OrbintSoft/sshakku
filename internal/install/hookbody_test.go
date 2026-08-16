@@ -92,8 +92,8 @@ func TestRenderingWithNoBinaryIsRefused(t *testing.T) {
 // something checks, and this is that something.
 func TestThePlaceholdersAreTheOnesTheRealTemplatesCarry(t *testing.T) {
 	for _, c := range []struct{ file, placeholder string }{
-		{"../../nn-sshakku-init.ps1", PowerShellBinaryPlaceholder},
-		{"../../nn-ssh-init.sh", BourneBinaryPlaceholder},
+		{"nn-sshakku-init.ps1", PowerShellBinaryPlaceholder},
+		{"nn-ssh-init.sh", BourneBinaryPlaceholder},
 	} {
 		content, err := os.ReadFile(c.file)
 		require.NoError(t, err)
