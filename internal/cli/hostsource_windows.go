@@ -13,10 +13,10 @@ func newHostSource(target string) hostcheck.Source {
 	return hostcheck.Windows{Target: target}
 }
 
-// newAncestrySource returns how the process tree is read on this OS, which is
-// not at all: there is no procfs to walk and no `ps` to ask.
+// newAncestrySource returns how the process tree is read on this OS: a
+// Toolhelp32 snapshot, there being no procfs to walk and no `ps` to ask.
 func newAncestrySource() launcher.AncestrySource {
-	return launcher.NoAncestry{}
+	return launcher.NewToolhelpAncestry()
 }
 
 // newCgroupSource returns how a process's control-group membership is read on

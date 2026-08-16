@@ -247,6 +247,19 @@ never ran here at all. It was a real-time scanner watching the directory Go
 builds and runs test binaries in, which left them started and never executing;
 pointed elsewhere, the suite runs in seconds.
 
+One row above has gained this platform without gaining a column. `doctor` names
+what launched an agent (F13) on Windows now: the process tree is read from a
+Toolhelp32 snapshot, where before every agent here was attributed to nobody.
+`TestTheRealTreeHoldsTheProcessDoingTheAsking` and
+`TestTheRealTreeCanBeWalkedUpwards` walk the real tree up from the test binary,
+`TestTheNamesThisSystemRecognises` covers this platform's launcher table, and
+the reading of a snapshot is checked from every platform in `snapshot_test.go`,
+since only the taking of one is Windows'. Two limits are the platform's own and
+are not defects: a parent pid is recorded at creation and never cleared, so an
+ancestor that has exited may be named by a stranger that inherited its number;
+and a snapshot gives a file name without a path, so the `bash.exe` of Git for
+Windows and the `bash.exe` that launches WSL are one name to it.
+
 What has no cells here yet, and why:
 
 - **The wiring.** `sshakku install`, the shells it can wire, the one point it
