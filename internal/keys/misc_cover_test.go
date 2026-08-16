@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/OrbintSoft/sshakku/internal/run"
+	"github.com/OrbintSoft/sshakku/internal/testproc"
 )
 
 // TestEnumeratorReadDirHardError covers Keys's non-missing-directory error
@@ -23,11 +24,14 @@ func TestEnumeratorReadDirHardError(t *testing.T) {
 }
 
 // TestExecRunnerRunStdinEnvAndStartFailure covers Run's stdin- and env-passing
-// branches (via a real `cat` that echoes its stdin) and its start-failure
-// branch (a binary that does not exist, which is a real error rather than a
-// non-zero exit code).
+// branches (via a real process that echoes its stdin — this test binary,
+// re-entered; see internal/testproc) and its start-failure branch (a binary
+// that does not exist, which is a real error rather than a non-zero exit code).
 func TestExecRunnerRunStdinEnvAndStartFailure(t *testing.T) {
-	res, err := run.ExecRunner{}.Run(t.Context(), run.Cmd{Name: "cat", Stdin: "hello", Env: []string{"SSHAKKU_X=1"}})
+	name, args := testproc.Command(t, testproc.EchoStdin)
+	res, err := run.ExecRunner{}.Run(t.Context(), run.Cmd{
+		Name: name, Args: args, Stdin: "hello", Env: []string{"SSHAKKU_X=1"},
+	})
 	require.NoError(t, err, "running a command must succeed")
 	assert.Equal(t, "hello", string(res.Stdout),
 		"and what it was given on standard input must reach it: that is where every secret travels")

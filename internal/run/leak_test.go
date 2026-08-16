@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"go.uber.org/goleak"
+
+	"github.com/OrbintSoft/sshakku/internal/testproc"
 )
 
 // TestMain runs the whole package under goleak: a goroutine still running once
@@ -16,6 +18,9 @@ import (
 // put its answer down and exit, and a change that left it blocked on a send
 // nobody listens for would hold one for the life of the process while every
 // assertion here still passed.
+// Serve comes first because this binary is also the program the tests here run:
+// what a runner does to a process can only be seen by giving it one.
 func TestMain(m *testing.M) {
+	testproc.Serve()
 	goleak.VerifyTestMain(m)
 }

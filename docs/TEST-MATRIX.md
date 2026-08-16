@@ -223,6 +223,16 @@ column in the install table above and in no other, and that is the honest state
 of it — a suite that passes says the code is consistent with itself, and this
 document asks a different question.
 
+One class of that vocabulary outlived the rest, because the runner hid it: the
+tests of anything that spawns a process borrowed `sh`, `cat` and `sleep` as the
+program to spawn. A GitHub `windows-latest` image carries Git for Windows with
+its `usr/bin` on `PATH`, so those names resolve there and the job was green on a
+machine that happened to have them, while the same suite failed on a Windows
+install that did not. One of those tests passed for a worse reason still: it
+asserted only that an error came back, and a program that could not be found is
+an error, so it never ran anything. They now spawn this repository's own test
+binary, re-entered (`internal/testproc`), which every system has by definition.
+
 What made the suite fail was mostly not Windows. It was this platform's own
 vocabulary written into tests as if it were universal: `/`-joined path literals
 against paths the product builds with `filepath`, `0600` asserted where mode
