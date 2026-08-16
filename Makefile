@@ -228,17 +228,32 @@ uninstall-user:
 
 else ifneq ($(WINDOWS_UNAME),)
 
-# Here the wiring is the program's own job rather than this file's. Which file a
-# shell reads is a question only that shell can answer — PowerShell keeps four
-# profiles and puts them where its own installation decides — so it is asked, by
-# `sshakku install`, instead of being assembled from paths written down here.
-# Building and testing work from this file as they do anywhere.
-install uninstall install-user uninstall-user:
-	@echo "On $(UNAME) the wiring is done by the program itself."
-	@echo "  make build"
-	@echo "  $(GO_BIN) install     # and 'uninstall' to take it back out"
-	@echo "See docs/INSTALLATION.md for the flags and where each piece goes."
-	@exit 1
+# Here the wiring is the program's own job, and these targets hand it over.
+# Which file a shell reads is a question only that shell can answer — PowerShell
+# keeps four profiles and puts them where its own installation decides — so it is
+# asked, rather than assembled from paths written down here. The scopes line up
+# with the other platforms': the plain target installs for the machine and needs
+# an elevated prompt, the -user one installs for the account and needs nothing.
+#
+# With no shell named, the program wires the one the command was typed in, which
+# from here is the shell running make. SHELL passes another: `make install-user
+# SHELL_ARG=--shell=windowspowershell`.
+SHELL_ARG ?=
+INSTALL_PATH = $(dir $(GO_BIN))
+SSHAKKU_INSTALL_PATH = $(GO_BIN)
+SSHAKKU_RUNTIME_PATH = $(GO_BIN)
+
+install: build
+	$(GO_BIN) install --scope=machine $(SHELL_ARG)
+
+uninstall: build
+	$(GO_BIN) uninstall --scope=machine $(SHELL_ARG)
+
+install-user: build
+	$(GO_BIN) install --scope=user $(SHELL_ARG)
+
+uninstall-user: build
+	$(GO_BIN) uninstall --scope=user $(SHELL_ARG)
 
 else
 

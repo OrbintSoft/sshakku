@@ -91,10 +91,14 @@ make test    # go test -race ./...
 
 On Windows both run from Git Bash, and the binary is built as
 `bin/sshakku.exe`: that system runs a program by its extension, and the path a
-wiring writes into a shell's startup file is this one. Installing is the
-program's own job there — `bin/sshakku.exe install`, see
-[INSTALLATION.md](INSTALLATION.md) — so `make install` and `make install-user`
-say so and stop rather than writing Unix paths onto a machine that has none.
+wiring writes into a shell's startup file is this one.
+
+`make install-user` and `make install` work there too, and hand the wiring to
+the program: they build, then run `sshakku install` for the account or for the
+machine. Which shell gets wired is the one you ran make from, unless you say
+otherwise — `make install-user SHELL_ARG=--shell=windowspowershell`. The Unix
+paths in this file are not used there at all; which file a shell reads is asked
+of that shell, see [INSTALLATION.md](INSTALLATION.md).
 
 `make test` is what CI runs on every push, on a plain Linux runner (with
 `dbus-daemon` installed, since some `internal/secretservice`/`internal/keys`
