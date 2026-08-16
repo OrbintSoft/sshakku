@@ -133,12 +133,25 @@ func backupFile(scope Scope) (string, error) {
 	return filepath.Join(where.HookDir, fmt.Sprintf("path-before-sshakku-%s.json", scope)), nil
 }
 
+// Whether a change to the list is the one that should be written down. Only
+// putting this program's directory in is: that is the moment the list stops
+// being what the account had, and the record exists to say what that was.
+const (
+	recordPrevious = true
+	leaveRecord    = false
+)
+
 // keepPreviousPath writes down what the search list was, before it is changed.
 //
-// It is written on every change and not only the first, and that is right
-// because a change only happens when there is one to make: adding a directory
-// already there changes nothing and so records nothing, and the file goes on
-// holding the list as it was before this program first touched it.
+// It is written on every recorded change and not only the first, and that is
+// right because a change only happens when there is one to make: adding a
+// directory already there changes nothing and so records nothing, and the file
+// goes on holding the list as it was before this program first touched it.
+//
+// Taking the entry back out is a change and is deliberately not recorded. The
+// list at that moment still has this program's own directory in it, and writing
+// that down would replace the answer with the one value a person restoring by
+// hand must not be given.
 func keepPreviousPath(scope Scope, raw string, kind uint32) error {
 	path, err := backupFile(scope)
 	if err != nil {
@@ -157,9 +170,11 @@ func keepPreviousPath(scope Scope, raw string, kind uint32) error {
 	return nil
 }
 
-// changePath applies change to the stored search list, recording what was there
-// first and telling the system afterwards. It reports whether anything changed.
-func changePath(where environmentLocation, scope Scope, change func(string) (string, bool)) (bool, error) {
+// changePath applies change to the stored search list and tells the system
+// afterwards. It reports whether anything changed. record says whether this is
+// the change the previous value should be written down for — see the constants
+// above.
+func changePath(where environmentLocation, scope Scope, record bool, change func(string) (string, bool)) (bool, error) {
 	raw, kind, err := readPath(where)
 	if err != nil {
 		return false, err
@@ -170,8 +185,10 @@ func changePath(where environmentLocation, scope Scope, change func(string) (str
 		return false, nil
 	}
 
-	if err := keepPreviousPath(scope, raw, kind); err != nil {
-		return false, err
+	if record {
+		if err := keepPreviousPath(scope, raw, kind); err != nil {
+			return false, err
+		}
 	}
 	if err := writePath(where, updated, kind); err != nil {
 		return false, err
@@ -188,8 +205,7 @@ func AddToPath(scope Scope, dir string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	list := PersistentPathList()
-	return changePath(where, scope, func(raw string) (string, bool) { return list.Add(raw, dir) })
+	return addToPathIn(where, scope, dir)
 }
 
 // RemoveFromPath takes dir back out of the search list of the given scope,
@@ -199,8 +215,20 @@ func RemoveFromPath(scope Scope, dir string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	return removeFromPathIn(where, scope, dir)
+}
+
+// The two operations themselves, separated from finding the account's own
+// environment so that both — including which of them writes the record down —
+// can be exercised against a key belonging to a test.
+func addToPathIn(where environmentLocation, scope Scope, dir string) (bool, error) {
 	list := PersistentPathList()
-	return changePath(where, scope, func(raw string) (string, bool) { return list.Remove(raw, dir) })
+	return changePath(where, scope, recordPrevious, func(raw string) (string, bool) { return list.Add(raw, dir) })
+}
+
+func removeFromPathIn(where environmentLocation, scope Scope, dir string) (bool, error) {
+	list := PersistentPathList()
+	return changePath(where, scope, leaveRecord, func(raw string) (string, bool) { return list.Remove(raw, dir) })
 }
 
 // announceEnvironmentChange tells the programs already running that the stored

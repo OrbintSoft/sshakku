@@ -72,7 +72,7 @@ func TestTheKindItWasStoredAsIsTheKindItIsWrittenBackAs(t *testing.T) {
 		require.NoError(t, writePath(where, `C:\one`, kind))
 
 		list := PersistentPathList()
-		_, err := changePath(where, User, func(raw string) (string, bool) { return list.Add(raw, `C:\two`) })
+		_, err := changePath(where, User, recordPrevious, func(raw string) (string, bool) { return list.Add(raw, `C:\two`) })
 		require.NoError(t, err)
 
 		_, found, err := readPath(where)
@@ -112,7 +112,7 @@ func TestAddingIsIdempotentAndRemovingGivesBackWhatWasThere(t *testing.T) {
 	ours := `C:\Users\example\AppData\Local\Programs\sshakku`
 	list := PersistentPathList()
 
-	changed, err := changePath(where, User, func(raw string) (string, bool) { return list.Add(raw, ours) })
+	changed, err := changePath(where, User, recordPrevious, func(raw string) (string, bool) { return list.Add(raw, ours) })
 	require.NoError(t, err)
 	assert.True(t, changed)
 
@@ -120,11 +120,11 @@ func TestAddingIsIdempotentAndRemovingGivesBackWhatWasThere(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, original+";"+ours, after)
 
-	changed, err = changePath(where, User, func(raw string) (string, bool) { return list.Add(raw, ours) })
+	changed, err = changePath(where, User, recordPrevious, func(raw string) (string, bool) { return list.Add(raw, ours) })
 	require.NoError(t, err)
 	assert.False(t, changed, "however many times an install is run, the entry is there once")
 
-	changed, err = changePath(where, User, func(raw string) (string, bool) { return list.Remove(raw, ours) })
+	changed, err = changePath(where, User, recordPrevious, func(raw string) (string, bool) { return list.Remove(raw, ours) })
 	require.NoError(t, err)
 	assert.True(t, changed)
 
@@ -143,7 +143,7 @@ func TestWhatWasThereIsWrittenDownBeforeItIsChanged(t *testing.T) {
 	require.NoError(t, writePath(where, original, registry.EXPAND_SZ))
 	list := PersistentPathList()
 
-	_, err := changePath(where, User, func(raw string) (string, bool) { return list.Add(raw, `C:\ours`) })
+	_, err := changePath(where, User, recordPrevious, func(raw string) (string, bool) { return list.Add(raw, `C:\ours`) })
 	require.NoError(t, err)
 
 	file, err := backupFile(User)
@@ -158,6 +158,40 @@ func TestWhatWasThereIsWrittenDownBeforeItIsChanged(t *testing.T) {
 	assert.Equal(t, User, kept.Scope)
 }
 
+// The record answers one question: what was the list before this program first
+// put itself into it. Taking the entry back out changes the list too, and
+// recording there would answer that question with a list that has this
+// program's own entry in it — the one value somebody restoring by hand must
+// never be handed.
+//
+// Driven through the two operations themselves rather than through changePath,
+// because which of them writes the record is the decision under test: passing
+// the flag in from here would assert the answer instead of asking for it.
+func TestTakingTheEntryBackOutDoesNotRewriteTheRecord(t *testing.T) {
+	where := scratch(t)
+	backupIn(t)
+	original := `%SystemRoot%\system32;C:\Program Files\Git\cmd`
+	require.NoError(t, writePath(where, original, registry.EXPAND_SZ))
+	ours := `C:\Users\someone\AppData\Local\Programs\sshakku`
+
+	added, err := addToPathIn(where, User, ours)
+	require.NoError(t, err)
+	require.True(t, added)
+	removed, err := removeFromPathIn(where, User, ours)
+	require.NoError(t, err)
+	require.True(t, removed, "there must have been something to take out")
+
+	file, err := backupFile(User)
+	require.NoError(t, err)
+	content, err := os.ReadFile(file)
+	require.NoError(t, err)
+	var kept pathBackup
+	require.NoError(t, json.Unmarshal(content, &kept))
+
+	assert.Equal(t, original, kept.Value, "the record still says what was there before the install")
+	assert.NotContains(t, kept.Value, ours, "and never names this program's own entry")
+}
+
 // A change that is not a change records nothing, so the file goes on holding
 // the list as it was before this program first touched it.
 func TestAnInstallThatChangesNothingDoesNotOverwriteTheRecord(t *testing.T) {
@@ -167,10 +201,10 @@ func TestAnInstallThatChangesNothingDoesNotOverwriteTheRecord(t *testing.T) {
 	require.NoError(t, writePath(where, `C:\first`, registry.EXPAND_SZ))
 	list := PersistentPathList()
 
-	_, err := changePath(where, User, func(raw string) (string, bool) { return list.Add(raw, ours) })
+	_, err := changePath(where, User, recordPrevious, func(raw string) (string, bool) { return list.Add(raw, ours) })
 	require.NoError(t, err)
 
-	_, err = changePath(where, User, func(raw string) (string, bool) { return list.Add(raw, ours) })
+	_, err = changePath(where, User, recordPrevious, func(raw string) (string, bool) { return list.Add(raw, ours) })
 	require.NoError(t, err)
 
 	file, err := backupFile(User)
