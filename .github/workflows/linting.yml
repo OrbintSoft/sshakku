@@ -33,6 +33,7 @@ jobs:
       TAPLO_CLI_VERSION: 0.7.0
       HADOLINT_VERSION: 2.14.0
       BLINTER_VERSION: 1.1.17
+      PSSCRIPTANALYZER_VERSION: 1.25.0
     steps:
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -83,6 +84,14 @@ jobs:
       # a PyPI release is immutable, so no lock file is needed to reproduce it.
       - name: Install the batch linter
         run: pip install "Blinter==${BLINTER_VERSION}"
+
+      # Also outside the pinned tool cache, and pinned the same way: a
+      # PowerShell Gallery release is immutable, so the version alone
+      # reproduces it. Runs in pwsh because the module is installed by
+      # PowerShell, into the runner's own module path.
+      - name: Install the PowerShell linter
+        shell: pwsh
+        run: Install-Module -Name PSScriptAnalyzer -RequiredVersion $env:PSSCRIPTANALYZER_VERSION -Scope CurrentUser -Force
 
       - name: Run make lint
         run: make lint

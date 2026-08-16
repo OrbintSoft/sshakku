@@ -2318,9 +2318,16 @@ the marker block in the profile is the mechanism that has to work.
   both editions, touches no disk, and is not governed by the policy, which
   applies to script files. The query stays a real `.ps1` file in the tree,
   embedded and encoded at the call site, so rule 13 holds and PSScriptAnalyzer
-  reads it. Two measured traps ride along: Windows PowerShell writes a CLIXML
-  progress payload to stderr, so only stdout may be read, and its stdout is the
-  OEM code page unless the script sets it, which mangles a non-ASCII path.
+  reads it. Three measured traps ride along: Windows PowerShell writes a CLIXML
+  progress payload to stderr, so only stdout may be read; its stdout is the
+  OEM code page unless the script sets it, which mangles a non-ASCII path; and
+  the byte-order mark must be stripped before the payload is encoded. Every
+  `.ps1` in the tree carries one — `PSUseBOMForUnicodeEncodedFile` asks for it,
+  because 5.1 reads a mark-less script in the machine's ANSI code page — but
+  left at the head of an `-EncodedCommand` payload that same 5.1 prints
+  **nothing at all and exits 0**, where 7 runs it. A mistake there therefore
+  looks like a host that answered emptily rather than like an error, which is
+  why the stripping is a Go test rather than a remembered detail.
 
   **The two editions disagree about the policy on the same account**, which is
   the measurement that settles whether one host may be asked and the other

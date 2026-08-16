@@ -299,8 +299,8 @@ print-paths:
 	@echo "USER_SHELL: $(USER_SHELL)"
 
 # Linting. Requires: shellcheck, shfmt, markdownlint-cli2, taplo, checkmake,
-# actionlint, editorconfig-checker, hadolint, blinter, zsh. Each tool reads its
-# own config file where it has one.
+# actionlint, editorconfig-checker, hadolint, blinter, zsh, pwsh with the
+# PSScriptAnalyzer module. Each tool reads its own config file where it has one.
 # The bats fixtures are a mixed bag: executable stand-ins for real tools, which
 # are shell, alongside config files a test drops in to select a backend. Only
 # the former belong to shellcheck; the rest are linted by the tool for their own
@@ -318,7 +318,11 @@ DOCKERFILES = $(wildcard test/containers/*.Dockerfile)
 APPLESCRIPTS = $(shell find internal -name '*.applescript')
 XML_FILES = $(wildcard internal/*/testdata/*.xml)
 
-lint: lint-sh lint-zsh lint-bat lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go lint-docker lint-applescript lint-xml
+# The login hook lives at the top level beside its Bourne counterpart; the rest
+# are found rather than globbed at a fixed depth, for the same reason as above.
+PS1_FILES = $(wildcard *.ps1) $(shell find cmd internal tools -name '*.ps1')
+
+lint: lint-sh lint-zsh lint-bat lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go lint-docker lint-applescript lint-ps1 lint-xml
 
 lint-sh:
 	shellcheck $(SH_SCRIPTS)
@@ -380,10 +384,20 @@ lint-applescript:
 		for f in $(APPLESCRIPTS); do echo "osacompile $$f"; osacompile -o /dev/null "$$f" || exit 1; done; \
 	fi
 
+# PSScriptAnalyzer is the PowerShell linter, and it is a PowerShell module: it
+# needs a pwsh to run in. On a machine without one this reports that it did not
+# run rather than passing quietly, which would read the same as having checked.
+lint-ps1:
+	@if ! command -v pwsh >/dev/null 2>&1; then \
+		echo "skipping lint-ps1: PSScriptAnalyzer runs in pwsh, which is not installed here"; \
+	else \
+		pwsh -NoProfile -File tools/lint-ps1.ps1 $(PS1_FILES); \
+	fi
+
 # Well-formedness only: the DTD these files name lives at an http:// URL, and
 # xmllint is not asked to fetch it, so the check stays offline.
 lint-xml:
 	xmllint --noout $(XML_FILES)
 
-.PHONY: install uninstall install-user uninstall-user build build-cross test test-json test-leakprofile test-keychain test-bats print-paths lint lint-sh lint-zsh lint-bat lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go lint-docker lint-applescript lint-xml
+.PHONY: install uninstall install-user uninstall-user build build-cross test test-json test-leakprofile test-keychain test-bats print-paths lint lint-sh lint-zsh lint-bat lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go lint-docker lint-applescript lint-ps1 lint-xml
 .DEFAULT_GOAL := install
