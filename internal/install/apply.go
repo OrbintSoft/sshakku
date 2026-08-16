@@ -425,9 +425,8 @@ func willNotRunItsProfile(host Host) (string, bool) {
 	switch host.EffectiveExecutionPolicy {
 	case "Restricted", "AllSigned":
 		return fmt.Sprintf("this PowerShell will not run its profile: its execution policy is %s,"+
-			" so nothing written there would ever run. Change it with"+
-			" `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser` and install again,"+
-			" or wire a different shell", host.EffectiveExecutionPolicy), true
+			" so nothing written there would ever run. %s",
+			host.EffectiveExecutionPolicy, changeThePolicy), true
 	}
 	if host.LanguageMode != "" && host.LanguageMode != "FullLanguage" {
 		return fmt.Sprintf("this PowerShell is running in %s, in which a profile of this kind cannot run,"+

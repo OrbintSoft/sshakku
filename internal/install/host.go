@@ -189,6 +189,12 @@ func childEnvironment(environ []string) []string {
 // beside them, so this recognises the refusal on a machine in any language.
 const refusedByPolicy = "UnauthorizedAccess"
 
+// changeThePolicy is what it takes to make a host run its profile, said once so
+// that both ways of finding out it will not — asking it and being refused, and
+// asking it and being told — end in the same instruction.
+const changeThePolicy = "Change it with `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser`" +
+	" and install again, or wire a different shell"
+
 // explain turns what a host wrote to its standard error into something worth
 // reading, for a message that would otherwise say only that something went
 // wrong. Empty when it said nothing, so the message does not end in a dangling
@@ -205,7 +211,8 @@ func explain(stderr string) string {
 	}
 	if strings.Contains(stderr, refusedByPolicy) {
 		return ": its execution policy refuses to run a script file, which means it will not run" +
-			" its profile either, so a hook written there would never start: " + stderr
+			" its profile either, so a hook written there would never start. " + changeThePolicy +
+			". What it said: " + stderr
 	}
 	return ": " + stderr
 }

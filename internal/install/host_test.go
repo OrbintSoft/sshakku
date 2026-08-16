@@ -128,6 +128,11 @@ func TestAPolicyRefusalIsToldApartFromABrokenQuery(t *testing.T) {
 	assert.Contains(t, refused, "execution policy")
 	assert.Contains(t, refused, "profile",
 		"the consequence a user needs is that the hook would not run either")
+	// The remedy is the half a person can act on, and this is the only path
+	// that reaches them for a policy that forbids script files: the host that
+	// would have reported its own policy cannot run the query that asks.
+	assert.Contains(t, refused, "Set-ExecutionPolicy",
+		"and what it would take to change it, since a consequence with no remedy leaves them stuck")
 
 	other := explain("Get-ExecutionPolicy : the term is not recognised")
 	assert.NotContains(t, other, "execution policy",
