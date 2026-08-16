@@ -25,6 +25,15 @@ type Dialect struct {
 	envLine string
 }
 
+// Quote renders a value as a literal this shell reads back unchanged, quotes
+// included. It is what SetVar and SetEnv put on the right of an assignment, for
+// a caller that is placing a value somewhere else — into a hook this program
+// renders, say, where the assignment is already written and only the value is
+// being supplied.
+func (s Dialect) Quote(value string) string {
+	return s.quote(value)
+}
+
 // SetVar prints an assignment to a shell variable, newline included.
 func (s Dialect) SetVar(name, value string) string {
 	return fmt.Sprintf(s.varLine, name, s.quote(value))
