@@ -303,10 +303,15 @@ What has no cells here yet, and why:
   elsewhere — both checked from either platform, since which answer a machine
   gets is stated by the caller and not read from the machine.
 
-  One report line is still wrong here and is a known gap, not a passing one:
-  the `SSH_ASKPASS` finding explains its absence by a profile that was never
-  read, when on this platform the askpass helper is simply not implemented.
-  It needs the same treatment as the agent line above.
+  Two things about the askpass helper are still wrong here and are known gaps,
+  not passing ones. `doctor`'s `SSH_ASKPASS` finding explains its absence by a
+  profile that was never read, when on this platform the helper is simply not
+  implemented. And `sshakku askpass-env` prints lines naming a helper that does
+  not exist on this system, together with the variable that makes reaching it
+  compulsory — a wired session never runs them, since the hook stops before
+  that on an empty socket, but a person running the command by hand is told
+  something untrue. Both need what the agent line above got: a fact about this
+  platform, stated once, that the command and the report both read.
 - **The wallet, the askpass helper and the passphrase handoff**, each of which
   reports itself unimplemented rather than behaving like an empty one.
 - **Coverage and test-health reporting**, which the other two platforms get and
