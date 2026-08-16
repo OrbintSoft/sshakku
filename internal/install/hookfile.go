@@ -135,10 +135,15 @@ func StripBlockFile(path string) error {
 	return replace(path, StripBlock(content), modeOf(path, newFileMode))
 }
 
-// WriteDropIn writes the wrapper into an existing drop-in directory. The
+// WriteDropIn writes a wrapper into an existing drop-in directory. The
 // directory is the caller's to find or create; this only writes the file.
-func WriteDropIn(path, body string) error {
-	return replace(path, BourneDropIn(body), dropInMode)
+//
+// The content is the finished file and is composed by the caller, because the
+// caller is the one that knows which language the directory is read in:
+// BourneDropIn makes the Bourne one, and a PowerShell drop-in is neither made
+// by it nor improved by being given its interpreter line.
+func WriteDropIn(path string, content []byte) error {
+	return replace(path, content, dropInMode)
 }
 
 // RemoveDropIn deletes the wrapper at path. One that is already gone is not an

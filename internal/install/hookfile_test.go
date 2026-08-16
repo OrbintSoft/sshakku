@@ -138,7 +138,7 @@ func TestStripBlockFileOnAFileThatIsNotThereIsNotAnError(t *testing.T) {
 func TestDropInIsWrittenAndRemoved(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "001-sshakku-init.sh")
 
-	require.NoError(t, WriteDropIn(path, ". \"/hook.sh\""))
+	require.NoError(t, WriteDropIn(path, BourneDropIn(". \"/hook.sh\"")))
 	got, err := os.ReadFile(path)
 	require.NoError(t, err)
 	assert.Equal(t, string(BourneDropIn(". \"/hook.sh\"")), string(got))
@@ -160,7 +160,7 @@ func TestAFailureNamesTheFileItWasWorkingOn(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), missing)
 
-	err = WriteDropIn(missing, ". \"/hook.sh\"")
+	err = WriteDropIn(missing, BourneDropIn(". \"/hook.sh\""))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), missing)
 

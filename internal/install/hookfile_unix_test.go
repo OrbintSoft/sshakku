@@ -58,7 +58,7 @@ func TestUpsertBlockFileCreatesAFileEveryoneCanRead(t *testing.T) {
 func TestDropInIsExecutable(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "001-sshakku-init.sh")
 
-	require.NoError(t, WriteDropIn(path, ". \"/hook.sh\""))
+	require.NoError(t, WriteDropIn(path, BourneDropIn(". \"/hook.sh\"")))
 
 	info, err := os.Stat(path)
 	require.NoError(t, err)

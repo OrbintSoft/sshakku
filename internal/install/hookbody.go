@@ -2,10 +2,41 @@ package install
 
 import (
 	"bytes"
+	_ "embed"
 	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
 
 	"github.com/OrbintSoft/sshakku/internal/cli/shell"
 )
+
+// The hook templates, carried inside the binary so that an install needs
+// nothing beside it. Each is a real file rather than a string in this source,
+// so that it can be read, diffed and linted as the language it is written in —
+// and, for the Bourne one, rendered by the shell installer as well, from the
+// same bytes.
+//
+// The byte-order mark on the PowerShell template is deliberate and travels into
+// the rendered hook: Windows PowerShell reads a script file without one in the
+// machine's ANSI code page, which corrupts exactly the non-ASCII paths a hook
+// is most likely to carry.
+var (
+	//go:embed nn-sshakku-init.ps1
+	powerShellHookTemplate []byte
+	//go:embed nn-ssh-init.sh
+	bourneHookTemplate []byte
+)
+
+// hookMode is what a rendered hook is given. It matches what the shell
+// installer gives the same file, because a machine can be wired by either.
+const hookMode fs.FileMode = 0o755
+
+// hookDirMode is what the directory holding the rendered hooks is given when
+// this program has to create it. It is not a secret and every session of the
+// scope has to read it; only the account or the administrator that installed
+// may write.
+const hookDirMode fs.FileMode = 0o755
 
 // The literal each hook template carries where the path of the binary belongs.
 //
@@ -46,4 +77,26 @@ func RenderHook(template []byte, placeholder, binary string, dialect shell.Diale
 			" path of the binary into it", placeholder)
 	}
 	return bytes.ReplaceAll(template, []byte(placeholder), []byte(dialect.Quote(binary))), nil
+}
+
+// renderInto writes the rendered hook into hookDir and returns where it put it.
+//
+// The directory is created if it is not there, which is the ordinary case on a
+// first install. The file goes down through the same atomic replace every other
+// startup file here does: a session logging in at that moment reads the whole
+// of the old hook or the whole of the new one, never half of each.
+func renderInto(hookDir string, p plan, binary string) (string, error) {
+	template, placeholder := p.template()
+	rendered, err := RenderHook(template, placeholder, binary, p.dialect)
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(hookDir, hookDirMode); err != nil {
+		return "", fmt.Errorf("making the directory for the hook, %s: %w", hookDir, err)
+	}
+	path := filepath.Join(hookDir, p.hookName())
+	if err := replace(path, rendered, hookMode); err != nil {
+		return "", err
+	}
+	return path, nil
 }

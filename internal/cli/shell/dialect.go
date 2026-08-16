@@ -55,6 +55,13 @@ var dialects = []Dialect{
 	{name: PowerShell, quote: powerShellSingleQuote, varLine: "$%s = %s\n", envLine: "$env:%s = %s\n"},
 }
 
+// Named returns the dialect called name, for a caller that already knows which
+// language it needs and has no flags to read — code rendering a file for a
+// shell it has just identified, rather than a command being told what to print.
+func Named(name string) (Dialect, error) {
+	return named(name)
+}
+
 // named returns the dialect called name, or an error naming what
 // was asked for and what there is instead. A name this program cannot print is
 // never quietly answered in some other language: lines a shell cannot read are
