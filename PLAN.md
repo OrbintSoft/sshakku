@@ -2311,6 +2311,30 @@ the marker block in the profile is the mechanism that has to work.
   that window's shell. Nothing is guessed: where the ancestry answers nothing,
   the command asks for `--shell`.
 
+  **A POSIX-emulating shell does not see the paths this program writes**, and
+  the mapping between the two spellings is that environment's own, so its own
+  translator is asked rather than the mapping reproduced. `cygpath` is found
+  beside the interpreter being wired — its neighbour, or one level up and back
+  down through `usr\bin`, which is where Git for Windows keeps it — so no
+  installation path is written into the source and a second environment
+  installed alongside the first is not mistaken for it. MSYS2 falls under the
+  first of those two places should it become a target; Cygwin is hypothetical
+  and chased no further than costing one `Stat`.
+
+  **The path is handed to the translator on its standard input, never as an
+  argument**, and this was measured rather than reasoned. A program built for
+  that environment re-parses the command line it is given under that
+  environment's quoting rules, where an apostrophe opens a quoted string: a path
+  through an account named `O'Brien` comes back with the apostrophe *silently
+  gone*, naming a directory that does not exist — a hook that would then fail at
+  every login with nothing to say why. `-f -` reads the path as bytes and it
+  arrives whole, apostrophes, spaces and ampersands together. A path cannot
+  contain a line ending on this platform, which is what makes one path to a line
+  safe. Characters the platform forbids in a name (`" * : < > ? |`) are mapped
+  by that environment into a private area of Unicode; no path arriving from this
+  platform can contain one, so that mapping is never met and is not guarded
+  against.
+
   **A PowerShell host is asked with `-File`, in the clear.** The alternatives
   were measured. `-Command -` on standard input silently swallows all but the
   first line of a multi-line script. `-Command` with the script inline keeps it
