@@ -14,11 +14,39 @@ import (
 // back as the real directory, and no installation path is assumed here.
 const MachineDropInDir = "/etc/profile.d"
 
-// BourneLoginFile names the file a Bourne shell reads when it logs in, which is
-// the primary wiring point: under Git Bash and after a console login it is the
-// one that fires.
-func BourneLoginFile(home string) (string, error) {
-	return under(home, ".bash_profile")
+// loginFiles are the files a login shell looks for, in the order it looks. It
+// reads the first one it finds and no others.
+var loginFiles = []string{".bash_profile", ".bash_login", ".profile"}
+
+// BourneLoginFile names the file a Bourne shell will really read when it logs
+// in, which is the primary wiring point: under Git Bash, and after a console
+// login, it is the one that fires.
+//
+// The file is chosen by looking, and that is not fussiness. A login shell reads
+// the first of the three above that exists and no others, so writing a hook
+// into .bash_profile on an account set up with .profile does not add SSHakku to
+// that account's configuration — it replaces it. The user's own login setup
+// stops running entirely, silently, and they find out at their next login by
+// everything being gone. Measured against a real shell: with only .profile it
+// is read; the moment .bash_profile exists, .profile is not read at all.
+//
+// Where none of them exists there is nothing to displace, and the first is
+// created — which is the name that shell looks for first.
+//
+// exists is passed in because on the system this matters for these paths are in
+// the shell's spelling and this program cannot look at one directly; the caller
+// translates. It is also what lets the choice be checked without a filesystem.
+func BourneLoginFile(home string, exists func(path string) bool) (string, error) {
+	for _, name := range loginFiles {
+		candidate, err := under(home, name)
+		if err != nil {
+			return "", err
+		}
+		if exists != nil && exists(candidate) {
+			return candidate, nil
+		}
+	}
+	return under(home, loginFiles[0])
 }
 
 // BourneRCFile names the file a Bourne shell reads when it starts interactive

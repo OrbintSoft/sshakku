@@ -96,7 +96,7 @@ func TestAScopeThatIsNotOfferedIsRefusedAndNamesWhatThereIs(t *testing.T) {
 // which on the platform this matters for is not this program's. Joined with a
 // backslash the file is still created — under a name the shell never opens.
 func TestABourneStartupFileIsNamedTheWayTheShellNamesIt(t *testing.T) {
-	login, err := BourneLoginFile("/c/Users/example")
+	login, err := BourneLoginFile("/c/Users/example", nothingExists)
 	require.NoError(t, err)
 	rc, err := BourneRCFile("/c/Users/example")
 	require.NoError(t, err)
@@ -107,13 +107,67 @@ func TestABourneStartupFileIsNamedTheWayTheShellNamesIt(t *testing.T) {
 	assert.NotContains(t, rc, `\`)
 }
 
+// A login shell reads the first of these it finds and no others. An install
+// that created .bash_profile on an account that had only .profile would not add
+// itself to that account's configuration — it would replace it, silently, and
+// the user would find out at their next login by everything being gone.
+// Measured against a real Git Bash: with only .profile it is read; the moment
+// .bash_profile exists, .profile is not read at all.
+func TestTheLoginFileWiredIsTheOneTheShellWillReallyRead(t *testing.T) {
+	const home = "/c/Users/example"
+
+	cases := []struct {
+		name    string
+		present []string
+		want    string
+	}{
+		{"an account set up with .profile", []string{".profile"}, home + "/.profile"},
+		{"an account set up with .bash_login", []string{".bash_login"}, home + "/.bash_login"},
+		{"an account with .bash_profile already", []string{".bash_profile"}, home + "/.bash_profile"},
+		{
+			"an account with more than one, where the shell reads the first",
+			[]string{".profile", ".bash_login", ".bash_profile"},
+			home + "/.bash_profile",
+		},
+		{
+			"the shell prefers .bash_login over .profile",
+			[]string{".profile", ".bash_login"},
+			home + "/.bash_login",
+		},
+		{"an account with none of them", nil, home + "/.bash_profile"},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, err := BourneLoginFile(home, presence(home, c.present...))
+
+			require.NoError(t, err)
+			assert.Equal(t, c.want, got)
+		})
+	}
+}
+
 func TestAShellWithNoHomeHasNoStartupFileToName(t *testing.T) {
-	_, err := BourneLoginFile("")
+	_, err := BourneLoginFile("", nothingExists)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no startup file")
 
 	_, err = BourneRCFile("")
 	require.Error(t, err)
+}
+
+func nothingExists(string) bool { return false }
+
+// presence answers for a home directory holding exactly the named files.
+func presence(home string, names ...string) func(string) bool {
+	return func(path string) bool {
+		for _, name := range names {
+			if path == home+"/"+name {
+				return true
+			}
+		}
+		return false
+	}
 }
 
 // The machine-wide directory is named in the shell's spelling too, and
