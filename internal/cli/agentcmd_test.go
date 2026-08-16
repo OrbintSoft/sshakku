@@ -11,6 +11,7 @@ import (
 
 	"github.com/OrbintSoft/sshakku/internal/agent"
 	"github.com/OrbintSoft/sshakku/internal/paths"
+	"github.com/OrbintSoft/sshakku/internal/platform"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -241,4 +242,43 @@ func TestRunEnsure(t *testing.T) {
 		assert.Empty(t, sock, "and no socket may be handed back for one")
 		assert.Contains(t, errOut.String(), "boom", "the reason must reach the user")
 	})
+
+	// F48: a mechanism this build has none of here is not a failure of the
+	// session that met it. It is told apart from "boom" above by the sentinel
+	// and by nothing else — a message is not something a caller can act on.
+	t.Run("a mechanism this system has none of is not a failure", func(t *testing.T) {
+		own := paths.Layout{
+			AgentSock: layout.AgentSock, AgentLock: layout.AgentLock,
+			LogFile: filepath.Join(t.TempDir(), "sessions.log"),
+		}
+		d := depsWithEnsurer(fakeEnsurer{err: platform.Unimplemented("keeping an ssh-agent on a fixed endpoint")})
+		var errOut bytes.Buffer
+
+		sock, code := d.runEnsure(t.Context(), &errOut, env, own)
+
+		assert.Zero(t, code, "a login shell must open on a system that has no agent to give it")
+		assert.Empty(t, sock, "with no socket, since there is none")
+		assert.Empty(t, errOut.String(), "and silently: there is nothing the user did wrong")
+
+		logged, err := os.ReadFile(own.LogFile)
+		require.NoError(t, err, "the absence must still be written down")
+		assert.Contains(t, string(logged), "keeping an ssh-agent", "naming what is missing")
+		assert.NotContains(t, string(logged), "ERROR", "as a fact about this build, not an error in this session")
+	})
+}
+
+// F48, F10: a shell wired on a system that cannot give it an agent opens
+// silently, and gets the paths that do exist rather than nothing at all.
+func TestAShellOnASystemWithNoAgentMechanismStillOpensAndIsToldNothing(t *testing.T) {
+	tempRuntimeEnv(t)
+	d := depsWithEnsurer(fakeEnsurer{err: platform.Unimplemented("keeping an ssh-agent on a fixed endpoint")})
+	var stdout, stderr bytes.Buffer
+
+	code := d.shellInit(t.Context(), &stdout, &stderr, nil)
+
+	require.Equalf(t, 0, code, "the shell must open: %s", stderr.String())
+	assert.Empty(t, stderr.String(), "and open with nothing printed")
+	assert.Contains(t, stdout.String(), "log_file=", "the paths this system does have are still handed over")
+	assert.Contains(t, stdout.String(), "agent_sock=''",
+		"and the one it has none for is handed over empty, which is what the hook reads to know there is none")
 }

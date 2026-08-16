@@ -286,12 +286,27 @@ What has no cells here yet, and why:
   running the suite: a session started fresh and finding itself wired, an
   execution policy set to `Restricted`, and the account's own stored `PATH`.
   Those are by-hand runs against the built binary, not cells a suite can fill.
-- **The agent.** There is no row to fill because there is no mechanism yet: an
-  agent on Windows is a service behind a named pipe, not a process on a socket,
-  and `ssh-agent.exe` there ignores the flag that would bind one of its own, so
-  the fixed-endpoint model the Unix builds use has no equivalent to point at.
-  What is settled is that Win32-OpenSSH does read `SSH_AUTH_SOCK` and that what
-  it names is a pipe.
+- **The agent.** There is still no mechanism: an agent on Windows is a service
+  behind a named pipe, not a process on a socket, and `ssh-agent.exe` there
+  ignores the flag that would bind one of its own, so the fixed-endpoint model
+  the Unix builds use has no equivalent to point at. What is settled is that
+  Win32-OpenSSH does read `SSH_AUTH_SOCK` and that what it names is a pipe.
+
+  What the absence itself does now has cells, because it is a promise (F48):
+  `TestOnThisSystemAWiredShellStillOpensWithNothingSaid` runs the real
+  `shell-init` through the ensurer this platform actually composes and requires
+  exit `0`, nothing on stderr, and a log line naming the mechanism rather than
+  whichever step of a lifecycle that cannot run was reached first;
+  `TestASystemThatCannotKeepAnAgentIsNotToldToOpenALoginShell` and
+  `TestTheFindingForNoAgentSaysWhetherOneCanBeStartedHere` hold `doctor` to
+  saying so instead of recommending the login shell that would have fixed it
+  elsewhere — both checked from either platform, since which answer a machine
+  gets is stated by the caller and not read from the machine.
+
+  One report line is still wrong here and is a known gap, not a passing one:
+  the `SSH_ASKPASS` finding explains its absence by a profile that was never
+  read, when on this platform the askpass helper is simply not implemented.
+  It needs the same treatment as the agent line above.
 - **The wallet, the askpass helper and the passphrase handoff**, each of which
   reports itself unimplemented rather than behaving like an empty one.
 - **Coverage and test-health reporting**, which the other two platforms get and

@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/OrbintSoft/sshakku/internal/agent"
 	"github.com/OrbintSoft/sshakku/internal/cli/shell"
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/diagnose"
@@ -481,6 +482,7 @@ func gatherReport(ctx context.Context, env paths.Env, layout paths.Layout, setti
 		EnvAskpassRequire: os.Getenv("SSH_ASKPASS_REQUIRE"),
 		Env:               shownEnv,
 		SecretEnv:         secretEnv,
+		NoAgentMechanism:  !agent.KeepsAgents(),
 	}, inspect.Inspector{}, reach.SocketProber{}, newAncestrySource(), newCgroupSource(), keySource,
 		newHostSource(env.Home))
 }

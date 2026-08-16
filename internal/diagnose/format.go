@@ -89,7 +89,7 @@ func Format(w io.Writer, r Report) {
 		p("  - %s\n", s)
 	}
 
-	if rec := recommend(r.State); rec != "" {
+	if rec := recommend(r); rec != "" {
 		p("\nrecommendation:\n  %s\n", rec)
 	}
 

@@ -204,11 +204,13 @@ On Linux and macOS, everything above is what `make install` and
 used; `sshakku install` is being brought in to take that over, and the
 Makefile keeps being the way the binary is put in place on every platform.
 
-On Windows, the binary builds and its test suite runs; the wiring described here
-is what is being implemented, and until it lands there is nothing to install
-there. Three things stay out of it deliberately, and are not oversights: the
-ssh-agent itself (Windows serves it as a service on a named pipe, which is a
-different mechanism from the socket the Unix builds keep healthy), the askpass
-helper, and the Credential Manager as a wallet. Until those exist, a wired
-Windows session gets the hook and the `PATH`, and the session log records what
-this platform cannot yet do.
+On Windows, the binary builds, its test suite runs, and `sshakku install` wires
+the shells listed above. Three things stay out of it deliberately, and are not
+oversights: the ssh-agent itself (Windows serves it as a service on a named
+pipe, which is a different mechanism from the socket the Unix builds keep
+healthy), the askpass helper, and the Credential Manager as a wallet. A wired
+Windows session therefore gets the hook and the `PATH` and nothing more — it
+opens silently, exactly as one on any other system does, and the session log
+records what this platform cannot yet do rather than the shell reporting it as
+a failure. `sshakku doctor` says the same in the report, and does not recommend
+opening a new login shell to get an agent that nothing here can start.

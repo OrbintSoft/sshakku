@@ -43,6 +43,8 @@ func findings(in Inputs, r Report) []string {
 	}
 
 	switch {
+	case reachable == 0 && r.NoAgentMechanism:
+		f = append(f, "no ssh-agent is answering, and this build has no way to keep one on this system yet")
 	case reachable == 0:
 		f = append(f, "no ssh-agent is answering; a new login shell will start one")
 	case reachable > 1:

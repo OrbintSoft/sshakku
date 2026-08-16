@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/agent"
 	"github.com/OrbintSoft/sshakku/internal/cli/shell"
 	"github.com/OrbintSoft/sshakku/internal/paths"
+	"github.com/OrbintSoft/sshakku/internal/platform"
 	"github.com/OrbintSoft/sshakku/internal/sessionlog"
 
 	"github.com/OrbintSoft/sshakku/internal/agent/inspect"
@@ -30,10 +32,16 @@ type agentEnsurer interface {
 }
 
 // realEnsurer wires the concrete system probes and runners into the production
-// agent.Manager. It composes real implementations and has no branching logic of
-// its own; deps.ensurer holds the result so command bodies can be tested against
-// a fake.
+// agent.Manager, on a system that has an agent to drive; deps.ensurer holds the
+// result so command bodies can be tested against a fake.
+//
+// Where this build cannot keep an agent at all, what it composes those pieces
+// out of does not exist, and the honest answer is the one that says so rather
+// than a Manager that would fail at its first step.
 func realEnsurer() agentEnsurer {
+	if !agent.KeepsAgents() {
+		return agent.NoMechanism{}
+	}
 	return agent.Manager{
 		Prober:    reach.SocketProber{},
 		Inspector: inspect.Inspector{},
@@ -155,6 +163,15 @@ func (d deps) runEnsure(ctx context.Context, stderr io.Writer, env paths.Env, la
 
 	res, err := d.ensurer.EnsureAgent(ctx, cfg, log)
 	if err != nil {
+		// A mechanism this build has none of on this system is not this
+		// session's failure. The shell opens, with whatever paths do exist,
+		// and the absence is written down once as the fact it is — where an
+		// error on the terminal would be read as something to go and fix, and
+		// there is nothing here to fix.
+		if errors.Is(err, platform.ErrUnimplemented) {
+			_ = log.Log("INFO", fmt.Sprintf("ensure-agent: %v", err))
+			return "", 0
+		}
 		_ = log.Log("ERROR", fmt.Sprintf("ensure-agent: %v", err))
 		_, _ = fmt.Fprintf(stderr, "sshakku: %v\n", err)
 		return "", 1

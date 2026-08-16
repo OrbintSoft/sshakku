@@ -85,8 +85,20 @@ func classifyState(r Report) State {
 // recommend returns the remediation for a state, phrased around what actually
 // heals it today: opening a login shell, whose init reaps, starts, or adopts as
 // the state requires.
-func recommend(s State) string {
-	switch s {
+//
+// All of that rests on there being an agent to drive. Where this build has none
+// on the system reported on, opening a shell changes nothing, and saying it
+// would send somebody to do a thing that cannot work — so the answer there is
+// about what is true rather than about what to do.
+func recommend(r Report) string {
+	if r.NoAgentMechanism {
+		if r.State == StateOursHealthy || r.State == StateForeignHealthy {
+			return "an agent is answering; SSHakku does not keep agents on this system yet, so nothing it does will change that"
+		}
+		return "no agent is answering, and SSHakku cannot start one on this system yet;" +
+			" ssh will ask for each passphrase itself"
+	}
+	switch r.State {
 	case StateClean:
 		return "no agent is running; a new login shell starts one and loads your keys"
 	case StateOursHealthy:

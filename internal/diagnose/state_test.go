@@ -72,9 +72,10 @@ func TestRecommend(t *testing.T) {
 	// assert, not require, so a run names all the silent ones rather than the
 	// first.
 	for _, s := range []State{StateClean, StateOursHealthy, StateOursZombie, StateForeignHealthy, StateDisaster} {
-		assert.NotEmptyf(t, recommend(s), "%v must come with something to do about it", s)
+		assert.NotEmptyf(t, recommend(Report{State: s}), "%v must come with something to do about it", s)
 	}
-	assert.Empty(t, recommend(StateUnknown), "a state that was never worked out has nothing to advise")
+	assert.Empty(t, recommend(Report{State: StateUnknown}),
+		"a state that was never worked out has nothing to advise")
 }
 
 func TestStateString(t *testing.T) {
