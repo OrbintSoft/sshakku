@@ -183,13 +183,10 @@ func TestAFailureNamesTheFileItWasWorkingOn(t *testing.T) {
 // other would not come back as it was. So the library is run, on the same
 // inputs, and the bytes are compared.
 func TestTheShellLibraryAgreesByteForByte(t *testing.T) {
-	bash, err := exec.LookPath("bash")
-	if err != nil {
-		t.Skip("no bash here to compare against")
-	}
 	lib, err := filepath.Abs(hookLib)
 	require.NoError(t, err)
 	require.FileExists(t, lib)
+	bash := findBash(t, lib)
 
 	inputs := []struct {
 		name string
@@ -228,6 +225,31 @@ func TestTheShellLibraryAgreesByteForByte(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, string(theirs), string(BourneDropIn(sourceLine)))
 	})
+}
+
+// findBash returns the first of this system's candidate shells that can read
+// the file at lib, which is the only property that makes one of them the shell
+// this comparison is about.
+//
+// The candidates are the platform's, and the choosing is not: bashCandidates
+// says where this system keeps a bash, and this decides which one answers.
+// Being on PATH is not the test — a name on PATH can belong to a shell whose
+// filesystem is not the one holding this repository.
+func findBash(t *testing.T, lib string) string {
+	t.Helper()
+
+	tried := bashCandidates(t)
+	for _, candidate := range tried {
+		path, err := exec.LookPath(candidate)
+		if err != nil {
+			continue
+		}
+		if exec.CommandContext(t.Context(), path, "-c", `test -f "$1"`, "sh", lib).Run() == nil {
+			return path
+		}
+	}
+	require.FailNow(t, "no bash here can read this repository", "tried %v", tried)
+	return ""
 }
 
 // run invokes the shell library and returns what it printed, failing the test

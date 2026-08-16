@@ -12,6 +12,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// bashCandidates says where this system keeps a bash that can run the shell
+// library. Here it is whichever one the PATH names, which is the shell a user
+// of this system would get.
+func bashCandidates(t *testing.T) []string {
+	t.Helper()
+	return []string{"bash"}
+}
+
 // Who may read a startup file is a question only a system with real permission
 // bits can be asked, which is why these two live here. On Windows the bits are
 // synthesised and a test of them would be reading its own reflection.
