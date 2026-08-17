@@ -11,11 +11,18 @@ run.
 
 1. **Puts the binary somewhere**, with `sshakku-askpass` beside it — a second
    name for the same binary, which `ssh` runs when it needs a passphrase and
-   which you never run yourself.
+   which you never run yourself. This is `make`'s work on every platform, and on
+   Windows there is no askpass beside it: this build has no implementation of one
+   there yet, and a helper that is present but cannot run is worse than one that
+   is honestly absent.
 2. **Wires a login hook into one shell startup file**, so every new session has
    a working agent without your doing anything.
 3. **Makes `sshakku` runnable by name**, which on some systems the first step
    does not achieve on its own.
+
+The first is where the program lives, so it decides the other two: the hook a
+shell runs names that copy, and it is that directory — never the tree you built
+in — that is made findable.
 
 Uninstalling undoes exactly those three, and nothing else: the surrounding lines
 of your startup file, and the rest of your `PATH`, come back byte for byte as
@@ -165,6 +172,23 @@ profile instead, and you are told why.
 Git Bash uses the same locations: it is a shell on this machine, not a machine
 of its own.
 
+`make install` puts the binary in the first of those and then runs **the copy it
+just placed** to do the wiring, which is what makes the recorded directory the
+installed one rather than a second answer written down somewhere and free to
+disagree; `make install-user` does the same under your account. The defaults are
+the table above and are yours to change:
+
+```sh
+make install       BINDIR="/c/tools/sshakku"
+make install-user  USER_BINDIR="/d/apps/sshakku"
+```
+
+Give the directory in the spelling the shell running `make` reads (`/c/…`),
+since that is the shell that creates it. `DESTDIR`, which on Unix stages an
+install under a second root, is refused here rather than obeyed halfway: a path
+on this system names the drive it is on, so there is no second root to put it
+under.
+
 ## PATH
 
 On Unix nothing is recorded anywhere, because there is nowhere to record it: a
@@ -177,8 +201,11 @@ had nothing to record — so the binary is put in place by `make`, which is also
 what makes the askpass helper reachable beside it.
 
 Windows has no such directory, so there the install **records the change in your
-environment**, for the account or for the machine depending on the scope. This
-is the one thing an install does that outlives the shell, so it is done
+environment**, for the account or for the machine depending on the scope. What
+is recorded is the directory the program is in, so it is the copy `make` placed
+that records it — run any other copy and it records where that one lives, which
+is what you want when you are running it by hand from wherever you unpacked it.
+This is the one thing an install does that outlives the shell, so it is done
 carefully: the stored value is read and written in its raw form, so a `PATH`
 that refers to other variables keeps referring to them rather than being
 flattened into whatever they meant at that moment; the entry is added once,
@@ -213,7 +240,8 @@ On Linux and macOS, everything above is what `make install` and
 used; `sshakku install` is being brought in to take that over, and the
 Makefile keeps being the way the binary is put in place on every platform.
 
-On Windows, the binary builds, its test suite runs, and `sshakku install` wires
+On Windows, the binary builds, its test suite runs, `make install` and
+`make install-user` put it in the directories above, and `sshakku install` wires
 the shells listed above. Three things stay out of it deliberately, and are not
 oversights: the ssh-agent itself (Windows serves it as a service on a named
 pipe, which is a different mechanism from the socket the Unix builds keep
