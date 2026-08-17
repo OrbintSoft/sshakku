@@ -2442,13 +2442,20 @@ the marker block in the profile is the mechanism that has to work.
   temporary file's mode with it: measured on Debian, an existing `0644` startup
   file comes back `0600`, and one the library creates is `0600` from the start.
   Per-user that is harmless; machine-wide it is not, since `WIRE_BASHRC=1 make
-  install` upserts into `/etc/bash.bashrc`, which every account has to read at
-  login. The Go side sets the mode explicitly — the file keeps what it had,
-  a new one gets `0644`, a drop-in gets `0755` — and three tests fail with
-  `0600` when that is removed. Fixing `shell-hook-lib.sh` itself is not folded
-  in here: this step changes nothing on Linux or macOS, and the fix wants its
-  own failing test first (rule 23). It is the one place where "byte-identical"
-  means the file's *contents* and not its mode.
+  install` upserts into `/etc/bash.bashrc`, and `make install` on macOS upserts
+  into `/etc/zprofile` — both read at every account's login. The Go side sets
+  the mode explicitly — the file keeps what it had, a new one gets `0644`, a
+  drop-in gets `0755` — and three tests fail with `0600` when that is removed.
+  It is the one place where "byte-identical" means the file's *contents* and not
+  its mode.
+
+  `shell-hook-lib.sh` now does the same, after the two install smoke scripts
+  were made to fail on the mode first: the permissions are settled before the
+  write and applied to the temporary file, since that file is the one the rename
+  puts in place. The unwiring had the same defect and three copies of it — the
+  `mktemp`/`strip-block`/`mv` dance was written out in the Makefile twice and in
+  `install-user-hook.sh` once — so it became one primitive, `strip-block-file`,
+  and the callers ask for that instead.
 
   Deferred here on purpose, so they are not read as oversights: the agent
   endpoint (see W4's findings), the askpass helper — wiring `askpass-env` on

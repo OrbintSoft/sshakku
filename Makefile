@@ -129,11 +129,7 @@ uninstall:
 	@echo "Uninstalling $(SSH_INIT_INSTALL_PATH)"
 	@rm -f $(SSH_INIT_INSTALL_PATH)
 	@./shell-hook-lib.sh remove-drop-in "$(SSH_INIT_BASHRC_DROPIN_PATH)"
-	@if [ -f "$(SSH_INIT_BASHRC_FILE_PATH)" ]; then \
-		tmp=$$(mktemp "$(SSH_INIT_BASHRC_FILE_PATH).XXXXXX"); \
-		./shell-hook-lib.sh strip-block "$(SSH_INIT_BASHRC_FILE_PATH)" >"$$tmp"; \
-		mv "$$tmp" "$(SSH_INIT_BASHRC_FILE_PATH)"; \
-	fi
+	@./shell-hook-lib.sh strip-block-file "$(SSH_INIT_BASHRC_FILE_PATH)"
 	@echo "Uninstallation complete."
 
 install-user: build
@@ -195,16 +191,8 @@ uninstall:
 	@echo "Removing $(SSH_INIT_HOOK_RENDERED_PATH)"
 	@rm -f $(SSH_INIT_HOOK_RENDERED_PATH)
 	@rmdir "$(dir $(SSH_INIT_HOOK_RENDERED_PATH))" 2>/dev/null || true
-	@if [ -f "$(SSH_INIT_ZPROFILE_PATH)" ]; then \
-		tmp=$$(mktemp "$(SSH_INIT_ZPROFILE_PATH).XXXXXX"); \
-		./shell-hook-lib.sh strip-block "$(SSH_INIT_ZPROFILE_PATH)" >"$$tmp"; \
-		mv "$$tmp" "$(SSH_INIT_ZPROFILE_PATH)"; \
-	fi
-	@if [ -f "$(SSH_INIT_ZSHRC_PATH)" ]; then \
-		tmp=$$(mktemp "$(SSH_INIT_ZSHRC_PATH).XXXXXX"); \
-		./shell-hook-lib.sh strip-block "$(SSH_INIT_ZSHRC_PATH)" >"$$tmp"; \
-		mv "$$tmp" "$(SSH_INIT_ZSHRC_PATH)"; \
-	fi
+	@./shell-hook-lib.sh strip-block-file "$(SSH_INIT_ZPROFILE_PATH)"
+	@./shell-hook-lib.sh strip-block-file "$(SSH_INIT_ZSHRC_PATH)"
 	@echo "Uninstallation complete."
 
 install-user: build
@@ -228,10 +216,9 @@ uninstall-user:
 
 else ifneq ($(WINDOWS_UNAME),)
 
-# Here the wiring is the program's own job, and these targets hand it over.
-# Which file a shell reads is a question only that shell can answer — PowerShell
-# keeps four profiles and puts them where its own installation decides — so it is
-# asked, rather than assembled from paths written down here. The scopes line up
+# Here the wiring is the program's own job, and these targets hand it over:
+# which file a shell reads is a question only that shell can answer, so it is
+# asked rather than assembled from paths written down here. The scopes line up
 # with the other platforms': the plain target installs for the machine and needs
 # an elevated prompt, the -user one installs for the account and needs nothing.
 #

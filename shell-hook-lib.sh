@@ -15,6 +15,7 @@
 #   shell-hook-lib.sh remove-drop-in <drop_file>
 #   shell-hook-lib.sh upsert-block <file> <source_line>
 #   shell-hook-lib.sh strip-block <file>
+#   shell-hook-lib.sh strip-block-file <file>
 set -euo pipefail
 
 marker_start="# >>> sshakku >>>"
@@ -41,12 +42,30 @@ strip_block() {
 	' "$file"
 }
 
+# file_mode prints file's permission bits as octal digits, or nothing when
+# there is no file there to have any. The flag that asks for them is not the
+# same on the two systems this runs on and neither accepts the other's, so both
+# are tried.
+file_mode() {
+	local file="$1"
+	[ -e "$file" ] || return 0
+	stat -c '%a' "$file" 2>/dev/null || stat -f '%Lp' "$file"
+}
+
 # upsert_block replaces any existing sshakku marker block in file with one
 # wrapping source_line, appending it if none existed. Writes via a temp file
 # in the same directory (so the final mv is an atomic same-filesystem
 # rename) rather than editing file in place.
+#
+# The permissions are set explicitly, on the temp file, because that file is the
+# one that ends up in place: mktemp creates it readable only by its owner and the
+# rename carries that with it. A startup file keeps what it had, and one this
+# created gets what a startup file normally has — a machine-wide file
+# (/etc/bash.bashrc, /etc/zprofile) that came back owner-only would silently stop
+# being read at every other account's login, taking its own contents with it.
 upsert_block() {
-	local file="$1" source_line="$2" tmp
+	local file="$1" source_line="$2" tmp mode
+	mode="$(file_mode "$file")"
 	tmp="$(mktemp "${file}.XXXXXX")"
 	strip_block "$file" >"$tmp"
 	# A blank separator line only when something preceded the block — a
@@ -61,6 +80,26 @@ upsert_block() {
 		echo "$source_line"
 		echo "$marker_end"
 	} >>"$tmp"
+	chmod "${mode:-644}" "$tmp"
+	mv "$tmp" "$file"
+}
+
+# strip_block_file removes the sshakku block from file in place, leaving every
+# other line of it — and the permissions it was found with — alone. A file that
+# isn't there is not an error: nothing was wired into it, so there is nothing to
+# unwire, and an uninstall has to run on a machine that was never installed.
+#
+# It writes through a temp file in the same directory for the reason upsert_block
+# does, and sets the mode for the same reason: an uninstall that hands back a
+# machine-wide startup file nobody but its owner can read has broken the file it
+# was asked to repair.
+strip_block_file() {
+	local file="$1" tmp mode
+	[ -f "$file" ] || return 0
+	mode="$(file_mode "$file")"
+	tmp="$(mktemp "${file}.XXXXXX")"
+	strip_block "$file" >"$tmp"
+	chmod "${mode:-644}" "$tmp"
 	mv "$tmp" "$file"
 }
 
@@ -83,13 +122,14 @@ remove_drop_in_hook() {
 
 # Dispatch only when executed directly, not when sourced.
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
-	usage="usage: shell-hook-lib.sh {drop-in <drop_file> <source_line>|remove-drop-in <drop_file>|upsert-block <file> <source_line>|strip-block <file>}"
+	usage="usage: shell-hook-lib.sh {drop-in <drop_file> <source_line>|remove-drop-in <drop_file>|upsert-block <file> <source_line>|strip-block <file>|strip-block-file <file>}"
 	action="${1:?$usage}"
 	case "$action" in
 	drop-in) drop_in_hook "${2:?$usage}" "${3:?$usage}" ;;
 	remove-drop-in) remove_drop_in_hook "${2:?$usage}" ;;
 	upsert-block) upsert_block "${2:?$usage}" "${3:?$usage}" ;;
 	strip-block) strip_block "${2:?$usage}" ;;
+	strip-block-file) strip_block_file "${2:?$usage}" ;;
 	*)
 		echo "shell-hook-lib.sh: unknown action '$action' ($usage)" >&2
 		exit 2

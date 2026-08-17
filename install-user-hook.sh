@@ -74,12 +74,7 @@ wire_hook() {
 unwire_hook() {
 	local dir="$1" file="$2" nn="$3"
 	remove_drop_in_hook "$dir/${nn}-sshakku-init.sh"
-	if [ -f "$file" ]; then
-		local tmp
-		tmp="$(mktemp "${file}.XXXXXX")"
-		strip_block "$file" >"$tmp"
-		mv "$tmp" "$file"
-	fi
+	strip_block_file "$file"
 }
 
 # set_shell_paths fills profile_d_dir/profile_file/rc_d_dir/rc_file for the
