@@ -13,7 +13,7 @@ require github.com/godbus/dbus/v5 v5.2.2
 require (
 	github.com/ebitengine/purego v0.10.2
 	go.uber.org/goleak v1.3.0
-	golang.org/x/crypto v0.54.0
+	golang.org/x/crypto v0.55.0
 )
 
 require (
