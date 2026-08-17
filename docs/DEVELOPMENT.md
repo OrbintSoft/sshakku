@@ -94,12 +94,20 @@ On Windows both run from Git Bash, and the binary is built as
 `bin/sshakku.exe`: that system runs a program by its extension, and the path a
 wiring writes into a shell's startup file is this one.
 
-`make install-user` and `make install` work there too, and hand the wiring to
-the program: they build, then run `sshakku install` for the account or for the
-machine. Which shell gets wired is the one you ran make from, unless you say
+`make install-user` and `make install` work there too. They build, copy the
+binary to where this system keeps programs — `%LOCALAPPDATA%\Programs\sshakku`
+for the account, `%ProgramFiles%\sshakku` for the machine, `BINDIR` and
+`USER_BINDIR` to say otherwise — and then run **that copy** to do the wiring,
+which is also what records its directory in the stored environment. Nothing you
+install from is left load-bearing: the build tree can be moved or deleted
+afterwards. Which shell gets wired is the one you ran make from, unless you say
 otherwise — `make install-user SHELL_ARG=--shell=windowspowershell`. The Unix
 paths in this file are not used there at all; which file a shell reads is asked
 of that shell, see [INSTALLATION.md](INSTALLATION.md).
+
+The machine-wide target needs an elevated prompt, as it does everywhere else,
+and `DESTDIR` is refused rather than obeyed halfway: a path here names its own
+drive, so there is no second root to stage an install under.
 
 `make test` is what CI runs on every push, on a plain Linux runner (with
 `dbus-daemon` installed, since some `internal/secretservice`/`internal/keys`

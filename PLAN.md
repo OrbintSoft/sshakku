@@ -2468,6 +2468,32 @@ the marker block in the profile is the mechanism that has to work.
   binds harder here than anywhere — moves with `load-keys` to the step that
   wires it, since a gate on a command that is not called is untestable.
 
+  **Where the binary goes on Windows, and who records it (step 11).** Until this
+  step `make install` there wired a binary that stayed in the build tree: delete
+  or move the tree and every session it had wired broke, and the `PATH` entry
+  recorded named a repository. The split settled with the user is that the
+  Makefile chooses the place — `%ProgramFiles%\sshakku` for the machine,
+  `%LOCALAPPDATA%\Programs\sshakku` for the account, `BINDIR`/`USER_BINDIR` to
+  say otherwise — and the wiring is then run from the copy it placed, so the
+  directory `sshakku install` records is the installed one by construction rather
+  than a second answer written down elsewhere and free to disagree. Rejected: a
+  `sshakku path add|remove` command taking the directory as an argument (a second
+  command and an F47 rewrite for nothing observable today), and the Makefile
+  writing the registry itself (a second implementation of the one thing an
+  install does that outlives the shell). `--no-path` stays, which is what an MSI
+  will use when it manages that entry itself.
+
+  Two traps found by writing it, both recorded in the Makefile itself.
+  `$(PROGRAMFILES)` read inside a Makefile is the **x86** directory whenever make
+  is itself a 32-bit program, which GnuWin32 make is — Windows redirects that
+  variable per process — so the directory is asked of the shell through
+  `cygpath`, which is not redirected. And `DESTDIR` cannot stage anything here: a
+  path names its own drive, so prefixing one yields `…/stageC:/…` rather than
+  either a staged tree or an error, and the Windows branch refuses it instead.
+  F49 was added for the placement itself, which is user-visible on every platform
+  and had lived only in a table in `docs/INSTALLATION.md`. The askpass helper is
+  still not installed there, deliberately, and is the next step's subject.
+
   Sub-steps, each committable: (1) this design, in `docs/INSTALLATION.md`,
   `PLAN.md` and the matrix; (2) the hook and query `.ps1` files with `lint-ps1`;
   (3) the marker-block and drop-in primitives in Go, byte-identical to
@@ -2477,7 +2503,9 @@ the marker block in the profile is the mechanism that has to work.
   (8) `shell-init` reporting an unsupported platform through the log instead of
   failing every shell; (9) the Makefile's `MINGW*`/`MSYS*` branch; (10) the run
   on a real desktop (rule 25) across both editions and Git Bash, and the
-  uninstall that leaves the files as they were.
+  uninstall that leaves the files as they were; (11) `make install` putting the
+  binary where this system keeps programs, and the `PATH` entry that then follows
+  from where it was put.
 - **W4 — run it** on `windows-*` runners (open decision 9) and on a real
   desktop session, driving the binary through a user's scenario (rule 25).
   **The suite half is done.** `go test (windows)` on `windows-latest` builds,
