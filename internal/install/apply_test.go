@@ -393,6 +393,33 @@ func TestWithNoFileNamedTheShellIsAskedWhereItLooks(t *testing.T) {
 	}
 }
 
+// F19, F44: a machine-wide install wires what every account of the machine
+// reads. The account that ran the command is not that, and getting this wrong
+// is invisible from the inside: the hook lands in a directory the whole machine
+// shares, so an administrator who installed for everybody has installed for
+// themselves and has every reason to believe otherwise.
+//
+// Only the plan is asked for, and deliberately: what a machine-wide target
+// names is outside any directory a test owns, so resolving it is the whole of
+// what can be checked without writing into the system running the suite.
+func TestAMachineWideInstallWiresTheMachineAndNotTheAccountThatRanIt(t *testing.T) {
+	home := t.TempDir()
+	installInto(t, home)
+	t.Setenv("HOME", home)
+	exe, kind := aLiveInterpreter(t)
+
+	p, err := resolve(t.Context(), Request{Shell: kind, ShellExe: exe, Scope: Machine, Hosts: AllHosts}, Ancestry{})
+
+	require.NoError(t, err)
+	require.NotEmpty(t, p.placement.Path)
+	assert.NotContains(t, p.placement.Path, home,
+		"a machine-wide wiring in one account's own startup file reaches one person")
+	for _, candidate := range p.sweep {
+		assert.NotContains(t, candidate, home,
+			"and an uninstall that swept that account's files would be answering the same wrong question")
+	}
+}
+
 // The default PowerShell target is the profile every host of that interpreter
 // reads, of the scope asked for — and the uninstall sweep is every profile the
 // interpreter named, because somebody may have installed with one set of flags
