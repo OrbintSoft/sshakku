@@ -163,3 +163,58 @@ func TestTheTwoFamiliesJudgeTheSameDirectoryDifferently(t *testing.T) {
 	assert.True(t, viaShell.DropIn, "a shell's drop-in directory is read by the shell's own configuration")
 	assert.False(t, viaPowerShell.DropIn, "PowerShell's is read by nothing unless the profile says so")
 }
+
+// Something that is not a directory where a drop-in directory would be is
+// neither a directory nor nothing. Reported as absent, the hook would go into the
+// startup file and the real problem would go unmentioned — and the file somebody
+// put there would still be there, doing whatever it does.
+func TestSomethingThatIsNotADirectoryWhereOneWouldBeIsReported(t *testing.T) {
+	dir := t.TempDir()
+
+	bourne := filepath.Join(dir, "profile")
+	require.NoError(t, os.WriteFile(BourneDropInDir(bourne), []byte("not a directory"), 0o644))
+	_, err := PlaceBourne(bourne, "50-sshakku.sh")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not a directory")
+
+	powershell := filepath.Join(dir, "Microsoft.PowerShell_profile.ps1")
+	require.NoError(t, os.WriteFile(PowerShellDropInDir(powershell), []byte("not a directory"), 0o644))
+	_, err = PlacePowerShell(powershell, "50-sshakku.ps1")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not a directory")
+}
+
+// A profile that is not there yet reads nothing, which is not an error: an install
+// writes one where there was none. A profile that cannot be read is an error,
+// because whether it loads its drop-in directory is then unknown — and guessing
+// either way puts the hook somewhere on the strength of nothing.
+func TestAProfileThatCannotBeReadIsNotGuessedAbout(t *testing.T) {
+	dir := t.TempDir()
+	dropIns := filepath.Join(dir, "Profile.d")
+	require.NoError(t, os.Mkdir(dropIns, 0o755))
+
+	absent := filepath.Join(dir, "Microsoft.PowerShell_profile.ps1")
+	place, err := PlacePowerShell(absent, "50-sshakku.ps1")
+	require.NoError(t, err)
+	assert.Equal(t, absent, place.Path, "nothing loads a drop-in directory in a profile that does not exist")
+	assert.NotEmpty(t, place.Why, "and the directory that was there and unused is why this file was chosen")
+
+	// A directory in the profile's place: not a profile, and not readable as one.
+	unreadable := filepath.Join(dir, "profile.ps1")
+	require.NoError(t, os.Mkdir(unreadable, 0o755))
+	_, err = PlacePowerShell(unreadable, "50-sshakku.ps1")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), unreadable)
+}
+
+// Something in the way of a path that is not a file or a directory but a name
+// that cannot be resolved at all — a directory sought under a file — is neither
+// there nor absent, and is reported rather than read as absent.
+func TestAPathThatCannotBeReachedIsNotReadAsAbsent(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "not-a-directory")
+	require.NoError(t, os.WriteFile(file, []byte("mine"), 0o644))
+
+	_, err := isDir(filepath.Join(file, "under-a-file"))
+
+	require.Error(t, err, "a name this system cannot resolve is not a directory that is not there")
+}

@@ -97,8 +97,12 @@ so, by name, instead of half-doing it.
 ### bash and zsh
 
 The login file is the primary one and is always wired: `~/.bash_profile` or
-`~/.zprofile` for a user install, `/etc/profile.d/` or `/etc/zprofile` for a
-machine install. Where a drop-in directory already exists beside the file
+`~/.zprofile` for a user install; for a machine install, a file of SSHakku's own
+in `/etc/profile.d/` on Linux and under Git Bash, and a block in `/etc/zprofile`
+(zsh) or `/etc/profile` (bash) on macOS. A machine-wide install for zsh on Linux
+is refused rather than guessed at: which file that shell reads system-wide is
+the distribution's own choice, so name it with `--profile`. Where a drop-in
+directory already exists beside the file
 (`~/.bash_profile.d/`, `~/.zshrc.d/`, `/etc/bash/bashrc.d/`), a small file is
 dropped into it instead of a block being added to the profile: the directory
 existing is taken as saying that it is read.
@@ -163,9 +167,14 @@ of its own.
 
 ## PATH
 
-On Unix the binary goes somewhere already on everyone's `PATH` for a machine
-install, and the wired hook adds `~/.local/bin` for a user install, since that
-one is not on the default `PATH` everywhere.
+On Unix nothing is recorded anywhere, because there is nowhere to record it: a
+session searches what its startup files built, and no stored environment
+outlives it. A machine install puts the binary somewhere every session already
+searches; a per-user `make install-user` puts `~/.local/bin` on `PATH` from the
+block it wires, since that directory is not on the default `PATH` everywhere.
+`sshakku install` does neither — it wires a shell and reports that this system
+had nothing to record — so the binary is put in place by `make`, which is also
+what makes the askpass helper reachable beside it.
 
 Windows has no such directory, so there the install **records the change in your
 environment**, for the account or for the machine depending on the scope. This

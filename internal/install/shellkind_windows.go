@@ -23,8 +23,17 @@ func shellPatterns() []shellPattern {
 	return []shellPattern{
 		{base: "pwsh.exe", kind: PowerShellCore},
 		{base: "powershell.exe", kind: WindowsPowerShell},
-		{base: "bash.exe", kind: Bash, confirmByTranslator: true},
+		{base: "bash.exe", kind: Bash, confirm: translatorBeside},
 	}
+}
+
+// translatorBeside reports whether the program at imagePath belongs to a
+// POSIX-emulating environment, which is what tells this system's two bash.exe
+// apart: such an environment ships its path translator beside its shell, and
+// the launcher for another operating system ships nothing of the sort.
+func translatorBeside(imagePath string) bool {
+	_, found := FindCygpath(imagePath)
+	return found
 }
 
 // ImagePath reports the full path of the program a process is running.

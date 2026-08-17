@@ -184,3 +184,15 @@ func TestARootIsNotTrimmedAway(t *testing.T) {
 	assert.Equal(t, "/", trimTrailingSeparators("/", `\/`))
 	assert.Equal(t, `C:`, trimTrailingSeparators(`C:\`, `\/`))
 }
+
+// A list whose system said nothing about what makes two entries the same is
+// compared as text. That is not a fallback anybody should rely on — every real
+// list here comes with its system's own rule — but a rule that is missing must
+// not be a rule that matches everything.
+func TestAListWithNoRuleOfItsOwnComparesEntriesAsText(t *testing.T) {
+	list := PathList{Separator: ":"}
+
+	assert.True(t, list.has("/a:/b", "/b"))
+	assert.False(t, list.has("/a:/b", "/B"), "without a rule saying case does not matter, it does")
+	assert.False(t, list.has("/a:/b", "/b/"), "and neither does a trailing separator")
+}

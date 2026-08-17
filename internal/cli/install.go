@@ -186,6 +186,9 @@ func pathStep(command wiring, request install.Request, outcome install.Outcome) 
 	case outcome.PathChanged:
 		return "no longer recorded: " + outcome.PathEntry
 	default:
-		return "no change needed (" + outcome.PathEntry + ")"
+		// Why nothing happened is the system's own answer and is asked for as
+		// one: "already there" and "there is nowhere to put it" are both a step
+		// that changed nothing, and only one of them is worth going to look at.
+		return install.PathStepNothingToDo + " (" + outcome.PathEntry + ")"
 	}
 }

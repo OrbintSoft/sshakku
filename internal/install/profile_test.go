@@ -159,3 +159,31 @@ func TestTheSweepNamesEachFileOnce(t *testing.T) {
 func TestAHostThatNamedNothingHasNothingToSweep(t *testing.T) {
 	assert.Empty(t, EveryProfile(Host{}))
 }
+
+// A value nobody serves is refused where it is read, not carried down to
+// whatever would have written a file: a scope of "sytem" that reached
+// LocationsFor is a mistyped flag turned into an error about install locations,
+// and one that reached a write would be a file in a directory nobody meant.
+func TestAScopeOrHostsNobodyServesIsRefusedWhereItIsRead(t *testing.T) {
+	for _, name := range []string{"user", "machine"} {
+		scope, err := ParseScope(name)
+		require.NoError(t, err)
+		assert.Equal(t, Scope(name), scope)
+	}
+	_, err := ParseScope("sytem")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "sytem", "the refusal repeats what was asked for")
+	assert.Contains(t, err.Error(), string(User), "and names what could have been asked for")
+	_, err = ParseScope("")
+	assert.Error(t, err, "no scope at all is not the default: the caller that has one passes it")
+
+	for _, name := range []string{"all", "current"} {
+		hosts, err := ParseHosts(name)
+		require.NoError(t, err)
+		assert.Equal(t, Hosts(name), hosts)
+	}
+	_, err = ParseHosts("every")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "every")
+	assert.Contains(t, err.Error(), string(CurrentHost))
+}

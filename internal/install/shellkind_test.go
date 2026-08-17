@@ -2,8 +2,8 @@ package install
 
 import (
 	"context"
-	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -70,7 +70,7 @@ func TestTheKindsOfferedAreTheOnesThisSystemHas(t *testing.T) {
 
 func TestAnInterpreterIsRecognisedByItsImage(t *testing.T) {
 	for _, pattern := range shellPatterns() {
-		if pattern.confirmByTranslator {
+		if pattern.confirm != nil {
 			continue // needs an environment around it; see below
 		}
 		kind, ok := RecogniseShell(filepath.Join("somewhere", "else", pattern.base))
@@ -88,40 +88,36 @@ func TestSomethingThatIsNotAShellIsNotRecognised(t *testing.T) {
 	}
 }
 
-// Where a name is not enough, being part of a POSIX-emulating environment is
-// what makes an interpreter the shell meant — and the evidence is positive: the
-// environment's own translator, beside its shell. A list of known-bad places
-// would admit every impostor nobody had thought of yet.
+// Where a name is not enough, something about the program itself is what makes
+// it the shell meant, and the evidence is positive rather than a list of
+// known-bad places — which would admit every impostor nobody had thought of yet.
+//
+// What each system looks for is its own to answer and is asked where that answer
+// lives. The rule is the same everywhere — a name that needs confirming is not
+// taken on the name alone, and one that does not is — so it is checked here,
+// against a table written for the purpose.
 func TestANameMoreThanOneProgramAnswersToIsConfirmedByItsEnvironment(t *testing.T) {
-	var ambiguous shellPattern
-	for _, pattern := range shellPatterns() {
-		if pattern.confirmByTranslator {
-			ambiguous = pattern
-		}
+	asked := ""
+	table := []shellPattern{
+		{base: "ambiguous", kind: Bash, confirm: func(imagePath string) bool {
+			asked = imagePath
+			return strings.HasPrefix(filepath.ToSlash(imagePath), "real/")
+		}},
+		{base: "settled", kind: Zsh},
 	}
-	if ambiguous.base == "" {
-		t.Skip("no name on this system is answered to by more than one program")
-	}
 
-	// One with an environment around it, one on its own.
-	root := t.TempDir()
-	real := filepath.Join(root, "bin", ambiguous.base)
-	require.NoError(t, os.MkdirAll(filepath.Dir(real), 0o755))
-	require.NoError(t, os.WriteFile(real, []byte("a shell"), 0o755))
-	translator := cygpathCandidates(real)[len(cygpathCandidates(real))-1]
-	require.NoError(t, os.MkdirAll(filepath.Dir(translator), 0o755))
-	require.NoError(t, os.WriteFile(translator, []byte("a translator"), 0o755))
-
-	impostor := filepath.Join(t.TempDir(), "system", ambiguous.base)
-	require.NoError(t, os.MkdirAll(filepath.Dir(impostor), 0o755))
-	require.NoError(t, os.WriteFile(impostor, []byte("a way into somewhere else"), 0o755))
-
-	kind, ok := RecogniseShell(real)
+	kind, ok := recognise(filepath.Join("real", "ambiguous"), table)
 	assert.True(t, ok, "a shell with its environment around it is the one meant")
-	assert.Equal(t, ambiguous.kind, kind)
+	assert.Equal(t, Bash, kind)
+	assert.Equal(t, filepath.Join("real", "ambiguous"), asked,
+		"the confirmation is handed the whole path, which is the only thing that tells two of one name apart")
 
-	_, ok = RecogniseShell(impostor)
+	_, ok = recognise(filepath.Join("impostor", "ambiguous"), table)
 	assert.False(t, ok, "the same name with no environment around it is not, and must not be guessed at")
+
+	kind, ok = recognise(filepath.Join("anywhere", "settled"), table)
+	assert.True(t, ok, "a name nothing else answers to needs no confirming")
+	assert.Equal(t, Zsh, kind)
 }
 
 // Typing the command in a window wires that window's shell: the ancestry is
@@ -181,7 +177,7 @@ func TestWithNoImagePathTheNameIsUsedForWhatItCanSettle(t *testing.T) {
 
 		kind, _, err := ResolveShell(t.Context(), 7, tree, nil)
 
-		if pattern.confirmByTranslator {
+		if pattern.confirm != nil {
 			require.Error(t, err, "%s cannot be settled by name, and must not be", pattern.base)
 			continue
 		}
@@ -191,3 +187,13 @@ func TestWithNoImagePathTheNameIsUsedForWhatItCanSettle(t *testing.T) {
 }
 
 var _ launcher.AncestrySource = fakeAncestry{}
+
+// The kinds on offer are the distinct ones this system's table names. A table
+// that lists one kind under two names — as a system with two shells of a family
+// would — offers it once, because the list is what a refusal reads out and a name
+// twice reads as two answers.
+func TestAKindNamedTwiceIsOfferedOnce(t *testing.T) {
+	assert.True(t, contains([]ShellKind{Bash, Zsh}, Zsh))
+	assert.False(t, contains([]ShellKind{Bash, Zsh}, PowerShellCore))
+	assert.False(t, contains(nil, Bash))
+}

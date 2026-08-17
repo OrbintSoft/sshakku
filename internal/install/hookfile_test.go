@@ -263,3 +263,67 @@ func run(t *testing.T, bash, lib string, args ...string) string {
 	require.NoError(t, err, "shell-hook-lib.sh %v: %s", args, stderr.String())
 	return string(out)
 }
+
+// A startup file that cannot be written is reported by name. The file is
+// replaced through a temporary one beside it, so a directory that is not there is
+// met at that step rather than when the wiring is renamed into place.
+func TestAStartupFileInADirectoryThatIsNotThereIsReported(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "no-such-directory", "profile")
+
+	err := UpsertBlockFile(missing, ". '/hook.sh'")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), missing, "which file could not be wired is the whole of the report")
+}
+
+// The replacement is a rename, and a rename onto something that is not a file it
+// may replace fails. Better here than half-written: a startup file is read at
+// every login, and one left as a fragment is read too.
+func TestAWiringThatCannotBeRenamedIntoPlaceIsReported(t *testing.T) {
+	occupied := filepath.Join(t.TempDir(), "profile")
+	require.NoError(t, os.Mkdir(occupied, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(occupied, "something"), []byte("mine"), 0o644))
+
+	err := replace(occupied, []byte("# >>> sshakku >>>\n"), 0o644)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), occupied)
+}
+
+// A file left holding nothing but the wiring is removed rather than left empty,
+// and a removal that cannot happen is said out loud: leaving a startup file that
+// only SSHakku ever wrote would be leaving the account as this program found it in
+// name only.
+func TestAFileThatHeldNothingButTheWiringAndCannotGoIsReported(t *testing.T) {
+	// A directory with something in it, where the wiring's own file would be:
+	// what is there is not ours to take away, and it will not be removed.
+	occupied := filepath.Join(t.TempDir(), "profile")
+	require.NoError(t, os.Mkdir(occupied, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(occupied, "something"), []byte("mine"), 0o644))
+	stripped := filepath.Join(t.TempDir(), "profile")
+	require.NoError(t, os.WriteFile(stripped, UpsertBlock(nil, ". '/hook.sh'"), 0o644))
+
+	// The same file, with nothing of anybody else's in it: this one goes.
+	require.NoError(t, StripBlockFile(stripped))
+	assert.NoFileExists(t, stripped)
+
+	// And one that cannot: reported, rather than reported as removed.
+	require.NoError(t, os.WriteFile(filepath.Join(occupied, "another"), []byte("mine"), 0o644))
+	err := StripBlockFile(occupied)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), occupied)
+}
+
+// A drop-in wrapper that cannot be removed is reported. The one thing worse than
+// failing to unwire a hook is removing a directory somebody else put there, so a
+// directory in its place is an error rather than something to delete.
+func TestADropInThatCannotBeRemovedIsReported(t *testing.T) {
+	inTheWay := filepath.Join(t.TempDir(), "50-sshakku-init.sh")
+	require.NoError(t, os.Mkdir(inTheWay, 0o755))
+
+	err := RemoveDropIn(inTheWay)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), inTheWay)
+	assert.DirExists(t, inTheWay, "and it is still there, because it was never ours")
+}

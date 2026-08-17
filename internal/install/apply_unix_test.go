@@ -31,3 +31,9 @@ func installInto(t *testing.T, dir string) {
 	t.Helper()
 	t.Setenv("HOME", dir)
 }
+
+// dropInDirBeside is where this platform's install would look for a drop-in
+// directory beside the startup file it is wiring.
+func dropInDirBeside(startupFile string) string {
+	return BourneDropInDir(startupFile)
+}

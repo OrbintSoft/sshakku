@@ -96,7 +96,7 @@ func TestAScopeThatIsNotOfferedIsRefusedAndNamesWhatThereIs(t *testing.T) {
 // which on the platform this matters for is not this program's. Joined with a
 // backslash the file is still created — under a name the shell never opens.
 func TestABourneStartupFileIsNamedTheWayTheShellNamesIt(t *testing.T) {
-	login, err := BourneLoginFile("/c/Users/example", nothingExists)
+	login, _, err := BourneLoginFile("/c/Users/example", nothingExists)
 	require.NoError(t, err)
 	rc, err := BourneRCFile("/c/Users/example")
 	require.NoError(t, err)
@@ -139,16 +139,19 @@ func TestTheLoginFileWiredIsTheOneTheShellWillReallyRead(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got, err := BourneLoginFile(home, presence(home, c.present...))
+			got, candidates, err := BourneLoginFile(home, presence(home, c.present...))
 
 			require.NoError(t, err)
 			assert.Equal(t, c.want, got)
+			assert.Contains(t, candidates, got,
+				"an uninstall sweeps the candidates, so the one wired has to be among them")
+			assert.Len(t, candidates, 3, "and every file that shell could have read is there, whichever existed")
 		})
 	}
 }
 
 func TestAShellWithNoHomeHasNoStartupFileToName(t *testing.T) {
-	_, err := BourneLoginFile("", nothingExists)
+	_, _, err := BourneLoginFile("", nothingExists)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no startup file")
 
@@ -170,11 +173,15 @@ func presence(home string, names ...string) func(string) bool {
 	}
 }
 
-// The machine-wide directory is named in the shell's spelling too, and
-// deliberately not as this platform's own /etc: under a POSIX-emulating
-// environment it is that environment's, wherever it was installed, and the
-// translator is what turns it into a real directory.
-func TestTheMachineWideDirectoryIsTheShellsAndNotTheSystems(t *testing.T) {
-	assert.Equal(t, "/etc/profile.d", MachineDropInDir)
-	assert.NotContains(t, MachineDropInDir, `\`)
+// Whatever this system's machine-wide target is, it is named in the shell's
+// spelling and deliberately not as this platform's own /etc: under a
+// POSIX-emulating environment it is that environment's, wherever it was
+// installed, and the translator is what turns it into a real directory.
+func TestTheMachineWideTargetIsSpeltTheShellsWay(t *testing.T) {
+	target, err := machineWiringFor(Bash)
+	require.NoError(t, err, "every system this runs on wires a bash for the machine")
+
+	named := target.DropInDir + target.File
+	assert.True(t, strings.HasPrefix(named, "/etc/"), "got %q", named)
+	assert.NotContains(t, named, `\`)
 }

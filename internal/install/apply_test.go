@@ -414,8 +414,8 @@ func TestAMachineWideInstallWiresTheMachineAndNotTheAccountThatRanIt(t *testing.
 	require.NotEmpty(t, p.placement.Path)
 	assert.NotContains(t, p.placement.Path, home,
 		"a machine-wide wiring in one account's own startup file reaches one person")
-	for _, candidate := range p.sweep {
-		assert.NotContains(t, candidate, home,
+	for _, place := range p.sweep {
+		assert.NotContains(t, place.Path, home,
 			"and an uninstall that swept that account's files would be answering the same wrong question")
 	}
 }

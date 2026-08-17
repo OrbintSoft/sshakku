@@ -32,3 +32,9 @@ func installInto(t *testing.T, dir string) {
 	t.Helper()
 	t.Setenv("LOCALAPPDATA", dir)
 }
+
+// dropInDirBeside is where this platform's install would look for a drop-in
+// directory beside the profile it is wiring.
+func dropInDirBeside(profile string) string {
+	return PowerShellDropInDir(profile)
+}

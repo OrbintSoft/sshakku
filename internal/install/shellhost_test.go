@@ -129,3 +129,37 @@ func mustAbs(t *testing.T, path string) string {
 	require.NoError(t, err)
 	return abs
 }
+
+// The query is handed to the interpreter as a file, so a system with nowhere to
+// put one has nothing to ask with — and that is a failure of the asking, named as
+// such, rather than an interpreter that said nothing.
+func TestWithNowhereToLayTheQueryDownNothingIsAsked(t *testing.T) {
+	// Every variable a system might name its temporary directory with, pointed
+	// at a directory that is not there.
+	nowhere := filepath.Join(t.TempDir(), "not-a-directory")
+	for _, name := range []string{"TMPDIR", "TMP", "TEMP"} {
+		t.Setenv(name, nowhere)
+	}
+
+	_, _, err := scriptOnDisk("query-shell.sh", []byte("#!/bin/sh\n"), 0o700)
+	require.Error(t, err)
+
+	_, err = AskShell(t.Context(), "any-interpreter")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "laying out the query", "which step failed is what a person acts on")
+
+	_, err = AskHost(t.Context(), "any-interpreter")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "laying out the query")
+}
+
+// An interpreter that cannot be run at all is reported with its own name, since a
+// machine may have several and only one of them failed.
+func TestAShellThatCannotBeRunIsReportedByName(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "not-a-shell")
+
+	_, err := AskShell(t.Context(), missing)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), missing)
+}

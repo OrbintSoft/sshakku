@@ -5,22 +5,16 @@ import (
 	"path"
 )
 
-// MachineDropInDir is the directory a Bourne shell reads at every login, for
-// every account, in the shell's own spelling.
-//
-// Under a POSIX-emulating environment this is not the Windows system's `/etc`
-// but the environment's own, wherever it was installed. That is the point of
-// naming it this way: translated by that environment's own translator it comes
-// back as the real directory, and no installation path is assumed here.
-const MachineDropInDir = "/etc/profile.d"
-
 // loginFiles are the files a login shell looks for, in the order it looks. It
 // reads the first one it finds and no others.
 var loginFiles = []string{".bash_profile", ".bash_login", ".profile"}
 
 // BourneLoginFile names the file a Bourne shell will really read when it logs
 // in, which is the primary wiring point: under Git Bash, and after a console
-// login, it is the one that fires.
+// login, it is the one that fires. It returns every file that shell could have
+// read as well, because that is what an uninstall has to sweep: the choice below
+// depends on which of them existed at the time, so an uninstall cannot reach the
+// same answer by making it again.
 //
 // The file is chosen by looking, and that is not fussiness. A login shell reads
 // the first of the three above that exists and no others, so writing a hook
@@ -36,17 +30,22 @@ var loginFiles = []string{".bash_profile", ".bash_login", ".profile"}
 // exists is passed in because on the system this matters for these paths are in
 // the shell's spelling and this program cannot look at one directly; the caller
 // translates. It is also what lets the choice be checked without a filesystem.
-func BourneLoginFile(home string, exists func(path string) bool) (string, error) {
+func BourneLoginFile(home string, exists func(path string) bool) (chosen string, candidates []string, err error) {
+	candidates = make([]string, 0, len(loginFiles))
 	for _, name := range loginFiles {
 		candidate, err := under(home, name)
 		if err != nil {
-			return "", err
+			return "", nil, err
 		}
+		candidates = append(candidates, candidate)
+	}
+
+	for _, candidate := range candidates {
 		if exists != nil && exists(candidate) {
-			return candidate, nil
+			return candidate, candidates, nil
 		}
 	}
-	return under(home, loginFiles[0])
+	return candidates[0], candidates, nil
 }
 
 // BourneRCFile names the file a Bourne shell reads when it starts interactive

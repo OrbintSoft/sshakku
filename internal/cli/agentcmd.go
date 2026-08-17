@@ -34,12 +34,19 @@ type agentEnsurer interface {
 // realEnsurer wires the concrete system probes and runners into the production
 // agent.Manager, on a system that has an agent to drive; deps.ensurer holds the
 // result so command bodies can be tested against a fake.
-//
-// Where this build cannot keep an agent at all, what it composes those pieces
-// out of does not exist, and the honest answer is the one that says so rather
-// than a Manager that would fail at its first step.
 func realEnsurer() agentEnsurer {
-	if !agent.KeepsAgents() {
+	return ensurerFor(agent.KeepsAgents())
+}
+
+// ensurerFor is what drives the agent on a system that can keep one, and what
+// answers for a system that cannot.
+//
+// Where this build cannot keep an agent at all, what a Manager composes itself
+// out of does not exist, and the honest answer is the one that says so rather
+// than a lifecycle that would fail at its first step. Which system this is comes
+// in as the answer it is, so both halves stay checkable from either machine.
+func ensurerFor(keepsAgents bool) agentEnsurer {
+	if !keepsAgents {
 		return agent.NoMechanism{}
 	}
 	return agent.Manager{

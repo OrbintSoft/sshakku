@@ -18,6 +18,12 @@ import (
 // keys below.
 const pathValue = "Path"
 
+// PathStepNothingToDo is how an install reports the step that makes the program
+// runnable by name when nothing was recorded. Here there is a list to record in,
+// so nothing having changed means the entry was in it already — which is the
+// ordinary outcome of installing a second time.
+const PathStepNothingToDo = "no change needed"
+
 // environmentLocation is where one scope's environment variables are kept.
 //
 // It is a value rather than a constant reached for inside the functions below,

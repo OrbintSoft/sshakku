@@ -69,6 +69,11 @@ func Command(tb testing.TB, mode string, args ...string) (name string, argv []st
 
 	exe, err := os.Executable()
 	if err != nil {
+		// A running program that cannot be asked where it is. There is no seam
+		// to put under this: what would have to fail is the system's answer
+		// about this very process, and a stand-in for that would be testing the
+		// stand-in.
+		//coverage:ignore
 		tb.Fatalf("locating this test binary, which is the program these tests run: %v", err)
 	}
 	return exe, append([]string{marker, mode}, args...)

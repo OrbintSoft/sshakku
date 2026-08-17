@@ -7,9 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 )
 
@@ -68,18 +66,7 @@ func AskShell(ctx context.Context, exe string) (Shell, error) {
 }
 
 func shellScriptOnDisk() (string, func(), error) {
-	dir, err := os.MkdirTemp("", "sshakku-query-")
-	if err != nil {
-		return "", nil, err
-	}
-	cleanup := func() { _ = os.RemoveAll(dir) }
-
-	path := filepath.Join(dir, "query-shell.sh")
-	if err := os.WriteFile(path, queryShellScript, queryShellMode); err != nil {
-		cleanup()
-		return "", nil, err
-	}
-	return path, cleanup, nil
+	return scriptOnDisk("query-shell.sh", queryShellScript, queryShellMode)
 }
 
 // parseShell reads the key=value lines the query prints.

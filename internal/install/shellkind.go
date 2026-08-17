@@ -33,10 +33,12 @@ type shellPattern struct {
 	// base is the file name, without a directory.
 	base string
 	kind ShellKind
-	// confirmByTranslator marks a name that more than one program answers to,
-	// where being part of a POSIX-emulating environment is what makes this one
-	// the shell meant. Where it is false the name settles it.
-	confirmByTranslator bool
+	// confirm answers whether the program at a path really is this shell, for a
+	// name that more than one program answers to. It is nil where the name
+	// settles the question, which is every name on a system that has no such
+	// collision — and what it looks for is that system's own business, which is
+	// why it arrives as part of that system's table.
+	confirm func(imagePath string) bool
 }
 
 // ParseShellKind reads a `--shell` value, refusing one this system cannot wire
@@ -82,15 +84,20 @@ func offeredShellKinds() []ShellKind {
 // environment ships a path translator beside its shell. A blacklist would admit
 // every impostor nobody had thought of yet.
 func RecogniseShell(imagePath string) (ShellKind, bool) {
+	return recognise(imagePath, shellPatterns())
+}
+
+// recognise is the judgement itself, against a table it is handed. The table is
+// one system's answer and cannot be had from another machine; what is done with
+// it is the same everywhere and is checked from both.
+func recognise(imagePath string, patterns []shellPattern) (ShellKind, bool) {
 	base := strings.ToLower(filepath.Base(imagePath))
-	for _, pattern := range shellPatterns() {
+	for _, pattern := range patterns {
 		if base != strings.ToLower(pattern.base) {
 			continue
 		}
-		if pattern.confirmByTranslator {
-			if _, found := FindCygpath(imagePath); !found {
-				return "", false
-			}
+		if pattern.confirm != nil && !pattern.confirm(imagePath) {
+			return "", false
 		}
 		return pattern.kind, true
 	}

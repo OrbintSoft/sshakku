@@ -282,3 +282,16 @@ func TestAShellOnASystemWithNoAgentMechanismStillOpensAndIsToldNothing(t *testin
 	assert.Contains(t, stdout.String(), "agent_sock=''",
 		"and the one it has none for is handed over empty, which is what the hook reads to know there is none")
 }
+
+// F48: which lifecycle a session gets is decided by whether this build can keep
+// an agent here at all, and both answers are checked from either platform — the
+// one a machine gets is the platform's own, and a test that could only ask its own
+// machine's question would leave the other half permanently unasked.
+func TestWhatDrivesTheAgentFollowsWhetherThisSystemCanKeepOne(t *testing.T) {
+	assert.IsType(t, agent.Manager{}, ensurerFor(true),
+		"where an agent can be kept on a fixed endpoint, the lifecycle drives it")
+	assert.IsType(t, agent.NoMechanism{}, ensurerFor(false),
+		"and where it cannot, the answer says so once instead of failing at whichever step is reached first")
+	assert.IsType(t, ensurerFor(agent.KeepsAgents()), realEnsurer(),
+		"and what the product composes here is this system's own answer")
+}

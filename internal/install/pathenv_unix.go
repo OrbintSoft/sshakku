@@ -2,14 +2,22 @@
 
 package install
 
+// PathStepNothingToDo is how an install reports the step that makes the program
+// runnable by name when nothing was recorded. Here that is never "it was already
+// there": there is nowhere to record one at all, so a report phrased as no change
+// having been needed would send somebody looking for an entry that is nobody's to
+// write.
+const PathStepNothingToDo = "nothing to record: this system keeps no stored environment"
+
 // AddToPath records a directory in the search list of the given scope, which
-// this system does not do and does not need to.
+// this system does not do.
 //
-// There is nowhere to record it and nothing to record: a machine install puts
-// the program somewhere already on everyone's search list, and a user install
-// has the wired hook add the account's own directory, which is a change the
-// shell makes at each login rather than one stored anywhere. Reporting that
-// nothing changed is the truth about this system, not a step that was skipped.
+// There is nowhere to record one: this system keeps no stored environment that
+// outlives a session, so what a session searches is what its startup files
+// built, and nothing here can add to that after the fact. Reporting that
+// nothing changed is the truth about this system, not a step that was skipped —
+// what makes the program findable by name here is the install that put it
+// somewhere sessions already search.
 func AddToPath(Scope, string) (bool, error) {
 	return false, nil
 }

@@ -10,37 +10,32 @@ import "context"
 // place: a path translated in some places and not others is the failure this
 // exists to prevent, and it is invisible — the file is created, under a name
 // the shell never opens.
-type spelling struct {
-	translator Cygpath
-	differs    bool
-}
-
-// spellingFor returns how paths must be written for the shell at interpreter.
 //
-// A translator beside the interpreter is what says the two spellings differ:
-// an environment that emulates POSIX on a system that does not ships one, and
-// an environment whose paths are already the system's has no use for one.
-func spellingFor(interpreter string) spelling {
-	if translator, found := FindCygpath(interpreter); found {
-		return spelling{translator: translator, differs: true}
-	}
-	return spelling{}
+// The translating itself is a system's own knowledge and lives with that
+// system; what arrives here is the pair of directions, or nothing at all. That
+// keeps this readable — and answerable — from a machine that has no translator
+// to hand and never will.
+type spelling struct {
+	// toShell and toUs render a path the shell's way and this program's way.
+	// Both are nil together, on a system where the two spellings agree.
+	toShell func(context.Context, string) (string, error)
+	toUs    func(context.Context, string) (string, error)
 }
 
 // forShell renders a path the way the shell writes one, which is how it must
 // appear inside anything the shell will read.
 func (s spelling) forShell(ctx context.Context, path string) (string, error) {
-	if !s.differs {
+	if s.toShell == nil {
 		return path, nil
 	}
-	return s.translator.ToUnix(ctx, path)
+	return s.toShell(ctx, path)
 }
 
 // forUs renders a path the way this program writes one, which is how it must
 // appear before anything here opens it.
 func (s spelling) forUs(ctx context.Context, path string) (string, error) {
-	if !s.differs {
+	if s.toUs == nil {
 		return path, nil
 	}
-	return s.translator.ToWindows(ctx, path)
+	return s.toUs(ctx, path)
 }

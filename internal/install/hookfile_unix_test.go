@@ -65,3 +65,33 @@ func TestDropInIsExecutable(t *testing.T) {
 	assert.Equal(t, fs.FileMode(0o755), info.Mode().Perm(),
 		"a file in a drop-in directory is run, not sourced, by some of the shells that read one")
 }
+
+// The realistic way an unwiring fails: a machine-wide startup file, and an
+// account without the privilege to change what is in that directory. Both shapes
+// of wiring are refused by name rather than reported as removed — somebody who is
+// told the hook is gone and finds it still running at the next login has been
+// told the one thing that must be true.
+func TestAWiringInADirectoryThisAccountMayNotWriteIsReported(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("this account may write anywhere, so there is no refusal to be had")
+	}
+
+	dir := t.TempDir()
+	block := filepath.Join(dir, "zprofile")
+	require.NoError(t, os.WriteFile(block, UpsertBlock(nil, ". \"/hook.sh\""), 0o644))
+	dropIn := filepath.Join(dir, "50-sshakku-init.sh")
+	require.NoError(t, os.WriteFile(dropIn, BourneDropIn(". \"/hook.sh\""), 0o755))
+
+	require.NoError(t, os.Chmod(dir, 0o555))
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+
+	// The file holds nothing but the wiring, so unwiring it means removing it —
+	// which this account may not do.
+	err := StripBlockFile(block)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), block)
+
+	err = RemoveDropIn(dropIn)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), dropIn)
+}

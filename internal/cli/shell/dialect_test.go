@@ -59,6 +59,37 @@ func TestAValueSurvivesItsOwnShellsQuoting(t *testing.T) {
 	}
 }
 
+// A caller that is placing a value somewhere else — into a hook this program
+// renders, where the assignment is already written and only the value is being
+// supplied — gets the same quoting the assignments above use, and not a rule of
+// its own. That is the whole point of it being reachable: one shell, one answer
+// about what a literal is, wherever the literal is going.
+func TestAValueCanBeQuotedForItsShellWithoutAnAssignmentAroundIt(t *testing.T) {
+	posix, powershell := dialect(t, Posix), dialect(t, PowerShell)
+
+	assert.Equal(t, `'/home/o'\''brien/bin/sshakku'`, posix.Quote("/home/o'brien/bin/sshakku"))
+	assert.Equal(t, `'C:\Users\O''Brien\sshakku.exe'`, powershell.Quote(`C:\Users\O'Brien\sshakku.exe`))
+
+	// The same value, quoted once by each way in: whatever a caller is building,
+	// what lands in the file is what the shell would have been given anyway.
+	assert.Equal(t, "p="+posix.Quote("/tmp/x")+"\n", posix.SetVar("p", "/tmp/x"))
+}
+
+// Code that has already worked out which language it needs — a renderer writing
+// a file for a shell it has just identified — asks by name, and is refused by
+// name for one this program cannot print rather than handed another language.
+func TestADialectCanBeAskedForByNameWithoutAFlagToRead(t *testing.T) {
+	for _, name := range []string{Posix, PowerShell} {
+		got, err := Named(name)
+		require.NoErrorf(t, err, "%s is a dialect this program has", name)
+		assert.Equal(t, name, got.name)
+	}
+
+	_, err := Named("fish")
+	require.Error(t, err, "a language this program cannot print is never quietly answered in another")
+	assert.Contains(t, err.Error(), "fish")
+}
+
 // TestTheDialectIsTheOneAskedForOrPosix verifies F43's other half: the dialect
 // is what --shell says and nothing else decides it, no flag means posix, and a
 // dialect this program has not got is refused by name rather than answered in

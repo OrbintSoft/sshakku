@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +10,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OrbintSoft/sshakku/internal/install"
 )
 
 // The install and uninstall commands, against what docs/FEATURES.md promises:
@@ -239,4 +242,61 @@ func TestWithNoShellNamedTheOneThatRanTheCommandIsTheOneWired(t *testing.T) {
 	assert.Contains(t, stderr, "--shell",
 		"a process tree naming no shell must ask for one rather than pick one")
 	assert.NoFileExists(t, profile, "and must write nothing")
+}
+
+// F47: what became of the step that makes SSHakku runnable by name is reported,
+// and the three things it can have been are told apart. "Already there" and
+// "there is nowhere to record one" are both a step that changed nothing, and only
+// one of them is worth going to look at — so the words come from the system rather
+// than from a guess about which it was.
+func TestTheReportSaysWhatBecameOfTheSearchListStep(t *testing.T) {
+	entry := filepath.Join(string(filepath.Separator), "opt", "sshakku", "bin")
+	installer := wiring{name: "install"}
+	remover := wiring{name: "uninstall"}
+
+	assert.Equal(t, "not recorded (--no-path)",
+		pathStep(installer, install.Request{NoPath: true}, install.Outcome{}))
+	assert.Equal(t, "recorded "+entry,
+		pathStep(installer, install.Request{}, install.Outcome{PathEntry: entry, PathChanged: true}))
+	assert.Equal(t, "no longer recorded: "+entry,
+		pathStep(remover, install.Request{}, install.Outcome{PathEntry: entry, PathChanged: true}))
+	assert.Contains(t, pathStep(installer, install.Request{}, install.Outcome{PathEntry: entry}),
+		install.PathStepNothingToDo,
+		"why nothing happened is this system's own answer, not a sentence written here")
+}
+
+// Something that is not a failure and is not for the log either: a drop-in
+// directory that was there and could not be used is why the file the report names
+// is the one it is, so it is printed under the report where the person is already
+// looking.
+func TestSomethingWorthKnowingThatIsNotAFailureIsPrintedWithTheReport(t *testing.T) {
+	var out bytes.Buffer
+
+	reportWiring(&out, wiring{name: "install", headline: "wired the sshakku hook into one shell:"},
+		install.Request{NoPath: true},
+		install.Outcome{
+			Shell: "bash", Wired: filepath.Join("home", "startup"),
+			Notes: []string{"Profile.d is there but nothing loads it"},
+		})
+
+	assert.Contains(t, out.String(), "note: Profile.d is there but nothing loads it")
+}
+
+// The hook runs this binary by its own path, so an install that cannot find out
+// where it is has nothing to write into the hook — and says so instead of wiring
+// something that would run whatever happened to be on PATH at login.
+func TestAnInstallThatCannotFindThisProgramSaysSoAndWritesNothing(t *testing.T) {
+	installInto(t, t.TempDir())
+	profile := aStartupFile(t)
+	exe, _ := aWiredShell(t)
+	d := realDeps()
+	d.self = func() (string, error) { return "", errors.New("this program has no path") }
+	var stdout, stderr bytes.Buffer
+
+	code := d.run(t.Context(), &stdout, &stderr,
+		[]string{"install", "--shell-exe", exe, "--profile", profile, "--no-path"})
+
+	assert.Equal(t, 1, code, "a command that ran and could not do the thing, not a usage error")
+	assert.Contains(t, stderr.String(), "this program's own path")
+	assert.NoFileExists(t, profile)
 }

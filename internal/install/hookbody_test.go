@@ -2,6 +2,7 @@ package install
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -112,4 +113,42 @@ func TestEveryOccurrenceIsWrittenOver(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 2, strings.Count(string(rendered), `'C:\x'`))
 	assert.NotContains(t, string(rendered), "@SSHAKKU_BIN@")
+}
+
+// A hook is not written at all when there is nothing to write into it or nowhere
+// to put it. Either would leave a file wired into a startup file and running
+// something else, or nothing, at every login.
+func TestAHookThatCannotBeRenderedOrPlacedIsNotWritten(t *testing.T) {
+	t.Run("no binary was named", func(t *testing.T) {
+		dir := t.TempDir()
+
+		_, err := renderInto(dir, bournePlan(t), "")
+
+		require.Error(t, err)
+		assert.NoFileExists(t, filepath.Join(dir, "shell-hook.sh"))
+	})
+
+	t.Run("the directory cannot be made", func(t *testing.T) {
+		inTheWay := filepath.Join(t.TempDir(), "a-file-not-a-directory")
+		require.NoError(t, os.WriteFile(inTheWay, []byte("mine"), 0o644))
+
+		_, err := renderInto(filepath.Join(inTheWay, "sshakku"), bournePlan(t), "/opt/sshakku/bin/sshakku")
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), inTheWay)
+	})
+
+	t.Run("the hook itself cannot be written", func(t *testing.T) {
+		dir := t.TempDir()
+		// A directory where the rendered hook belongs, with something in it: it
+		// cannot be replaced by a file, and the install has to say so.
+		hook := filepath.Join(dir, "shell-hook.sh")
+		require.NoError(t, os.Mkdir(hook, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(hook, "something"), []byte("mine"), 0o644))
+
+		_, err := renderInto(dir, bournePlan(t), "/opt/sshakku/bin/sshakku")
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), hook)
+	})
 }

@@ -63,6 +63,20 @@ type Ancestry struct {
 	PID    int
 }
 
+// The three answers below are the system's own, and they are held as variables
+// rather than called by name so that what an install *does* with an answer stays
+// checkable from a machine whose answer is always the same. A system with
+// nowhere to record a search list can never refuse to record one, and a system
+// whose shell spells paths as this program does can never fail to translate one
+// — so on that machine the handling of both refusals would be unreachable code,
+// which is to say untested code in the one place where the install has already
+// started writing. Production points each at this platform's own answer.
+var (
+	spellingForShell = spellingFor
+	addToPath        = AddToPath
+	removeFromPath   = RemoveFromPath
+)
+
 // Install wires the hook for one shell and returns what it did.
 //
 // The order is the promise's own: everything that could refuse is asked before
@@ -90,7 +104,7 @@ func Install(ctx context.Context, req Request, tree Ancestry) (Outcome, error) {
 	}
 
 	if p.placement.DropIn {
-		err = WriteDropIn(p.placement.Path, p.dropInFile(sourceLine))
+		err = p.writeDropIn(sourceLine)
 	} else {
 		err = UpsertBlockFile(p.placement.Path, sourceLine)
 	}
@@ -108,7 +122,7 @@ func Install(ctx context.Context, req Request, tree Ancestry) (Outcome, error) {
 	}
 	if !req.NoPath {
 		out.PathEntry = filepath.Dir(req.Binary)
-		out.PathChanged, err = AddToPath(req.Scope, out.PathEntry)
+		out.PathChanged, err = addToPath(req.Scope, out.PathEntry)
 		if err != nil {
 			return out, fmt.Errorf("recording %s in the environment: %w", out.PathEntry, err)
 		}
@@ -129,18 +143,9 @@ func Uninstall(ctx context.Context, req Request, tree Ancestry) (Outcome, error)
 	}
 
 	out := Outcome{Shell: p.kind, Interpreter: p.interpreter, Notes: p.notes}
-	for _, candidate := range p.sweep {
-		place, err := p.placeIn(ctx, candidate)
-		if err != nil {
+	for _, place := range p.sweep {
+		if err := p.unwire(place); err != nil {
 			return out, err
-		}
-		if place.DropIn {
-			err = RemoveDropIn(place.Path)
-		} else {
-			err = StripBlockFile(place.Path)
-		}
-		if err != nil {
-			return out, fmt.Errorf("unwiring %s: %w", place.Path, err)
 		}
 		if place.Path == p.placement.Path {
 			out.Wired = place.Path
@@ -167,7 +172,7 @@ func Uninstall(ctx context.Context, req Request, tree Ancestry) (Outcome, error)
 		// Restoring it would discard everything changed since installing, where
 		// what was promised is that this entry goes and every other one stays.
 		out.PathEntry = filepath.Dir(req.Binary)
-		out.PathChanged, err = RemoveFromPath(req.Scope, out.PathEntry)
+		out.PathChanged, err = removeFromPath(req.Scope, out.PathEntry)
 		if err != nil {
 			return out, fmt.Errorf("taking %s back out of the environment: %w", out.PathEntry, err)
 		}
@@ -187,9 +192,16 @@ type plan struct {
 	spelling spelling
 	// placement is where the wiring goes for the flags given.
 	placement Placement
-	// sweep is every file an install of this shell could have wired, which is
-	// what an uninstall has to look in.
-	sweep []string
+	// dropInDir is a drop-in directory this install has to make, empty when the
+	// directory being written into is one that was already there. See
+	// machineWiring.DropInDir.
+	dropInDir string
+	// sweep is every place an install of this shell could have put a wiring,
+	// which is what an uninstall has to go through. They are settled here rather
+	// than worked out again later, because where a wiring goes beside one startup
+	// file is a question about the disk as it is now — and the answer an uninstall
+	// has to act on is the one that describes what is actually there.
+	sweep []Placement
 	notes []string
 }
 
@@ -201,27 +213,40 @@ func resolve(ctx context.Context, req Request, tree Ancestry) (plan, error) {
 		return plan{}, err
 	}
 
-	p := plan{kind: kind, interpreter: interpreter, spelling: spellingFor(interpreter)}
+	p := plan{kind: kind, interpreter: interpreter, spelling: spellingForShell(interpreter)}
 	if p.dialect, err = shell.Named(dialectName(kind)); err != nil {
+		// dialectName answers with one of the two languages this program prints,
+		// and both of them exist. The error is still checked rather than
+		// discarded, in case a kind is added whose language is not yet one of
+		// them: what must not happen is a hook rendered in no language at all.
+		//coverage:ignore
 		return plan{}, err
 	}
 
-	switch kind {
-	case PowerShellCore, WindowsPowerShell:
-		err = p.forPowerShell(ctx, req)
-	case Bash, Zsh:
-		err = p.forBourne(ctx, req)
-	case Auto:
-		// whichShell settles Auto into a real kind or fails; arriving here
-		// would mean it had returned the question instead of an answer.
-		err = fmt.Errorf("the shell was not worked out, so there is nothing to wire")
-	default:
-		err = fmt.Errorf("there is no wiring defined for a %s shell", kind)
-	}
-	if err != nil {
+	if err := p.forKind(ctx, req); err != nil {
 		return plan{}, err
 	}
 	return p, nil
+}
+
+// forKind settles the target for the kind of shell this plan is for.
+//
+// The two answers nobody should ever see are here rather than inside resolve so
+// that they can be asked for: whichShell settles Auto into a real kind or fails,
+// and every kind a system's table names has wiring defined for it — so both of
+// the refusals below mean this program has contradicted itself, and the one thing
+// they must not do is write a file anyway.
+func (p *plan) forKind(ctx context.Context, req Request) error {
+	switch p.kind {
+	case PowerShellCore, WindowsPowerShell:
+		return p.forPowerShell(ctx, req)
+	case Bash, Zsh:
+		return p.forBourne(ctx, req)
+	case Auto:
+		return fmt.Errorf("the shell was not worked out, so there is nothing to wire")
+	default:
+		return fmt.Errorf("there is no wiring defined for a %s shell", p.kind)
+	}
 }
 
 // whichShell settles the interpreter, by what was asked for or by looking.
@@ -279,19 +304,25 @@ func (p *plan) forHost(ctx context.Context, host Host, req Request) error {
 
 	var err error
 	target := req.Profile
+	candidates := []string{target}
 	if target == "" {
-		p.sweep = EveryProfile(host)
+		candidates = EveryProfile(host)
 		if target, err = ProfileFor(host, req.Scope, req.Hosts); err != nil {
 			return err
 		}
-	} else {
-		// Somebody who named a file named the whole of what to touch. Sweeping
-		// the others would remove a wiring they did not ask about.
-		p.sweep = []string{target}
 	}
-
-	if p.placement, err = p.placeIn(ctx, target); err != nil {
-		return err
+	// Somebody who named a file named the whole of what to touch, which is why
+	// the candidates above are that one file: sweeping the others would remove a
+	// wiring they did not ask about.
+	for _, candidate := range candidates {
+		place, err := p.placeIn(ctx, candidate)
+		if err != nil {
+			return err
+		}
+		p.sweep = append(p.sweep, place)
+		if candidate == target {
+			p.placement = place
+		}
 	}
 	p.note(p.placement.Why)
 	return nil
@@ -300,38 +331,51 @@ func (p *plan) forHost(ctx context.Context, host Host, req Request) error {
 // forBourne settles a Bourne target, asking the shell where it will look.
 func (p *plan) forBourne(ctx context.Context, req Request) error {
 	if req.Profile != "" {
-		p.sweep = []string{req.Profile}
 		place, err := p.placeIn(ctx, req.Profile)
 		if err != nil {
 			return err
 		}
-		p.placement = place
+		p.placement, p.sweep = place, []Placement{place}
 		p.note(place.Why)
 		return nil
+	}
+
+	if req.Scope == Machine {
+		target, err := machineWiringFor(p.kind)
+		if err != nil {
+			return err
+		}
+		return p.forMachine(ctx, target)
 	}
 
 	answered, err := AskShell(ctx, p.interpreter)
 	if err != nil {
 		return err
 	}
-	login, err := BourneLoginFile(answered.Home, func(path string) bool { return p.exists(ctx, path) })
+	// The file that will really be read, and every file that could have been:
+	// the first is the wiring point, and the whole list is what an uninstall has
+	// to sweep.
+	login, candidates, err := BourneLoginFile(answered.Home, func(path string) bool { return p.exists(ctx, path) })
 	if err != nil {
+		// A home directory that is empty, which this shell was already refused
+		// for: AskShell does not return one. Checked because naming a file under
+		// no directory at all is what that refusal exists to prevent, and a
+		// caller that stopped honouring it would name a relative path instead.
+		//coverage:ignore
 		return err
 	}
-
-	// Every file a login shell might have been wired into, whichever of them
-	// existed at the time: the choice above depends on what was there, so an
-	// uninstall cannot reach the same answer by making it again.
-	for _, name := range loginFiles {
-		candidate, err := under(answered.Home, name)
+	// Each of them judged now, and not again later: an uninstall acts on where a
+	// wiring would be, and that is a question about the drop-in directories
+	// beside these files as they are at this moment.
+	for _, candidate := range candidates {
+		place, err := p.placeIn(ctx, candidate)
 		if err != nil {
 			return err
 		}
-		p.sweep = append(p.sweep, candidate)
-	}
-
-	if p.placement, err = p.placeIn(ctx, login); err != nil {
-		return err
+		p.sweep = append(p.sweep, place)
+		if candidate == login {
+			p.placement = place
+		}
 	}
 	p.note(p.placement.Why)
 	return nil
@@ -375,6 +419,37 @@ func (p plan) template() ([]byte, string) {
 		return bourneHookTemplate, BourneBinaryPlaceholder
 	}
 	return powerShellHookTemplate, PowerShellBinaryPlaceholder
+}
+
+// writeDropIn puts the wrapper in place, having first made the directory it
+// belongs in where that directory is this install's own to make — the
+// machine-wide one, which the shell reads whether or not anybody created it.
+// The directory beside an account's own startup file is never made here: it was
+// there already, and that is why it is being written into.
+func (p plan) writeDropIn(sourceLine string) error {
+	if p.dropInDir != "" {
+		if err := os.MkdirAll(p.dropInDir, dropInDirMode); err != nil {
+			return fmt.Errorf("making the directory the wiring goes in, %s: %w", p.dropInDir, err)
+		}
+	}
+	return WriteDropIn(p.placement.Path, p.dropInFile(sourceLine))
+}
+
+// unwire takes one wiring back out, in the way that place was written: a file of
+// ours is removed, and a block inside somebody else's file is stripped from it.
+// Doing the other thing to either is what an uninstall that reports success and
+// leaves the hook running looks like from the inside.
+func (p plan) unwire(place Placement) error {
+	var err error
+	if place.DropIn {
+		err = RemoveDropIn(place.Path)
+	} else {
+		err = StripBlockFile(place.Path)
+	}
+	if err != nil {
+		return fmt.Errorf("unwiring %s: %w", place.Path, err)
+	}
+	return nil
 }
 
 // dropInFile is the whole content of the wrapper that goes into a drop-in

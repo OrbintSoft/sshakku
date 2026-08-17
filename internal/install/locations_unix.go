@@ -2,6 +2,8 @@
 
 package install
 
+import "path/filepath"
+
 // locationsFor is this platform's table of where an install writes.
 //
 // These are the directories the Makefile's install targets already use, and
@@ -12,15 +14,17 @@ package install
 func locationsFor(scope Scope, lookup func(string) (string, bool)) (Locations, error) {
 	switch scope {
 	case User:
-		bin, err := directory(lookup, "HOME", ".local", "bin")
+		// One variable, read once. Both directories hang off the account's home,
+		// so asking for it twice would be two chances to ask and one answer to
+		// have, with a second refusal nothing could ever produce.
+		home, err := directory(lookup, "HOME")
 		if err != nil {
 			return Locations{}, err
 		}
-		hook, err := directory(lookup, "HOME", ".local", "share", "sshakku")
-		if err != nil {
-			return Locations{}, err
-		}
-		return Locations{BinDir: bin, HookDir: hook}, nil
+		return Locations{
+			BinDir:  filepath.Join(home, ".local", "bin"),
+			HookDir: filepath.Join(home, ".local", "share", "sshakku"),
+		}, nil
 
 	case Machine:
 		// Not from the environment: the prefix a machine install uses is a

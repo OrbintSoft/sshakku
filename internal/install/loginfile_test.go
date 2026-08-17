@@ -31,7 +31,7 @@ func TestARealShellReadsOneLoginFileAndTheChoiceFollowsIt(t *testing.T) {
 	write(t, home, ".profile", "echo READ .profile")
 	assert.Equal(t, ".profile", whatTheShellRead(t, bash, spelling),
 		"an account set up this way is read from .profile")
-	chosen, err := BourneLoginFile(spelling, func(path string) bool { return present(home, spelling, path) })
+	chosen, _, err := BourneLoginFile(spelling, func(path string) bool { return present(home, spelling, path) })
 	require.NoError(t, err)
 	assert.Equal(t, spelling+"/.profile", chosen, "so that is the file to wire")
 
@@ -39,7 +39,7 @@ func TestARealShellReadsOneLoginFileAndTheChoiceFollowsIt(t *testing.T) {
 	write(t, home, ".bash_profile", "echo READ .bash_profile")
 	assert.Equal(t, ".bash_profile", whatTheShellRead(t, bash, spelling),
 		"the moment this file exists the shell reads it instead, and .profile is not read at all")
-	chosen, err = BourneLoginFile(spelling, func(path string) bool { return present(home, spelling, path) })
+	chosen, _, err = BourneLoginFile(spelling, func(path string) bool { return present(home, spelling, path) })
 	require.NoError(t, err)
 	assert.Equal(t, spelling+"/.bash_profile", chosen, "and now that is the file to wire")
 }
@@ -58,16 +58,15 @@ func present(home, spelling, path string) bool {
 }
 
 // homeAsTheShellSpellsIt is the temporary directory in the shell's own
-// spelling, which under a POSIX-emulating environment is not this program's.
+// spelling, which under a POSIX-emulating environment is not this program's. It
+// goes through the same spelling the install itself uses, so this test cannot
+// pass by translating differently from the code it is about.
 func homeAsTheShellSpellsIt(t *testing.T, bash, home string) string {
 	t.Helper()
 
-	if cyg, found := FindCygpath(bash); found {
-		spelt, err := cyg.ToUnix(t.Context(), home)
-		require.NoError(t, err)
-		return spelt
-	}
-	return filepath.ToSlash(home)
+	spelt, err := spellingFor(bash).forShell(t.Context(), home)
+	require.NoError(t, err)
+	return filepath.ToSlash(spelt)
 }
 
 // whatTheShellRead starts a login shell with the given home and returns which

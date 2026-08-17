@@ -43,6 +43,12 @@ const newFileMode fs.FileMode = 0o644
 // is not inherited from whatever was there before.
 const dropInMode fs.FileMode = 0o755
 
+// dropInDirMode is what a drop-in directory this program had to create is
+// given. Every session of the scope has to read it at login, and a
+// machine-wide one that only its owner could read would take the whole
+// directory's worth of wiring with it.
+const dropInDirMode fs.FileMode = 0o755
+
 // StripBlock returns content with sshakku's marker block removed, along with
 // any blank lines left trailing behind it. Content that never held a block
 // comes back with its own trailing blank lines trimmed and a final newline
@@ -215,14 +221,25 @@ func replace(path string, content []byte, mode fs.FileMode) error {
 	}
 	defer func() { _ = os.Remove(tmp.Name()) }()
 
+	// The three below are checked and not one of them is reachable from a test:
+	// what would have to fail is writing to, closing, or changing the mode of a
+	// file this call created moments earlier in a directory it has already
+	// written to — a filled disk, a quota, a mount taken away underneath. They
+	// are checked because the rename must not happen after one of them: a
+	// startup file replaced by a half-written copy is read at every login, and a
+	// machine-wide one replaced by a copy nobody may read is worse.
 	if _, err := tmp.Write(content); err != nil {
+		//coverage:ignore
 		_ = tmp.Close()
+		//coverage:ignore
 		return fmt.Errorf("writing %s: %w", tmp.Name(), err)
 	}
 	if err := tmp.Close(); err != nil {
+		//coverage:ignore
 		return fmt.Errorf("closing %s: %w", tmp.Name(), err)
 	}
 	if err := os.Chmod(tmp.Name(), mode); err != nil {
+		//coverage:ignore
 		return fmt.Errorf("setting the permissions of %s: %w", tmp.Name(), err)
 	}
 	if err := os.Rename(tmp.Name(), path); err != nil {

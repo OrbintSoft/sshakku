@@ -116,15 +116,34 @@ func queryArguments(script string) []string {
 // script file without one in the machine's ANSI code page, which corrupts
 // exactly the non-ASCII paths the query exists to report.
 func queryScriptOnDisk() (string, func(), error) {
+	return scriptOnDisk("query-host.ps1", queryHostScript, queryScriptMode)
+}
+
+// scriptOnDisk lays one of the embedded queries down in a directory of its own
+// and returns the path with the means to take it back.
+//
+// A directory rather than a bare temporary file, and one per call: the file is
+// handed to another program by name, and a name nothing else can reach is what
+// keeps a second install running at the same moment from being answered by this
+// one's copy.
+func scriptOnDisk(name string, content []byte, mode fs.FileMode) (string, func(), error) {
 	dir, err := os.MkdirTemp("", "sshakku-query-")
 	if err != nil {
 		return "", nil, err
 	}
 	cleanup := func() { _ = os.RemoveAll(dir) }
 
-	path := filepath.Join(dir, "query-host.ps1")
-	if err := os.WriteFile(path, queryHostScript, queryScriptMode); err != nil {
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, content, mode); err != nil {
+		// A directory this call created moments ago, for itself, and nothing
+		// else can have taken it away yet: what is left to fail here is the
+		// filesystem underneath. Reported rather than ignored — an interpreter
+		// handed a half-written query answers as though it had been asked
+		// something else — and the directory goes rather than being left behind
+		// with a fragment in it.
+		//coverage:ignore
 		cleanup()
+		//coverage:ignore
 		return "", nil, err
 	}
 	return path, cleanup, nil
