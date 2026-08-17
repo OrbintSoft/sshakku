@@ -50,8 +50,9 @@ per-PR test-health comment.
 ## How the pieces fit together
 
 `internal/cli`'s `run()` dispatches on `args[0]`: `shell-init`,
-`ensure-agent`, `load-keys`, `askpass-env`, `doctor`, `forget`, `help`. See
-[docs/CLI.md](CLI.md) for the full command reference.
+`ensure-agent`, `load-keys`, `askpass-env`, `config`, `doctor`, `forget`,
+`install`, `uninstall`, `help`. See [docs/CLI.md](CLI.md) for the full command
+reference.
 
 The end-to-end flow, as wired up by `nn-ssh-init.sh` (installed to
 `/etc/profile.d` on Linux, sourced from `/etc/zprofile` on macOS) in every

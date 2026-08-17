@@ -151,6 +151,15 @@ boundary — the command runs in-process rather than as a spawned binary — whi
 is why the rows a person actually meets, at a prompt, are still marked as
 by-hand work.
 
+Two things this command does not do on Linux and macOS have no row, because they
+are not its job there: it does not put the binary anywhere, and it does not make
+the askpass helper reachable beside it. Both are `make install`'s, and until the
+two installs are one, a session wired by `sshakku install` alone gets a hook that
+exports `SSH_ASKPASS` at a helper that may not be there — with
+`SSH_ASKPASS_REQUIRE=force`, which is what makes reaching it compulsory. So the
+wiring belongs with a binary `make` put in place, and that pairing is what the
+table above covers.
+
 | Case | Linux | macOS | Windows |
 | --- | --- | --- | --- |
 | The interpreter you name is the one wired, and the report names the file written and the hook it runs (F44) | ✅ `TestTheShellYouNameIsTheOneWiredAndTheReportSaysWhereToLook`, against this machine's own `bash` | ✅ same test, against the platform's own `bash` | ✅ same test, against a real `powershell.exe` asked where its profiles are |
@@ -159,7 +168,8 @@ by-hand work.
 | With nothing named, the shell is the one that ran the command (F44) | ⚠️ `TestWithNoShellNamedTheOneThatRanTheCommandIsTheOneWired` reads the real process tree and asserts both halves of the promise — a wiring naming the shell, or a refusal asking for `--shell` — but which half it meets depends on what started the run, so neither half is asserted on its own. The half a person meets is the by-hand run | ⚠️ same | ⚠️ same |
 | Two shells of different languages on one machine, neither handed the other's file (F45) | ❌ it would take a `pwsh` beside the bash, which is a combination this project does not test — see the shell table in [INSTALLATION.md](INSTALLATION.md) | ❌ same | ✅ `TestOneMachineWiresAPowerShellAndAGitBashWithoutSwappingTheirFiles` wires both and asks a real Git Bash which of the two hooks it can read: its own, and not the other |
 | A shell that would never read the hook is refused before anything is written (F46) | — nothing here decides whether a shell may read its own startup file | — same | ❌ `TestAPowerShellThatWillNotRunItsProfileIsReportedWithTheRemedy` covers the decision against a fabricated host, and nothing sets a real machine's execution policy: doing that to the machine running the suite is what makes it a by-hand run |
-| The `PATH` entry is recorded once, and removed again leaving every other entry (F47) | — there is nothing to record: the binary goes where every session already searches | — same | ⚠️ `TestAddingIsIdempotentAndRemovingGivesBackWhatWasThere` and its neighbours drive the real registry, against a key of the test's own; `TestTheStoredEnvironmentIsLeftAloneWhenYouSaySo` covers `--no-path`. The account's own stored environment is only ever touched by hand |
+| A machine-wide install wires what every account reads, and not the login file of whoever ran it (F19, F44) | ⚠️ `TestAMachineWideInstallWiresTheMachineAndNotTheAccountThatRanIt` resolves the target and holds it away from the account's own home, and `TestAMachineWideWiringGoesWhereEveryLoginShellReads` covers what is written into such a directory. The write to `/etc/profile.d` itself has no cell: that directory belongs to the machine running the suite | ⚠️ the same two tests, with the same limit against `/etc/zprofile` | ⚠️ `TestThePowerShellTargetIsTheOneTheInterpreterNamed` covers the machine scope too, since the profile is the host's own answer; writing into `%ProgramData%` needs an elevated prompt, which is the by-hand run |
+| The `PATH` entry is recorded once, and removed again leaving every other entry (F47) | — nothing is recorded, because there is nowhere to record one: this system keeps no stored environment outliving a session. What makes the program findable by name is the install that put it where sessions already search, which is `make`'s job and is covered in the table above | — same | ⚠️ `TestAddingIsIdempotentAndRemovingGivesBackWhatWasThere` and its neighbours drive the real registry, against a key of the test's own; `TestTheStoredEnvironmentIsLeftAloneWhenYouSaySo` covers `--no-path`. The account's own stored environment is only ever touched by hand |
 
 ## Agent lifecycle and recovery scenarios
 
