@@ -50,8 +50,9 @@ per-PR test-health comment.
 ## How the pieces fit together
 
 `internal/cli`'s `run()` dispatches on `args[0]`: `shell-init`,
-`ensure-agent`, `load-keys`, `askpass-env`, `doctor`, `forget`, `help`. See
-[docs/CLI.md](CLI.md) for the full command reference.
+`ensure-agent`, `load-keys`, `askpass-env`, `config`, `doctor`, `forget`,
+`install`, `uninstall`, `help`. See [docs/CLI.md](CLI.md) for the full command
+reference.
 
 The end-to-end flow, as wired up by `nn-ssh-init.sh` (installed to
 `/etc/profile.d` on Linux, sourced from `/etc/zprofile` on macOS) in every
@@ -88,6 +89,17 @@ needs installed.
 make build   # go build -o bin/sshakku ./cmd/sshakku
 make test    # go test -race ./...
 ```
+
+On Windows both run from Git Bash, and the binary is built as
+`bin/sshakku.exe`: that system runs a program by its extension, and the path a
+wiring writes into a shell's startup file is this one.
+
+`make install-user` and `make install` work there too, and hand the wiring to
+the program: they build, then run `sshakku install` for the account or for the
+machine. Which shell gets wired is the one you ran make from, unless you say
+otherwise — `make install-user SHELL_ARG=--shell=windowspowershell`. The Unix
+paths in this file are not used there at all; which file a shell reads is asked
+of that shell, see [INSTALLATION.md](INSTALLATION.md).
 
 `make test` is what CI runs on every push, on a plain Linux runner (with
 `dbus-daemon` installed, since some `internal/secretservice`/`internal/keys`
@@ -152,6 +164,19 @@ failure-injection tags — because golangci-lint only ever looks at one. You can
 run all of them from either machine: no macOS host is needed to lint the macOS
 files, and a file that only compiles under a build tag is analysed only if that
 build is in the list.
+
+The file lists the targets walk are built with `find`, and the patterns they
+match are double-quoted for a reason worth knowing before you change one: a
+`make` built for Windows runs a command without a shell when it holds nothing
+that system treats as special, and a single-quoted pattern qualifies — so
+`find` becomes Windows' own `FIND`, the list comes back empty, and the linter
+reports success having examined no files. Double quotes send it through `sh`,
+where the pattern means what it says on every platform.
+
+Linting from Windows needs more of the tools than testing does, and two are
+awkward there: `blinter` is a Python program, and Git for Windows ships no
+`xmllint`. `lint-ps1` needs `pwsh` — Windows PowerShell is not it — and says
+so rather than passing quietly when there is none.
 
 ## Recommended dev environment
 

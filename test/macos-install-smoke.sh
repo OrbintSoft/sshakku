@@ -26,6 +26,13 @@ mkdir -p "$prefix" "$destdir" "$home"
 
 cd "$repo_root"
 
+# A file with a line of somebody's own in it, readable by everyone, which is what
+# /etc/zprofile is on a real machine: every account's login zsh reads it, so the
+# wiring has to give it back with the permissions it found.
+mkdir -p "$destdir/etc"
+printf 'umask 022\n' >"$destdir/etc/zprofile"
+chmod 644 "$destdir/etc/zprofile"
+
 make install PREFIX="$prefix" DESTDIR="$destdir"
 test -x "$destdir$prefix/bin/sshakku"
 # The askpass helper is a link to the binary beside it: -L that it is a link at
@@ -35,6 +42,16 @@ test -L "$destdir$prefix/bin/sshakku-askpass"
 test -x "$destdir$prefix/bin/sshakku-askpass"
 test -x "$rendered"
 grep -qF ". \"$rendered\"" "$destdir/etc/zprofile"
+grep -qF 'umask 022' "$destdir/etc/zprofile"
+# The wiring writes through a temporary file and renames it into place, and a
+# rename carries the temporary file's own permissions with it. A machine-wide
+# startup file that comes back owner-only stops being read at every other
+# account's login, taking its own contents with it.
+zprofile_mode="$(stat -f '%Lp' "$destdir/etc/zprofile")"
+if [ "$zprofile_mode" != "644" ]; then
+	echo "wiring left /etc/zprofile as $zprofile_mode, not the 644 it was found with" >&2
+	exit 1
+fi
 
 make uninstall PREFIX="$prefix" DESTDIR="$destdir"
 test ! -e "$destdir$prefix/bin/sshakku"
@@ -44,6 +61,11 @@ test ! -L "$destdir$prefix/bin/sshakku-askpass"
 test ! -e "$rendered"
 if grep -q sshakku "$destdir/etc/zprofile"; then
 	echo "zprofile still wired after uninstall" >&2
+	exit 1
+fi
+zprofile_mode="$(stat -f '%Lp' "$destdir/etc/zprofile")"
+if [ "$zprofile_mode" != "644" ]; then
+	echo "unwiring left /etc/zprofile as $zprofile_mode, not the 644 it was found with" >&2
 	exit 1
 fi
 

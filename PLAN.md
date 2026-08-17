@@ -2311,16 +2311,89 @@ the marker block in the profile is the mechanism that has to work.
   that window's shell. Nothing is guessed: where the ancestry answers nothing,
   the command asks for `--shell`.
 
-  **Asking a PowerShell host is `-EncodedCommand`, and that was measured.**
-  `-File` needs a temporary file and is itself subject to the execution policy —
-  the very thing being diagnosed. `-Command -` on standard input silently
-  swallows a multi-line script. `-EncodedCommand` (base64 of UTF-16LE) works on
-  both editions, touches no disk, and is not governed by the policy, which
-  applies to script files. The query stays a real `.ps1` file in the tree,
-  embedded and encoded at the call site, so rule 13 holds and PSScriptAnalyzer
-  reads it. Two measured traps ride along: Windows PowerShell writes a CLIXML
-  progress payload to stderr, so only stdout may be read, and its stdout is the
-  OEM code page unless the script sets it, which mangles a non-ASCII path.
+  **A POSIX-emulating shell does not see the paths this program writes**, and
+  the mapping between the two spellings is that environment's own, so its own
+  translator is asked rather than the mapping reproduced. `cygpath` is found
+  beside the interpreter being wired — its neighbour, or one level up and back
+  down through `usr\bin`, which is where Git for Windows keeps it — so no
+  installation path is written into the source and a second environment
+  installed alongside the first is not mistaken for it. MSYS2 falls under the
+  first of those two places should it become a target; Cygwin is hypothetical
+  and chased no further than costing one `Stat`.
+
+  **The path is handed to the translator on its standard input, never as an
+  argument**, and this was measured rather than reasoned. A program built for
+  that environment re-parses the command line it is given under that
+  environment's quoting rules, where an apostrophe opens a quoted string: a path
+  through an account named `O'Brien` comes back with the apostrophe *silently
+  gone*, naming a directory that does not exist — a hook that would then fail at
+  every login with nothing to say why. `-f -` reads the path as bytes and it
+  arrives whole, apostrophes, spaces and ampersands together. A path cannot
+  contain a line ending on this platform, which is what makes one path to a line
+  safe. Characters the platform forbids in a name (`" * : < > ? |`) are mapped
+  by that environment into a private area of Unicode; no path arriving from this
+  platform can contain one, so that mapping is never met and is not guarded
+  against.
+
+  **A PowerShell host is asked with `-File`, in the clear.** The alternatives
+  were measured. `-Command -` on standard input silently swallows all but the
+  first line of a multi-line script. `-Command` with the script inline keeps it
+  readable but hands it to two quoting dialects in a row, Go's and PowerShell's.
+  `-EncodedCommand` (base64 of UTF-16LE) works on both editions and touches no
+  disk, and was used here first for exactly that reason — but it is unreadable
+  to every party entitled to read it: the person running the install, an
+  administrator looking at a process list, an audit log, and the endpoint
+  protection deciding whether to allow it. It is also the only one of these
+  forms that can never carry an Authenticode signature, so it leads away from
+  the machines where scripts must be signed rather than towards them. The query
+  stays a real `.ps1` in the tree, so rule 13 holds and PSScriptAnalyzer reads
+  it; it is embedded, laid out in a private temporary directory for the call at
+  0600, and taken back afterwards.
+
+  Two measured traps ride along, one fewer than before. Windows PowerShell
+  writes a CLIXML progress payload to stderr, so only stdout may be read; and
+  its stdout is the OEM code page unless the script sets it, which mangles a
+  non-ASCII path. The byte-order mark stopped being a trap when the encoding
+  did: every `.ps1` here carries one because 5.1 reads a mark-less **file** in
+  the machine's ANSI code page, which is exactly the case `-File` puts us in.
+  Under `-EncodedCommand` the same mark made 5.1 print nothing and exit 0, a
+  failure indistinguishable from a host with nothing to say; that hazard is now
+  gone rather than guarded.
+
+  **That `-File` is governed by the execution policy is the point, not the
+  price.** It was the argument for encoding — the query would be blocked by the
+  very thing it is diagnosing. But a policy that refuses this script file
+  refuses the profile for the same reason, so the hook the install is about to
+  write there could not run either. Failing at the query is therefore the
+  earliest truthful report available, where bypassing the policy to read it
+  would wire a hook that silently never starts. The failure is told apart by the
+  error identifier PowerShell prints, `UnauthorizedAccess`, which is not
+  translated as the message beside it is, and is turned into the sentence the
+  user actually needs — the profile will not run either. This is pinned by
+  driving a real host into a real refusal with `-ExecutionPolicy Restricted`,
+  which outranks the account's own setting and so needs nothing changed on the
+  machine running the tests.
+
+  **What a host is started with is as much a decision as what it is asked.**
+  Two variables describe the PowerShell that started *us* and must not reach
+  the one we start. `PSModulePath` names where one edition keeps its modules:
+  handed PowerShell 7's list, 5.x cannot resolve a module-qualified cmdlet at
+  all — it reports that the module could not be auto-loaded and exits having
+  printed nothing, which is the same shape as every other failure of this
+  mechanism. `PSExecutionPolicyPreference` is the process-scope policy we were
+  given, and passing it on makes the host report the asking session's policy as
+  its own, when the question is what governs the sessions the user will start
+  later. Both were caught by asking a real 5.1 rather than by reading.
+
+  **Endpoint protection was the first evidence that the encoding was wrong.**
+  Norton's behavioural heuristics flag `powershell.exe -EncodedCommand` started
+  by a process that is not a shell, which is exactly what this used to do; on
+  the machine this was written on it terminated the host mid-query, making
+  "blocked" and "broken" indistinguishable from inside. Handing the script over
+  as a named file removes the signature rather than arguing with it, and is the
+  same move that makes the script signable. The e2e run (10) still belongs on a
+  machine with such a product running, not only on a clean one — but it now has
+  a shape to defend rather than a shape to excuse.
 
   **The two editions disagree about the policy on the same account**, which is
   the measurement that settles whether one host may be asked and the other
@@ -2362,6 +2435,27 @@ the marker block in the profile is the mechanism that has to work.
   that back too; **F46**, a shell that will never read the hook is reported at
   install time, with what it would take, rather than discovered at the next
   login.
+
+  **Restating the shell library in Go found a defect in the shell library**,
+  and the Go primitives deliberately do not reproduce it. `upsert_block` writes
+  through `mktemp` and renames the result into place, and a rename carries the
+  temporary file's mode with it: measured on Debian, an existing `0644` startup
+  file comes back `0600`, and one the library creates is `0600` from the start.
+  Per-user that is harmless; machine-wide it is not, since `WIRE_BASHRC=1 make
+  install` upserts into `/etc/bash.bashrc`, and `make install` on macOS upserts
+  into `/etc/zprofile` — both read at every account's login. The Go side sets
+  the mode explicitly — the file keeps what it had, a new one gets `0644`, a
+  drop-in gets `0755` — and three tests fail with `0600` when that is removed.
+  It is the one place where "byte-identical" means the file's *contents* and not
+  its mode.
+
+  `shell-hook-lib.sh` now does the same, after the two install smoke scripts
+  were made to fail on the mode first: the permissions are settled before the
+  write and applied to the temporary file, since that file is the one the rename
+  puts in place. The unwiring had the same defect and three copies of it — the
+  `mktemp`/`strip-block`/`mv` dance was written out in the Makefile twice and in
+  `install-user-hook.sh` once — so it became one primitive, `strip-block-file`,
+  and the callers ask for that instead.
 
   Deferred here on purpose, so they are not read as oversights: the agent
   endpoint (see W4's findings), the askpass helper — wiring `askpass-env` on

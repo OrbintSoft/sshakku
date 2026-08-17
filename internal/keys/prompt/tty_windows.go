@@ -5,6 +5,8 @@ package prompt
 import (
 	"context"
 	"errors"
+
+	"github.com/OrbintSoft/sshakku/internal/platform"
 )
 
 // ErrNoTerminal is returned when there is no controlling terminal to prompt
@@ -18,7 +20,7 @@ var ErrNoTerminal = errors.New("no controlling terminal available")
 // console mode that can turn echo off), so answering "there is nobody to ask"
 // would report a missing implementation as an empty room, and callers treat an
 // empty room as normal and stay silent about it.
-var errNoConsolePrompt = errors.New("prompting on the console is not implemented on windows")
+var errNoConsolePrompt = platform.Unimplemented("prompting on the console")
 
 // ReadTTYLine reports errNoConsolePrompt.
 func ReadTTYLine(string, bool) (string, error) { return "", errNoConsolePrompt }

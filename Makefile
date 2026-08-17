@@ -54,7 +54,17 @@ endif
 
 GO ?= go
 GO_MAIN = ./cmd/sshakku
+# Windows runs a program by its extension, so the name it is built under is part
+# of whether it can be run at all — and the hook a wiring writes names this path.
+# `uname` under a POSIX-emulating environment there reports the environment and
+# its kernel version (MINGW64_NT-10.0-…), so the family is matched, never the
+# whole string.
+WINDOWS_UNAME = $(filter MINGW% MSYS%,$(UNAME))
+ifeq ($(WINDOWS_UNAME),)
 GO_BIN = bin/sshakku
+else
+GO_BIN = bin/sshakku.exe
+endif
 
 # The race detector is built on cgo, and the binary this project distributes
 # must not need a C toolchain to produce. SSHAKKU_RACE picks between the two:
@@ -79,7 +89,7 @@ endif
 SSHAKKU_ASKPASS_NAME = sshakku-askpass
 
 ifeq ($(UNAME),Linux)
-SSH_INIT_INSTALL_SCRIPT = nn-ssh-init.sh
+SSH_INIT_INSTALL_SCRIPT = internal/install/nn-ssh-init.sh
 INSTALL_PATH = $(DESTDIR)$(BINDIR)
 SSH_INIT_NAME= $(NN)-ssh-init.sh
 SSH_INIT_BIND_PATH = $(ETC_PROFILE_D)$(SSH_INIT_NAME)
@@ -119,11 +129,7 @@ uninstall:
 	@echo "Uninstalling $(SSH_INIT_INSTALL_PATH)"
 	@rm -f $(SSH_INIT_INSTALL_PATH)
 	@./shell-hook-lib.sh remove-drop-in "$(SSH_INIT_BASHRC_DROPIN_PATH)"
-	@if [ -f "$(SSH_INIT_BASHRC_FILE_PATH)" ]; then \
-		tmp=$$(mktemp "$(SSH_INIT_BASHRC_FILE_PATH).XXXXXX"); \
-		./shell-hook-lib.sh strip-block "$(SSH_INIT_BASHRC_FILE_PATH)" >"$$tmp"; \
-		mv "$$tmp" "$(SSH_INIT_BASHRC_FILE_PATH)"; \
-	fi
+	@./shell-hook-lib.sh strip-block-file "$(SSH_INIT_BASHRC_FILE_PATH)"
 	@echo "Uninstallation complete."
 
 install-user: build
@@ -145,7 +151,7 @@ uninstall-user:
 	@echo "Uninstallation complete."
 
 else ifeq ($(UNAME),Darwin)
-SSH_INIT_INSTALL_SCRIPT = nn-ssh-init.sh
+SSH_INIT_INSTALL_SCRIPT = internal/install/nn-ssh-init.sh
 INSTALL_PATH = $(DESTDIR)$(BINDIR)
 SSH_INIT_NAME = $(NN)-sshakku-init.sh
 SSH_INIT_HOOK_RENDERED_PATH = $(DESTDIR)$(SHARE_DIR)$(SSH_INIT_NAME)
@@ -185,16 +191,8 @@ uninstall:
 	@echo "Removing $(SSH_INIT_HOOK_RENDERED_PATH)"
 	@rm -f $(SSH_INIT_HOOK_RENDERED_PATH)
 	@rmdir "$(dir $(SSH_INIT_HOOK_RENDERED_PATH))" 2>/dev/null || true
-	@if [ -f "$(SSH_INIT_ZPROFILE_PATH)" ]; then \
-		tmp=$$(mktemp "$(SSH_INIT_ZPROFILE_PATH).XXXXXX"); \
-		./shell-hook-lib.sh strip-block "$(SSH_INIT_ZPROFILE_PATH)" >"$$tmp"; \
-		mv "$$tmp" "$(SSH_INIT_ZPROFILE_PATH)"; \
-	fi
-	@if [ -f "$(SSH_INIT_ZSHRC_PATH)" ]; then \
-		tmp=$$(mktemp "$(SSH_INIT_ZSHRC_PATH).XXXXXX"); \
-		./shell-hook-lib.sh strip-block "$(SSH_INIT_ZSHRC_PATH)" >"$$tmp"; \
-		mv "$$tmp" "$(SSH_INIT_ZSHRC_PATH)"; \
-	fi
+	@./shell-hook-lib.sh strip-block-file "$(SSH_INIT_ZPROFILE_PATH)"
+	@./shell-hook-lib.sh strip-block-file "$(SSH_INIT_ZSHRC_PATH)"
 	@echo "Uninstallation complete."
 
 install-user: build
@@ -215,6 +213,34 @@ uninstall-user:
 	@echo "Removing the per-user login hook"
 	@./install-user-hook.sh uninstall "$(USER_HOME)" "$(NN)" "$(USER_SHELL)"
 	@echo "Uninstallation complete."
+
+else ifneq ($(WINDOWS_UNAME),)
+
+# Here the wiring is the program's own job, and these targets hand it over:
+# which file a shell reads is a question only that shell can answer, so it is
+# asked rather than assembled from paths written down here. The scopes line up
+# with the other platforms': the plain target installs for the machine and needs
+# an elevated prompt, the -user one installs for the account and needs nothing.
+#
+# With no shell named, the program wires the one the command was typed in, which
+# from here is the shell running make. SHELL passes another: `make install-user
+# SHELL_ARG=--shell=windowspowershell`.
+SHELL_ARG ?=
+INSTALL_PATH = $(dir $(GO_BIN))
+SSHAKKU_INSTALL_PATH = $(GO_BIN)
+SSHAKKU_RUNTIME_PATH = $(GO_BIN)
+
+install: build
+	$(GO_BIN) install --scope=machine $(SHELL_ARG)
+
+uninstall: build
+	$(GO_BIN) uninstall --scope=machine $(SHELL_ARG)
+
+install-user: build
+	$(GO_BIN) install --scope=user $(SHELL_ARG)
+
+uninstall-user: build
+	$(GO_BIN) uninstall --scope=user $(SHELL_ARG)
 
 else
 
@@ -299,26 +325,30 @@ print-paths:
 	@echo "USER_SHELL: $(USER_SHELL)"
 
 # Linting. Requires: shellcheck, shfmt, markdownlint-cli2, taplo, checkmake,
-# actionlint, editorconfig-checker, hadolint, blinter, zsh. Each tool reads its
-# own config file where it has one.
+# actionlint, editorconfig-checker, hadolint, blinter, zsh, pwsh with the
+# PSScriptAnalyzer module. Each tool reads its own config file where it has one.
 # The bats fixtures are a mixed bag: executable stand-ins for real tools, which
 # are shell, alongside config files a test drops in to select a backend. Only
 # the former belong to shellcheck; the rest are linted by the tool for their own
 # format (config files by taplo, via lint-toml).
 BATS_FIXTURES = $(filter-out %.toml,$(wildcard test/bats/fixtures/*))
-SH_SCRIPTS = $(wildcard *.sh) $(wildcard .githooks/*) $(wildcard .github/scripts/*.sh) $(wildcard test/*.sh) $(wildcard test/containers/*.sh) $(wildcard test/fakes/*.sh) $(wildcard test/bats/*.bats) $(wildcard test/bats/*.bash) $(shell find cmd internal -path '*/testdata/*.sh') $(BATS_FIXTURES)
+SH_SCRIPTS = $(wildcard *.sh) $(wildcard .githooks/*) $(wildcard .github/scripts/*.sh) $(wildcard test/*.sh) $(wildcard test/containers/*.sh) $(wildcard test/fakes/*.sh) $(wildcard test/bats/*.bats) $(wildcard test/bats/*.bash) $(shell find cmd internal -name "*.sh") $(BATS_FIXTURES)
 ZSH_SCRIPTS = $(wildcard *.zsh)
 # Found rather than globbed at a fixed depth: a fixture that moves with the
 # package it belongs to must not stop being linted without anything saying so.
-BAT_FILES = $(shell find cmd internal -path '*/testdata/*.cmd')
+BAT_FILES = $(shell find cmd internal -path "*/testdata/*.cmd")
 DOCKERFILES = $(wildcard test/containers/*.Dockerfile)
 
 # Found rather than globbed at a fixed depth: a script that moves to another
 # package must not stop being linted without anything saying so.
-APPLESCRIPTS = $(shell find internal -name '*.applescript')
+APPLESCRIPTS = $(shell find internal -name "*.applescript")
 XML_FILES = $(wildcard internal/*/testdata/*.xml)
 
-lint: lint-sh lint-zsh lint-bat lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go lint-docker lint-applescript lint-xml
+# The login hook lives at the top level beside its Bourne counterpart; the rest
+# are found rather than globbed at a fixed depth, for the same reason as above.
+PS1_FILES = $(wildcard *.ps1) $(shell find cmd internal tools -name "*.ps1")
+
+lint: lint-sh lint-zsh lint-bat lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go lint-docker lint-applescript lint-ps1 lint-xml
 
 lint-sh:
 	shellcheck $(SH_SCRIPTS)
@@ -380,10 +410,20 @@ lint-applescript:
 		for f in $(APPLESCRIPTS); do echo "osacompile $$f"; osacompile -o /dev/null "$$f" || exit 1; done; \
 	fi
 
+# PSScriptAnalyzer is the PowerShell linter, and it is a PowerShell module: it
+# needs a pwsh to run in. On a machine without one this reports that it did not
+# run rather than passing quietly, which would read the same as having checked.
+lint-ps1:
+	@if ! command -v pwsh >/dev/null 2>&1; then \
+		echo "skipping lint-ps1: PSScriptAnalyzer runs in pwsh, which is not installed here"; \
+	else \
+		pwsh -NoProfile -File tools/lint-ps1.ps1 $(PS1_FILES); \
+	fi
+
 # Well-formedness only: the DTD these files name lives at an http:// URL, and
 # xmllint is not asked to fetch it, so the check stays offline.
 lint-xml:
 	xmllint --noout $(XML_FILES)
 
-.PHONY: install uninstall install-user uninstall-user build build-cross test test-json test-leakprofile test-keychain test-bats print-paths lint lint-sh lint-zsh lint-bat lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go lint-docker lint-applescript lint-xml
+.PHONY: install uninstall install-user uninstall-user build build-cross test test-json test-leakprofile test-keychain test-bats print-paths lint lint-sh lint-zsh lint-bat lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go lint-docker lint-applescript lint-ps1 lint-xml
 .DEFAULT_GOAL := install

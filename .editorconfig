@@ -39,6 +39,16 @@ indent_style = tab
 [*.applescript]
 indent_style = tab
 
+# Four spaces is what PSScriptAnalyzer's own formatter produces and what every
+# PowerShell style guide asks for, so a contributor's editor and the linter
+# agree without either being configured. The byte-order mark is not decoration:
+# Windows PowerShell 5.x reads a script without one using the machine's ANSI
+# code page, so an accented character in a path or a dash in a comment becomes
+# something else on a machine whose code page differs from the author's.
+[*.ps1]
+indent_size = 4
+charset = utf-8-bom
+
 # Markdown uses trailing spaces for hard line breaks; its indentation is
 # content-driven (list-marker alignment, fenced code), so don't enforce it.
 [*.md]

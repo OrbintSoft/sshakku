@@ -25,6 +25,15 @@ type Dialect struct {
 	envLine string
 }
 
+// Quote renders a value as a literal this shell reads back unchanged, quotes
+// included. It is what SetVar and SetEnv put on the right of an assignment, for
+// a caller that is placing a value somewhere else — into a hook this program
+// renders, say, where the assignment is already written and only the value is
+// being supplied.
+func (s Dialect) Quote(value string) string {
+	return s.quote(value)
+}
+
 // SetVar prints an assignment to a shell variable, newline included.
 func (s Dialect) SetVar(name, value string) string {
 	return fmt.Sprintf(s.varLine, name, s.quote(value))
@@ -44,6 +53,13 @@ func (s Dialect) SetEnv(name, value string) string {
 var dialects = []Dialect{
 	{name: Posix, quote: Quote, varLine: "%s=%s\n", envLine: "export %s=%s\n"},
 	{name: PowerShell, quote: powerShellSingleQuote, varLine: "$%s = %s\n", envLine: "$env:%s = %s\n"},
+}
+
+// Named returns the dialect called name, for a caller that already knows which
+// language it needs and has no flags to read — code rendering a file for a
+// shell it has just identified, rather than a command being told what to print.
+func Named(name string) (Dialect, error) {
+	return named(name)
 }
 
 // named returns the dialect called name, or an error naming what

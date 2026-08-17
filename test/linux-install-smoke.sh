@@ -78,18 +78,38 @@ test ! -e "$di_dropin"
 fb="$work_dir/wire-file"
 fb_destdir="$fb/root"
 fb_bashrc_file="$fb/etc/bash.bashrc"
-mkdir -p "$fb_destdir"
+mkdir -p "$fb_destdir" "$fb_destdir$fb/etc"
 fb_target="$fb_destdir$fb_bashrc_file"
+# A file with a line of somebody's own in it, readable by everyone, which is
+# what /etc/bash.bashrc is on a real machine: this one is read at every login by
+# every account, so the wiring must give it back with the permissions it found.
+printf 'umask 022\n' >"$fb_target"
+chmod 644 "$fb_target"
 
 make install PREFIX="$fb/prefix" DESTDIR="$fb_destdir" WIRE_BASHRC=1 \
 	BASH_BASHRC_D="$fb/absent" BASH_BASHRC_FILE="$fb_bashrc_file"
 test -f "$fb_target"
 grep -qF '. "/etc/profile.d/001-ssh-init.sh"' "$fb_target"
+grep -qF 'umask 022' "$fb_target"
+# The wiring writes through a temporary file and renames it into place, and a
+# rename carries the temporary file's own permissions with it. A machine-wide
+# startup file that comes back owner-only is one that silently stops working at
+# every other account's login.
+fb_mode="$(stat -c '%a' "$fb_target")"
+if [ "$fb_mode" != "644" ]; then
+	echo "wiring left $fb_target as $fb_mode, not the 644 it was found with" >&2
+	exit 1
+fi
 
 make uninstall PREFIX="$fb/prefix" DESTDIR="$fb_destdir" WIRE_BASHRC=1 \
 	BASH_BASHRC_D="$fb/absent" BASH_BASHRC_FILE="$fb_bashrc_file"
 if grep -q sshakku "$fb_target"; then
 	echo "bash.bashrc still wired after uninstall" >&2
+	exit 1
+fi
+fb_mode="$(stat -c '%a' "$fb_target")"
+if [ "$fb_mode" != "644" ]; then
+	echo "unwiring left $fb_target as $fb_mode, not the 644 it was found with" >&2
 	exit 1
 fi
 

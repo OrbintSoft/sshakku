@@ -8,6 +8,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OrbintSoft/sshakku/internal/testproc"
 )
 
 func TestExecRunnerStart(t *testing.T) {
@@ -51,9 +53,13 @@ func TestExecRunnerStart(t *testing.T) {
 	// An agent that refuses to start says why on its stderr, and an exit
 	// status on its own says nothing anybody can act on. What the agent said
 	// has to reach whoever is reading.
+	// These two need a process that really exits non-zero, because what is
+	// under test is what os/exec puts in an ExitError and what Start makes of
+	// it. The process is this test binary re-entered — see internal/testproc.
 	t.Run("reports what the agent itself said", func(t *testing.T) {
+		name, args := testproc.Command(t, testproc.Emit, "", "bind: Invalid argument", "1")
 		execOutput = func(ctx context.Context, _ string, _ ...string) ([]byte, error) {
-			return exec.CommandContext(ctx, "sh", "-c", "echo 'bind: Invalid argument' >&2; exit 1").Output()
+			return exec.CommandContext(ctx, name, args...).Output()
 		}
 		_, err := (ExecRunner{}).Start(t.Context(), "/run/agent.sock")
 		require.Error(t, err, "an ssh-agent that exits non-zero must be reported")
@@ -62,10 +68,16 @@ func TestExecRunnerStart(t *testing.T) {
 
 	// Nothing to add is not an excuse to lose the exit status.
 	t.Run("an exit with nothing said is still reported", func(t *testing.T) {
+		name, args := testproc.Command(t, testproc.Emit, "", "", "3")
 		execOutput = func(ctx context.Context, _ string, _ ...string) ([]byte, error) {
-			return exec.CommandContext(ctx, "sh", "-c", "exit 3").Output()
+			return exec.CommandContext(ctx, name, args...).Output()
 		}
 		_, err := (ExecRunner{}).Start(t.Context(), "/run/agent.sock")
-		assert.Error(t, err, "an ssh-agent that exits non-zero in silence must still be reported")
+		require.Error(t, err, "an ssh-agent that exits non-zero in silence must still be reported")
+
+		var exit *exec.ExitError
+		require.ErrorAs(t, err, &exit,
+			"and reported as what it was: a program that ran and refused, not one that could not be started")
+		assert.Equal(t, 3, exit.ExitCode(), "the status is the only thing it said, so it is the one thing that must survive")
 	})
 }

@@ -5,6 +5,10 @@
 *.sh  text eol=lf
 *.zsh text eol=lf
 
+# PowerShell reads an LF-terminated script perfectly well on Windows, on both
+# editions, so these follow the LF rule rather than the batch exception below.
+*.ps1 text eol=lf
+
 # Batch files are the exception to the LF rule above: cmd.exe reads a script by
 # seeking through it, and a label it has to jump back to is not reliably found
 # when the lines end in LF alone. They are checked out with CRLF for that

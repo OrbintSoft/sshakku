@@ -3,14 +3,15 @@
 package agent
 
 import (
-	"errors"
 	"time"
+
+	"github.com/OrbintSoft/sshakku/internal/platform"
 )
 
 // errNoLock is what FlockLocker reports here. Windows locks a byte range of an
 // open file rather than the file itself, which is a different mechanism from
 // the advisory whole-file lock the Unix build takes, and it is not written yet.
-var errNoLock = errors.New("locking the agent start path is not implemented on windows")
+var errNoLock = platform.Unimplemented("locking the agent start path")
 
 // FlockLocker serialises the mutate path of EnsureAgent. Its fields carry the
 // caller's waiting policy, which nothing here reads yet.

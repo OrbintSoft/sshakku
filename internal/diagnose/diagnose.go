@@ -108,6 +108,11 @@ type Inputs struct {
 	// withheld rather than drawn from an empty string: not knowing what a
 	// shell exports is not evidence that it exports nothing.
 	EnvUnreadable bool
+
+	// NoAgentMechanism says this build has no way to keep an ssh-agent on the
+	// system being reported on, which the caller knows and this does not go
+	// and read. The zero value is the ordinary case, a system with one.
+	NoAgentMechanism bool
 }
 
 // AgentView is one ssh-agent process as the report presents it.
@@ -228,6 +233,12 @@ type Report struct {
 	Env           []EnvVar
 	SecretEnv     []SecretEnvVar
 	EnvUnreadable bool // the environment shown is not this process's own (see Inputs)
+
+	// NoAgentMechanism says the build being reported on has no way to keep an
+	// ssh-agent here, which changes what there is to do about every state but
+	// none of what is observed. Stated by the caller rather than read from the
+	// machine, so both answers stay checkable from either one.
+	NoAgentMechanism bool
 }
 
 // Gather inspects the agent situation described by in and returns the report,
