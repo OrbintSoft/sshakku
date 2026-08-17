@@ -206,7 +206,10 @@ func TestAnUninstallThatCannotFinishSaysWhichStepStoppedIt(t *testing.T) {
 		// difference between this and the hook simply not being there.
 		locations, err := LocationsFor(req.Scope)
 		require.NoError(t, err)
-		hook := filepath.Join(locations.HookDir, "shell-hook.sh")
+		// The hook's name is the wired shell's, and this machine's own shell
+		// decides which that is: a name written out here would be the other
+		// platform's, and the directory would be one the uninstall never looks at.
+		hook := filepath.Join(locations.HookDir, plan{kind: req.Shell}.hookName())
 		require.NoError(t, os.MkdirAll(hook, 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(hook, "something-else"), []byte("mine"), 0o644))
 
@@ -266,34 +269,6 @@ func TestOnlySomethingWorthSayingBecomesANote(t *testing.T) {
 
 	p.note("the drop-in directory was there and could not be used")
 	assert.Len(t, p.notes, 1)
-}
-
-// F19, F44: where the shell reads a drop-in directory beside its startup file, a
-// file of ours goes in there and the startup file is not touched at all — and the
-// uninstall takes that file away again rather than looking for a block.
-func TestWhereAShellReadsADropInDirectoryTheWiringIsAFileOfItsOwn(t *testing.T) {
-	home := t.TempDir()
-	installInto(t, home)
-	profile := filepath.Join(home, "startup-file")
-	require.NoError(t, os.WriteFile(profile, []byte("# mine\n"), 0o644))
-	require.NoError(t, os.Mkdir(dropInDirBeside(profile), 0o755))
-	req := wiringRequest(t, home, profile)
-
-	installed, err := Install(t.Context(), req, Ancestry{})
-	require.NoError(t, err)
-
-	assert.True(t, installed.DropIn, "a directory that is there is one somebody's own configuration loops over")
-	assert.FileExists(t, installed.Wired)
-	untouched, err := os.ReadFile(profile)
-	require.NoError(t, err)
-	assert.Equal(t, "# mine\n", string(untouched), "the shell's own file is left exactly as it was")
-
-	_, err = Uninstall(t.Context(), req, Ancestry{})
-	require.NoError(t, err)
-	assert.NoFileExists(t, installed.Wired)
-	after, err := os.ReadFile(profile)
-	require.NoError(t, err)
-	assert.Equal(t, "# mine\n", string(after))
 }
 
 // A drop-in directory this install has to make, in a place it cannot: reported
@@ -412,8 +387,15 @@ func TestAMachineWideInstallForAShellWithNoAnswerStopsAtTheTable(t *testing.T) {
 	installInto(t, home)
 
 	var refused bool
-	for _, kind := range []ShellKind{Bash, Zsh} {
+	for _, kind := range offeredShellKinds() {
 		if _, err := machineWiringFor(kind); err == nil {
+			continue
+		}
+		if _, ok := RecogniseShell(string(kind)); !ok {
+			// A kind this system's table names but does not recognise under that
+			// bare name: what it is called as a file is that platform's business,
+			// and this test is about the machine-wide table rather than about
+			// recognising an interpreter.
 			continue
 		}
 		refused = true

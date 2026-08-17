@@ -1,7 +1,6 @@
 package install
 
 import (
-	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -28,15 +27,12 @@ func TestAMachineWideWiringGoesWhereEveryLoginShellReads(t *testing.T) {
 
 		// The directory is this install's to make: the shell reads it whether or
 		// not anybody has created it, which is the opposite of the rule for the
-		// one beside an account's own startup file.
+		// one beside an account's own startup file. Who may then read either of
+		// them is a question only a system with real permission bits can be
+		// asked — see machinewiring_unix_test.go.
 		require.NoError(t, p.writeDropIn(". '/hook.sh'"))
-		written, err := os.Stat(p.placement.Path)
-		require.NoError(t, err)
-		assert.Equal(t, fs.FileMode(0o755), written.Mode().Perm())
-		made, err := os.Stat(dir)
-		require.NoError(t, err)
-		assert.Equal(t, fs.FileMode(0o755), made.Mode().Perm(),
-			"a directory of wiring nobody but its owner could read would take all of it with it")
+		assert.FileExists(t, p.placement.Path)
+		assert.DirExists(t, dir)
 	})
 
 	t.Run("a startup file every login shell reads", func(t *testing.T) {

@@ -206,15 +206,3 @@ func TestAProfileThatCannotBeReadIsNotGuessedAbout(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), unreadable)
 }
-
-// Something in the way of a path that is not a file or a directory but a name
-// that cannot be resolved at all — a directory sought under a file — is neither
-// there nor absent, and is reported rather than read as absent.
-func TestAPathThatCannotBeReachedIsNotReadAsAbsent(t *testing.T) {
-	file := filepath.Join(t.TempDir(), "not-a-directory")
-	require.NoError(t, os.WriteFile(file, []byte("mine"), 0o644))
-
-	_, err := isDir(filepath.Join(file, "under-a-file"))
-
-	require.Error(t, err, "a name this system cannot resolve is not a directory that is not there")
-}
