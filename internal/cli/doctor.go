@@ -474,8 +474,10 @@ func gatherReport(ctx context.Context, env paths.Env, layout paths.Layout, setti
 		State:       keystate.Store{Dir: keystateDir(layout)},
 	}
 	shownEnv, secretEnv := environmentReport()
+	endpoint := platformEndpoint(layout)
 	return diagnose.Gather(ctx, diagnose.Inputs{
-		FixedSock:         layout.AgentSock,
+		FixedSock:         endpoint.Native(),
+		FixedSockPosix:    endpoint.ForPosixShell(),
 		LegacyDir:         filepath.Join(env.Home, ".ssh", "agent"),
 		StatePath:         filepath.Join(filepath.Dir(layout.AgentSock), "agent.state"),
 		EnvSock:           os.Getenv("SSH_AUTH_SOCK"),
@@ -486,7 +488,7 @@ func gatherReport(ctx context.Context, env paths.Env, layout paths.Layout, setti
 		Env:               shownEnv,
 		SecretEnv:         secretEnv,
 		NoAgentMechanism:  !agent.KeepsAgents(),
-	}, inspect.Inspector{}, reach.SocketProber{}, newAncestrySource(), newCgroupSource(), keySource,
+	}, inspect.Inspector{}, platformProber(), newAncestrySource(), newCgroupSource(), keySource,
 		newHostSource(env.Home))
 }
 

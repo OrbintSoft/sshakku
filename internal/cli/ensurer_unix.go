@@ -8,7 +8,17 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/agent"
 	"github.com/OrbintSoft/sshakku/internal/agent/inspect"
 	"github.com/OrbintSoft/sshakku/internal/agent/reach"
+	"github.com/OrbintSoft/sshakku/internal/paths"
 )
+
+// platformEndpoint is where sessions on this system are pointed: the socket in
+// the resolved layout, which this program binds an agent to itself.
+func platformEndpoint(layout paths.Layout) agent.Endpoint {
+	return agent.SocketEndpoint(layout.AgentSock)
+}
+
+// platformProber is how an agent is asked whether it answers here.
+func platformProber() agent.Prober { return reach.SocketProber{} }
 
 // agentLockWait bounds how long a login blocks for the start lock before it
 // proceeds without it, so a stuck holder slows the login but never hangs it.

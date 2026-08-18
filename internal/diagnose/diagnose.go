@@ -81,8 +81,15 @@ type KeySource struct {
 // Inputs are the facts Gather reasons over, injected so it stays pure and
 // testable — nothing here is read from the ambient process.
 type Inputs struct {
-	FixedSock string // the socket our agent binds (from the resolved layout)
-	LegacyDir string // ~/.ssh/agent, for spotting a pre-sshakku agent
+	FixedSock string // the endpoint sessions are pointed at, as this system writes it
+	// FixedSockPosix is that same endpoint in the writing a POSIX-emulating
+	// shell can carry, where a system has two of them — empty where an
+	// endpoint has only one writing, which is every system whose agent
+	// listens on a socket. A session holding either is holding ours, and a
+	// report that knew only one of them would call the other one somebody
+	// else's agent.
+	FixedSockPosix string
+	LegacyDir      string // ~/.ssh/agent, for spotting a pre-sshakku agent
 	StatePath string // agent.state, holding the pid of the agent we started
 	EnvSock   string // SSH_AUTH_SOCK as this shell sees it
 	LogFile   string // session log to tail
@@ -214,10 +221,15 @@ func WalletFindings(w WalletView) []string {
 
 // Report is the read-only picture the doctor presents.
 type Report struct {
-	Wallet       WalletView
-	FixedSock    string
-	EnvSock      string
-	EnvReachable bool
+	Wallet    WalletView
+	FixedSock string
+	// FixedReachable says whether an agent answers on the fixed endpoint. It
+	// is asked of the endpoint itself rather than worked out from the process
+	// list, because a system whose agent is a service has no process to find
+	// and would otherwise be reported as having no agent while one answers.
+	FixedReachable bool
+	EnvSock        string
+	EnvReachable   bool
 	OurUID       int
 	RecordedPID  int // pid from agent.state, 0 when absent or unreadable
 	Agents       []AgentView
