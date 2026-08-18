@@ -34,3 +34,28 @@ func Stash(passphrase string, ttl time.Duration) (string, error) {
 func Fetch(ctx context.Context, token string) (string, error) {
 	return socketHandoffFetch(ctx, token)
 }
+
+// chooseSocketBase picks the directory handoff sockets are created under.
+//
+// A per-user temporary directory the system hands out (tmpDir) is preferred:
+// it is short, which matters because a socket address is capped at barely a
+// hundred bytes, and it is the same private per-user directory the cache is.
+// It is only taken if it really is that, though — private reports whether it
+// exists, belongs to this user, and grants nothing to anyone else — because
+// unlike the cache directory it is named by the environment rather than
+// derived from the user's own home, and a shared directory (a bare /tmp, say)
+// is one an attacker can wait in for a passphrase.
+//
+// Anything else falls back to the cache directory, which is private by
+// construction but sits under the home and is therefore as long as the home
+// is.
+//
+// It is this system's question and lives with it: the other two do not choose.
+// Linux hands nothing over a socket, and Windows has one answer — the account's
+// own cache directory, inside a profile that is already the account's.
+func chooseSocketBase(tmpDir string, private func(string) bool, cacheDir func() (string, error)) (string, error) {
+	if tmpDir != "" && private(tmpDir) {
+		return tmpDir, nil
+	}
+	return cacheDir()
+}
