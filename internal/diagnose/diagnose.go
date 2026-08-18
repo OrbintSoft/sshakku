@@ -90,10 +90,10 @@ type Inputs struct {
 	// else's agent.
 	FixedSockPosix string
 	LegacyDir      string // ~/.ssh/agent, for spotting a pre-sshakku agent
-	StatePath string // agent.state, holding the pid of the agent we started
-	EnvSock   string // SSH_AUTH_SOCK as this shell sees it
-	LogFile   string // session log to tail
-	OurUID    int    // the invoking user's uid, to tell same-user agents apart
+	StatePath      string // agent.state, holding the pid of the agent we started
+	EnvSock        string // SSH_AUTH_SOCK as this shell sees it
+	LogFile        string // session log to tail
+	OurUID         int    // the invoking user's uid, to tell same-user agents apart
 
 	// EnvAskpass and EnvAskpassRequire describe whether this shell's ssh
 	// passphrase prompts are routed through sshakku's wallet-aware askpass
@@ -230,17 +230,17 @@ type Report struct {
 	FixedReachable bool
 	EnvSock        string
 	EnvReachable   bool
-	OurUID       int
-	RecordedPID  int // pid from agent.state, 0 when absent or unreadable
-	Agents       []AgentView
-	State        State
-	Findings     []string
-	LogTail      []string
-	InspectErr   error // enumeration failed; the report is partial
-	Keys         []KeyView
-	KeysDir      string // the directory Keys were read from, as the report names it
-	KeysErr      error  // key enumeration failed; Keys is empty
-	Host         hostcheck.Checks
+	OurUID         int
+	RecordedPID    int // pid from agent.state, 0 when absent or unreadable
+	Agents         []AgentView
+	State          State
+	Findings       []string
+	LogTail        []string
+	InspectErr     error // enumeration failed; the report is partial
+	Keys           []KeyView
+	KeysDir        string // the directory Keys were read from, as the report names it
+	KeysErr        error  // key enumeration failed; Keys is empty
+	Host           hostcheck.Checks
 
 	Env           []EnvVar
 	SecretEnv     []SecretEnvVar
