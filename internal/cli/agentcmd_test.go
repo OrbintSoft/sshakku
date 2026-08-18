@@ -71,7 +71,7 @@ func depsWithEnsurer(e agentEnsurer) deps {
 func TestShellInit(t *testing.T) {
 	t.Run("healthy agent prints the shell assignments", func(t *testing.T) {
 		tempRuntimeEnv(t)
-		d := depsWithEnsurer(fakeEnsurer{res: agent.EnsureResult{LiveSock: "/run/sshakku/agent.sock"}})
+		d := depsWithEnsurer(fakeEnsurer{res: agent.EnsureResult{Live: agent.SocketEndpoint("/run/sshakku/agent.sock")}})
 		var out, errOut bytes.Buffer
 		require.Zerof(t, d.shellInit(t.Context(), &out, &errOut, nil), "shellInit must succeed; stderr=%q", errOut.String())
 		// Three assignments the shell needs; assert, so one run names every one
@@ -104,7 +104,7 @@ func TestShellInit(t *testing.T) {
 
 	t.Run("stdout write error returns 1", func(t *testing.T) {
 		tempRuntimeEnv(t)
-		d := depsWithEnsurer(fakeEnsurer{res: agent.EnsureResult{LiveSock: "/run/sshakku/agent.sock"}})
+		d := depsWithEnsurer(fakeEnsurer{res: agent.EnsureResult{Live: agent.SocketEndpoint("/run/sshakku/agent.sock")}})
 		var errOut bytes.Buffer
 		assert.Equal(t, 1, d.shellInit(t.Context(), errWriter{}, &errOut, nil),
 			"assignments the shell never received must not be reported as delivered")
@@ -117,7 +117,7 @@ func TestShellInit(t *testing.T) {
 func TestShellInitSpeaksTheDialectItWasAsked(t *testing.T) {
 	t.Run("powershell", func(t *testing.T) {
 		tempRuntimeEnv(t)
-		d := depsWithEnsurer(fakeEnsurer{res: agent.EnsureResult{LiveSock: `\\.\pipe\sshakku`}})
+		d := depsWithEnsurer(fakeEnsurer{res: agent.EnsureResult{Live: agent.PipeEndpoint(`\\.\pipe\sshakku`)}})
 		var out, errOut bytes.Buffer
 		require.Zerof(t, d.shellInit(t.Context(), &out, &errOut, []string{"--shell=powershell"}),
 			"shellInit must succeed; stderr=%q", errOut.String())
@@ -141,6 +141,25 @@ func TestShellInitSpeaksTheDialectItWasAsked(t *testing.T) {
 	})
 }
 
+// F50: an endpoint with two writings is handed to each shell in the one that
+// shell can carry. The language of the assignment and the writing of the value
+// are two different questions, and this is the second: a POSIX-emulating shell
+// is given the slash form, which is the only one that survives being carried
+// through such a shell to the program that has to dial it.
+func TestAnEndpointWithTwoWritingsIsPrintedInTheOneTheShellCanCarry(t *testing.T) {
+	tempRuntimeEnv(t)
+	d := depsWithEnsurer(fakeEnsurer{res: agent.EnsureResult{Live: agent.PipeEndpoint(`\\.\pipe\sshakku`)}})
+	var out, errOut bytes.Buffer
+
+	require.Zerof(t, d.shellInit(t.Context(), &out, &errOut, nil),
+		"shellInit must succeed; stderr=%q", errOut.String())
+
+	assert.Contains(t, out.String(), "agent_sock='//./pipe/sshakku'",
+		"the writing a POSIX-emulating shell can carry")
+	assert.NotContains(t, out.String(), `\\.\pipe\sshakku`,
+		"and not the one it would eat on the way through")
+}
+
 // TestEnsureAgent covers the ensure-agent command against a fake ensurer: a
 // healthy agent prints the single agent_sock assignment in the language it was
 // asked for, a dialect there is no printing for is refused before the agent is
@@ -149,7 +168,7 @@ func TestShellInitSpeaksTheDialectItWasAsked(t *testing.T) {
 func TestEnsureAgent(t *testing.T) {
 	t.Run("healthy agent prints agent_sock", func(t *testing.T) {
 		tempRuntimeEnv(t)
-		d := depsWithEnsurer(fakeEnsurer{res: agent.EnsureResult{LiveSock: "/run/sshakku/agent.sock"}})
+		d := depsWithEnsurer(fakeEnsurer{res: agent.EnsureResult{Live: agent.SocketEndpoint("/run/sshakku/agent.sock")}})
 		var out, errOut bytes.Buffer
 		require.Zerof(t, d.ensureAgent(t.Context(), &out, &errOut, nil), "ensureAgent must succeed; stderr=%q", errOut.String())
 		assert.Equal(t, "agent_sock='/run/sshakku/agent.sock'\n", out.String(),
@@ -159,7 +178,7 @@ func TestEnsureAgent(t *testing.T) {
 	// F43: this command prints for a shell too, so it takes the same flag.
 	t.Run("the dialect asked for is what it prints", func(t *testing.T) {
 		tempRuntimeEnv(t)
-		d := depsWithEnsurer(fakeEnsurer{res: agent.EnsureResult{LiveSock: `\\.\pipe\sshakku`}})
+		d := depsWithEnsurer(fakeEnsurer{res: agent.EnsureResult{Live: agent.PipeEndpoint(`\\.\pipe\sshakku`)}})
 		var out, errOut bytes.Buffer
 		require.Zerof(t, d.ensureAgent(t.Context(), &out, &errOut, []string{"--shell", "powershell"}),
 			"ensureAgent must succeed; stderr=%q", errOut.String())
@@ -199,7 +218,7 @@ func TestEnsureAgent(t *testing.T) {
 
 	t.Run("stdout write error returns 1", func(t *testing.T) {
 		tempRuntimeEnv(t)
-		d := depsWithEnsurer(fakeEnsurer{res: agent.EnsureResult{LiveSock: "/run/sshakku/agent.sock"}})
+		d := depsWithEnsurer(fakeEnsurer{res: agent.EnsureResult{Live: agent.SocketEndpoint("/run/sshakku/agent.sock")}})
 		assert.Equal(t, 1, d.ensureAgent(t.Context(), errWriter{}, io.Discard, nil),
 			"a socket the caller never received must not be reported as delivered")
 	})
@@ -217,20 +236,20 @@ func TestRunEnsure(t *testing.T) {
 	env := paths.Env{Home: t.TempDir(), UID: 1000}
 
 	t.Run("healthy returns the live socket", func(t *testing.T) {
-		d := depsWithEnsurer(fakeEnsurer{res: agent.EnsureResult{LiveSock: "/run/sshakku/agent.sock"}})
+		d := depsWithEnsurer(fakeEnsurer{res: agent.EnsureResult{Live: agent.SocketEndpoint("/run/sshakku/agent.sock")}})
 		var errOut bytes.Buffer
 		sock, code := d.runEnsure(t.Context(), &errOut, env, layout)
 		assert.Zero(t, code, "a healthy agent is not a failure")
-		assert.Equal(t, "/run/sshakku/agent.sock", sock, "the socket the agent is live on")
+		assert.Equal(t, "/run/sshakku/agent.sock", sock.Native(), "the endpoint the agent is live on")
 		assert.Empty(t, errOut.String(), "a clean run has nothing to say")
 	})
 
 	t.Run("anomaly is reported but still succeeds", func(t *testing.T) {
-		d := depsWithEnsurer(fakeEnsurer{res: agent.EnsureResult{LiveSock: "/run/sshakku/agent.sock", Anomaly: "adopted a foreign agent"}})
+		d := depsWithEnsurer(fakeEnsurer{res: agent.EnsureResult{Live: agent.SocketEndpoint("/run/sshakku/agent.sock"), Anomaly: "adopted a foreign agent"}})
 		var errOut bytes.Buffer
 		sock, code := d.runEnsure(t.Context(), &errOut, env, layout)
 		assert.Zero(t, code, "an anomaly worth mentioning is not a reason to fail the login")
-		assert.Equal(t, "/run/sshakku/agent.sock", sock, "the socket the agent is live on")
+		assert.Equal(t, "/run/sshakku/agent.sock", sock.Native(), "the endpoint the agent is live on")
 		assert.Contains(t, errOut.String(), "adopted a foreign agent", "but it must still be said out loud")
 	})
 
@@ -288,8 +307,8 @@ func TestAShellOnASystemWithNoAgentMechanismStillOpensAndIsToldNothing(t *testin
 // one a machine gets is the platform's own, and a test that could only ask its own
 // machine's question would leave the other half permanently unasked.
 func TestWhatDrivesTheAgentFollowsWhetherThisSystemCanKeepOne(t *testing.T) {
-	assert.IsType(t, agent.Manager{}, ensurerFor(true),
-		"where an agent can be kept on a fixed endpoint, the lifecycle drives it")
+	assert.NotEqual(t, agent.NoMechanism{}, ensurerFor(true),
+		"where an agent can be kept, this system's own lifecycle drives it — which one that is, each platform's test says")
 	assert.IsType(t, agent.NoMechanism{}, ensurerFor(false),
 		"and where it cannot, the answer says so once instead of failing at whichever step is reached first")
 	assert.IsType(t, ensurerFor(agent.KeepsAgents()), realEnsurer(),

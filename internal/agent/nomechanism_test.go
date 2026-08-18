@@ -18,5 +18,5 @@ func TestASystemWithNoAgentMechanismSaysSoInsteadOfDrivingOne(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, platform.ErrUnimplemented)
 	assert.Contains(t, err.Error(), "ssh-agent", "the words name the piece that is missing")
-	assert.Empty(t, result.LiveSock, "and no socket is offered for an agent that was never started")
+	assert.Empty(t, result.Live.Native(), "and no endpoint is offered for an agent that was never started")
 }

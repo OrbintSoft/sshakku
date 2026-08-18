@@ -175,14 +175,14 @@ func TestRunHelpAndUnknown(t *testing.T) {
 func TestRunDispatch(t *testing.T) {
 	t.Run("shell-init", func(t *testing.T) {
 		tempRuntimeEnv(t)
-		d := depsWithEnsurer(fakeEnsurer{res: agent.EnsureResult{LiveSock: "/run/sshakku/agent.sock"}})
+		d := depsWithEnsurer(fakeEnsurer{res: agent.EnsureResult{Live: agent.SocketEndpoint("/run/sshakku/agent.sock")}})
 		assert.Zero(t, d.run(t.Context(), io.Discard, io.Discard, []string{"shell-init"}),
 			"shell-init must reach the same healthy agent through dispatch as it does directly")
 	})
 
 	t.Run("ensure-agent", func(t *testing.T) {
 		tempRuntimeEnv(t)
-		d := depsWithEnsurer(fakeEnsurer{res: agent.EnsureResult{LiveSock: "/run/sshakku/agent.sock"}})
+		d := depsWithEnsurer(fakeEnsurer{res: agent.EnsureResult{Live: agent.SocketEndpoint("/run/sshakku/agent.sock")}})
 		assert.Zero(t, d.run(t.Context(), io.Discard, io.Discard, []string{"ensure-agent"}),
 			"and so must ensure-agent")
 	})
