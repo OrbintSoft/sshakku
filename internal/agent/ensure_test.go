@@ -64,7 +64,7 @@ func TestEnsureAgentHealthy(t *testing.T) {
 	res, err := m.EnsureAgent(t.Context(), EnsureConfig{FixedSock: fixed, StatePath: filepath.Join(dir, "st"), OurUID: 1000}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, SituationHealthy, res.Situation, "situation")
-	assert.Equal(t, fixed, res.LiveSock, "the live socket is the fixed one")
+	assert.Equal(t, fixed, res.Live.Native(), "the live endpoint is the fixed one")
 	assert.Empty(t, runner.started, "the healthy path must not start an agent")
 }
 
@@ -83,7 +83,7 @@ func TestEnsureAgentClean(t *testing.T) {
 	res, err := m.EnsureAgent(t.Context(), EnsureConfig{FixedSock: fixed, StatePath: state, OurUID: 1000}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, SituationClean, res.Situation, "situation")
-	assert.Equal(t, fixed, res.LiveSock, "the live socket is the fixed one")
+	assert.Equal(t, fixed, res.Live.Native(), "the live endpoint is the fixed one")
 	assert.Equal(t, 4242, res.Started, "the pid started")
 	assert.Equal(t, fixed, runner.started, "the socket the agent was started on")
 
@@ -140,7 +140,7 @@ func TestEnsureAgentForeign(t *testing.T) {
 	assert.NotEmpty(t, res.Anomaly, "foreign adoption must report an anomaly")
 	assert.True(t, log.hasLevel("WARN"), "the anomaly must be logged at WARN")
 	assert.Empty(t, runner.started, "adoption must not start a new agent")
-	assert.Equal(t, fixed, res.LiveSock, "the live socket is still the fixed one")
+	assert.Equal(t, fixed, res.Live.Native(), "the live endpoint is still the fixed one")
 
 	target, err := os.Readlink(fixed)
 	require.NoError(t, err, "readlink(fixed)")
@@ -275,7 +275,7 @@ func TestEnsureAgentDoubleCheckUnderLock(t *testing.T) {
 	res, err := m.EnsureAgent(t.Context(), EnsureConfig{FixedSock: fixed, StatePath: filepath.Join(dir, "st"), LockPath: filepath.Join(dir, "lock"), OurUID: 1000}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, SituationHealthy, res.Situation, "the under-lock re-check must find ours healthy")
-	assert.Equal(t, fixed, res.LiveSock, "the live socket is the fixed one")
+	assert.Equal(t, fixed, res.Live.Native(), "the live endpoint is the fixed one")
 	assert.Empty(t, runner.started, "the re-check found ours healthy, so nothing must be started")
 	assert.Empty(t, sig.killed, "the re-check found ours healthy, so nothing must be reaped")
 	assert.Equal(t, 1, lk.unlocked, "the lock must be released even on the healthy re-check")

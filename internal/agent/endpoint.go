@@ -16,6 +16,13 @@ type Endpoint struct {
 	posix  string
 }
 
+// SocketEndpoint is the endpoint of an agent listening on the socket at path.
+// A path is one writing: every shell on such a system reads it the same, and
+// there is nothing for a shell to carry it through that would change it.
+func SocketEndpoint(path string) Endpoint {
+	return Endpoint{native: path, posix: path}
+}
+
 // PipeEndpoint is the endpoint of an agent reached through the named pipe
 // called name, written as that system writes it.
 func PipeEndpoint(name string) Endpoint {

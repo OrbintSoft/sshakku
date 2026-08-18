@@ -126,7 +126,7 @@ func TestDoctorFix(t *testing.T) {
 		layout := paths.Resolve(paths.FromOS(), paths.ProbeDir)
 		report := diagnose.Report{EnvSock: layout.AgentSock}
 		d := doctorDeps(report, fakeTokenSource{}, 1000)
-		d.ensurer = fakeEnsurer{res: agent.EnsureResult{LiveSock: layout.AgentSock}}
+		d.ensurer = fakeEnsurer{res: agent.EnsureResult{Live: agent.SocketEndpoint(layout.AgentSock)}}
 		var out, errOut bytes.Buffer
 		require.Zerof(t, d.doctor(t.Context(), &out, &errOut, []string{"--fix"}), "--fix; stderr=%q", errOut.String())
 		assert.NotContains(t, out.String(), "export SSH_AUTH_SOCK",
@@ -137,7 +137,7 @@ func TestDoctorFix(t *testing.T) {
 		tempRuntimeEnv(t)
 		report := diagnose.Report{EnvSock: "/somewhere/else.sock"}
 		d := doctorDeps(report, fakeTokenSource{}, 1000)
-		d.ensurer = fakeEnsurer{res: agent.EnsureResult{LiveSock: "/run/sshakku/agent.sock"}}
+		d.ensurer = fakeEnsurer{res: agent.EnsureResult{Live: agent.SocketEndpoint("/run/sshakku/agent.sock")}}
 		var out, errOut bytes.Buffer
 		require.Zerof(t, d.doctor(t.Context(), &out, &errOut, []string{"--fix"}), "--fix; stderr=%q", errOut.String())
 		assert.Contains(t, out.String(), "export SSH_AUTH_SOCK=",

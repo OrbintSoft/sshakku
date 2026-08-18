@@ -78,6 +78,18 @@ func TestAValueCanBeQuotedForItsShellWithoutAnAssignmentAroundIt(t *testing.T) {
 // Code that has already worked out which language it needs — a renderer writing
 // a file for a shell it has just identified — asks by name, and is refused by
 // name for one this program cannot print rather than handed another language.
+// A dialect says which language it is, for the caller whose *value* depends on
+// the shell reading it and not only on how that shell writes an assignment — an
+// endpoint spelled one way for a shell of the system's own and another for one
+// emulating POSIX. Asked by the name `--shell` uses, so the two never drift.
+func TestADialectSaysWhichLanguageItIs(t *testing.T) {
+	for _, name := range []string{Posix, PowerShell} {
+		got, err := Named(name)
+		require.NoErrorf(t, err, "%s is a dialect this program has", name)
+		assert.Equal(t, name, got.Name(), "the name it answers to is the name it was asked for")
+	}
+}
+
 func TestADialectCanBeAskedForByNameWithoutAFlagToRead(t *testing.T) {
 	for _, name := range []string{Posix, PowerShell} {
 		got, err := Named(name)

@@ -63,7 +63,7 @@ type EnsureConfig struct {
 // EnsureResult reports what EnsureAgent observed and did.
 type EnsureResult struct {
 	Situation Situation
-	LiveSock  string             // the healthy socket to expose to the shell
+	Live      Endpoint           // the healthy endpoint to point the shell at
 	Started   int                // pid of the agent we started, or 0
 	Adopted   *inspect.AgentProc // the agent we adopted, or nil
 	Reaped    ReapResult
@@ -71,7 +71,7 @@ type EnsureResult struct {
 }
 
 // EnsureAgent drives the fixed socket to a healthy ssh-agent and returns the
-// socket to expose to the shell. In precedence order it attaches to our healthy
+// endpoint to point the shell at. In precedence order it attaches to our healthy
 // agent; otherwise it reaps the dead, then either adopts a healthy agent it did
 // not start (reporting the anomaly) or starts its own. It never reimplements the
 // agent and, on success, never leaves the shell pointed at a dead socket.
@@ -85,7 +85,7 @@ func (m Manager) EnsureAgent(ctx context.Context, cfg EnsureConfig, log Logger) 
 	// Ours is already healthy on the fixed socket: attach and go, silently. This
 	// fast path runs before the lock, so the common login is never serialised.
 	if m.Prober.Reachable(ctx, cfg.FixedSock) {
-		return EnsureResult{Situation: SituationHealthy, LiveSock: cfg.FixedSock}, nil
+		return EnsureResult{Situation: SituationHealthy, Live: SocketEndpoint(cfg.FixedSock)}, nil
 	}
 
 	// The fixed socket is silent and we are about to mutate the landscape, so
@@ -98,7 +98,7 @@ func (m Manager) EnsureAgent(ctx context.Context, cfg EnsureConfig, log Logger) 
 		}
 		defer unlock()
 		if m.Prober.Reachable(ctx, cfg.FixedSock) {
-			return EnsureResult{Situation: SituationHealthy, LiveSock: cfg.FixedSock}, nil
+			return EnsureResult{Situation: SituationHealthy, Live: SocketEndpoint(cfg.FixedSock)}, nil
 		}
 	}
 
@@ -138,7 +138,7 @@ func (m Manager) EnsureAgent(ctx context.Context, cfg EnsureConfig, log Logger) 
 			sit = SituationZombie
 		}
 		logf("INFO", "started ssh-agent pid %d on %s (%s)", pid, cfg.FixedSock, sit)
-		return EnsureResult{Situation: sit, LiveSock: cfg.FixedSock, Started: pid, Reaped: reap}, nil
+		return EnsureResult{Situation: sit, Live: SocketEndpoint(cfg.FixedSock), Started: pid, Reaped: reap}, nil
 	}
 
 	// A healthy agent we did not start exists: adopt the lowest-pid one by
@@ -170,7 +170,7 @@ func (m Manager) EnsureAgent(ctx context.Context, cfg EnsureConfig, log Logger) 
 	logf("WARN", "%s", anomaly)
 	return EnsureResult{
 		Situation: sit,
-		LiveSock:  cfg.FixedSock,
+		Live:      SocketEndpoint(cfg.FixedSock),
 		Adopted:   &adopt,
 		Reaped:    reap,
 		Anomaly:   anomaly,
