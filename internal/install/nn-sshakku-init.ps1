@@ -6,13 +6,18 @@
 # This is a thin hook around the sshakku core. `sshakku shell-init`, evaluated
 # below, keeps an ssh-agent healthy on a fixed endpoint and prints the runtime
 # paths to use; the fixed endpoint means the SSH_AUTH_SOCK this session gets
-# never goes stale even if the agent is restarted. All the logic lives in the
-# core; this script only pins the session to the endpoint and invokes it.
+# never goes stale even if the agent is restarted. `sshakku askpass-env` then
+# routes this session's ssh passphrase prompts through sshakku, so a key that
+# has expired from the agent is asked about once, here, rather than by ssh on
+# whatever it can find. All the logic lives in the core; this script only pins
+# the session to the endpoint and invokes it.
 #
-# Two things the Bourne hook does are deliberately absent here, and their
-# absence is not an oversight: routing ssh passphrase prompts through the
-# sshakku askpass broker, and adding the user's keys in interactive sessions.
-# Neither is supported on this platform — `sshakku doctor` reports what is.
+# One thing the Bourne hook does is deliberately absent here, and its absence is
+# not an oversight: adding the user's keys in interactive sessions. What tells
+# an interactive session from one running a single command is not settled on
+# this shell — it runs its profile for both — and a prompt in a session that
+# cannot answer is worse than a key loaded later. `sshakku doctor` reports what
+# is wired and what is not.
 #
 # Every cmdlet below is named with its module and every type with its full
 # namespace. This file is dot-sourced into whatever session the user has
@@ -62,3 +67,51 @@ $env:SSH_AUTH_SOCK = $agent_sock
 # wanted: a stale SSH_AGENT_PID inherited from elsewhere names an agent this
 # session is no longer talking to.
 $env:SSH_AGENT_PID = $null
+
+# Point this session's ssh passphrase prompts at sshakku. Every session gets
+# them, since these are two environment assignments and nothing else: what they
+# say is where ssh should go when it needs a passphrase, and a session that
+# never needs one is unaffected. The exit code is put back for the same reason
+# it is above — a hook that runs before the first prompt must not be what the
+# prompt reports on.
+$sshakku_previous_exit = $LASTEXITCODE
+$askpass_env = & $sshakku_bin askpass-env --shell=powershell 2>$null
+$sshakku_ok = $LASTEXITCODE -eq 0
+$global:LASTEXITCODE = $sshakku_previous_exit
+if ($sshakku_ok -and $askpass_env) {
+    Microsoft.PowerShell.Utility\Invoke-Expression ($askpass_env -join [System.Environment]::NewLine)
+}
+
+# Load the user's keys, but only in a session somebody is sitting at. Loading
+# may ask for a passphrase and write to the terminal, and this shell runs its
+# profile for a session that was handed a command or a script to run as well —
+# a build step, a scheduled task, a `git` helper — where a question stops the
+# work at a prompt nobody is watching.
+#
+# There is no single flag to read for it, the way a Bourne shell has one, so
+# the two things that can be known are both asked. The first is this session's
+# own invocation: one given a command, a file or an encoded command to run, or
+# told outright it is not interactive, is not one to ask anything of. The names
+# may be abbreviated to any prefix, which is why they are matched as prefixes.
+# The second is where its input comes from: a session reading its commands from
+# a pipe or a file is being driven by something rather than by somebody, and
+# that is true even when nothing on the command line said so.
+$sshakku_interactive = $true
+foreach ($sshakku_arg in [System.Environment]::GetCommandLineArgs()) {
+    if (-not $sshakku_arg.StartsWith('-')) { continue }
+    $sshakku_flag = $sshakku_arg.TrimStart('-').Split(':')[0].ToLowerInvariant()
+    if ($sshakku_flag.Length -eq 0) { continue }
+    foreach ($sshakku_batch in @('command', 'file', 'encodedcommand', 'noninteractive')) {
+        if ($sshakku_batch.StartsWith($sshakku_flag)) { $sshakku_interactive = $false }
+    }
+}
+if ([System.Console]::IsInputRedirected) { $sshakku_interactive = $false }
+
+if ($sshakku_interactive) {
+    $sshakku_previous_exit = $LASTEXITCODE
+    & $sshakku_bin load-keys
+    # Loading keys is something this session does for the user, not something
+    # the user asked for, so what it returns must not become what their next
+    # prompt reports on.
+    $global:LASTEXITCODE = $sshakku_previous_exit
+}

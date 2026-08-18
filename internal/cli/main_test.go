@@ -134,9 +134,9 @@ func TestAskpassExports(t *testing.T) {
 	// back in this system's own spelling — what is pinned verbatim is the pair
 	// of lines, not one system's separator.
 	bindir := filepath.FromSlash("/usr/local/bin")
-	want := "export SSH_ASKPASS='" + filepath.Join(bindir, "sshakku-askpass") + "'\n" +
+	want := "export SSH_ASKPASS='" + filepath.Join(bindir, "sshakku-askpass"+programSuffix) + "'\n" +
 		"export SSH_ASKPASS_REQUIRE='force'\n"
-	assert.Equal(t, want, askpassExports(posixDialect(t), filepath.Join(bindir, "sshakku")),
+	assert.Equal(t, want, askpassExports(posixDialect(t), filepath.Join(bindir, "sshakku"+programSuffix)),
 		"the two lines the shell must export, verbatim")
 }
 
@@ -146,21 +146,26 @@ func TestAskpassExports(t *testing.T) {
 // both be recognised; everything else is somebody running the binary itself,
 // including the two names it is reached under for its own purposes.
 func TestDispatchRoutesOnTheNameItWasRunAs(t *testing.T) {
+	// The helper is named as a program is named on the system running this, so
+	// the names that mean "answer a prompt" are built the same way the product
+	// builds them — a table of one platform's spellings would pass everywhere
+	// and describe only one of them.
+	helper := askpassProgName + programSuffix
 	tests := []struct {
 		invokedAs string
 		want      bool
 	}{
-		{"sshakku-askpass", true},
-		{"/usr/local/bin/sshakku-askpass", true},
-		{"./sshakku-askpass", true},
-		{"sshakku", false},
-		{"/usr/local/bin/sshakku", false},
-		{"/tmp/go-build123/b001/sshakku.test", false},
+		{helper, true},
+		{filepath.Join(filepath.FromSlash("/usr/local/bin"), helper), true},
+		{"." + string(filepath.Separator) + helper, true},
+		{"sshakku" + programSuffix, false},
+		{filepath.Join(filepath.FromSlash("/usr/local/bin"), "sshakku"+programSuffix), false},
+		{filepath.FromSlash("/tmp/go-build123/b001/sshakku.test"), false},
 		{"sshakku-askpass-backup", false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.invokedAs, func(t *testing.T) {
-			assert.Equalf(t, tc.want, filepath.Base(tc.invokedAs) == askpassProgName,
+			assert.Equalf(t, tc.want, invokedAsAskpass(tc.invokedAs),
 				"whether being run as %q means answering a prompt", tc.invokedAs)
 		})
 	}

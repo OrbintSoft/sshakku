@@ -1,12 +1,9 @@
-// The passphrase handoff over a private Unix socket. Darwin is what reaches
-// for it (handoff_darwin.go); Linux has the kernel keyring instead, and
-// Windows has neither and says so — see handoff_windows.go. It is built for
-// the family whose sockets carry a permission bit, because that bit is what
-// makes the rendezvous private: a system that answers "who may connect" with
-// an access-control list needs a mechanism of its own, not this one with the
-// check left out.
-
-//go:build unix
+// The passphrase handoff over a private socket. Darwin reaches for it
+// (handoff_darwin.go) and so does Windows (handoff_windows.go); Linux has the
+// kernel keyring instead. The rendezvous itself is the same everywhere — a
+// socket nobody else can guess the name of, serving one connection and then
+// gone — and only what makes it private differs, which is why that step is
+// each system's own (handoff_privacy_*.go) and everything here is not.
 
 package handoff
 
@@ -21,41 +18,19 @@ import (
 	"time"
 )
 
-// Seams over the socket listen and chmod, so socketHandoffStash's listen- and
-// permission-failure branches are exercisable deterministically. Production
-// points them at the real net and os operations.
+// Seams over the socket listen and read, so socketHandoffStash's failure
+// branches are exercisable deterministically. Production points them at the
+// real net and io operations; what makes the socket private is a seam too, and
+// lives with the system that decides it.
 var (
 	netListen = net.Listen
-	chmodDir  = os.Chmod
-	chmodSock = os.Chmod
 	readAll   = io.ReadAll
 )
 
-// chooseSocketBase picks the directory handoff sockets are created under.
-//
-// A per-user temporary directory the system hands out (tmpDir) is preferred:
-// it is short, which matters because a socket address is capped at barely a
-// hundred bytes, and it is the same private per-user directory the cache is.
-// It is only taken if it really is that, though — private reports whether it
-// exists, belongs to this user, and grants nothing to anyone else — because
-// unlike the cache directory it is named by the environment rather than
-// derived from the user's own home, and a shared directory (a bare /tmp, say)
-// is one an attacker can wait in for a passphrase.
-//
-// Anything else falls back to the cache directory, which is private by
-// construction but sits under the home and is therefore as long as the home
-// is.
-func chooseSocketBase(tmpDir string, private func(string) bool, cacheDir func() (string, error)) (string, error) {
-	if tmpDir != "" && private(tmpDir) {
-		return tmpDir, nil
-	}
-	return cacheDir()
-}
-
 // socketHandoffDir returns (creating it if needed) the private per-user
 // directory passphrase-handoff sockets live in, under base. Named "h", not
-// "handoff": every byte here counts against AF_UNIX's sun_path limit (104
-// bytes on Darwin, 108 on Linux) once the socket filename is appended.
+// "handoff": every byte here counts against the socket address limit — barely
+// a hundred bytes, wherever this runs — once the socket filename is appended.
 //
 // The leaf is forced to 0700 rather than left to the umask: it holds a
 // rendezvous for a passphrase, and one that already existed with looser

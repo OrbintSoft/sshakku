@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"time"
 
+	"github.com/OrbintSoft/sshakku/internal/agent"
 	"github.com/OrbintSoft/sshakku/internal/giveup"
 	"github.com/OrbintSoft/sshakku/internal/keys"
 	"github.com/OrbintSoft/sshakku/internal/keys/prompt"
@@ -35,6 +37,12 @@ func (d deps) loadKeys(ctx context.Context, stderr io.Writer) int {
 	}
 
 	settings := loadSettings(layout, "load-keys", log)
+	lifetime := effectiveKeyLifetime(settings.KeyLifetime, agent.KeepsLifetimes())
+	if lifetime != settings.KeyLifetime {
+		_ = log.Log("INFO", fmt.Sprintf(
+			"load-keys: the agent on this system holds no key lifetimes, so keys are added with no expiry"+
+				" and the configured %s is not in force", settings.KeyLifetime))
+	}
 
 	var giveupStore keys.GiveupStore
 	if !settings.NoGiveup {
@@ -68,7 +76,7 @@ func (d deps) loadKeys(ctx context.Context, stderr io.Writer) int {
 		Runner:   runner,
 		Secret:   secret,
 		Prompt:   prompter,
-		Adder:    keys.ExecKeyAdder{AskpassProg: askpassProg(self), KeyLifetime: settings.KeyLifetime},
+		Adder:    keys.ExecKeyAdder{AskpassProg: askpassProg(self), KeyLifetime: lifetime},
 		Log:      log,
 		Notify:   notifier,
 		Giveup:   giveupStore,
@@ -77,7 +85,7 @@ func (d deps) loadKeys(ctx context.Context, stderr io.Writer) int {
 			MaxAttempts:   settings.MaxAttempts,
 			WalletStore:   settings.StoresWallet,
 			AutoLoad:      settings.AutoLoads,
-			KeyLifetime:   settings.KeyLifetime,
+			KeyLifetime:   lifetime,
 			ServicePrefix: settings.ServicePrefix,
 			OnDismiss:     settings.OnDismiss,
 		},
@@ -86,6 +94,21 @@ func (d deps) loadKeys(ctx context.Context, stderr io.Writer) int {
 		_ = log.Log("ERROR", fmt.Sprintf("load-keys: %v", err))
 		_, _ = fmt.Fprintf(stderr, "sshakku: %v\n", err)
 		return 1
+	}
+	return 0
+}
+
+// effectiveKeyLifetime is the lifetime a key is really added with: the
+// configured one where the agent holds lifetimes, and none where it does not.
+//
+// Where it does not, asking for one is not a smaller version of the same
+// thing — the agent refuses the key outright — so the choice is between a key
+// that loads without an expiry and no key at all. It loads, and the session log
+// says the configured value is not in force. Which system this is comes in as
+// the answer it is, so both outcomes stay checkable from either machine.
+func effectiveKeyLifetime(configured time.Duration, agentKeepsLifetimes bool) time.Duration {
+	if agentKeepsLifetimes {
+		return configured
 	}
 	return 0
 }

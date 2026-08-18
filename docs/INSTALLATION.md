@@ -11,10 +11,10 @@ run.
 
 1. **Puts the binary somewhere**, with `sshakku-askpass` beside it — a second
    name for the same binary, which `ssh` runs when it needs a passphrase and
-   which you never run yourself. This is `make`'s work on every platform, and on
-   Windows there is no askpass beside it: this build has no implementation of one
-   there yet, and a helper that is present but cannot run is worse than one that
-   is honestly absent.
+   which you never run yourself. This is `make`'s work on every platform. The
+   second name is a link to the same file wherever the system makes links
+   cheaply, and it carries whatever that system puts at the end of a program's
+   name, so on Windows it is `sshakku-askpass.exe` beside `sshakku.exe`.
 2. **Wires a login hook into one shell startup file**, so every new session has
    a working agent without your doing anything.
 3. **Makes `sshakku` runnable by name**, which on some systems the first step
@@ -241,13 +241,17 @@ used; `sshakku install` is being brought in to take that over, and the
 Makefile keeps being the way the binary is put in place on every platform.
 
 On Windows, the binary builds, its test suite runs, `make install` and
-`make install-user` put it in the directories above, and `sshakku install` wires
-the shells listed above. Three things stay out of it deliberately, and are not
-oversights: the ssh-agent itself (Windows serves it as a service on a named
-pipe, which is a different mechanism from the socket the Unix builds keep
-healthy), the askpass helper, and the Credential Manager as a wallet. A wired
-Windows session therefore gets the hook and the `PATH` and nothing more — it
-opens silently, exactly as one on any other system does, and the session log
-records what this platform cannot yet do rather than the shell reporting it as
-a failure. `sshakku doctor` says the same in the report, and does not recommend
-opening a new login shell to get an agent that nothing here can start.
+`make install-user` put it and its askpass helper in the directories above, and
+`sshakku install` wires the shells listed above. A wired session there is
+pointed at the agent the system itself keeps — a service on a named pipe, which
+is a different mechanism from the socket the Unix builds keep healthy, and which
+`sshakku` starts if it is not running — and its ssh passphrase prompts go
+through the same helper as everywhere else, answered on the console.
+
+What stays out deliberately, and is not an oversight, is the wallet: this
+system's own is the Credential Manager, which SSHakku cannot yet read or write,
+so nothing is offered and nothing is silently in force. Every passphrase is
+therefore asked for, once per key per session, and none is saved. A wired
+Windows session opens silently all the same, the session log records what this
+platform has none of rather than the shell reporting it as a failure, and
+`sshakku doctor` says the same in the report.

@@ -230,7 +230,7 @@ func (d deps) doctor(ctx context.Context, stdout, stderr io.Writer, args []strin
 		return 1
 	}
 	paths.CleanupLegacyAgentDir(env.Home)
-	liveSock, code := d.runEnsure(ctx, stderr, env, layout)
+	live, code := d.runEnsure(ctx, stderr, env, layout)
 	if code != 0 {
 		return code
 	}
@@ -242,10 +242,13 @@ func (d deps) doctor(ctx context.Context, stdout, stderr io.Writer, args []strin
 	_, _ = io.WriteString(stdout, "\nafter:\n\n")
 	after := d.reportWithWallet(ctx, env, layout, settings)
 	diagnose.Format(stdout, after)
-	if after.EnvSock != liveSock {
+	// Either writing of the endpoint is this shell pointing at the right agent:
+	// the two name the one agent, and which of them a shell holds depends on
+	// the shell rather than on anything being wrong.
+	if after.EnvSock != live.Native() && after.EnvSock != live.ForPosixShell() {
 		_, _ = fmt.Fprintf(stdout,
 			"\nthis shell still points elsewhere; open a new shell or run:\n  export SSH_AUTH_SOCK=%s\n",
-			shell.Quote(liveSock))
+			shell.Quote(live.ForPosixShell()))
 	}
 	return exitCode
 }
@@ -471,8 +474,10 @@ func gatherReport(ctx context.Context, env paths.Env, layout paths.Layout, setti
 		State:       keystate.Store{Dir: keystateDir(layout)},
 	}
 	shownEnv, secretEnv := environmentReport()
+	endpoint := platformEndpoint(layout)
 	return diagnose.Gather(ctx, diagnose.Inputs{
-		FixedSock:         layout.AgentSock,
+		FixedSock:         endpoint.Native(),
+		FixedSockPosix:    endpoint.ForPosixShell(),
 		LegacyDir:         filepath.Join(env.Home, ".ssh", "agent"),
 		StatePath:         filepath.Join(filepath.Dir(layout.AgentSock), "agent.state"),
 		EnvSock:           os.Getenv("SSH_AUTH_SOCK"),
@@ -483,7 +488,10 @@ func gatherReport(ctx context.Context, env paths.Env, layout paths.Layout, setti
 		Env:               shownEnv,
 		SecretEnv:         secretEnv,
 		NoAgentMechanism:  !agent.KeepsAgents(),
-	}, inspect.Inspector{}, reach.SocketProber{}, newAncestrySource(), newCgroupSource(), keySource,
+		// What was asked for and what this agent can do are both known here,
+		// so the report is handed the one answer rather than the two facts.
+		LifetimeNotEnforceable: settings.KeyLifetime > 0 && !agent.KeepsLifetimes(),
+	}, inspect.Inspector{}, platformProber(), newAncestrySource(), newCgroupSource(), keySource,
 		newHostSource(env.Home))
 }
 

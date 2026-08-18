@@ -97,7 +97,10 @@ wiring writes into a shell's startup file is this one.
 `make install-user` and `make install` work there too. They build, copy the
 binary to where this system keeps programs — `%LOCALAPPDATA%\Programs\sshakku`
 for the account, `%ProgramFiles%\sshakku` for the machine, `BINDIR` and
-`USER_BINDIR` to say otherwise — and then run **that copy** to do the wiring,
+`USER_BINDIR` to say otherwise — link the askpass helper beside it under the
+name a program carries here (`sshakku-askpass.exe`, a hard link, since making a
+symbolic one is a privilege an ordinary account does not hold), and then run
+**that copy** to do the wiring,
 which is also what records its directory in the stored environment. Nothing you
 install from is left load-bearing: the build tree can be moved or deleted
 afterwards. Which shell gets wired is the one you ran make from, unless you say
