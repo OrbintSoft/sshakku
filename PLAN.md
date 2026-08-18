@@ -2576,9 +2576,16 @@ between `C:\…` and MSYS2's `/c/…`. W3 translates paths for one narrower purp
 — reaching the startup files of a bash that spells them the other way — and does
 it with that environment's own translator rather than with a rule of our own.
 
-→ goals 13, 16, 17; open decisions 3, 8, 9.
+→ goals 13, 16, 17; open decisions 3, 8, 9 — 3 is settled for this shell in W5,
+which asks the two things that can be known instead of the one flag it has not
+got, and 8's agent half is settled by W5 as well: the port is the system's own
+endpoint rather than one of ours.
 
-→ rules 12, 15, 23, 26; no feature in `docs/FEATURES.md` gained or lost a promise
+→ rules 12, 15, 19, 23, 26; `docs/FEATURES.md` gained F50 (one endpoint, written
+the way each shell reads it), F51 (a service that is not running is started, or
+explained) and F52 (a key loads where the agent holds no lifetimes, and you are
+told), and F48 kept its promise while its illustration moved to the wallet,
+which is what this platform now has none of
 
 ### Phase 36 — The context that every call started over ✅ Done
 
