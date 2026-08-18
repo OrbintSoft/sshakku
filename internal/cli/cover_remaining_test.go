@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"path/filepath"
 	"testing"
 
 	"github.com/OrbintSoft/sshakku/internal/agent"
@@ -144,7 +145,7 @@ func TestDispatchRoutesToAskpass(t *testing.T) {
 	d := depsReturning(&fakeProbeBackend{lookupVal: "wallet-pass", lookupOK: true})
 	question := "Enter passphrase for key '/home/u/.ssh/id_ed25519': "
 	var out bytes.Buffer
-	require.Zero(t, dispatch(t.Context(), d, &out, io.Discard, "/usr/local/bin/"+askpassProgName, []string{question}),
+	require.Zero(t, dispatch(t.Context(), d, &out, io.Discard, filepath.Join(filepath.FromSlash("/usr/local/bin"), askpassProgName+programSuffix), []string{question}),
 		"run under the helper's name, arguments are a prompt to answer")
 	assert.Equal(t, "wallet-pass\n", out.String(), "answered from the wallet, not from a terminal")
 }

@@ -22,7 +22,7 @@ func TestAskpassEnv(t *testing.T) {
 		// comes back in this system's own spelling; what is asserted is the
 		// path made of these components, not one system's separator.
 		self := filepath.Join(filepath.FromSlash("/opt/sshakku/bin"), "sshakku")
-		helper := filepath.Join(filepath.FromSlash("/opt/sshakku/bin"), "sshakku-askpass")
+		helper := filepath.Join(filepath.FromSlash("/opt/sshakku/bin"), "sshakku-askpass"+programSuffix)
 		d := realDeps()
 		d.self = func() (string, error) { return self, nil }
 		var out, errOut bytes.Buffer
@@ -43,7 +43,7 @@ func TestAskpassEnv(t *testing.T) {
 		var out, errOut bytes.Buffer
 		require.Zerof(t, d.askpassEnv(&out, &errOut, []string{"--shell=powershell"}),
 			"askpassEnv; stderr=%q", errOut.String())
-		assert.Contains(t, out.String(), "$env:SSH_ASKPASS = '"+filepath.Join(dir, "sshakku-askpass")+"'",
+		assert.Contains(t, out.String(), "$env:SSH_ASKPASS = '"+filepath.Join(dir, "sshakku-askpass"+programSuffix)+"'",
 			"the helper beside the binary, as PowerShell reads an environment assignment")
 		assert.Contains(t, out.String(), "$env:SSH_ASKPASS_REQUIRE = 'force'",
 			"and the value that makes ssh consult it, quoted, since PowerShell would run a bare word")
