@@ -162,18 +162,30 @@ func realDeps() deps {
 // the two callers arrive under different names and there is nothing to work
 // out: args are a prompt to answer, or a subcommand, and never both.
 func dispatch(ctx context.Context, d deps, stdout, stderr io.Writer, invokedAs string, args []string) int {
-	if filepath.Base(invokedAs) == askpassProgName {
+	if invokedAsAskpass(invokedAs) {
 		return d.askpass(ctx, stdout, args)
 	}
 	return d.run(ctx, stdout, stderr, args)
 }
 
 // askpassProg returns the path to hand ssh as its SSH_ASKPASS helper: the name
-// above, in the directory self was installed into. Derived from the running
-// binary rather than fixed at build time, so a copy run from anywhere reaches
-// the helper next to it and not one somewhere else on the system.
+// above, carrying whatever this system puts at the end of a program's name, in
+// the directory self was installed into. Derived from the running binary rather
+// than fixed at build time, so a copy run from anywhere reaches the helper next
+// to it and not one somewhere else on the system.
 func askpassProg(self string) string {
-	return filepath.Join(filepath.Dir(self), askpassProgName)
+	return filepath.Join(filepath.Dir(self), askpassProgName+programSuffix)
+}
+
+// invokedAsAskpass reports whether this process was run under the helper's
+// name, which is what says the arguments are a prompt to answer rather than a
+// command to run. The suffix is part of that name wherever this system gives
+// programs one: the helper installed beside `sshakku.exe` is called
+// `sshakku-askpass.exe`, and a comparison blind to that reads ssh's invocation
+// of the helper as somebody running the binary itself — which answers a
+// passphrase prompt with the usage text.
+func invokedAsAskpass(invokedAs string) bool {
+	return filepath.Base(invokedAs) == askpassProgName+programSuffix
 }
 
 // run dispatches a subcommand and returns the process exit code. Output goes to

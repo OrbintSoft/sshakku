@@ -11,10 +11,10 @@ run.
 
 1. **Puts the binary somewhere**, with `sshakku-askpass` beside it — a second
    name for the same binary, which `ssh` runs when it needs a passphrase and
-   which you never run yourself. This is `make`'s work on every platform, and on
-   Windows there is no askpass beside it: this build has no implementation of one
-   there yet, and a helper that is present but cannot run is worse than one that
-   is honestly absent.
+   which you never run yourself. This is `make`'s work on every platform. The
+   second name is a link to the same file wherever the system makes links
+   cheaply, and it carries whatever that system puts at the end of a program's
+   name, so on Windows it is `sshakku-askpass.exe` beside `sshakku.exe`.
 2. **Wires a login hook into one shell startup file**, so every new session has
    a working agent without your doing anything.
 3. **Makes `sshakku` runnable by name**, which on some systems the first step
