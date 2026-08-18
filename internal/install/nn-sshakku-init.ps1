@@ -81,3 +81,37 @@ $global:LASTEXITCODE = $sshakku_previous_exit
 if ($sshakku_ok -and $askpass_env) {
     Microsoft.PowerShell.Utility\Invoke-Expression ($askpass_env -join [System.Environment]::NewLine)
 }
+
+# Load the user's keys, but only in a session somebody is sitting at. Loading
+# may ask for a passphrase and write to the terminal, and this shell runs its
+# profile for a session that was handed a command or a script to run as well —
+# a build step, a scheduled task, a `git` helper — where a question stops the
+# work at a prompt nobody is watching.
+#
+# There is no single flag to read for it, the way a Bourne shell has one, so
+# the two things that can be known are both asked. The first is this session's
+# own invocation: one given a command, a file or an encoded command to run, or
+# told outright it is not interactive, is not one to ask anything of. The names
+# may be abbreviated to any prefix, which is why they are matched as prefixes.
+# The second is where its input comes from: a session reading its commands from
+# a pipe or a file is being driven by something rather than by somebody, and
+# that is true even when nothing on the command line said so.
+$sshakku_interactive = $true
+foreach ($sshakku_arg in [System.Environment]::GetCommandLineArgs()) {
+    if (-not $sshakku_arg.StartsWith('-')) { continue }
+    $sshakku_flag = $sshakku_arg.TrimStart('-').Split(':')[0].ToLowerInvariant()
+    if ($sshakku_flag.Length -eq 0) { continue }
+    foreach ($sshakku_batch in @('command', 'file', 'encodedcommand', 'noninteractive')) {
+        if ($sshakku_batch.StartsWith($sshakku_flag)) { $sshakku_interactive = $false }
+    }
+}
+if ([System.Console]::IsInputRedirected) { $sshakku_interactive = $false }
+
+if ($sshakku_interactive) {
+    $sshakku_previous_exit = $LASTEXITCODE
+    & $sshakku_bin load-keys
+    # Loading keys is something this session does for the user, not something
+    # the user asked for, so what it returns must not become what their next
+    # prompt reports on.
+    $global:LASTEXITCODE = $sshakku_previous_exit
+}
