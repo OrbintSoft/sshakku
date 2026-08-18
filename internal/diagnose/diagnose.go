@@ -120,6 +120,14 @@ type Inputs struct {
 	// system being reported on, which the caller knows and this does not go
 	// and read. The zero value is the ordinary case, a system with one.
 	NoAgentMechanism bool
+
+	// LifetimeNotEnforceable says a key lifetime is configured that the agent
+	// on the system being reported on cannot hold to. Both halves of that —
+	// what is configured, and what this agent can do — are the caller's to
+	// know, so it arrives as the one answer rather than as two facts to
+	// combine here. The zero value is the ordinary case: either no lifetime
+	// was asked for, or the agent honours the one that was.
+	LifetimeNotEnforceable bool
 }
 
 // AgentView is one ssh-agent process as the report presents it.

@@ -57,6 +57,28 @@ func TestAnAgentAnsweringWithNoProcessToShowForItIsStillAnAgent(t *testing.T) {
 		"what could not be read is still said, since the report is partial: %v", r.Findings)
 }
 
+// F52: a key that will still be in the agent tomorrow is said out loud where
+// somebody looks afterwards, and not only in the log at the moment it was
+// added. Where the agent does hold the lifetime that was asked for, there is
+// nothing to say and nothing is said.
+func TestALifetimeTheAgentCannotHoldIsReported(t *testing.T) {
+	t.Run("configured and unenforceable", func(t *testing.T) {
+		r := Gather(t.Context(), Inputs{FixedSock: fixed, LifetimeNotEnforceable: true},
+			fakeSource{}, fakeProber{}, nil, nil, nil, nil)
+
+		assert.Truef(t, hasFinding(r, "holds none"),
+			"the report names what the configured lifetime is worth here: %v", r.Findings)
+	})
+
+	t.Run("honoured, so unremarkable", func(t *testing.T) {
+		r := Gather(t.Context(), Inputs{FixedSock: fixed},
+			fakeSource{}, fakeProber{}, nil, nil, nil, nil)
+
+		assert.Falsef(t, hasFinding(r, "holds none"),
+			"an agent that keeps its side of the bargain is not worth a finding: %v", r.Findings)
+	})
+}
+
 // The endpoint answering never overrides what the process list did say. Another
 // account's agent on that socket is that account's, and an elevated caller
 // reaching it does not make it this session's — which is the state this report

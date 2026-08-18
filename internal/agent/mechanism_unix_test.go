@@ -17,3 +17,11 @@ func TestThisSystemCanKeepAnAgentOnAFixedEndpoint(t *testing.T) {
 	assert.True(t, KeepsAgents(),
 		"the lifecycle in this package has something to drive here, and the callers act on this answer")
 }
+
+// F52: and what a configured key lifetime rests on here — the agent holds a key
+// for the time it was given and then drops it, which is what `ssh-add -t` asks
+// for. The other platform's answer is asserted in its own file.
+func TestThisSystemsAgentHoldsKeyLifetimes(t *testing.T) {
+	assert.True(t, KeepsLifetimes(),
+		"a lifetime asked of this agent is honoured, and what reads this answer acts on it")
+}

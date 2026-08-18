@@ -2541,14 +2541,40 @@ the marker block in the profile is the mechanism that has to work.
   item 1's "Windows once it exists", which needs a report artifact, a column in
   `tools/testreport`, and a badge, none of which this step touched.
 
-**Out of scope here, named so they are not mistaken for oversights**: the agent
-endpoint and its named pipe, Credential Manager and 1Password as Windows
-backends, WSL2 (Linux with an agent story of its own), Cygwin and MSYS2 as
-environments this project has run in and checked, MSI packaging (Phase 8's
-business), and translating the paths handed to `ssh` between `C:\…` and MSYS2's
-`/c/…`. W3 translates paths for one narrower purpose — reaching the startup
-files of a bash that spells them the other way — and does it with that
-environment's own translator rather than with a rule of our own.
+- **W5 — the agent, the environment and the keys on Windows.** The endpoint is
+  the system's own: a named pipe served by a machine-wide service, which
+  `sshakku` probes with the agent's own handshake and starts when it is not
+  running. The pipe has two writings and each shell is handed the one it can
+  carry — measured, `\\.\pipe\…` does not survive a POSIX-emulating shell's
+  environment while `//./pipe/…` reaches the same pipe from both. F50, F51 and
+  F52 state what that promises; the askpass helper is installed and named the
+  way a program is named here, the console is where a passphrase is asked for,
+  and the handoff crosses on a socket under the account's own profile.
+
+  **Key expiry is the one promise this platform cannot keep, and it needs a
+  step of its own.** The agent here refuses `ssh-add -t` outright — the key is
+  not added at all — and it keeps what it is given in `HKCU`, so a key added
+  survives the session, the agent and the reboot. Today the key loads with no
+  expiry and both the session log and `sshakku doctor` say the configured
+  lifetime is not in force (F52), which is honest but is not the promise the
+  other platforms keep. Three ways out, none of them free: **(a)** SSHakku
+  expires the key itself, removing it with `ssh-add -d` when its time is up,
+  which needs something alive to do it — a scheduled task, or the next session
+  noticing on the way in, and the keystate record is already what would say
+  when; **(b)** the login removes every key it added at logout, which is
+  narrower than an expiry and needs a hook this project does not have here;
+  **(c)** an agent of our own on an endpoint of our own, which the ssh-agent
+  that ships with the system cannot be asked for and would mean keeping one.
+  (a) is the only one that keeps the shape of the promise, and its cost is a
+  piece of the product that runs when nobody is logged in.
+
+**Out of scope here, named so they are not mistaken for oversights**: Credential
+Manager and 1Password as Windows backends, WSL2 (Linux with an agent story of
+its own), Cygwin and MSYS2 as environments this project has run in and checked,
+MSI packaging (Phase 8's business), and translating the paths handed to `ssh`
+between `C:\…` and MSYS2's `/c/…`. W3 translates paths for one narrower purpose
+— reaching the startup files of a bash that spells them the other way — and does
+it with that environment's own translator rather than with a rule of our own.
 
 → goals 13, 16, 17; open decisions 3, 8, 9.
 
