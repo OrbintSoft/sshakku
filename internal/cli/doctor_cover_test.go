@@ -200,6 +200,6 @@ func TestGatherReport(t *testing.T) {
 	env := paths.FromOS()
 	layout := paths.Resolve(env, paths.ProbeDir)
 	report := gatherReport(t.Context(), env, layout, config.Settings{})
-	assert.Equal(t, layout.AgentSock, report.FixedSock,
-		"the report must be about the socket this layout resolves to")
+	assert.Equal(t, platformEndpoint(layout).Native(), report.FixedSock,
+		"the report must be about the endpoint sessions on this system are pointed at")
 }
