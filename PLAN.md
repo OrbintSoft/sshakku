@@ -2648,3 +2648,58 @@ and gave up on a dismissal without hanging the shell.
 
 → rules 12, 16, 28; no feature in `docs/FEATURES.md` gained or lost a promise,
 and `docs/TEST-MATRIX.md` is untouched: nothing here is visible to a user.
+
+### Phase 37 — The machine nobody has touched ✅ Done
+
+A Windows install could not be tested the way a person meets it. What SSHakku
+writes there lives in a user's profile, in that account's stored environment and
+in a service the whole machine shares, so a throwaway directory does not isolate
+it and a second account does not either — and the state that matters most, a
+machine on which nobody has installed anything, is the one state a machine that
+has been developed on cannot be put back into.
+
+**A native Windows container, and nothing Linux in it.** `containerd` with
+`nerdctl` on the host, `mcr.microsoft.com/windows/servercore` as the machine: no
+Docker Desktop, no WSL, no Linux container anywhere. The base image already
+carries the OpenSSH this project drives — `ssh.exe`, `ssh-add.exe` and the
+`ssh-agent` service, present and disabled, as on a machine nobody has set up — so
+nothing is installed into it, and a scenario drives the same programs a user has
+rather than substitutes chosen to make it pass.
+
+**Isolation is an argument, because it is a property of the host.** Process
+isolation needs the host's build to be exactly the base image's; a machine whose
+build has moved past the newest image cannot use it and gets
+`hcs::CreateComputeSystem: The request is not supported` for trying. Hyper-V
+isolation gives the container a kernel of its own and does not care. The runner
+defaults to the one that works anywhere and takes `-Isolation process` where the
+builds match — a CI runner, whose build is the image's. The container command is
+an argument for the same reason: `nerdctl` and `docker` are two drivers of the
+same containerd underneath, so a machine with either can run this.
+
+**No new linter to choose.** Neither file kind is new to the tree: the Dockerfile
+is picked up by `lint-docker`'s existing wildcard and the scenarios by
+`lint-ps1`. But `PS1_FILES` stopped at `tools/`, so a PowerShell file under
+`test/` would have gone unlinted without anything saying so; that glob now
+reaches `test/`.
+
+**What it found on its first real run.** `sshakku install` failed on an account
+that had never had a PowerShell profile: a startup file is replaced through a
+temporary file beside it, and `Documents\WindowsPowerShell` was not there to hold
+one. `Documents` was. The fix is `UpsertBlockFile` making the directory it is
+about to write into, which is what its own doc comment already promised.
+
+Three unit tests changed with it, and they are why this was never caught: each
+used "a directory that is not there" as a convenient way to make a write fail, so
+all three agreed with the code about a case the product gets wrong. They now use
+a directory that *cannot be made* — a file sitting where it would go — which is a
+genuine failure and still names the file it could not wire.
+
+**Verified**: the real binary driven through the scenario in a throwaway
+container. Red first — exit 1, nothing written — then green, the install
+reporting the interpreter, the profile, the hook and the recorded `PATH`, and the
+profile holding one block dot-sourcing a hook that is there. `go test ./...`
+green and `golangci-lint` clean. `make lint` was not run whole: it wants a POSIX
+shell and tools this Windows host has not got, so `lint-ps1` and `lint-docker`
+were run directly instead.
+
+→ features F44; rules 12, 19, 22, 23.

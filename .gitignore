@@ -20,3 +20,8 @@ scratch/
 /coverage-linux.json
 /coverage-macos.json
 /report.md
+
+# The Windows CNI plugin writes its debug log into the directory it was invoked
+# from, which is this one when a container scenario is run from the repository
+# root. It records the network interfaces of the machine that ran it.
+/wincni.log

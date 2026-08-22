@@ -145,6 +145,40 @@ explains why that particular distro/version was chosen (e.g. KDE's
 `ksecretd` isn't packaged on Debian; Debian's KeePassXC 2.7.10 segfaults on a
 backgrounded unlock where Fedora's 2.7.12 doesn't).
 
+**The Windows suite** — a Windows machine on which nobody has installed
+anything, which is a state no machine that has been worked on can be put back
+into. It runs in a *native* Windows container, so it needs a Windows host;
+there is no Linux container and no WSL anywhere in it:
+
+```powershell
+pwsh -File test/containers/run-windows-scenario.ps1 windows-fresh-install-scenario.ps1
+```
+
+The runner builds the program for `windows/amd64` from the working tree, builds
+the image, runs one scenario and throws the container away. `-Cli docker` names
+docker as the container command instead of nerdctl — both drive the same
+containerd underneath. `-Isolation process` is faster but needs the host's build
+to be exactly the base image's, which is true of a CI runner and generally not
+of a developer's machine; the default `hyperv` gives the container a kernel of
+its own and does not care.
+
+**Run it from an elevated session.** containerd and buildkitd each serve a
+control pipe, and both are served to Administrators only; without that the
+runner reaches neither. It says so before it builds anything, because the error
+that comes back from underneath is misleading — the build reports that
+`buildctl` needs to be installed when it is installed and was refused.
+
+A host needs the `Containers` optional feature, a containerd to run the
+containers and a BuildKit to build them. Nothing is installed into the image:
+`mcr.microsoft.com/windows/servercore` already carries the OpenSSH these
+scenarios drive.
+
+Both daemons run as automatic Windows services, and buildkitd has to be made to
+depend on containerd (`sc.exe config buildkitd depend= containerd`). Left
+independent it starts alongside containerd, waits for a pipe nothing is serving
+yet, and is killed by the service control manager's start timeout — so the
+machine comes up from a reboot with containerd running and buildkitd stopped.
+
 1Password's real-account coverage (`onepassword-real-account.yml`) is not
 container-based: it runs `go test -run OnePasswordBackendRealAccount
 ./internal/keys/...` directly against a real 1Password service account
