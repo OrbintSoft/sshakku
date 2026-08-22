@@ -170,6 +170,7 @@ table above covers.
 | Two shells of different languages on one machine, neither handed the other's file (F45) | ❌ it would take a `pwsh` beside the bash, which is a combination this project does not test — see the shell table in [INSTALLATION.md](INSTALLATION.md) | ❌ same | ✅ `TestOneMachineWiresAPowerShellAndAGitBashWithoutSwappingTheirFiles` wires both and asks a real Git Bash which of the two hooks it can read: its own, and not the other |
 | A shell that would never read the hook is refused before anything is written (F46) | — nothing here decides whether a shell may read its own startup file | — same | ❌ `TestAPowerShellThatWillNotRunItsProfileIsReportedWithTheRemedy` covers the decision against a fabricated host, and nothing sets a real machine's execution policy: doing that to the machine running the suite is what makes it a by-hand run |
 | A machine-wide install wires what every account reads, and not the login file of whoever ran it (F19, F44) | ⚠️ `TestAMachineWideInstallWiresTheMachineAndNotTheAccountThatRanIt` resolves the target and holds it away from the account's own home, and `TestAMachineWideWiringGoesWhereEveryLoginShellReads` covers what is written into such a directory. The write to `/etc/profile.d` itself has no cell: that directory belongs to the machine running the suite | ⚠️ the same two tests, with the same limit against `/etc/zprofile` | ⚠️ `TestThePowerShellTargetIsTheOneTheInterpreterNamed` covers the machine scope too, since the profile is the host's own answer; writing into `%ProgramData%` needs an elevated prompt, which is the by-hand run |
+| An install on an account that has never had a startup file for that shell (F44) | — the login file this platform writes lives in the home directory itself, which exists for any account that can log in, so there is no directory that could be absent | — same | ✅ `windows-fresh-install-scenario.ps1`, the real binary in a throwaway `servercore` container where `Documents\WindowsPowerShell` is not there and `Documents` is: the install makes the directory, exits `0`, names the profile and the hook, and the profile holds one block dot-sourcing a hook that exists. Made to fail by running it against the build before the fix, which exited `1` having written nothing — a state no machine that has been developed on can be put back into, which is why it is a container and not a `t.TempDir()` |
 | The `PATH` entry is recorded once, and removed again leaving every other entry (F47) | — nothing is recorded, because there is nowhere to record one: this system keeps no stored environment outliving a session. What makes the program findable by name is the install that put it where sessions already search, which is `make`'s job and is covered in the table above | — same | ⚠️ `TestAddingIsIdempotentAndRemovingGivesBackWhatWasThere` and its neighbours drive the real registry, against a key of the test's own; `TestTheStoredEnvironmentIsLeftAloneWhenYouSaySo` covers `--no-path`. The account's own stored environment is only ever touched by hand |
 
 ## Agent lifecycle and recovery scenarios
@@ -293,10 +294,19 @@ Windows and the `bash.exe` that launches WSL are one name to it.
 What has no cells here yet, and why:
 
 - **The wiring, as a person meets it.** `sshakku install` has its own table
-  above now, and what is missing from it is what cannot be asked of the machine
-  running the suite: a session started fresh and finding itself wired, an
-  execution policy set to `Restricted`, and the account's own stored `PATH`.
-  Those are by-hand runs against the built binary, not cells a suite can fill.
+  above now, and part of what was missing from it is no longer a by-hand run.
+  A native Windows container *is* a machine nobody has installed anything on,
+  so the row for an account with no startup file is filled from one, and the
+  defect it found the first time it ran is the argument for the rest.
+
+  What it has not taken over yet is the remainder of that list: a session
+  started fresh and finding itself wired, an execution policy set to
+  `Restricted`, and the account's own stored `PATH`. The reason has changed,
+  though, and the change matters — a container has a registry, a Service
+  Control Manager and an execution policy of its own, so none of the three is
+  something a suite cannot ask for any more. They are scenarios nobody has
+  written, which is a different thing from cells that cannot exist, and this
+  document must not go on spelling them the same way.
 - **The agent.** There is still no mechanism: an agent on Windows is a service
   behind a named pipe, not a process on a socket, and `ssh-agent.exe` there
   ignores the flag that would bind one of its own, so the fixed-endpoint model

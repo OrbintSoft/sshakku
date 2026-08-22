@@ -120,7 +120,12 @@ func TestAnInstallThatCannotFinishSaysWhichStepStoppedIt(t *testing.T) {
 	t.Run("the startup file cannot be written", func(t *testing.T) {
 		home := t.TempDir()
 		installInto(t, home)
-		profile := filepath.Join(home, "no-such-directory", "startup-file")
+		// A directory that is not there is made, so an absent one refuses
+		// nothing; one that cannot be made is what stops an install, and a file
+		// where the directory would go is that.
+		inTheWay := filepath.Join(home, "not-a-directory")
+		require.NoError(t, os.WriteFile(inTheWay, []byte("something of somebody's own"), 0o644))
+		profile := filepath.Join(inTheWay, "startup-file")
 
 		_, err := Install(t.Context(), wiringRequest(t, home, profile), Ancestry{})
 

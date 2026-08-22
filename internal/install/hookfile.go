@@ -37,6 +37,12 @@ const (
 // file it found already there keeps the permissions it had.
 const newFileMode fs.FileMode = 0o644
 
+// startupDirMode is what a directory this program had to create to hold a
+// startup file is given. The shell opens that file at every login, so the
+// account logging in has to be able to enter the directory: one it cannot
+// traverse is a wiring that is written and never read.
+const startupDirMode fs.FileMode = 0o755
+
 // dropInMode is what a wrapper in a drop-in directory is given, whether it is
 // new or is replacing one. Some of the shells that read such a directory run
 // each file in it rather than sourcing it, so this one is not negotiable and
@@ -117,11 +123,18 @@ func BourneDropIn(body string) []byte {
 }
 
 // UpsertBlockFile writes body as sshakku's block in the startup file at path,
-// creating the file if it is not there.
+// creating the file if it is not there — and the directory that holds it, which
+// on an account that has never had a startup file for that shell is not there
+// either. A shell names a startup file it will read whether or not anyone has
+// made one yet, so the directory being absent is the ordinary state of a
+// machine nobody has set up, not a caller's mistake.
 func UpsertBlockFile(path, body string) error {
 	content, err := read(path)
 	if err != nil {
 		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), startupDirMode); err != nil {
+		return fmt.Errorf("making the directory to hold %s: %w", path, err)
 	}
 	return replace(path, UpsertBlock(content, body), modeOf(path, newFileMode))
 }

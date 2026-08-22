@@ -152,9 +152,15 @@ func TestDropInIsWrittenAndRemoved(t *testing.T) {
 // install pointed at a home that is not there, or at a drop-in directory the
 // caller believed it had created. The path that failed has to be in the
 // message, since the caller passed several.
+//
+// A directory that is merely absent is made, so it would stop nothing; what
+// stops the wiring is a directory that cannot be made, which is what a file
+// sitting where it would go leaves behind.
 func TestAFailureNamesTheFileItWasWorkingOn(t *testing.T) {
 	dir := t.TempDir()
-	missing := filepath.Join(dir, "not-a-directory", "profile")
+	inTheWay := filepath.Join(dir, "not-a-directory")
+	require.NoError(t, os.WriteFile(inTheWay, []byte("something of somebody's own"), 0o644))
+	missing := filepath.Join(inTheWay, "profile")
 
 	err := UpsertBlockFile(missing, ". \"/hook.sh\"")
 	require.Error(t, err)
@@ -264,16 +270,21 @@ func run(t *testing.T, bash, lib string, args ...string) string {
 	return string(out)
 }
 
-// A startup file that cannot be written is reported by name. The file is
-// replaced through a temporary one beside it, so a directory that is not there is
-// met at that step rather than when the wiring is renamed into place.
-func TestAStartupFileInADirectoryThatIsNotThereIsReported(t *testing.T) {
+// An account that has never had a startup file for a shell has no directory to
+// hold one either. That is the ordinary state of a machine nobody has set up, so
+// the wiring makes the directory instead of reporting its absence: a shell names
+// the file it reads at login whether or not anyone has ever made one.
+//
+// A directory that is there and may not be written is a different answer, and is
+// still reported — see TestAWiringInADirectoryThisAccountMayNotWriteIsReported.
+func TestAStartupFileWhoseDirectoryIsNotThereIsWrittenAnyway(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "no-such-directory", "profile")
 
-	err := UpsertBlockFile(missing, ". '/hook.sh'")
+	require.NoError(t, UpsertBlockFile(missing, ". '/hook.sh'"))
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), missing, "which file could not be wired is the whole of the report")
+	written, err := os.ReadFile(missing)
+	require.NoError(t, err, "the startup file the install said it wrote must be there")
+	assert.Contains(t, string(written), ". '/hook.sh'", "the wiring it was asked to put in it")
 }
 
 // The replacement is a rename, and a rename onto something that is not a file it
