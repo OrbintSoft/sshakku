@@ -51,6 +51,23 @@ if (-not (Microsoft.PowerShell.Management\Test-Path -LiteralPath $scenarioPath -
     throw "no such scenario: $scenarioPath"
 }
 
+# containerd and buildkitd each serve a control pipe, and both are served to
+# Administrators only. A session without that reaches neither, and what it is
+# told is not what happened: the build reports that `buildctl` needs to be
+# installed, when it is installed and was refused. Both are asked here, once and
+# up front, so the answer names the thing that is actually wrong.
+& $Cli images --quiet 2>&1 | Microsoft.PowerShell.Core\Out-Null
+if ($LASTEXITCODE -ne 0) {
+    throw "$Cli cannot reach containerd. Its control pipe is served to Administrators only, so this needs an elevated session; check as well that the containerd service is running."
+}
+
+if ($Cli -eq 'nerdctl') {
+    & buildctl debug workers 2>&1 | Microsoft.PowerShell.Core\Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw 'buildctl cannot reach buildkitd, which nerdctl builds through. The same elevation applies to its pipe; check as well that the buildkitd service is running, since it starts before containerd is ready unless it is made to depend on it.'
+    }
+}
+
 # A directory of its own, so what the build can see is only what is put here.
 # The built program must not be left in the tree, where the next build of it
 # for another platform would find it.

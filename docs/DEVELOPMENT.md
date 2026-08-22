@@ -162,10 +162,22 @@ to be exactly the base image's, which is true of a CI runner and generally not
 of a developer's machine; the default `hyperv` gives the container a kernel of
 its own and does not care.
 
+**Run it from an elevated session.** containerd and buildkitd each serve a
+control pipe, and both are served to Administrators only; without that the
+runner reaches neither. It says so before it builds anything, because the error
+that comes back from underneath is misleading — the build reports that
+`buildctl` needs to be installed when it is installed and was refused.
+
 A host needs the `Containers` optional feature, a containerd to run the
 containers and a BuildKit to build them. Nothing is installed into the image:
 `mcr.microsoft.com/windows/servercore` already carries the OpenSSH these
 scenarios drive.
+
+Both daemons run as automatic Windows services, and buildkitd has to be made to
+depend on containerd (`sc.exe config buildkitd depend= containerd`). Left
+independent it starts alongside containerd, waits for a pipe nothing is serving
+yet, and is killed by the service control manager's start timeout — so the
+machine comes up from a reboot with containerd running and buildkitd stopped.
 
 1Password's real-account coverage (`onepassword-real-account.yml`) is not
 container-based: it runs `go test -run OnePasswordBackendRealAccount
