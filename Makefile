@@ -429,7 +429,7 @@ XML_FILES = $(wildcard internal/*/testdata/*.xml)
 
 # The login hook lives at the top level beside its Bourne counterpart; the rest
 # are found rather than globbed at a fixed depth, for the same reason as above.
-PS1_FILES = $(wildcard *.ps1) $(shell find cmd internal tools -name "*.ps1")
+PS1_FILES = $(wildcard *.ps1) $(shell find cmd internal test tools -name "*.ps1")
 
 lint: lint-sh lint-zsh lint-bat lint-md lint-toml lint-make lint-yaml lint-editorconfig lint-go lint-docker lint-applescript lint-ps1 lint-xml
 
