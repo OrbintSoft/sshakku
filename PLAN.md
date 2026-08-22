@@ -2736,3 +2736,70 @@ shell and tools this Windows host has not got, so `lint-ps1` and `lint-docker`
 were run directly instead.
 
 → features F44; rules 12, 19, 22, 23.
+
+### Phase 38 — The agent that is not running
+
+F51 promises two things about an agent that is a service: one that is stopped is
+started, and one that cannot be started names the command that puts it right.
+Neither state could be reached on a machine that works on this project, because
+the agent there is running — which is what makes the promise invisible. Both
+were held by unit tests against a scripted service manager and by runs somebody
+did once, by hand, and remembered.
+
+**The base image ships the state.** `servercore` carries the `ssh-agent`
+service present, stopped and disabled, so the harder of the two states costs
+nothing to build: it is what the machine is when it starts.
+`windows-agent-service-scenario.ps1` drives both, in the order a person meets
+them — the refusal first, then the service it can start once the refusal has
+been acted on.
+
+**The command it names is run, not matched.** "Named in full rather than
+described" is a promise about a string being *usable*, and a comparison cannot
+tell those apart: a sentence explaining what an administrator ought to do
+matches a pattern just as well as a command does, and only one of the two
+survives being executed. The scenario takes `Set-Service ssh-agent -StartupType
+Automatic` out of the message, runs it, and requires the machine to have
+changed. That run is also what carries the machine into the second state, so the
+two halves are one journey rather than two fixtures.
+
+**A native program's standard error must be read from a file.** Reaching this
+shell directly, it arrives as an error record wrapped to the width of a console,
+which split the one-line message into `Set-Service ssh-agent` and `-StartupType
+Automatic` — two lines, neither of them a command. The scenario runs everything
+through `Start-Process` with both streams redirected to files, so what it judges
+is what was written rather than how a host chose to render it.
+
+**A promise with nothing behind it.** F51 also says the person whose shell it is
+gets told. They do not: the hook runs `shell-init` with `2>$null`, so the
+sentence reaches the session log and `sshakku doctor` and never the terminal. A
+user whose agent service is disabled is asked for every passphrase, every time,
+with nothing on screen ever saying why. The unit tests do not see it because
+they call `shell-init` directly, where the standard error is right there — the
+hook, which is the thing that discards it, is not in their path.
+
+The fix has an argument against it that is worth keeping: a session being driven
+by a script — a build step, a scheduled task — should not find diagnostics in
+its standard error. The hook already works out whether somebody is sitting at
+the session, but only after the call that would print. Moving that decision
+above the call is the shape that keeps both.
+
+**Two things are still to do, and the second is a question rather than a task.**
+The fix itself: the hook already works out whether somebody is sitting at the
+session, but only after the call that would print, so moving that decision above
+the call is the shape that keeps both halves. And then whether a suite can watch
+it — which is open, not settled. `nerdctl -it` from a script answers `provided
+file is not a console`, and a scenario that opened a session with a console of
+its own did not come back; neither has been diagnosed, and one unexplained hang
+is not a limit. Nor is the shape of what gets printed decided: a sentence the
+hook captures and re-emits through the shell can be recorded, where one a native
+program writes straight to the console handle cannot. So the feasibility is to
+be established, and calling this manual by nature before that would be excusing
+a gap with a guess.
+
+**Integration coverage on this platform is early on purpose.** The port itself is
+young, and scenarios are not where the next effort goes. What is not negotiable
+is that every gap is written down where it can be seen: a promise nobody has
+tested belongs in the matrix as an uncovered cell, not in somebody's memory, so
+that the work of covering it can be picked up rather than rediscovered.
+
+→ features F51; rules 19, 21, 22, 23, 25.
