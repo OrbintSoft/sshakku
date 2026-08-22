@@ -258,9 +258,13 @@ else ifneq ($(WINDOWS_UNAME),)
 #
 # The scopes line up with the other platforms': the plain target installs for the
 # machine and needs an elevated prompt, the -user one installs for the account
-# and needs nothing. No askpass helper is installed either way — this platform
-# has no implementation of one, and a helper that is there but cannot run is
-# worse than one that is honestly absent.
+# and needs nothing. The askpass helper goes in beside the binary as it does
+# elsewhere, but as a hard link rather than a symbolic one: making a symbolic
+# link here is a privilege an ordinary account does not hold, and this target
+# has to work for one. A hard link needs no privilege and gives the same thing
+# — one file under two names — and where the volume has no links at all, a copy
+# does. The name carries this system's program suffix, without which nothing
+# would execute it.
 #
 # With no shell named, the program wires the one the command was typed in, which
 # from here is the shell running make. SHELL_ARG passes another: `make
@@ -282,12 +286,16 @@ USER_INSTALL_PATH = $(USER_BINDIR)
 SSHAKKU_INSTALL_PATH = $(INSTALL_PATH)/sshakku.exe
 SSHAKKU_USER_INSTALL_PATH = $(USER_INSTALL_PATH)/sshakku.exe
 SSHAKKU_RUNTIME_PATH = $(SSHAKKU_INSTALL_PATH)
-SSHAKKU_ASKPASS_INSTALL_PATH =
+SSHAKKU_ASKPASS_INSTALL_PATH = $(INSTALL_PATH)/$(SSHAKKU_ASKPASS_NAME).exe
+SSHAKKU_ASKPASS_USER_INSTALL_PATH = $(USER_INSTALL_PATH)/$(SSHAKKU_ASKPASS_NAME).exe
 
 install: build
 	@echo "Installing $(GO_BIN) to $(SSHAKKU_INSTALL_PATH)"
 	@mkdir -p "$(INSTALL_PATH)"
 	@cp -f "$(GO_BIN)" "$(SSHAKKU_INSTALL_PATH)"
+	@echo "Linking $(SSHAKKU_ASKPASS_INSTALL_PATH) to sshakku"
+	@ln -f "$(SSHAKKU_INSTALL_PATH)" "$(SSHAKKU_ASKPASS_INSTALL_PATH)" 2>/dev/null \
+		|| cp -f "$(SSHAKKU_INSTALL_PATH)" "$(SSHAKKU_ASKPASS_INSTALL_PATH)"
 	"$(SSHAKKU_INSTALL_PATH)" install --scope=machine $(SHELL_ARG)
 	@echo "Installation complete."
 
@@ -300,6 +308,8 @@ uninstall: build
 	@installed="$(SSHAKKU_INSTALL_PATH)"; [ -x "$$installed" ] || installed="$(GO_BIN)"; \
 		echo "Removing the wiring, with $$installed"; \
 		"$$installed" uninstall --scope=machine $(SHELL_ARG)
+	@echo "Uninstalling $(SSHAKKU_ASKPASS_INSTALL_PATH)"
+	@rm -f "$(SSHAKKU_ASKPASS_INSTALL_PATH)"
 	@echo "Uninstalling $(SSHAKKU_INSTALL_PATH)"
 	@rm -f "$(SSHAKKU_INSTALL_PATH)"
 	@rmdir "$(INSTALL_PATH)" 2>/dev/null || true
@@ -309,6 +319,9 @@ install-user: build
 	@echo "Installing $(GO_BIN) to $(SSHAKKU_USER_INSTALL_PATH)"
 	@mkdir -p "$(USER_INSTALL_PATH)"
 	@cp -f "$(GO_BIN)" "$(SSHAKKU_USER_INSTALL_PATH)"
+	@echo "Linking $(SSHAKKU_ASKPASS_USER_INSTALL_PATH) to sshakku"
+	@ln -f "$(SSHAKKU_USER_INSTALL_PATH)" "$(SSHAKKU_ASKPASS_USER_INSTALL_PATH)" 2>/dev/null \
+		|| cp -f "$(SSHAKKU_USER_INSTALL_PATH)" "$(SSHAKKU_ASKPASS_USER_INSTALL_PATH)"
 	"$(SSHAKKU_USER_INSTALL_PATH)" install --scope=user $(SHELL_ARG)
 	@echo "Installation complete."
 
@@ -316,6 +329,8 @@ uninstall-user: build
 	@installed="$(SSHAKKU_USER_INSTALL_PATH)"; [ -x "$$installed" ] || installed="$(GO_BIN)"; \
 		echo "Removing the wiring, with $$installed"; \
 		"$$installed" uninstall --scope=user $(SHELL_ARG)
+	@echo "Uninstalling $(SSHAKKU_ASKPASS_USER_INSTALL_PATH)"
+	@rm -f "$(SSHAKKU_ASKPASS_USER_INSTALL_PATH)"
 	@echo "Uninstalling $(SSHAKKU_USER_INSTALL_PATH)"
 	@rm -f "$(SSHAKKU_USER_INSTALL_PATH)"
 	@rmdir "$(USER_INSTALL_PATH)" 2>/dev/null || true

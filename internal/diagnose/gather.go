@@ -25,6 +25,9 @@ func Gather(ctx context.Context, in Inputs, src AgentSource, prober agent.Prober
 	if in.EnvSock != "" {
 		r.EnvReachable = prober.Reachable(ctx, in.EnvSock)
 	}
+	if in.FixedSock != "" {
+		r.FixedReachable = prober.Reachable(ctx, in.FixedSock)
+	}
 	if st, err := agent.ReadState(in.StatePath); err == nil {
 		r.RecordedPID = st.PID
 	}

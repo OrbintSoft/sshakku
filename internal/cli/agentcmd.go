@@ -6,34 +6,25 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
-	"time"
 
 	"github.com/OrbintSoft/sshakku/internal/agent"
 	"github.com/OrbintSoft/sshakku/internal/cli/shell"
 	"github.com/OrbintSoft/sshakku/internal/paths"
 	"github.com/OrbintSoft/sshakku/internal/platform"
 	"github.com/OrbintSoft/sshakku/internal/sessionlog"
-
-	"github.com/OrbintSoft/sshakku/internal/agent/inspect"
-
-	"github.com/OrbintSoft/sshakku/internal/agent/reach"
 )
 
-// agentLockWait bounds how long a login blocks for the start lock before it
-// proceeds without it, so a stuck holder slows the login but never hangs it.
-const agentLockWait = 5 * time.Second
-
-// agentEnsurer drives the fixed socket to a healthy ssh-agent. The production
-// implementation is the concrete agent.Manager; a fake stands in so runEnsure's
-// result handling is exercised without spawning, reaping, or adopting a real
-// agent on the test host.
+// agentEnsurer drives the endpoint to a healthy ssh-agent. The production
+// implementation is whichever lifecycle this system has; a fake stands in so
+// runEnsure's result handling is exercised without spawning, reaping, adopting
+// or starting anything on the test host.
 type agentEnsurer interface {
 	EnsureAgent(ctx context.Context, cfg agent.EnsureConfig, log agent.Logger) (agent.EnsureResult, error)
 }
 
-// realEnsurer wires the concrete system probes and runners into the production
-// agent.Manager, on a system that has an agent to drive; deps.ensurer holds the
-// result so command bodies can be tested against a fake.
+// realEnsurer wires the concrete system probes into the lifecycle this system
+// has; deps.ensurer holds the result so command bodies can be tested against a
+// fake.
 func realEnsurer() agentEnsurer {
 	return ensurerFor(agent.KeepsAgents())
 }
@@ -41,21 +32,17 @@ func realEnsurer() agentEnsurer {
 // ensurerFor is what drives the agent on a system that can keep one, and what
 // answers for a system that cannot.
 //
-// Where this build cannot keep an agent at all, what a Manager composes itself
-// out of does not exist, and the honest answer is the one that says so rather
-// than a lifecycle that would fail at its first step. Which system this is comes
-// in as the answer it is, so both halves stay checkable from either machine.
+// Where this build cannot keep an agent at all, what a lifecycle composes
+// itself out of does not exist, and the honest answer is the one that says so
+// rather than a lifecycle that would fail at its first step. Which system this
+// is comes in as the answer it is, so both halves stay checkable from either
+// machine; which lifecycle a system that can keep one has is that system's own
+// (see platformEnsurer).
 func ensurerFor(keepsAgents bool) agentEnsurer {
 	if !keepsAgents {
 		return agent.NoMechanism{}
 	}
-	return agent.Manager{
-		Prober:    reach.SocketProber{},
-		Inspector: inspect.Inspector{},
-		Runner:    agent.ExecRunner{},
-		Signaler:  agent.SysSignaler{},
-		Locker:    agent.FlockLocker{Wait: agentLockWait},
-	}
+	return platformEnsurer()
 }
 
 // shellInit resolves and creates the per-user runtime layout, drives the fixed
@@ -91,13 +78,13 @@ func (d deps) shellInit(ctx context.Context, stdout, stderr io.Writer, args []st
 	}
 	paths.CleanupLegacyAgentDir(env.Home)
 
-	liveSock, code := d.runEnsure(ctx, stderr, env, layout)
+	live, code := d.runEnsure(ctx, stderr, env, layout)
 	if code != 0 {
 		return code
 	}
 
 	assignments := []struct{ name, value string }{
-		{"agent_sock", liveSock},
+		{"agent_sock", endpointFor(dialect, live)},
 		{"agent_lock", layout.AgentLock},
 		{"log_file", layout.LogFile},
 	}
@@ -133,11 +120,11 @@ func (d deps) ensureAgent(ctx context.Context, stdout, stderr io.Writer, args []
 		return 1
 	}
 
-	liveSock, code := d.runEnsure(ctx, stderr, env, layout)
+	live, code := d.runEnsure(ctx, stderr, env, layout)
 	if code != 0 {
 		return code
 	}
-	if _, err := io.WriteString(stdout, dialect.SetVar("agent_sock", liveSock)); err != nil {
+	if _, err := io.WriteString(stdout, dialect.SetVar("agent_sock", endpointFor(dialect, live))); err != nil {
 		_, _ = fmt.Fprintf(stderr, "sshakku: %v\n", err)
 		return 1
 	}
@@ -152,13 +139,24 @@ func keystateDir(layout paths.Layout) string {
 	return filepath.Join(filepath.Dir(layout.AgentSock), "keystate")
 }
 
-// runEnsure drives the fixed socket to a healthy ssh-agent for the resolved
+// endpointFor gives the endpoint in the writing the shell being printed for
+// reads. A system whose agent listens on a socket has one writing and hands it
+// to every shell; one that reaches its agent through a named pipe has two, and
+// which of them arrives intact depends on the shell carrying it.
+func endpointFor(dialect shell.Dialect, live agent.Endpoint) string {
+	if dialect.Name() == shell.Posix {
+		return live.ForPosixShell()
+	}
+	return live.Native()
+}
+
+// runEnsure drives the fixed endpoint to a healthy ssh-agent for the resolved
 // layout, serialising concurrent logins on the start lock and reporting
-// anomalies and errors to stderr and the session log. It returns the live socket
-// to expose and a process exit code (0 on success). shell-init and ensure-agent
-// share it so the login path and the standalone command drive the agent
-// identically; each caller prints the assignments it needs.
-func (d deps) runEnsure(ctx context.Context, stderr io.Writer, env paths.Env, layout paths.Layout) (string, int) {
+// anomalies and errors to stderr and the session log. It returns the live
+// endpoint to expose and a process exit code (0 on success). shell-init and
+// ensure-agent share it so the login path and the standalone command drive the
+// agent identically; each caller prints the assignments it needs.
+func (d deps) runEnsure(ctx context.Context, stderr io.Writer, env paths.Env, layout paths.Layout) (agent.Endpoint, int) {
 	log := sessionlog.New(layout.LogFile)
 	cfg := agent.EnsureConfig{
 		FixedSock: layout.AgentSock,
@@ -177,14 +175,14 @@ func (d deps) runEnsure(ctx context.Context, stderr io.Writer, env paths.Env, la
 		// there is nothing here to fix.
 		if errors.Is(err, platform.ErrUnimplemented) {
 			_ = log.Log("INFO", fmt.Sprintf("ensure-agent: %v", err))
-			return "", 0
+			return agent.Endpoint{}, 0
 		}
 		_ = log.Log("ERROR", fmt.Sprintf("ensure-agent: %v", err))
 		_, _ = fmt.Fprintf(stderr, "sshakku: %v\n", err)
-		return "", 1
+		return agent.Endpoint{}, 1
 	}
 	if res.Anomaly != "" {
 		_, _ = fmt.Fprintf(stderr, "sshakku: %s\n", res.Anomaly)
 	}
-	return res.LiveSock, 0
+	return res.Live, 0
 }

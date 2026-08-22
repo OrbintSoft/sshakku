@@ -14,7 +14,7 @@ broker see them.
 
 | Variable | Config-file key | Default | Effect |
 | --- | --- | --- | --- |
-| `SSHAKKU_KEY_LIFETIME` | `key_lifetime` | `8h` | How long an added key stays in the agent before it expires, as a Go duration (`30m`, `1h`, `8h`). Passed to `ssh-add -t`. A zero or negative value (`0`) disables expiry, so the key stays until the agent does. |
+| `SSHAKKU_KEY_LIFETIME` | `key_lifetime` | `8h` | How long an added key stays in the agent before it expires, as a Go duration (`30m`, `1h`, `8h`). Passed to `ssh-add -t`. A zero or negative value (`0`) disables expiry, so the key stays until the agent does. Windows has no expiry at all: the agent there refuses a key it is asked to hold for a time, so keys are added without one and stay until they are removed — the session log and `sshakku doctor` both say so, and this setting has no effect there. |
 | `SSHAKKU_MAX_ATTEMPTS` | `max_attempts` | `3` | How many passphrase attempts to make per key before giving up. Values below `1` fall back to the default. |
 | `SSHAKKU_GIVEUP_TTL` | `giveup_ttl` | `1h` | How long a key stays in the give-up state before it is retried, as a Go duration. A zero or negative value never expires (the state still clears at logout or reboot). |
 | `SSHAKKU_NO_GIVEUP` | `no_giveup` | unset | When truthy, disables the give-up memory entirely: every shell retries every key. |

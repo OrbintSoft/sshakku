@@ -40,6 +40,20 @@ func (s State) String() string {
 	}
 }
 
+// answersWithNoProcessToShowForIt reports that the fixed endpoint answers and
+// the process list holds nothing at all — a service serving a pipe, where there
+// is no process to enumerate and reasoning from the list alone would call an
+// answering agent no agent.
+//
+// It asks for an empty list rather than merely for no *reachable* agent,
+// because a list that did name processes is information, and it has already
+// been reasoned about: an agent belonging to another account is one such answer,
+// and that an elevated caller can still reach its socket does not make it this
+// account's agent.
+func answersWithNoProcessToShowForIt(r Report) bool {
+	return r.FixedReachable && len(r.Agents) == 0
+}
+
 // classifyState maps the gathered agents to a single lifecycle state, in the same
 // precedence order the login path resolves: several live agents are a disaster, a
 // lone healthy agent is ours or foreign, and with nothing live the question is
@@ -72,6 +86,8 @@ func classifyState(r Report) State {
 	case reachable > 1:
 		return StateDisaster
 	case oursReach == 1:
+		return StateOursHealthy
+	case answersWithNoProcessToShowForIt(r):
 		return StateOursHealthy
 	case otherReach == 1:
 		return StateForeignHealthy

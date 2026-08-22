@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"path/filepath"
 	"testing"
 
 	"github.com/OrbintSoft/sshakku/internal/agent"
@@ -144,7 +145,7 @@ func TestDispatchRoutesToAskpass(t *testing.T) {
 	d := depsReturning(&fakeProbeBackend{lookupVal: "wallet-pass", lookupOK: true})
 	question := "Enter passphrase for key '/home/u/.ssh/id_ed25519': "
 	var out bytes.Buffer
-	require.Zero(t, dispatch(t.Context(), d, &out, io.Discard, "/usr/local/bin/"+askpassProgName, []string{question}),
+	require.Zero(t, dispatch(t.Context(), d, &out, io.Discard, filepath.Join(filepath.FromSlash("/usr/local/bin"), askpassProgName+programSuffix), []string{question}),
 		"run under the helper's name, arguments are a prompt to answer")
 	assert.Equal(t, "wallet-pass\n", out.String(), "answered from the wallet, not from a terminal")
 }
@@ -175,14 +176,14 @@ func TestRunHelpAndUnknown(t *testing.T) {
 func TestRunDispatch(t *testing.T) {
 	t.Run("shell-init", func(t *testing.T) {
 		tempRuntimeEnv(t)
-		d := depsWithEnsurer(fakeEnsurer{res: agent.EnsureResult{LiveSock: "/run/sshakku/agent.sock"}})
+		d := depsWithEnsurer(fakeEnsurer{res: agent.EnsureResult{Live: agent.SocketEndpoint("/run/sshakku/agent.sock")}})
 		assert.Zero(t, d.run(t.Context(), io.Discard, io.Discard, []string{"shell-init"}),
 			"shell-init must reach the same healthy agent through dispatch as it does directly")
 	})
 
 	t.Run("ensure-agent", func(t *testing.T) {
 		tempRuntimeEnv(t)
-		d := depsWithEnsurer(fakeEnsurer{res: agent.EnsureResult{LiveSock: "/run/sshakku/agent.sock"}})
+		d := depsWithEnsurer(fakeEnsurer{res: agent.EnsureResult{Live: agent.SocketEndpoint("/run/sshakku/agent.sock")}})
 		assert.Zero(t, d.run(t.Context(), io.Discard, io.Discard, []string{"ensure-agent"}),
 			"and so must ensure-agent")
 	})

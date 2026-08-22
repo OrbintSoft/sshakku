@@ -11,6 +11,15 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/agent/inspect"
 )
 
+// namesTheFixedEndpoint reports whether what this shell holds names the
+// endpoint sessions are pointed at. A system that writes its endpoint two ways
+// hands each shell the writing that shell can carry, so both are ours and only
+// something else is somebody else's.
+func namesTheFixedEndpoint(in Inputs) bool {
+	return in.EnvSock == in.FixedSock ||
+		(in.FixedSockPosix != "" && in.EnvSock == in.FixedSockPosix)
+}
+
 func findings(in Inputs, r Report) []string {
 	var reachable, dead, elsewhere int
 	for _, a := range r.Agents {
@@ -34,7 +43,7 @@ func findings(in Inputs, r Report) []string {
 		f = append(f, "SSH_AUTH_SOCK is unset — this shell cannot reach any agent; "+loginShellHint)
 	case !r.EnvReachable:
 		f = append(f, fmt.Sprintf("SSH_AUTH_SOCK points at %s, which is not answering", in.EnvSock))
-	case in.EnvSock != in.FixedSock:
+	case !namesTheFixedEndpoint(in):
 		if label, ok := knownForeignShape(in.EnvSock); ok {
 			f = append(f, fmt.Sprintf("SSH_AUTH_SOCK is %s (%s), not our fixed socket %s", in.EnvSock, label, in.FixedSock))
 		} else {
@@ -43,6 +52,10 @@ func findings(in Inputs, r Report) []string {
 	}
 
 	switch {
+	// Whether anything answers is asked of the endpoint too, not of the process
+	// list alone: a system whose agent is a service has no process to count,
+	// and counting is what would report an answering agent as none at all.
+	case answersWithNoProcessToShowForIt(r):
 	case reachable == 0 && r.NoAgentMechanism:
 		f = append(f, "no ssh-agent is answering, and this build has no way to keep one on this system yet")
 	case reachable == 0:
@@ -71,6 +84,13 @@ func findings(in Inputs, r Report) []string {
 			who = label
 		}
 		f = append(f, fmt.Sprintf("a foreign ssh-agent (pid %d) started by %s is answering", a.PID, who))
+	}
+	// A key that will still be in the agent tomorrow is worth saying out loud,
+	// once, wherever the reader is looking — the session log said it when the
+	// key was added, and this is where somebody looks afterwards.
+	if in.LifetimeNotEnforceable {
+		f = append(f, "a key lifetime is configured, and the agent on this system holds none: "+
+			"keys are added with no expiry and stay until they are removed")
 	}
 	if r.InspectErr != nil {
 		f = append(f, fmt.Sprintf("could not enumerate processes: %v (report is partial)", r.InspectErr))

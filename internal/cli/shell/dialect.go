@@ -25,6 +25,12 @@ type Dialect struct {
 	envLine string
 }
 
+// Name is the language this dialect prints, as `--shell` names it. A caller
+// asks when the value it is about to print depends on the shell reading it and
+// not only on how that shell is written — a path spelled one way for a shell
+// of this system's own and another for one emulating POSIX.
+func (s Dialect) Name() string { return s.name }
+
 // Quote renders a value as a literal this shell reads back unchanged, quotes
 // included. It is what SetVar and SetEnv put on the right of an assignment, for
 // a caller that is placing a value somewhere else — into a hook this program

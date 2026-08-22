@@ -81,12 +81,19 @@ type KeySource struct {
 // Inputs are the facts Gather reasons over, injected so it stays pure and
 // testable — nothing here is read from the ambient process.
 type Inputs struct {
-	FixedSock string // the socket our agent binds (from the resolved layout)
-	LegacyDir string // ~/.ssh/agent, for spotting a pre-sshakku agent
-	StatePath string // agent.state, holding the pid of the agent we started
-	EnvSock   string // SSH_AUTH_SOCK as this shell sees it
-	LogFile   string // session log to tail
-	OurUID    int    // the invoking user's uid, to tell same-user agents apart
+	FixedSock string // the endpoint sessions are pointed at, as this system writes it
+	// FixedSockPosix is that same endpoint in the writing a POSIX-emulating
+	// shell can carry, where a system has two of them — empty where an
+	// endpoint has only one writing, which is every system whose agent
+	// listens on a socket. A session holding either is holding ours, and a
+	// report that knew only one of them would call the other one somebody
+	// else's agent.
+	FixedSockPosix string
+	LegacyDir      string // ~/.ssh/agent, for spotting a pre-sshakku agent
+	StatePath      string // agent.state, holding the pid of the agent we started
+	EnvSock        string // SSH_AUTH_SOCK as this shell sees it
+	LogFile        string // session log to tail
+	OurUID         int    // the invoking user's uid, to tell same-user agents apart
 
 	// EnvAskpass and EnvAskpassRequire describe whether this shell's ssh
 	// passphrase prompts are routed through sshakku's wallet-aware askpass
@@ -113,6 +120,14 @@ type Inputs struct {
 	// system being reported on, which the caller knows and this does not go
 	// and read. The zero value is the ordinary case, a system with one.
 	NoAgentMechanism bool
+
+	// LifetimeNotEnforceable says a key lifetime is configured that the agent
+	// on the system being reported on cannot hold to. Both halves of that —
+	// what is configured, and what this agent can do — are the caller's to
+	// know, so it arrives as the one answer rather than as two facts to
+	// combine here. The zero value is the ordinary case: either no lifetime
+	// was asked for, or the agent honours the one that was.
+	LifetimeNotEnforceable bool
 }
 
 // AgentView is one ssh-agent process as the report presents it.
@@ -214,21 +229,26 @@ func WalletFindings(w WalletView) []string {
 
 // Report is the read-only picture the doctor presents.
 type Report struct {
-	Wallet       WalletView
-	FixedSock    string
-	EnvSock      string
-	EnvReachable bool
-	OurUID       int
-	RecordedPID  int // pid from agent.state, 0 when absent or unreadable
-	Agents       []AgentView
-	State        State
-	Findings     []string
-	LogTail      []string
-	InspectErr   error // enumeration failed; the report is partial
-	Keys         []KeyView
-	KeysDir      string // the directory Keys were read from, as the report names it
-	KeysErr      error  // key enumeration failed; Keys is empty
-	Host         hostcheck.Checks
+	Wallet    WalletView
+	FixedSock string
+	// FixedReachable says whether an agent answers on the fixed endpoint. It
+	// is asked of the endpoint itself rather than worked out from the process
+	// list, because a system whose agent is a service has no process to find
+	// and would otherwise be reported as having no agent while one answers.
+	FixedReachable bool
+	EnvSock        string
+	EnvReachable   bool
+	OurUID         int
+	RecordedPID    int // pid from agent.state, 0 when absent or unreadable
+	Agents         []AgentView
+	State          State
+	Findings       []string
+	LogTail        []string
+	InspectErr     error // enumeration failed; the report is partial
+	Keys           []KeyView
+	KeysDir        string // the directory Keys were read from, as the report names it
+	KeysErr        error  // key enumeration failed; Keys is empty
+	Host           hostcheck.Checks
 
 	Env           []EnvVar
 	SecretEnv     []SecretEnvVar

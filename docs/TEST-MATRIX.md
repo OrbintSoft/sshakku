@@ -235,10 +235,10 @@ both PowerShell 7.6 and Windows PowerShell 5.1 — `askpass-env
 holding the helper beside the binary, run from a directory named `O’Brien`,
 whose curly apostrophe is the character the quoting exists for; the same binary
 with no flag wires a Git Bash session on that same machine, and the Bourne form
-fed to PowerShell is the parse error it should be. `shell-init` could not be
-reached there at all — the agent is not ported to Windows, so it fails before
-printing anything. A run by hand is not a test: this stays uncovered until
-there is a Windows job to hold it.
+fed to PowerShell is the parse error it should be. `shell-init` now prints
+there too, and its value differs per dialect rather than only its syntax (F50):
+the Windows table below says what covers that. A run by hand is not a test:
+this stays uncovered until there is a Windows job to hold it.
 
 The two live-terminal rows above are covered by the Go suite rather than by
 `test/bats/shell-plumbing.bats`: that suite runs in a container with no
@@ -307,37 +307,33 @@ What has no cells here yet, and why:
   something a suite cannot ask for any more. They are scenarios nobody has
   written, which is a different thing from cells that cannot exist, and this
   document must not go on spelling them the same way.
-- **The agent.** There is still no mechanism: an agent on Windows is a service
-  behind a named pipe, not a process on a socket, and `ssh-agent.exe` there
-  ignores the flag that would bind one of its own, so the fixed-endpoint model
-  the Unix builds use has no equivalent to point at. What is settled is that
-  Win32-OpenSSH does read `SSH_AUTH_SOCK` and that what it names is a pipe.
-
-  What the absence itself does now has cells, because it is a promise (F48):
-  `TestOnThisSystemAWiredShellStillOpensWithNothingSaid` runs the real
-  `shell-init` through the ensurer this platform actually composes and requires
-  exit `0`, nothing on stderr, and a log line naming the mechanism rather than
-  whichever step of a lifecycle that cannot run was reached first;
-  `TestASystemThatCannotKeepAnAgentIsNotToldToOpenALoginShell` and
-  `TestTheFindingForNoAgentSaysWhetherOneCanBeStartedHere` hold `doctor` to
-  saying so instead of recommending the login shell that would have fixed it
-  elsewhere — both checked from either platform, since which answer a machine
-  gets is stated by the caller and not read from the machine.
-
-  Two things about the askpass helper are still wrong here and are known gaps,
-  not passing ones. `doctor`'s `SSH_ASKPASS` finding explains its absence by a
-  profile that was never read, when on this platform the helper is simply not
-  implemented. And `sshakku askpass-env` prints lines naming a helper that does
-  not exist on this system, together with the variable that makes reaching it
-  compulsory — a wired session never runs them, since the hook stops before
-  that on an empty socket, but a person running the command by hand is told
-  something untrue. Both need what the agent line above got: a fact about this
-  platform, stated once, that the command and the report both read.
-- **The wallet, the askpass helper and the passphrase handoff**, each of which
-  reports itself unimplemented rather than behaving like an empty one.
+- **The wallet**, which reports itself unimplemented rather than behaving like
+  an empty one — this system's own is the Credential Manager, which SSHakku
+  cannot yet read or write, so nothing is offered and nothing is silently in
+  force. It is what F48's illustration now points at.
 - **Coverage and test-health reporting**, which the other two platforms get and
   this one does not yet: a report artifact, a column in `tools/testreport`, and
   a badge.
+
+### The agent, the environment and the keys on this platform
+
+An agent here is a service on a named pipe rather than a process on a socket,
+and `ssh-agent.exe` ignores the flag that would bind one of its own — so what
+is kept healthy is the endpoint the system already has. Everything below runs
+on `windows-latest` in `go test (windows)` unless the cell says otherwise;
+what only a real desktop can answer is marked as the by-hand run it was.
+
+| Case | Covered by |
+| --- | --- |
+| The endpoint is named in both writings, and each shell is handed the one it can carry (F50) | ✅ `TestPipeEndpointIsWrittenForBothKindsOfShell` and `TestSystemEndpointIsAPipeInBothWritings` for the writings, `TestAnEndpointWithTwoWritingsIsPrintedInTheOneTheShellCanCarry` for what a command prints, and `TestOnThisSystemAWiredShellIsPointedAtTheSystemsOwnAgentOrToldWhyNot` / `TestAShellOfThisSystemIsHandedTheSystemsOwnWriting` for the real `shell-init` on the real endpoint |
+| An agent answering on that endpoint is what a session gets (F50) | ✅ `TestPipeProberReachesAnAgentThatAnswers` speaks the agent's own handshake to a pipe served in-process; `TestPipeProberRefusesWhatIsNotAnAgent` holds it to refusing anything else. That the endpoint this platform names is the one the system really serves is not a unit test's to know: the by-hand run below is what answers it |
+| A stopped service is started, and a session gets its agent (F51) | ✅ `TestASilentEndpointIsAnsweredByStartingTheService` and `TestAStoppedServiceIsStarted` against a scripted service manager; ⚠️ the real service was stopped by hand and a real `shell-init` started it again, exit `0`, endpoint printed, one line in the session log |
+| What cannot be started names the command that puts it right (F51) | ✅ `TestARefusalNamesTheCommandThatPutsItRight` maps each of the three refusals the real service manager returns, and `TestAServiceThatIsNotThereIsReportedAsSuch` asks the real one about a service that cannot exist. The `Disabled` case is not hypothetical and is not only ours: the `windows-latest` runner ships that service disabled, so every run of `TestOnThisSystemAWiredShellIsPointedAtTheSystemsOwnAgentOrToldWhyNot` there takes that branch — the shell opens, nothing is pointed at silence, and the message names `Set-Service`. The same was run by hand here with the service really disabled |
+| A key loads where the agent holds no lifetimes, and the log and the report say so (F52) | ✅ `TestAKeyLoadsEvenWhereTheAgentHoldsNoLifetimes`, `TestThisSystemsAgentHoldsNoKeyLifetimes` and `TestALifetimeTheAgentCannotHoldIsReported`; the refusal itself — `ssh-add -t` answered with `agent refused operation` — was measured by hand against the real agent, and no test reproduces it |
+| A passphrase crosses to the helper without argv, environment or file (F7) | ✅ `TestAPassphraseCrossesToTheHelperAndIsGoneAfterwards` through the entry points the product calls: a socket under the account's own directory, one collection, and nothing left to collect twice |
+| A passphrase is asked for on the console, with echo off before the question (F7, F29, F38) | ⚠️ everything above the console is covered — `TestAPassphraseIsAskedForWithTheEchoAlreadyOff`, `TestClosingTheInputIsADecisionAndAnEmptyAnswerIsNot`, `TestNoConsoleIsReportedAsNobodyToAsk` — against a console nobody has to type into. The three calls that talk to a real one are not: a read cannot be exercised without somebody typing, and running the real helper only shows it stopping there with the question asked |
+| Keys are loaded where somebody is sitting, and only there (F40) | ⚠️ both ways it can be false were run by hand against the real hook — a `-Command` session and one driven through a pipe, each leaving the session log untouched. The true branch is a session somebody is sitting at, which no harness can be |
+| `doctor` reports the endpoint and what answers on it (F13) | ✅ `TestEitherWritingOfTheEndpointIsThisSessionsOwn` and `TestAnAgentAnsweringWithNoProcessToShowForItIsStillAnAgent`, both checked from either platform since what the caller knows is stated rather than read from the machine |
 
 ## Init system (systemd/OpenRC/...)
 
