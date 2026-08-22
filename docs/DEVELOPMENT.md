@@ -148,13 +148,15 @@ explains why that particular distro/version was chosen (e.g. KDE's
 `ksecretd` isn't packaged on Debian; Debian's KeePassXC 2.7.10 segfaults on a
 backgrounded unlock where Fedora's 2.7.12 doesn't).
 
-**The Windows suite** — a Windows machine on which nobody has installed
-anything, which is a state no machine that has been worked on can be put back
-into. It runs in a *native* Windows container, so it needs a Windows host;
-there is no Linux container and no WSL anywhere in it:
+**The Windows suite** — a Windows machine in the states no machine that has been
+worked on can be put back into: one on which nobody has installed anything, and
+one whose agent service has never been started. It runs in a *native* Windows
+container, so it needs a Windows host; there is no Linux container and no WSL
+anywhere in it. One scenario per run:
 
 ```powershell
 pwsh -File test/containers/run-windows-scenario.ps1 windows-fresh-install-scenario.ps1
+pwsh -File test/containers/run-windows-scenario.ps1 windows-agent-service-scenario.ps1
 ```
 
 The runner builds the program for `windows/amd64` from the working tree, builds
