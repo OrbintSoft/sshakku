@@ -226,9 +226,10 @@ jobs:
     # toolchain that cross-compiles cleanly can still meet a native runner's own
     # defaults.
     #
-    # `go test` rather than `make test`: this runner has no GNU Make. The flags
-    # are the ones `make test` passes under SSHAKKU_RACE, and the two have to be
-    # kept in step by hand.
+    # The commands spelled out rather than `make test-json`: this runner has no
+    # GNU Make. They are the ones that target runs — the same gotestsum
+    # invocation and the same go-ignore-cov pass after it — and the two have to
+    # be kept in step by hand.
     #
     # What the suite does not cover here is worth knowing. A promise that needs
     # a wallet is not asked on this platform, because there is none it can
@@ -236,13 +237,30 @@ jobs:
     # files say so where they sit. Nothing here is an integration test either —
     # no agent is started, no wallet is opened — so docs/TEST-MATRIX.md gains no
     # row from this job, which tracks integration coverage and counts a unit
-    # test with a faked dependency as not covered.
+    # test with a faked dependency as not covered. The coverage this job
+    # measures and publishes is unit coverage, and that is a different question
+    # from the one that document asks.
+    defaults:
+      run:
+        # Git Bash, which the runner image ships. Two reasons that are not
+        # taste: PowerShell splits `-coverprofile=coverage.out` into
+        # `-coverprofile=coverage` and `.out`, so `go test` writes the profile
+        # to a file named `coverage` and then fails on a package that does not
+        # exist; and the report step feeds test.json in on standard input,
+        # which PowerShell has no operator for.
+        shell: bash
     steps:
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Go
         uses: ./.github/actions/setup-go-env
+
+      - name: Install test tools (gotestsum, gopogh)
+        run: .github/scripts/install-test-tools.sh
+
+      - name: Add Go bin to PATH
+        run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       # Built the way the shipped binary is: no cgo, no C toolchain needed.
       - name: Build every package
@@ -266,11 +284,46 @@ jobs:
         env:
           CGO_ENABLED: "1"
         timeout-minutes: 15
-        run: go test -race ./...
+        run: |
+          gotestsum --jsonfile test.json -- -race -coverprofile=coverage.out ./...
+          go-ignore-cov --file coverage.out --root .
+
+      - name: Build test-health report
+        if: always()
+        run: go run ./tools/testreport -os windows -coverprofile=coverage.out < test.json > report-windows.json
+
+      - name: Upload test-health report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: report-windows
+          path: report-windows.json
+
+      - name: Build HTML test report
+        if: always()
+        run: gopogh -in test.json -out_html report-windows.html -name Windows -repo github.com/OrbintSoft/sshakku -details "${{ github.sha }}"
+
+      - name: Upload HTML test report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: report-html-windows
+          path: report-windows.html
+
+      - name: Build coverage HTML report
+        if: always()
+        run: go-better-html-coverage -profile coverage.out -o coverage-windows.html -n
+
+      - name: Upload coverage HTML report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-windows
+          path: coverage-windows.html
 
   pr-test-report:
     name: Post test-health PR comment
-    needs: [test, test-macos]
+    needs: [test, test-macos, test-windows]
     if: always() && github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
@@ -291,7 +344,7 @@ jobs:
       - name: Render test-health comment
         env:
           GH_TOKEN: ${{ github.token }}
-        run: .github/scripts/render-pr-comment.sh report-linux.json report-macos.json > comment.md
+        run: .github/scripts/render-pr-comment.sh report-linux.json report-macos.json report-windows.json > comment.md
 
       - name: Post or update the PR comment
         env:
@@ -300,7 +353,7 @@ jobs:
 
   publish-coverage-report:
     name: Publish coverage badges + report
-    needs: [test, test-macos]
+    needs: [test, test-macos, test-windows]
     if: github.ref == 'refs/heads/master' && success()
     runs-on: ubuntu-latest
     permissions:
@@ -330,8 +383,11 @@ jobs:
       - name: Build coverage badge JSON (macos)
         run: go run ./tools/testreport badge report-macos.json > coverage-macos.json
 
+      - name: Build coverage badge JSON (windows)
+        run: go run ./tools/testreport badge report-windows.json > coverage-windows.json
+
       - name: Build coverage report
-        run: go run ./tools/testreport render report-linux.json report-macos.json > report.md
+        run: go run ./tools/testreport render report-linux.json report-macos.json report-windows.json > report.md
 
       - name: Publish to coverage-reports
         run: .github/scripts/publish-coverage-report.sh

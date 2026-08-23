@@ -784,9 +784,12 @@ manually-triggered CI workflow, once the steps below land. → goal 16; open
 decisions 9, 20, 24.
 
 1. **Coverage + test-health report on every PR.** CI computes per-OS
-   unit-test coverage (Linux, macOS; Windows once it exists) and posts/updates
+   unit-test coverage (Linux, macOS and Windows) and posts/updates
    a single PR comment: total coverage per OS, wall-clock test time, a ranked
    list of the slowest tests, and a failure report when something fails.
+   Windows joined last and needed no Go at all: `tools/testreport` never knew
+   which system a report came from, so all of it is the job running the suite
+   under `gotestsum`, three artifacts, and a third badge.
 2. **Post-merge badge + report. ✅ Done.** Once merged to master, CI commits
    a shields.io endpoint badge (JSON, one per OS) and a markdown report to
    the `coverage-reports` branch (orphan history, never `master`);
@@ -2536,10 +2539,13 @@ the marker block in the profile is the mechanism that has to work.
   whole suite runs in three seconds, and forty-one under `-race`. Nothing in
   the product was involved, and nothing was changed for it.
 
-  Still to do here: the real desktop session (rule 25), and Windows joining the
+  Still to do here: the real desktop session (rule 25). Windows joining the
   coverage and test-health reporting the other two platforms get — Phase 6
-  item 1's "Windows once it exists", which needs a report artifact, a column in
-  `tools/testreport`, and a badge, none of which this step touched.
+  item 1's "Windows once it exists" — is done, and cost less than this entry
+  guessed: no column in `tools/testreport`, which never needed one. What it did
+  cost is that the job runs under bash, since PowerShell splits
+  `-coverprofile=coverage.out` at the dot and leaves `go test` writing a
+  profile named `coverage` before failing on a package that does not exist.
 
 - **W5 — the agent, the environment and the keys on Windows.** The endpoint is
   the system's own: a named pipe served by a machine-wide service, which
