@@ -4,23 +4,25 @@ package backend
 
 import (
 	"context"
-	"errors"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/keys"
 	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
 )
 
-// errNoWallet is what the default backend reports here. This system's own
-// wallet is the Credential Manager, which sshakku cannot yet read or write, and
-// no other wallet is on offer either — so an unnamed backend has nothing to
-// open.
-var errNoWallet = errors.New("no secret backend is available on windows")
-
-// newDefaultSecretBackend resolves the wallet used when the configuration names
-// none. It reports the reason on every operation rather than behaving like an
-// empty wallet: a miss would send the loader off to ask for a passphrase with
-// no explanation, and would let a later store believe it had saved one.
-func newDefaultSecretBackend(context.Context, string, keys.Logger, config.Settings) (wallet.Backend, func()) {
-	return wallet.Unavailable{Reason: errNoWallet}, func() {}
+// newDefaultSecretBackend resolves the wallet used when the configuration
+// names none: the store this system keeps itself, which is also the only one
+// on offer here. user and log are unused — the store is scoped to the account
+// the process is already running as, and there is nothing to fall back from —
+// and are kept for signature parity with the other platforms.
+//
+// It is given the budget for something that answers by itself rather than the
+// longer one kept for a wait on a person. This store raises no dialog and asks
+// for no approval: what guards an entry is the account being signed in, which
+// happened before this program started.
+func newDefaultSecretBackend(_ context.Context, _ string, _ keys.Logger, settings config.Settings) (wallet.Backend, func()) {
+	return &wallet.CredentialManager{
+		ServicePrefix: settings.ServicePrefix,
+		Timeout:       settings.CommandTimeout,
+	}, func() {}
 }

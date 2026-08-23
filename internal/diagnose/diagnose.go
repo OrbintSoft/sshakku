@@ -184,8 +184,18 @@ type Requirement struct {
 // value prints nothing, which is what an invocation that never resolved a
 // backend should say.
 type WalletView struct {
-	Backend      string
-	Route        string // how the backend is reached, for the ones that offer a choice
+	Backend string
+	Route   string // how the backend is reached, for the ones that offer a choice
+	// Guard says what has to be got past to read what this wallet holds, for a
+	// wallet whose answer is not the one its name would lead a reader to
+	// assume. A wallet that locks, and asks, needs no such line — being asked
+	// is itself the statement. One that never asks says nothing at all unless
+	// this does, and silence there reads as the stronger guarantee rather than
+	// the weaker one.
+	//
+	// Empty prints nothing, so a platform whose wallet holds no surprise is not
+	// made to describe itself.
+	Guard        string
 	Requirements []Requirement
 }
 

@@ -69,7 +69,15 @@ func TestFormatWalletSection(t *testing.T) {
 			name:   "a backend with one way to be reached names no route",
 			wallet: WalletView{Backend: "keychain"},
 			want:   []string{"wallet:", "keychain"},
-			absent: []string{"route:"},
+			absent: []string{"route:", "guarded by:"},
+		},
+		{
+			// F54: a wallet with no lock of its own must say so where the
+			// wallet is described, or its name is read with another wallet's
+			// guarantees attached to it.
+			name:   "a wallet that has nothing to unlock says what does guard it",
+			wallet: WalletView{Backend: "credential-manager", Guard: "this account's sign-in and nothing else"},
+			want:   []string{"guarded by:", "this account's sign-in and nothing else"},
 		},
 		{
 			name:   "a satisfied requirement is not called missing",

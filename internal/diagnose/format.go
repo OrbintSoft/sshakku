@@ -58,6 +58,9 @@ func Format(w io.Writer, r Report) {
 	if r.Wallet.Backend != "" {
 		p("\nwallet:\n")
 		p("  %-22s %s\n", "backend:", walletBackendLine(r.Wallet))
+		if r.Wallet.Guard != "" {
+			p("  %-22s %s\n", "guarded by:", r.Wallet.Guard)
+		}
 		for _, req := range r.Wallet.Requirements {
 			state := "found"
 			switch {
