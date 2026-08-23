@@ -71,8 +71,7 @@ func (a ExecKeyAdder) AddWithAskpass(ctx context.Context, keyfile, passphrase st
 		"SSH_ASKPASS_REQUIRE=force",
 		handoff.EnvToken + "=" + token,
 	}
-	env = passThrough(env, "PATH", "HOME", "USER", "DISPLAY", "WAYLAND_DISPLAY",
-		"SSH_AUTH_SOCK", "XDG_RUNTIME_DIR", "XDG_CONFIG_HOME", "DBUS_SESSION_BUS_ADDRESS")
+	env = passThrough(env, childEnvNames(platformChildEnv)...)
 	return a.runSSHAdd(ctx, env, keyfile)
 }
 
@@ -114,6 +113,23 @@ func sshAddArgs(lifetime time.Duration, keyfile string) []string {
 		return []string{"-t", strconv.FormatInt(secs, 10), keyfile}
 	}
 	return []string{keyfile}
+}
+
+// childEnvNames is every variable ssh-add and the askpass helper it starts are
+// given out of this process's environment: the three that mean the same thing
+// everywhere, and then whatever this system names for itself.
+//
+// The system's half arrives as an argument rather than being read here, so the
+// composing stays one piece of logic that either machine's tests can check
+// against either machine's answer (see platformChildEnv on each).
+//
+// PATH is how ssh-add is found and how it finds the helper; HOME is the account
+// whose keys and settings are in question, which both of them read; and
+// SSH_AUTH_SOCK is the agent this session settled on, which is not always the
+// one a bare ssh-add would pick for itself.
+func childEnvNames(platform []string) []string {
+	names := []string{"PATH", "HOME", "SSH_AUTH_SOCK"}
+	return append(names, platform...)
 }
 
 // passThrough appends "NAME=value" for each named variable that is set, leaving

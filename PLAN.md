@@ -2949,7 +2949,7 @@ container.
 
 → features F52, F53; PLAN Phase 35 W5; rules 19, 21, 22, 23, 25, 26.
 
-### Phase 41 — The wallet this platform had none of
+### Phase 41 — The wallet this platform had none of ✅ Done
 
 Windows is the one target where SSHakku cannot do the thing it exists to do.
 `platformSecretBackends` there is empty, `backend.Open` hands back
@@ -3012,6 +3012,33 @@ F17 already covers and not a broken promise, but it has to be measured, said in
 the matrix, and reported by `doctor`, rather than met by a user at the moment
 they needed the key.
 
+**The first was yes, and the scenario exists.** A native Windows container
+reaches the store, so `load-keys` is driven end to end here for the first time:
+a locked key, its passphrase put in the store by `cmdkey` — this system's own
+command, which means what SSHakku reads was written by something else entirely —
+and the real binary loading it into the real agent with nobody asked anything.
+`forget --all` then takes ours and leaves a credential another program saved. The
+second is **still unmeasured** and stays named here rather than quietly dropped.
+
+**What running it found, which no amount of testing would have.** The suite was
+green and the product did not work. `ssh-add` is started with an environment
+built up from nothing, and the list of what to carry over was nine names that
+mean something on Unix and nothing here — no `SystemRoot`, no `LOCALAPPDATA` for
+the helper to find the handoff under, and, decisively, no `ProgramData`, which
+is where this system keeps ssh's own configuration. Started without it, `ssh-add`
+exits 255 having printed nothing on either stream: no message, no clue, and an
+exit code that says only that something went wrong early. What SSHakku then
+concluded, and wrote in the session log, was that the user's stored passphrase
+had gone stale — of a passphrase that was perfect and a program that never got as
+far as reading it. The list is now this platform's own answer, as data behind the
+tag (rule 26), and the entry that had to be measured is pinned by a test that
+takes it back out and requires the failure, so the reason is checked rather than
+remembered.
+
+The other half of that failure was the scenario's own: the image carried
+`sshakku.exe` and not the askpass helper beside it, which is half an install and
+fails the same silent way. The image now places both, as `make install` does.
+
 Sub-steps, each committable: (1) the promise, in `docs/FEATURES.md` — F54 added,
 F48's illustration moved off the wallet it no longer describes and onto the
 dialog this platform still has none of — and this phase; (2) the `advapi32`
@@ -3023,3 +3050,15 @@ typed.
 
 → features F54, F48, F4–F9, F27; PLAN Phase 35 W5, Phase 40; open decisions 7, 8;
 rules 12, 16, 19, 21, 22, 23, 25, 26.
+
+**What this unblocks, and what it does not.** The scheduled task that would
+expire a key with nobody logged in was deferred until this platform had secret
+backends; it has one now, so that condition is met and the task can be taken up
+whenever it is wanted. Still open, and deliberately untouched here: the askpass
+helper wired into the shell rather than only into `ssh-add`'s own invocation
+(W3's deferred list, whose note that the handoff is a stub on this platform is
+out of date — it uses the socket rendezvous, as Darwin does); a passphrase
+prompt that is a dialog rather than a console read, which this build still draws
+nowhere on this platform (F48's illustration); and the three wallets reached by
+running a program of their own, each of which owes a matrix row before it is
+offered here.
