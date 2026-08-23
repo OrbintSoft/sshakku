@@ -2867,7 +2867,7 @@ turn on is worked out.
 
 → features F51; rules 15, 19, 21, 22, 23, 24, 25.
 
-### Phase 40 — The key that outlived every session
+### Phase 40 — The key that outlived every session ✅ Done
 
 W5 named this as the one promise this platform cannot keep, and left it needing a
 step of its own. This is that step. The agent here refuses `ssh-add -t` outright,
@@ -2918,10 +2918,33 @@ agent that keeps lifetimes keeps them, and nothing here runs on Linux or macOS.
 The answer arrives as an argument rather than as a build tag around the logic, so
 both outcomes stay checkable from either machine (rule 26).
 
+**The report had been describing the old arrangement.** Two of its sentences
+stopped being true the moment a session started removing keys, and one of them
+was worse than out of date: a key still in the agent past its recorded time was
+reported as one something must have re-added outside SSHakku, since an agent
+that holds lifetimes drops a key exactly at its deadline. Where the sessions
+keep the lifetime that is simply what the state between two logins looks like,
+so the report now says the key's time is up and what will happen to it. Where
+the agent does keep them, the old sentence is still the right one and is still
+there. This is the shape of a change that arrives with a rule: the behaviour
+moved, and every place that described the old behaviour is part of the move.
+
+**What the container can and cannot reach.** The scenario drives the removal
+through the real binary — the system's own agent, a real `ssh-add`, a session
+opened the way a person opens one — and arranges one thing: the record saying
+SSHakku added the key and gave it a lifetime. That cannot be driven here,
+because this platform has no wallet and the only other way SSHakku obtains a
+passphrase is by asking on a console, which a container has nobody to type at.
+It is the same limit the matrix already records against the keys themselves, and
+it is the argument for the backends: until they exist, a Windows user answers
+for every key at every expiry, which is exactly why the scheduled task waits for
+them.
+
 Sub-steps, each committable: (1) the promise, in `docs/FEATURES.md` — F52
 rewritten, F53 added — and this phase; (2) the record keeping the configured
 lifetime and the key's path; (3) the expiry mechanism itself; (4) its wiring into
-`shell-init`; (5) the matrix row and the real binary driven through a key that
-runs out of time, in the Windows container.
+`shell-init`; (5) the report made to say what now happens; (6) the matrix row and
+the real binary driven through a key that runs out of time, in the Windows
+container.
 
 → features F52, F53; PLAN Phase 35 W5; rules 19, 21, 22, 23, 25, 26.
