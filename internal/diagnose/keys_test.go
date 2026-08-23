@@ -175,6 +175,39 @@ func TestGatherKeysExpired(t *testing.T) {
 		"a key the loader would skip must not be promised a refill")
 }
 
+// F53: where the sessions keep the lifetime, a key still in the agent past its
+// time is the ordinary state between the moment it ran out and the next login —
+// the report says what is about to happen to it, rather than casting doubt on a
+// record that is right.
+func TestGatherKeysExpiredWhereTheSessionsKeepTheLifetime(t *testing.T) {
+	fixedNow := time.Date(2026, 7, 8, 12, 0, 0, 0, time.UTC)
+	withFixedNow(t, fixedNow)
+
+	ks := &KeySource{
+		Lister: fakeKeyLister{paths: []string{"/home/u/.ssh/id_rsa"}},
+		Fingerprint: fakeKeyFingerprinter{
+			byPath:  map[string]string{"/home/u/.ssh/id_rsa": "SHA256:EEE"},
+			agentFP: map[string]bool{"SHA256:EEE": true},
+		},
+		State: fakeKeyStateSource{
+			"id_rsa": keystate.Record{AddedAt: fixedNow.Add(-9 * time.Hour), Lifetime: 8 * time.Hour},
+		},
+	}
+	r := Gather(t.Context(),
+		Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000, LifetimeKeptBySessions: true},
+		fakeSource{}, fakeProber{}, nil, nil, ks, nil)
+
+	var b strings.Builder
+	Format(&b, r)
+	out := b.String()
+	assert.Contains(t, out, "its lifetime ran out 1h0m0s ago",
+		"the report says how long the key has been past its time")
+	assert.Contains(t, out, "the next session takes it out of the agent",
+		"and what will happen to it, since here that is a thing that happens")
+	assert.NotContains(t, out, "likely refreshed outside sshakku",
+		"nothing refreshed it: this is what a lifetime kept by the sessions looks like between logins")
+}
+
 func TestGatherKeysEnumerateError(t *testing.T) {
 	ks := &KeySource{Lister: fakeKeyLister{err: errors.New("boom")}}
 	r := Gather(t.Context(), Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, fakeSource{}, fakeProber{}, nil, nil, ks, nil)

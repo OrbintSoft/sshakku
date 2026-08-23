@@ -85,12 +85,15 @@ func findings(in Inputs, r Report) []string {
 		}
 		f = append(f, fmt.Sprintf("a foreign ssh-agent (pid %d) started by %s is answering", a.PID, who))
 	}
-	// A key that will still be in the agent tomorrow is worth saying out loud,
-	// once, wherever the reader is looking — the session log said it when the
-	// key was added, and this is where somebody looks afterwards.
-	if in.LifetimeNotEnforceable {
+	// Where a key's lifetime is kept by the sessions rather than by the agent,
+	// what it is worth differs from what was asked for, and that is worth
+	// saying out loud once wherever the reader is looking — the session log
+	// said it when the key was added, and this is where somebody looks
+	// afterwards.
+	if in.LifetimeKeptBySessions {
 		f = append(f, "a key lifetime is configured, and the agent on this system holds none: "+
-			"keys are added with no expiry and stay until they are removed")
+			"a key past its lifetime is taken out of the agent as the next session opens, "+
+			"rather than at the moment it runs out")
 	}
 	if r.InspectErr != nil {
 		f = append(f, fmt.Sprintf("could not enumerate processes: %v (report is partial)", r.InspectErr))

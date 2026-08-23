@@ -48,7 +48,7 @@ func Format(w io.Writer, r Report) {
 	if r.KeysDir != "" || len(r.Keys) > 0 || r.KeysErr != nil {
 		p("\nkeys in %s (%d):\n", keysDirName(r.KeysDir), len(r.Keys))
 		for _, k := range r.Keys {
-			p("  %-28s %s\n", k.Name, keyStatus(k))
+			p("  %-28s %s\n", k.Name, keyStatus(k, r.LifetimeKeptBySessions))
 		}
 		if r.KeysErr != nil {
 			p("  could not enumerate %s: %v\n", keysDirName(r.KeysDir), r.KeysErr)
@@ -127,7 +127,9 @@ func envReachSuffix(sock string, reachable bool) string {
 }
 
 // keyStatus renders one KeyView's loaded/TTL status for the report.
-func keyStatus(k KeyView) string {
+// expiryIsTheSessions says the sessions here are what keep a lifetime, which is
+// what an elapsed record means on such a system (see Report).
+func keyStatus(k KeyView, expiryIsTheSessions bool) string {
 	if !k.Loaded {
 		return "not loaded"
 	}
@@ -138,6 +140,13 @@ func keyStatus(k KeyView) string {
 		remaining := k.ExpiresAt.Sub(now())
 		if remaining >= 0 {
 			return fmt.Sprintf("loaded, expires in %s", remaining.Round(time.Second))
+		}
+		if expiryIsTheSessions {
+			// Here an elapsed record and a key still in the agent are the
+			// ordinary state between the moment a lifetime runs out and the
+			// next session, which is what takes the key back out. Nothing is
+			// wrong and nothing has to be trusted less.
+			return fmt.Sprintf("loaded, its lifetime ran out %s ago — the next session takes it out of the agent", (-remaining).Round(time.Second))
 		}
 		// sshakku's own record says this key's lifetime elapsed, yet the agent
 		// still has it: our record can no longer be trusted for it (the agent

@@ -121,13 +121,15 @@ type Inputs struct {
 	// and read. The zero value is the ordinary case, a system with one.
 	NoAgentMechanism bool
 
-	// LifetimeNotEnforceable says a key lifetime is configured that the agent
-	// on the system being reported on cannot hold to. Both halves of that —
-	// what is configured, and what this agent can do — are the caller's to
-	// know, so it arrives as the one answer rather than as two facts to
-	// combine here. The zero value is the ordinary case: either no lifetime
-	// was asked for, or the agent honours the one that was.
-	LifetimeNotEnforceable bool
+	// LifetimeKeptBySessions says a key lifetime is configured that the agent
+	// on the system being reported on cannot hold to, so it is the sessions
+	// there that keep it: a key past its lifetime is taken out of the agent as
+	// the next one opens. Both halves of that — what is configured, and what
+	// this agent can do — are the caller's to know, so it arrives as the one
+	// answer rather than as two facts to combine here. The zero value is the
+	// ordinary case: either no lifetime was asked for, or the agent honours the
+	// one that was.
+	LifetimeKeptBySessions bool
 }
 
 // AgentView is one ssh-agent process as the report presents it.
@@ -259,6 +261,13 @@ type Report struct {
 	// none of what is observed. Stated by the caller rather than read from the
 	// machine, so both answers stay checkable from either one.
 	NoAgentMechanism bool
+
+	// LifetimeKeptBySessions says the sessions on the system being reported on
+	// are what keep a key's lifetime, its agent holding none (see Inputs). It
+	// changes what an elapsed record means: there, a key still in the agent
+	// past its time is one the next session takes out, and not a sign that the
+	// record can no longer be trusted.
+	LifetimeKeptBySessions bool
 }
 
 // Gather inspects the agent situation described by in and returns the report,
