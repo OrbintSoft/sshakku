@@ -3,9 +3,9 @@
 
 | OS | Coverage | Wall time | Slowest test | Test report | Coverage report |
 | --- | --- | --- | --- | --- | --- |
-| linux | 99.9% | 31.5s | TestNoCommandBlocksIndefinitely/GUI_detection_(xset) (10.01s) | [HTML](https://orbintsoft.github.io/sshakku/report-linux.html) | [HTML](https://orbintsoft.github.io/sshakku/coverage-linux.html) |
-| macos | 99.9% | 61.8s | TestLoadKeysEmptyAnswerRealTerminal (10.45s) | [HTML](https://orbintsoft.github.io/sshakku/report-macos.html) | [HTML](https://orbintsoft.github.io/sshakku/coverage-macos.html) |
-| windows | 94.0% | 48.8s | TestTheShellYouNameIsTheOneWiredAndTheReportSaysWhereToLook (6.49s) | [HTML](https://orbintsoft.github.io/sshakku/report-windows.html) | [HTML](https://orbintsoft.github.io/sshakku/coverage-windows.html) |
+| linux | 99.9% | 32.1s | TestNoCommandBlocksIndefinitely/GUI_detection_(xset) (10.01s) | [HTML](https://orbintsoft.github.io/sshakku/report-linux.html) | [HTML](https://orbintsoft.github.io/sshakku/coverage-linux.html) |
+| macos | 99.9% | 59.6s | TestLoadKeysEmptyAnswerRealTerminal (10.84s) | [HTML](https://orbintsoft.github.io/sshakku/report-macos.html) | [HTML](https://orbintsoft.github.io/sshakku/coverage-macos.html) |
+| windows | 94.0% | 47.3s | TestExecRunnerRun (4.52s) | [HTML](https://orbintsoft.github.io/sshakku/report-windows.html) | [HTML](https://orbintsoft.github.io/sshakku/coverage-windows.html) |
 
 <details><summary>Coverage by package (linux)</summary>
 
@@ -134,10 +134,10 @@
 | --- | --- | --- |
 | TestNoCommandBlocksIndefinitely/GUI_detection_(xset) | github.com/OrbintSoft/sshakku/internal/keys | 10.01 |
 | TestExecRunnerRun | github.com/OrbintSoft/sshakku/internal/run | 4.35 |
-| TestARealPowerShellAnswersAboutItself | github.com/OrbintSoft/sshakku/internal/install | 2.91 |
+| TestARealPowerShellAnswersAboutItself | github.com/OrbintSoft/sshakku/internal/install | 3.13 |
 | TestLookForCollection | github.com/OrbintSoft/sshakku/internal/secretservice | 2.09 |
 | TestLookForCollection/a_wallet_that_stopped_answering | github.com/OrbintSoft/sshakku/internal/secretservice | 2.01 |
-| TestLoadKeysNoTerminalReturnsPromptly | github.com/OrbintSoft/sshakku/internal/keys | 1.26 |
+| TestLoadKeysNoTerminalReturnsPromptly | github.com/OrbintSoft/sshakku/internal/keys | 1.29 |
 | TestExecRunnerRun/zero_Timeout_does_not_bound_the_command | github.com/OrbintSoft/sshakku/internal/run | 1.21 |
 | TestReadTTYLineNoTerminalReturnsPromptly | github.com/OrbintSoft/sshakku/internal/keys/prompt | 1.01 |
 | TestExecRunnerRun/a_command_that_finishes_within_its_Timeout_completes_normally | github.com/OrbintSoft/sshakku/internal/run | 1.01 |
@@ -147,11 +147,11 @@
 | TestNoCommandBlocksIndefinitely/Bitwarden_Lookup | github.com/OrbintSoft/sshakku/internal/keys | 0.60 |
 | TestPinentryPrompt | github.com/OrbintSoft/sshakku/internal/keys/prompt | 0.31 |
 | TestPinentryAvailable | github.com/OrbintSoft/sshakku/internal/keys/prompt | 0.31 |
-| TestNoCommandBlocksIndefinitely/graphical_passphrase_prompt_(zenity) | github.com/OrbintSoft/sshakku/internal/keys | 0.30 |
+| TestClientUnlockLock | github.com/OrbintSoft/sshakku/internal/secretservice | 0.31 |
 | TestNoCommandBlocksIndefinitely/graphical_passphrase_prompt_(pinentry) | github.com/OrbintSoft/sshakku/internal/keys | 0.30 |
-| TestNoCommandBlocksIndefinitely/1Password_Lookup | github.com/OrbintSoft/sshakku/internal/keys | 0.30 |
-| TestNoCommandBlocksIndefinitely/secret-tool_Lookup | github.com/OrbintSoft/sshakku/internal/keys | 0.30 |
-| TestPinentryPrompt/an_unanswered_dialog_does_not_strand_the_caller | github.com/OrbintSoft/sshakku/internal/keys/prompt | 0.30 |
+| TestNoCommandBlocksIndefinitely/graphical_passphrase_prompt_(kdialog) | github.com/OrbintSoft/sshakku/internal/keys | 0.30 |
+| TestNoCommandBlocksIndefinitely/graphical_passphrase_prompt_(zenity) | github.com/OrbintSoft/sshakku/internal/keys | 0.30 |
+| TestNoCommandBlocksIndefinitely/secret-tool_Store | github.com/OrbintSoft/sshakku/internal/keys | 0.30 |
 
 </details>
 
@@ -159,25 +159,25 @@
 
 | Test | Package | Seconds |
 | --- | --- | --- |
-| TestLoadKeysEmptyAnswerRealTerminal | github.com/OrbintSoft/sshakku/internal/keys | 10.45 |
-| TestLoadKeysFirstTimePromptRealTerminal | github.com/OrbintSoft/sshakku/internal/keys | 10.05 |
-| TestLoadKeysWrongPassphraseRealTerminal | github.com/OrbintSoft/sshakku/internal/keys | 9.86 |
-| TestLoadKeysDismissedOnRealTerminalIsNotAFailure | github.com/OrbintSoft/sshakku/internal/keys | 9.79 |
-| TestExecRunnerRun | github.com/OrbintSoft/sshakku/internal/run | 4.65 |
-| TestAddWithAskpassRealBinaryDarwin | github.com/OrbintSoft/sshakku/internal/keys | 2.52 |
-| TestExecRunnerRun/zero_Timeout_does_not_bound_the_command | github.com/OrbintSoft/sshakku/internal/run | 1.23 |
-| TestExecRunnerRun/Env_is_added_to_the_inherited_environment,_not_put_in_its_place | github.com/OrbintSoft/sshakku/internal/run | 1.18 |
-| TestExecRunnerRunStdinEnvAndStartFailure | github.com/OrbintSoft/sshakku/internal/keys | 1.16 |
-| TestExecRunnerRun/Stdin_is_fed_to_the_program | github.com/OrbintSoft/sshakku/internal/run | 1.11 |
-| TestReadTTYLineNoTerminalReturnsPromptly | github.com/OrbintSoft/sshakku/internal/keys/prompt | 1.02 |
+| TestLoadKeysEmptyAnswerRealTerminal | github.com/OrbintSoft/sshakku/internal/keys | 10.84 |
+| TestLoadKeysFirstTimePromptRealTerminal | github.com/OrbintSoft/sshakku/internal/keys | 9.19 |
+| TestLoadKeysWrongPassphraseRealTerminal | github.com/OrbintSoft/sshakku/internal/keys | 9.17 |
+| TestLoadKeysDismissedOnRealTerminalIsNotAFailure | github.com/OrbintSoft/sshakku/internal/keys | 8.79 |
+| TestExecRunnerRun | github.com/OrbintSoft/sshakku/internal/run | 4.58 |
+| TestAddWithAskpassRealBinaryDarwin | github.com/OrbintSoft/sshakku/internal/keys | 2.42 |
+| TestExecRunnerRun/zero_Timeout_does_not_bound_the_command | github.com/OrbintSoft/sshakku/internal/run | 1.22 |
+| TestExecRunnerRun/Env_is_added_to_the_inherited_environment,_not_put_in_its_place | github.com/OrbintSoft/sshakku/internal/run | 1.16 |
+| TestExecRunnerRunStdinEnvAndStartFailure | github.com/OrbintSoft/sshakku/internal/keys | 1.09 |
+| TestReadTTYLineNoTerminalReturnsPromptly | github.com/OrbintSoft/sshakku/internal/keys/prompt | 1.08 |
+| TestExecRunnerRun/Stdin_is_fed_to_the_program | github.com/OrbintSoft/sshakku/internal/run | 1.06 |
 | TestExecRunnerRun/a_command_that_finishes_within_its_Timeout_completes_normally | github.com/OrbintSoft/sshakku/internal/run | 1.02 |
+| TestARealPowerShellAnswersAboutItself | github.com/OrbintSoft/sshakku/internal/install | 0.62 |
 | TestNoCommandBlocksIndefinitely/Bitwarden_Lookup | github.com/OrbintSoft/sshakku/internal/keys | 0.61 |
-| TestARealPowerShellAnswersAboutItself | github.com/OrbintSoft/sshakku/internal/install | 0.58 |
 | TestKeychainGivesUpOnAKeychainThatNeverAnswers | github.com/OrbintSoft/sshakku/internal/keys/wallet | 0.41 |
 | TestNoCommandBlocksIndefinitely/1Password_Lookup | github.com/OrbintSoft/sshakku/internal/keys | 0.30 |
 | TestWaitingForAServiceEndsAtTheBoundItWasGiven | github.com/OrbintSoft/sshakku/internal/agent | 0.25 |
 | TestAServiceComingUpIsWaitedForRatherThanStartedAgain | github.com/OrbintSoft/sshakku/internal/agent | 0.20 |
-| TestAssociateWaitsLongerThanAnOrdinaryExchange | github.com/OrbintSoft/sshakku/internal/keys/wallet/keepassxc/wire | 0.19 |
+| TestAssociateWaitsLongerThanAnOrdinaryExchange | github.com/OrbintSoft/sshakku/internal/keys/wallet/keepassxc/wire | 0.17 |
 | TestFlockLockerSerialises | github.com/OrbintSoft/sshakku/internal/agent | 0.14 |
 
 </details>
@@ -186,25 +186,25 @@
 
 | Test | Package | Seconds |
 | --- | --- | --- |
-| TestTheShellYouNameIsTheOneWiredAndTheReportSaysWhereToLook | github.com/OrbintSoft/sshakku/internal/cli | 6.49 |
-| TestExecRunnerRun | github.com/OrbintSoft/sshakku/internal/run | 4.57 |
-| TestAnInstallThatCannotFinishSaysWhichStepStoppedIt | github.com/OrbintSoft/sshakku/internal/install | 2.45 |
-| TestTheShellLibraryAgreesByteForByte | github.com/OrbintSoft/sshakku/internal/install | 2.36 |
-| TestAnUninstallThatCannotFinishSaysWhichStepStoppedIt | github.com/OrbintSoft/sshakku/internal/install | 2.16 |
-| TestWithNoFileNamedTheShellIsAskedWhereItLooks | github.com/OrbintSoft/sshakku/internal/install | 1.40 |
-| TestTheSearchListStepIsTakenUnlessItIsDeclined | github.com/OrbintSoft/sshakku/internal/install | 1.40 |
-| TestExecRunnerRun/zero_Timeout_does_not_bound_the_command | github.com/OrbintSoft/sshakku/internal/run | 1.24 |
-| TestTheTwoEditionsDoNotShareTheirProfiles | github.com/OrbintSoft/sshakku/internal/install | 1.15 |
-| TestAFileThatHeldNothingButTheWiringIsNotLeftBehind | github.com/OrbintSoft/sshakku/internal/cli | 1.07 |
+| TestExecRunnerRun | github.com/OrbintSoft/sshakku/internal/run | 4.52 |
+| TestTheShellYouNameIsTheOneWiredAndTheReportSaysWhereToLook | github.com/OrbintSoft/sshakku/internal/cli | 4.49 |
+| TestTheShellLibraryAgreesByteForByte | github.com/OrbintSoft/sshakku/internal/install | 2.55 |
+| TestAnInstallThatCannotFinishSaysWhichStepStoppedIt | github.com/OrbintSoft/sshakku/internal/install | 2.29 |
+| TestAnUninstallThatCannotFinishSaysWhichStepStoppedIt | github.com/OrbintSoft/sshakku/internal/install | 2.03 |
+| TestWithNoFileNamedTheShellIsAskedWhereItLooks | github.com/OrbintSoft/sshakku/internal/install | 1.33 |
+| TestTheSearchListStepIsTakenUnlessItIsDeclined | github.com/OrbintSoft/sshakku/internal/install | 1.31 |
+| TestTheShellLibraryAgreesByteForByte/a_profile_with_lines_of_its_own | github.com/OrbintSoft/sshakku/internal/install | 1.26 |
+| TestExecRunnerRun/zero_Timeout_does_not_bound_the_command | github.com/OrbintSoft/sshakku/internal/run | 1.25 |
 | TestExecRunnerRunStdinEnvAndStartFailure | github.com/OrbintSoft/sshakku/internal/keys | 1.07 |
-| TestWiringAFileAndUnwiringItLeavesItAsItWasFound | github.com/OrbintSoft/sshakku/internal/install | 1.06 |
-| TestExecRunnerRun/a_command_that_finishes_within_its_Timeout_completes_normally | github.com/OrbintSoft/sshakku/internal/run | 1.05 |
+| TestTheTwoEditionsDoNotShareTheirProfiles | github.com/OrbintSoft/sshakku/internal/install | 1.04 |
 | TestExecRunnerRun/Stdin_is_fed_to_the_program | github.com/OrbintSoft/sshakku/internal/run | 1.04 |
 | TestExecRunnerRun/Env_is_added_to_the_inherited_environment,_not_put_in_its_place | github.com/OrbintSoft/sshakku/internal/run | 1.04 |
-| TestInstallingTwiceLeavesOneWiring | github.com/OrbintSoft/sshakku/internal/install | 1.00 |
-| TestUninstallingLeavesTheFileAsItWasFound | github.com/OrbintSoft/sshakku/internal/cli | 0.93 |
-| TestARealShellReadsOneLoginFileAndTheChoiceFollowsIt | github.com/OrbintSoft/sshakku/internal/install | 0.89 |
-| TestARealPowerShellAnswersAboutItself | github.com/OrbintSoft/sshakku/internal/install | 0.87 |
-| TestTheShellLibraryAgreesByteForByte/a_profile_with_lines_of_its_own | github.com/OrbintSoft/sshakku/internal/install | 0.86 |
+| TestExecRunnerRun/a_command_that_finishes_within_its_Timeout_completes_normally | github.com/OrbintSoft/sshakku/internal/run | 1.03 |
+| TestInstallingTwiceLeavesOneWiring | github.com/OrbintSoft/sshakku/internal/install | 0.98 |
+| TestUninstallingLeavesTheFileAsItWasFound | github.com/OrbintSoft/sshakku/internal/cli | 0.97 |
+| TestAFileThatHeldNothingButTheWiringIsNotLeftBehind | github.com/OrbintSoft/sshakku/internal/cli | 0.88 |
+| TestARealShellReadsOneLoginFileAndTheChoiceFollowsIt | github.com/OrbintSoft/sshakku/internal/install | 0.87 |
+| TestWiringAFileAndUnwiringItLeavesItAsItWasFound | github.com/OrbintSoft/sshakku/internal/install | 0.81 |
+| TestARealPowerShellAnswersAboutItself | github.com/OrbintSoft/sshakku/internal/install | 0.79 |
 
 </details>
