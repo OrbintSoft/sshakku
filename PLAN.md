@@ -2743,7 +2743,7 @@ were run directly instead.
 
 → features F44; rules 12, 19, 22, 23.
 
-### Phase 38 — The agent that is not running
+### Phase 38 — The agent that is not running ✅ Done
 
 F51 promises two things about an agent that is a service: one that is stopped is
 started, and one that cannot be started names the command that puts it right.
@@ -2789,18 +2789,10 @@ its standard error. The hook already works out whether somebody is sitting at
 the session, but only after the call that would print. Moving that decision
 above the call is the shape that keeps both.
 
-**Two things are still to do, and the second is a question rather than a task.**
-The fix itself: the hook already works out whether somebody is sitting at the
-session, but only after the call that would print, so moving that decision above
-the call is the shape that keeps both halves. And then whether a suite can watch
-it — which is open, not settled. `nerdctl -it` from a script answers `provided
-file is not a console`, and a scenario that opened a session with a console of
-its own did not come back; neither has been diagnosed, and one unexplained hang
-is not a limit. Nor is the shape of what gets printed decided: a sentence the
-hook captures and re-emits through the shell can be recorded, where one a native
-program writes straight to the console handle cannot. So the feasibility is to
-be established, and calling this manual by nature before that would be excusing
-a gap with a guess.
+**Two things are still to do, and the second is a question rather than a task**:
+the fix itself, and whether a suite can watch a session's screen at all — open,
+not settled, and not to be called manual by nature before it has been
+established. Both are Phase 39.
 
 **Integration coverage on this platform is early on purpose.** The port itself is
 young, and scenarios are not where the next effort goes. What is not negotiable
@@ -2809,3 +2801,67 @@ tested belongs in the matrix as an uncovered cell, not in somebody's memory, so
 that the work of covering it can be picked up rather than rediscovered.
 
 → features F51; rules 19, 21, 22, 23, 25.
+
+### Phase 39 — The line that never reached the screen ✅ Done
+
+F51 says the person whose shell it is gets told what to run. On this platform
+they were not: the hook ran `shell-init` with `2>$null`, so the one sentence
+naming the command reached the session log and never the terminal. A user whose
+agent service is disabled paid a passphrase for every connection with nothing on
+screen saying why.
+
+**The answer was already in the file, one call too late.** The hook works out
+whether somebody is sitting at the session — nothing on its command line saying
+it was handed work, and standard input not being fed by something else — but it
+did so below the call that would have printed. Moved to the top, that one answer
+now decides both of the things that turn on it: whose keys are loaded, and who is
+told. A session a person opened sees the sentence; one handed work still sees
+nothing, because its standard error is a script's own output, and a script that
+starts failing because SSHakku had something to say has been given a new problem
+in place of the one it was being told about. Both sides went into F51, which had
+promised only the first.
+
+**Which failures are worth saying out loud is not the hook's to decide.** The
+binary already judges that: what nobody can act on it keeps to the session log —
+a platform with no agent mechanism at all says so there and nowhere else — and
+what somebody can act on it puts on standard error. A hook that filtered that a
+second time would be a second opinion in a second place, free to drift from the
+first.
+
+**Passed through, never captured.** The stream is left alone rather than read
+into the shell and written out again. Standard error read back arrives as an
+error record, and that is two hazards at once: it is rendered wrapped to the
+width of the console, which breaks a long message across lines and leaves a
+command named in one no longer a command anybody can paste; and in a session that
+has asked for errors to stop it, `2>&1` on a native command throws. Both editions
+were measured: pwsh carries on, Windows PowerShell does not. This file is
+dot-sourced into a session somebody else arranged, so it does not get to end that
+session's startup.
+
+**A suite can watch what a session printed — the question Phase 38 left open.**
+It took three container runs to answer, and the first two answered something
+else. A session started with any of its streams captured is handed the standard
+handles the scenario itself was given, and in a container those are pipes:
+`IsInputRedirected` comes back true and the product concludes, correctly, that
+nobody is sitting there. So the session is started through `cmd`, asked for the
+one thing this shell cannot do — give the session a console of its own for input
+while pointing its error stream at a file. Then the product sees a person, and
+the sentence is in the file where the scenario can read it. Ending such a session
+takes ending the process: `exit` in a profile ends the profile, and the session
+goes on to its prompt to wait for input that cannot come.
+
+**The check passed while the screen was empty.** Written first and run against
+the unfixed hook, it went green: the property holding what the session said is
+empty when it said nothing, and an emptiness compared with `-notmatch` answers
+with an empty collection rather than with true. Read as a string it fails, which
+is what it then did. A test that has never been red proves only that it agrees
+with today's code — this one agreed with code that was wrong, and the only reason
+that was ever noticed is that it was made to run before there was anything to
+find.
+
+**A comment describing a file the file had stopped being.** The header said that
+adding the user's keys was deliberately absent here, and had gone on saying it
+after the hook started adding them. It now says where the one answer both of them
+turn on is worked out.
+
+→ features F51; rules 15, 19, 21, 22, 23, 24, 25.

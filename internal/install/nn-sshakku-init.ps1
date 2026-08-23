@@ -12,12 +12,12 @@
 # whatever it can find. All the logic lives in the core; this script only pins
 # the session to the endpoint and invokes it.
 #
-# One thing the Bourne hook does is deliberately absent here, and its absence is
-# not an oversight: adding the user's keys in interactive sessions. What tells
-# an interactive session from one running a single command is not settled on
-# this shell — it runs its profile for both — and a prompt in a session that
-# cannot answer is worse than a key loaded later. `sshakku doctor` reports what
-# is wired and what is not.
+# Where the Bourne hook can ask its shell whether anybody is sitting at it, this
+# one has nothing to ask: PowerShell runs its profile for a session that was
+# handed a command to run exactly as it does for a person's. So it is worked out
+# below instead, before anything is run, and two things turn on the answer — the
+# keys that are added, and what this session is told. `sshakku doctor` reports
+# what is wired and what is not, in either kind of session.
 #
 # Every cmdlet below is named with its module and every type with its full
 # namespace. This file is dot-sourced into whatever session the user has
@@ -34,18 +34,63 @@ param()
 
 $sshakku_bin = '@SSHAKKU_BIN@'
 
+# Whether somebody is sitting at this session. Two things below turn on it: the
+# user's keys are loaded only where there is somebody to answer for them, and
+# what the program has to say about a failure is put where it can be read only
+# where there is somebody to read it. This shell runs its profile for a session
+# that was handed a command or a script to run as well — a build step, a
+# scheduled task, a `git` helper — and neither a question nor a diagnostic
+# belongs in one of those, whose output is something else's input.
+#
+# There is no single flag to read for it, the way a Bourne shell has one, so the
+# two things that can be known are both asked. The first is this session's own
+# invocation: one given a command, a file or an encoded command to run, or told
+# outright it is not interactive, is not one to ask anything of. The names may be
+# abbreviated to any prefix, which is why they are matched as prefixes. The
+# second is where its input comes from: a session reading its commands from a
+# pipe or a file is being driven by something rather than by somebody, and that
+# is true even when nothing on the command line said so.
+$sshakku_interactive = $true
+foreach ($sshakku_arg in [System.Environment]::GetCommandLineArgs()) {
+    if (-not $sshakku_arg.StartsWith('-')) { continue }
+    $sshakku_flag = $sshakku_arg.TrimStart('-').Split(':')[0].ToLowerInvariant()
+    if ($sshakku_flag.Length -eq 0) { continue }
+    foreach ($sshakku_batch in @('command', 'file', 'encodedcommand', 'noninteractive')) {
+        if ($sshakku_batch.StartsWith($sshakku_flag)) { $sshakku_interactive = $false }
+    }
+}
+if ([System.Console]::IsInputRedirected) { $sshakku_interactive = $false }
+
 # Resolve the runtime paths, keep the agent healthy, and evaluate the printed
 # assignments. Declare them first so an absent or failing binary leaves them
 # empty rather than undefined.
 $agent_sock = ''
 $log_file = ''
 if (Microsoft.PowerShell.Management\Test-Path -LiteralPath $sshakku_bin -PathType Leaf) {
-    # Only standard output is evaluated. What the binary has to say about a
-    # failure goes to its standard error and to the session log, which is
-    # where it can be read — not into every new prompt, and never into a line
-    # this session would try to run.
+    # Only standard output is evaluated, and never as anything but the
+    # assignments it is: what the binary has to say about a failure it says on
+    # standard error instead, where no line this session would run can come
+    # from.
+    #
+    # What belongs on that stream is the binary's judgement rather than this
+    # hook's — what reaches it is what somebody is meant to act on, and what
+    # needs no acting on it keeps to the session log. All that is decided here
+    # is whether there is a somebody: a session a person opened is left to see
+    # it, and one that was handed work is not.
+    #
+    # Where it is seen, it is left alone rather than captured and written out
+    # again. Standard error read back into this shell arrives as an error
+    # record, and that is two hazards at once: it is rendered wrapped to the
+    # width of the console, which breaks a long message across lines and leaves
+    # a command named in one no longer a command anybody can paste; and in
+    # Windows PowerShell, in a session that has asked for errors to stop it, it
+    # ends the profile it is being read in.
     $sshakku_previous_exit = $LASTEXITCODE
-    $init = & $sshakku_bin shell-init --shell=powershell 2>$null
+    if ($sshakku_interactive) {
+        $init = & $sshakku_bin shell-init --shell=powershell
+    } else {
+        $init = & $sshakku_bin shell-init --shell=powershell 2>$null
+    }
     $sshakku_ok = $LASTEXITCODE -eq 0
     # Put the exit code back the way it was found. A prompt that shows the last
     # command's status is a common setup, and a hook that runs before the first
@@ -82,31 +127,10 @@ if ($sshakku_ok -and $askpass_env) {
     Microsoft.PowerShell.Utility\Invoke-Expression ($askpass_env -join [System.Environment]::NewLine)
 }
 
-# Load the user's keys, but only in a session somebody is sitting at. Loading
-# may ask for a passphrase and write to the terminal, and this shell runs its
-# profile for a session that was handed a command or a script to run as well —
-# a build step, a scheduled task, a `git` helper — where a question stops the
+# Load the user's keys, but only in a session somebody is sitting at, which was
+# worked out at the top. Loading may ask for a passphrase and write to the
+# terminal, and in a session that was handed work to do a question stops that
 # work at a prompt nobody is watching.
-#
-# There is no single flag to read for it, the way a Bourne shell has one, so
-# the two things that can be known are both asked. The first is this session's
-# own invocation: one given a command, a file or an encoded command to run, or
-# told outright it is not interactive, is not one to ask anything of. The names
-# may be abbreviated to any prefix, which is why they are matched as prefixes.
-# The second is where its input comes from: a session reading its commands from
-# a pipe or a file is being driven by something rather than by somebody, and
-# that is true even when nothing on the command line said so.
-$sshakku_interactive = $true
-foreach ($sshakku_arg in [System.Environment]::GetCommandLineArgs()) {
-    if (-not $sshakku_arg.StartsWith('-')) { continue }
-    $sshakku_flag = $sshakku_arg.TrimStart('-').Split(':')[0].ToLowerInvariant()
-    if ($sshakku_flag.Length -eq 0) { continue }
-    foreach ($sshakku_batch in @('command', 'file', 'encodedcommand', 'noninteractive')) {
-        if ($sshakku_batch.StartsWith($sshakku_flag)) { $sshakku_interactive = $false }
-    }
-}
-if ([System.Console]::IsInputRedirected) { $sshakku_interactive = $false }
-
 if ($sshakku_interactive) {
     $sshakku_previous_exit = $LASTEXITCODE
     & $sshakku_bin load-keys

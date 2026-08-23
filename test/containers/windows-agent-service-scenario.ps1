@@ -12,11 +12,12 @@
 # Running it is also what puts the machine into the second state, so the two
 # halves are one journey rather than two fixtures.
 #
-# What this cannot see, and does not claim to: F51 also promises that the line
-# reaches the person whose shell it is. A session that is being driven by a
-# script is not one somebody is sitting at, and this scenario is a script all
-# the way down, so what it holds the product to is the session log — which the
-# same promise names — and the message the command itself prints.
+# F51 also promises the line reaches the person whose shell it is, and says
+# where: the screen of a shell somebody opened, the session log either way. Both
+# sides are held here, because only together do they mean anything — a session
+# opened at a console of its own must carry the sentence on its standard error,
+# and one handed work on its command line must carry none of it, since a build
+# step's own output is not a place to leave diagnostics.
 #
 # Every program below is run through Start-Process rather than the call
 # operator, and its output read back from files. A native program's standard
@@ -93,6 +94,79 @@ function Open-Session {
         '-Command', 'Microsoft.PowerShell.Utility\Write-Output "sock=[$env:SSH_AUTH_SOCK]"')
 }
 
+# A session as a person opens one, and what it put on its screen.
+#
+# The two things this product reads to decide whether anybody is there are
+# arranged rather than asserted — nothing on the command line saying the session
+# was handed work, and a console of its own for standard input — because a
+# session that had to be told it was a person's would prove nothing about how
+# the product tells them apart.
+#
+# The console is why cmd is here, and it is the only reason. Asking Start-Process
+# to capture a stream makes it hand the child the standard handles this scenario
+# was itself given, and those are pipes: the session would read its input from
+# one, which is precisely what the product reads to conclude that nobody is
+# sitting there. Started with no stream captured, the session gets a console of
+# its own — and cmd, which is what owns it, is asked for the one thing this shell
+# then cannot do, to point that session's error stream at a file.
+#
+# Such a session is handed nothing to do, so it would sit at its prompt until
+# something typed into it said otherwise, and nothing here can type. Saying it on
+# the command line is not open to us either, so it is said in the one place a
+# session reads before its first prompt: CurrentUserCurrentHost, the last of the
+# four PowerShell reads, whichever of them the install wrote into. The process is
+# ended rather than the shell asked to exit, because `exit` in a profile ends the
+# profile and the session goes on to its prompt anyway. Everything read here was
+# written before that: the hook runs ahead of the prompt, and what wrote it was a
+# program that had already finished.
+#
+# That instruction is taken out again afterwards. It belongs to this one session,
+# and a profile that keeps it makes every session after this one end before the
+# work it was handed — including the ones the rest of this scenario opens.
+#
+# The wait is bounded because this is the state where the product may have
+# nothing to say: a session that never reaches its profile's last line would
+# otherwise hold the whole run open.
+function Open-SessionAtAConsole {
+    $profileFile = (Invoke-Native -FilePath 'powershell.exe' -Arguments @(
+            '-NoProfile', '-Command', '[System.Console]::Out.Write($PROFILE)')).Out
+    if (-not $profileFile) {
+        $failures.Add('this host named no per-user profile, so a session opened at a console has no way to be told to leave')
+        return
+    }
+
+    $dir = Microsoft.PowerShell.Management\Split-Path -Path $profileFile -Parent
+    if (-not (Microsoft.PowerShell.Management\Test-Path -LiteralPath $dir -PathType Container)) {
+        Microsoft.PowerShell.Management\New-Item -ItemType Directory -Path $dir | Microsoft.PowerShell.Core\Out-Null
+    }
+    $before = $null
+    if (Microsoft.PowerShell.Management\Test-Path -LiteralPath $profileFile -PathType Leaf) {
+        $before = Microsoft.PowerShell.Management\Get-Content -LiteralPath $profileFile -Raw
+    }
+
+    $errFile = [System.IO.Path]::GetTempFileName()
+    try {
+        Microsoft.PowerShell.Management\Add-Content -LiteralPath $profileFile -Value '[System.Environment]::Exit(0)'
+        $p = Microsoft.PowerShell.Management\Start-Process -FilePath 'cmd.exe' `
+            -ArgumentList @('/c', "powershell.exe 2> `"$errFile`"") `
+            -WindowStyle Hidden -PassThru
+        if (-not $p.WaitForExit(60000)) {
+            $p.Kill()
+            $failures.Add('a session opened at a console never left, so what it said cannot be read')
+        }
+        [PSCustomObject]@{
+            Err = (Microsoft.PowerShell.Management\Get-Content -LiteralPath $errFile -Raw)
+        }
+    } finally {
+        if ($null -eq $before) {
+            Microsoft.PowerShell.Management\Remove-Item -LiteralPath $profileFile -Force -ErrorAction SilentlyContinue
+        } else {
+            Microsoft.PowerShell.Management\Set-Content -LiteralPath $profileFile -Value $before -NoNewline
+        }
+        Microsoft.PowerShell.Management\Remove-Item -LiteralPath $errFile -Force -ErrorAction SilentlyContinue
+    }
+}
+
 Microsoft.PowerShell.Utility\Write-Output '--- the machine as it was found ---'
 $startMode = Get-ServiceStartMode
 $status = Get-ServiceStatus
@@ -133,6 +207,33 @@ if ($session.Out -notmatch 'sock=\[\]') {
 
 if ((Get-ServiceStatus) -ne 'Stopped') {
     $failures.Add('a service that is disabled was reported as started')
+}
+
+# That session was handed its work on the command line, so nothing about a
+# broken agent belongs in its output: whatever started it is capturing that,
+# and a script that begins failing because SSHakku had something to say has
+# been given a new problem in place of the one it was told about.
+if ("$($session.Err)" -match 'Set-Service') {
+    $failures.Add("a session handed work to run was given diagnostics on its standard error: $("$($session.Err)".Trim())")
+}
+
+Microsoft.PowerShell.Utility\Write-Output '--- a session somebody is sitting at ---'
+
+$seated = Open-SessionAtAConsole
+if ($null -ne $seated) {
+    # Read as a string, and not as whatever the property holds. A session that
+    # said nothing leaves that property empty, and an emptiness compared with
+    # -notmatch answers with an empty collection rather than with true: the one
+    # state this check exists to catch is the one it would let through.
+    $said = "$($seated.Err)".Trim()
+    Microsoft.PowerShell.Utility\Write-Output "it said, on its standard error: $said"
+
+    # The one place this clause is about. A person whose agent cannot be started
+    # is asked for every passphrase, every time; being told why, on the screen
+    # they are looking at, is the whole of what F51 promises here.
+    if ($said -notmatch 'Set-Service\s+ssh-agent\s+-StartupType') {
+        $failures.Add('a session opened at a console was told nothing about an agent that could not be started')
+    }
 }
 
 # What the product says about it, in the words it says it in.
