@@ -171,15 +171,15 @@ type fakeKeyState struct {
 }
 
 type keyStateCall struct {
-	key      string
+	keyfile  string
 	lifetime time.Duration
 }
 
-func (k *fakeKeyState) Save(key string, lifetime time.Duration) error {
+func (k *fakeKeyState) Save(keyfile string, lifetime time.Duration) error {
 	if k.err != nil {
 		return k.err
 	}
-	k.saved = append(k.saved, keyStateCall{key, lifetime})
+	k.saved = append(k.saved, keyStateCall{keyfile, lifetime})
 	return nil
 }
 

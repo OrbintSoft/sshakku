@@ -85,6 +85,58 @@ func TestMalformedRecordMisses(t *testing.T) {
 	assert.False(t, ok, "a malformed record must miss, not report a zero-value record")
 }
 
+func TestARecordSaysWhichFileTheKeyIs(t *testing.T) {
+	keyfile := filepath.Join(t.TempDir(), "keys", "id_ed25519")
+	s := Store{Dir: t.TempDir()}
+
+	require.NoError(t, s.Save(keyfile, time.Hour), "Save")
+	rec, ok := s.Load("id_ed25519")
+	require.True(t, ok, "Load after Save must find a record")
+	assert.Equal(t, keyfile, rec.KeyFile, "the record must name the file the key is in")
+}
+
+func TestARecordWrittenBeforeItNamedTheFileStillParses(t *testing.T) {
+	dir := t.TempDir()
+	s := Store{Dir: dir}
+	p := filepath.Join(dir, "id_rsa")
+	require.NoError(t, os.WriteFile(p, []byte("2026-07-08T12:00:00Z\n3600\n"), 0o600), "seed")
+
+	rec, ok := s.Load("id_rsa")
+	require.True(t, ok, "a record with no file name is still a record")
+	assert.Equal(t, time.Hour, rec.Lifetime, "Lifetime")
+	assert.Empty(t, rec.KeyFile, "there was no file name to read")
+}
+
+func TestEveryRecordCanBeListed(t *testing.T) {
+	dir := t.TempDir()
+	keys := filepath.Join(t.TempDir(), "keys")
+	s := Store{Dir: dir}
+	require.NoError(t, s.Save(filepath.Join(keys, "id_rsa"), time.Hour), "Save id_rsa")
+	require.NoError(t, s.Save(filepath.Join(keys, "id_ed25519"), 0), "Save id_ed25519")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "id_junk"), []byte("rubbish\n"), 0o600), "seed a malformed record")
+	require.NoError(t, os.Mkdir(filepath.Join(dir, "a-directory"), 0o700), "seed a directory")
+
+	recs, err := s.Records()
+	require.NoError(t, err, "Records")
+
+	files := make([]string, 0, len(recs))
+	for _, rec := range recs {
+		files = append(files, rec.KeyFile)
+	}
+	assert.ElementsMatch(t, []string{filepath.Join(keys, "id_rsa"), filepath.Join(keys, "id_ed25519")}, files,
+		"every well-formed record is listed, and nothing that is not one")
+}
+
+func TestListingNothingIsNotAFailure(t *testing.T) {
+	recs, err := Store{Dir: filepath.Join(t.TempDir(), "never-written")}.Records()
+	assert.NoError(t, err, "a store nothing has been saved to yet has no records, which is not an error")
+	assert.Empty(t, recs, "and no records")
+
+	recs, err = Store{}.Records()
+	assert.NoError(t, err, "a disabled store has no records either")
+	assert.Empty(t, recs, "and no records")
+}
+
 func TestPathEscapeContained(t *testing.T) {
 	dir := t.TempDir()
 	s := Store{Dir: dir}

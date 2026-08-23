@@ -1,10 +1,12 @@
-// Package keystate records, per key, when sshakku added it to the agent and
-// for how long it was asked to live there — so `sshakku doctor` can report a
-// key's remaining time in the agent without relying on ssh-agent to expose it
-// (the ssh-agent protocol has no query for a key's remaining lifetime). Each
-// record is a small file under the per-login runtime directory (wiped on
-// logout/reboot, never written to disk otherwise); it holds no secret, only a
-// timestamp and a duration.
+// Package keystate records, per key, when sshakku added it to the agent, how
+// long it is meant to live there and which file it came from — so `sshakku
+// doctor` can report a key's remaining time in the agent without relying on
+// ssh-agent to expose it (the ssh-agent protocol has no query for a key's
+// remaining lifetime), and so a system whose agent expires nothing can be told
+// which key to take out of it and where that key is. Each record is a small
+// file under the per-login runtime directory (wiped on logout/reboot on the
+// systems that have one, never written to disk otherwise); it holds no secret,
+// only a timestamp, a duration and a path.
 package keystate
 
 import (
@@ -26,8 +28,13 @@ const (
 type Record struct {
 	// AddedAt is when sshakku added the key to the agent.
 	AddedAt time.Time
-	// Lifetime is the value passed to `ssh-add -t`; zero means no expiry.
+	// Lifetime is how long the key is meant to stay in the agent, whichever
+	// side ends up enforcing it; zero means no expiry.
 	Lifetime time.Duration
+	// KeyFile is the file the key was added from, which is what names it to
+	// `ssh-add` again. It is empty for a record written before records said
+	// so, and such a record is one nothing can act on.
+	KeyFile string
 }
 
 // ExpiresAt returns when the key expires, and false when Lifetime is zero
@@ -48,18 +55,46 @@ type Store struct {
 	Now func() time.Time
 }
 
-// Save records that key was just added to the agent with the given lifetime
-// (zero for no expiry), stamped with the current time.
-func (s Store) Save(key string, lifetime time.Duration) error {
-	p, ok := s.path(key)
+// Save records that the key in keyfile was just added to the agent with the
+// given lifetime (zero for no expiry), stamped with the current time. The
+// record is named after keyfile's base name, and keeps keyfile itself so a
+// later caller can name the same key to ssh-add.
+func (s Store) Save(keyfile string, lifetime time.Duration) error {
+	p, ok := s.path(keyfile)
 	if !ok {
 		return nil
 	}
 	if err := os.MkdirAll(s.Dir, dirPerm); err != nil {
 		return err
 	}
-	body := fmt.Sprintf("%s\n%d\n", s.now().UTC().Format(time.RFC3339), int64(lifetime/time.Second))
+	body := fmt.Sprintf("%s\n%d\n%s\n", s.now().UTC().Format(time.RFC3339), int64(lifetime/time.Second), keyfile)
 	return os.WriteFile(p, []byte(body), filePerm)
+}
+
+// Records lists every well-formed record in Dir, in no particular order. A
+// store that has never been written to has none, which is not an error; a file
+// that is not a record is left out, exactly as Load leaves it out.
+func (s Store) Records() ([]Record, error) {
+	if s.Dir == "" {
+		return nil, nil
+	}
+	entries, err := os.ReadDir(s.Dir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	recs := make([]Record, 0, len(entries))
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		if rec, ok := s.Load(e.Name()); ok {
+			recs = append(recs, rec)
+		}
+	}
+	return recs, nil
 }
 
 // Load returns the recorded state for key, and whether a well-formed record
@@ -75,8 +110,12 @@ func (s Store) Load(key string) (Record, bool) {
 	if err != nil {
 		return Record{}, false
 	}
-	lines := strings.SplitN(strings.TrimSpace(string(data)), "\n", 2)
-	if len(lines) != 2 {
+	// Three fields, of which the path is the last: it is taken as the whole of
+	// what follows, so a path is never cut short by whatever it happens to
+	// contain. Two fields is the older form, and reads as a record whose key
+	// file is not known.
+	lines := strings.SplitN(strings.TrimSpace(string(data)), "\n", 3)
+	if len(lines) < 2 {
 		return Record{}, false
 	}
 	addedAt, err := time.Parse(time.RFC3339, strings.TrimSpace(lines[0]))
@@ -87,7 +126,11 @@ func (s Store) Load(key string) (Record, bool) {
 	if err != nil {
 		return Record{}, false
 	}
-	return Record{AddedAt: addedAt, Lifetime: time.Duration(secs) * time.Second}, true
+	rec := Record{AddedAt: addedAt, Lifetime: time.Duration(secs) * time.Second}
+	if len(lines) == 3 {
+		rec.KeyFile = strings.TrimSpace(lines[2])
+	}
+	return rec, true
 }
 
 // Clear removes any recorded state for key; a missing record is not an error.
