@@ -40,6 +40,14 @@ const startupFailure = 255
 //
 // It asks for a listing, which needs no key and no agent, so what it answers is
 // only whether it started. Anything but the startup failure means it did.
+//
+// What makes it fail depends on the machine, and that is deliberate rather
+// than a weakness: on a machine where the system-wide ssh configuration
+// directory exists, an environment missing the variable that names it is fatal
+// and this catches it; on one where that directory was never created, the same
+// environment is survivable and this passes. The assertion is on the outcome
+// that matters everywhere — the program SSHakku is about to hand a passphrase
+// to can start — rather than on a mechanism that only some machines have.
 func TestSSHAddCanStartWithWhatThisSystemSaysToGiveIt(t *testing.T) {
 	_, err := exec.LookPath("ssh-add")
 	require.NoError(t, err, "this platform's own ssh-add is what SSHakku drives here; without it nothing below is answerable")
@@ -50,28 +58,22 @@ func TestSSHAddCanStartWithWhatThisSystemSaysToGiveIt(t *testing.T) {
 		"ssh-add could not start with the environment this system's list gives it, which is how a stored passphrase comes to be reported as stale")
 }
 
-// TestTheDirectoryTheSystemKeepsSSHsOwnConfigurationUnderIsWhyProgramDataIsInThatList
-// records the measurement the list rests on, so that if this system stops
-// needing it, somebody is told rather than left carrying an entry nobody can
-// account for.
+// TestTheSystemWideConfigurationDirectoryIsNamedInThatList keeps the entry that
+// cost a measurement from being trimmed by someone reading the list and seeing
+// nothing that obviously belongs to SSHakku.
 //
-// Dropping it is not a degradation, it is a stop: ssh-add exits with the code
-// above having printed nothing at all, on either stream. Nothing about that
-// points at an environment, which is why it had to be measured rather than
-// reasoned about — and why what a user would otherwise see is a session log
-// telling them their perfectly good stored passphrase has gone stale.
-func TestTheDirectoryTheSystemKeepsSSHsOwnConfigurationUnderIsWhyProgramDataIsInThatList(t *testing.T) {
-	require.Contains(t, platformChildEnv, "ProgramData")
-
-	var without []string
-	for _, name := range childEnvNames(platformChildEnv) {
-		if name != "ProgramData" {
-			without = append(without, name)
-		}
-	}
-
-	code := exitOfSSHAdd(t.Context(), t, passThrough(nil, without...))
-
-	assert.Equalf(t, startupFailure, code,
-		"ssh-add started without ProgramData, so the reason that entry is in the list no longer holds: measure again before trusting either answer")
+// It says only that the name is there, and that is as much as can honestly be
+// asserted: what happens without it is the machine's business, not this
+// platform's. Where the system-wide ssh configuration directory exists,
+// ssh-add given no way to find it exits 255 having printed nothing at all, on
+// either stream — the failure this entry was added for, and the one the test
+// above catches. Where that directory was never created, the same environment
+// costs nothing, which is why a test asserting the failure passed on the
+// machine it was written on and failed on the runner. The entry is right in
+// both cases: a child that cannot find the machine's ssh configuration is
+// reading a different one from the session that started it, whether or not it
+// gets far enough to say so.
+func TestTheSystemWideConfigurationDirectoryIsNamedInThatList(t *testing.T) {
+	assert.Contains(t, platformChildEnv, "ProgramData",
+		"without it, ssh-add cannot find the configuration this system keeps for every account")
 }

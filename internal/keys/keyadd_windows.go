@@ -16,11 +16,14 @@ import "os/exec"
 // started without them behaves in ways nobody would connect back to a
 // passphrase.
 //
-// ProgramData is the one that had to be measured rather than reasoned about,
-// and it is not optional: this system's ssh-add resolves the machine-wide ssh
-// configuration under it, and started without it exits 255 having printed
-// nothing whatsoever — no message, no clue, and an exit code that says only
-// that something went wrong very early.
+// ProgramData is the one that had to be measured rather than reasoned about.
+// This system's ssh-add resolves the machine-wide ssh configuration under it,
+// so a child that does not get it is reading a different configuration from the
+// session that started it. What that costs depends on the machine: where that
+// directory exists, ssh-add exits 255 having printed nothing whatsoever — no
+// message, no clue, and an exit code that says only that something went wrong
+// very early; where it was never created, nothing happens at all, which is what
+// makes the first kind of machine so hard to recognise from the second.
 //
 // The cost of getting any of this wrong is that it does not look wrong. What a
 // user sees is a key that will not load and a session log saying their stored

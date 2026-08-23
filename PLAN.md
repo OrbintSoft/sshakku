@@ -3031,9 +3031,19 @@ exit code that says only that something went wrong early. What SSHakku then
 concluded, and wrote in the session log, was that the user's stored passphrase
 had gone stale — of a passphrase that was perfect and a program that never got as
 far as reading it. The list is now this platform's own answer, as data behind the
-tag (rule 26), and the entry that had to be measured is pinned by a test that
-takes it back out and requires the failure, so the reason is checked rather than
-remembered.
+tag (rule 26).
+
+**And the test written to pin that measurement was itself too strong**, which
+the runner said before anybody else did. It asserted the 255 as a fact of the
+platform; on `windows-latest` the same environment exits 2, because the failure
+needs the machine-wide ssh configuration directory to exist and a fresh runner
+has never created one. So the entry is right on every machine — a child that
+cannot find that directory reads a different configuration from the session that
+started it — and what it costs is the machine's business. The test now asserts
+the outcome that holds everywhere, that ssh-add can start with what it is given,
+which catches this where it is fatal and is quiet where it is not. A test that
+had gone green on the machine it was written on and red in CI is the cheapest
+version of that lesson available.
 
 The other half of that failure was the scenario's own: the image carried
 `sshakku.exe` and not the askpass helper beside it, which is half an install and
