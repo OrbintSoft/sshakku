@@ -12,11 +12,10 @@
 # first: whether a session can start one is F51's promise and is verified in its
 # own scenario, and a machine with no agent has nothing to take a key out of.
 # The keys are put in the agent with ssh-add, and one of them is then recorded
-# as one SSHakku added and gave a lifetime to. That last part is arranged
-# because it cannot be driven here: this platform has no wallet yet, so the only
-# way SSHakku obtains a passphrase is by asking on a console, and a container has
-# nobody to type into one — the same limit the test matrix records against the
-# keys themselves.
+# as one SSHakku added and gave a lifetime to. That last part is arranged rather
+# than obtained by loading a key, because what a session removes is what is
+# being judged here and what put the key there is beside the point; a key
+# loading out of the wallet is its own scenario.
 #
 # What is not arranged is the whole of what is being judged: a real session
 # opening, a real agent, a real ssh-add, and what the session log says

@@ -248,10 +248,16 @@ is a different mechanism from the socket the Unix builds keep healthy, and which
 `sshakku` starts if it is not running — and its ssh passphrase prompts go
 through the same helper as everywhere else, answered on the console.
 
-What stays out deliberately, and is not an oversight, is the wallet: this
-system's own is the Credential Manager, which SSHakku cannot yet read or write,
-so nothing is offered and nothing is silently in force. Every passphrase is
-therefore asked for, once per key per session, and none is saved. A wired
-Windows session opens silently all the same, the session log records what this
-platform has none of rather than the shell reporting it as a failure, and
-`sshakku doctor` says the same in the report.
+The wallet is this system's own: the Credential Manager, holding one generic
+credential per key, in force with nothing configured and the only value
+`secret_backend` takes here. A passphrase is asked for once and read back with
+nothing typed at every session afterwards, exactly as on the other two
+platforms. What differs is what guards it — the account's own sign-in and
+nothing further, so anything running as you can read what is stored there —
+which `sshakku doctor` states beside the wallet's name rather than leaving you
+to assume the guarantees of a wallet that locks.
+
+What stays out deliberately, and is not an oversight, are the wallets reached by
+running a program of their own — 1Password, Bitwarden, KeePassXC. They compile
+here and are not offered here, because being buildable on a system is not the
+same as having been driven on one.

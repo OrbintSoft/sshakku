@@ -11,13 +11,24 @@ import (
 )
 
 // platformWalletView describes the wallet this operating system provides
-// itself. Windows has one — the Credential Manager — but this build cannot
-// read or write it, and no configuration can select it, so there is no piece
-// to report as missing: the view names the backend in force and claims nothing
-// further.
+// itself: the Credential Manager, which needs nothing installed, nothing
+// running and nothing configured, so there is no piece to report as missing.
+//
+// What it does report is what guards an entry, which is the one thing about
+// this wallet a reader would otherwise get wrong. It never asks for anything,
+// and a wallet that never asks looks from the outside exactly like one that
+// has already been unlocked — so the report says, in the section describing
+// the wallet, that there was nothing to unlock in the first place.
 func (p walletProbe) platformWalletView(_ context.Context, _ config.Settings, backend string) diagnose.WalletView {
-	return diagnose.WalletView{Backend: backend}
+	return diagnose.WalletView{Backend: backend, Guard: credentialStoreGuard}
 }
+
+// credentialStoreGuard is what stands between a stored passphrase and whoever
+// wants to read it here: the account being signed in, and nothing further. The
+// entry is encrypted under this account and handed back to anything running as
+// it, with no prompt, no per-entry unlock and no permission asked per program.
+const credentialStoreGuard = "this account's own sign-in, and nothing beyond it — " +
+	"there is no separate password and nothing to unlock, so any program running as you can read what is stored here"
 
 // keepassxcSecretServiceRoute describes reaching KeePassXC over the Secret
 // Service on a system that has none.

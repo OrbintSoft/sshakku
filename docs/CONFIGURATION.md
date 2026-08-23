@@ -104,23 +104,30 @@ See [CLI.md](CLI.md#sshakku-config) for both.
 Left alone, SSHakku uses the wallet your operating system provides itself, and
 you need configure nothing: a dedicated Secret Service collection on Linux (KDE
 Wallet, GNOME Keyring, or KeePassXC via its Secret Service integration — see the
-next section), and the Keychain on macOS.
+next section), the Keychain on macOS, and the Credential Manager on Windows.
 
 Which wallets you can name depends on the system, because two of them *are* the
 system:
 
-| Value | Linux | macOS |
-| --- | --- | --- |
-| `"secret-service"` | ✅ the default | ❌ no such API exists there |
-| `"keychain"` | ❌ no such API exists there | ✅ the default |
-| `"keepassxc"` | ✅ | ✅ |
-| `"1password"` | ✅ | ✅ |
-| `"bitwarden"` | ✅ | ✅ |
+| Value | Linux | macOS | Windows |
+| --- | --- | --- | --- |
+| `"secret-service"` | ✅ the default | ❌ no such API exists there | ❌ no such API exists there |
+| `"keychain"` | ❌ no such API exists there | ✅ the default | ❌ no such API exists there |
+| `"credential-manager"` | ❌ no such API exists there | ❌ no such API exists there | ✅ the default |
+| `"keepassxc"` | ✅ | ✅ | ❌ not yet driven there |
+| `"1password"` | ✅ | ✅ | ❌ not yet driven there |
+| `"bitwarden"` | ✅ | ✅ | ❌ not yet driven there |
 
 Naming one your system has not got is a mistake in the configuration, not a
 wallet waiting for you to install something: SSHakku logs it and carries on with
 your platform's default, so a stale config file cannot take your login shell
 down with it.
+
+Three of those cells say *not yet driven there* rather than *no such thing
+exists*, and the difference is deliberate. Those wallets are programs that could
+perfectly well be installed on Windows; what is missing is not the program but
+anyone having run SSHakku against it there and a test holding it to that. A
+wallet is offered on a platform once it has been.
 
 Like `wallet_store_mode`, these four keys are config-file only — an account
 identity (an email address, a vault name) doesn't fit a single environment
@@ -142,6 +149,16 @@ bitwarden_server = "https://vault.example.com" # optional; a self-hosted Vaultwa
   exposure, but a passphrase does, and `security add-generic-password -w`
   has no way to take it other than on the command line. It is the default
   there, so a macOS install needs no configuration to use it.
+- `"credential-manager"` stores each passphrase as a generic credential in the
+  Windows Credential Manager, one per key, under your own account. SSHakku
+  calls the credential API directly rather than shelling out — there is no
+  command-line that would give a stored secret back in any case. It is the
+  default there, so a Windows install needs no configuration to use it. Note
+  what guards it, because it differs from the other two: your Windows sign-in,
+  and nothing further. You are never asked to unlock this wallet, there is no
+  separate password, and no permission is asked per program — so anything
+  running as you can read what is stored in it. `sshakku doctor` says so beside
+  the wallet's name.
 - `"1password"` shells out to the `op` CLI. `onepassword_vault` names the vault
   to keep the entries in; SSHakku tags every item it creates there and only
   ever reads or deletes its own, so the vault does not have to be one you keep
@@ -273,6 +290,16 @@ Passphrase for <keyname>` and scoped to your account. Unlike the Secret
 Service default, these items are ordinary entries in the same keychain
 everything else uses, so they're visible in Keychain Access alongside your
 other passwords, not tucked away in a separate collection.
+
+With `secret_backend = "credential-manager"` (Windows), each key's passphrase is
+a generic credential named after the key — `SSHakku-Key-id_rsa` — described as
+`SSH Passphrase for <keyname>` and carrying the prefix as its user name, so the
+column beside the target says where the entry came from. `cmdkey /list` shows
+them, as does the Credential Manager in Control Panel; neither will show you the
+secret, which no supported command-line will give back either. There is no
+separate collection here any more than there is on macOS: the entries sit in the
+same store as everything else the account has saved, and SSHakku reads, lists
+and deletes only the ones carrying its own prefix.
 
 ### Naming SSHakku's entries
 

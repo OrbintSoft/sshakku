@@ -81,7 +81,7 @@ is made.
 | root / kernel | Decision deferred | Can already take A1–A8; defending is likely **Accept** (not worth it), but that is confirmed at the final review, not assumed here. |
 | Remote SSH peers | Other system's responsibility | We only make the agent available; authenticating peers is OpenSSH's job, not this component's. |
 | OS secret store / session keyring | Trusted component | Gated by session unlock; we rely on it. |
-| External secret CLIs & OS keychains | Trusted components | `op`, macOS Keychain, Windows Credential Manager once wired in. |
+| External secret CLIs & OS keychains | Trusted components | `op`, macOS Keychain, Windows Credential Manager. The last of these has no lock of its own — a generic credential is decrypted for anything running as the account — so it protects A4 against *other local users* and not against the same user's own processes, which the row above already treats as trusted. |
 
 ## Residual-risk register (decisions deferred)
 

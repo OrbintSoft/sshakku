@@ -2938,7 +2938,7 @@ passphrase is by asking on a console, which a container has nobody to type at.
 It is the same limit the matrix already records against the keys themselves, and
 it is the argument for the backends: until they exist, a Windows user answers
 for every key at every expiry, which is exactly why the scheduled task waits for
-them.
+them. Phase 41 is where they arrive.
 
 Sub-steps, each committable: (1) the promise, in `docs/FEATURES.md` — F52
 rewritten, F53 added — and this phase; (2) the record keeping the configured
@@ -2948,3 +2948,127 @@ the real binary driven through a key that runs out of time, in the Windows
 container.
 
 → features F52, F53; PLAN Phase 35 W5; rules 19, 21, 22, 23, 25, 26.
+
+### Phase 41 — The wallet this platform had none of ✅ Done
+
+Windows is the one target where SSHakku cannot do the thing it exists to do.
+`platformSecretBackends` there is empty, `backend.Open` hands back
+`wallet.Unavailable`, and the only remaining route to a passphrase is asking on
+the console — so a Windows user types every passphrase at every login, and again
+at every expiry now that Phase 40 makes expiry real. It is also what stopped the
+container scenario for that phase from driving `load-keys` end to end: with no
+wallet to read and nobody to type at a console, the scenario had to seed the
+keystate record itself. And it is the prerequisite settled with the user for the
+scheduled task that would expire a key with nobody logged in, which waits on the
+backends precisely because a late expiry is a better bargain than a passphrase
+re-typed by hand.
+
+**The system's own wallet, through the API and not through a command.** The
+Credential Manager has no supported command-line that will give a stored secret
+back — `cmdkey /list` shows a credential's name, type and user and never its
+blob — and the PowerShell module that would is a third-party one nobody has
+installed. So this backend is the second one reached through an operating
+system's own API rather than through somebody's CLI, the macOS keychain being
+the first, and it is much the cheaper of the two: `CredReadW`, `CredWriteW`,
+`CredDeleteW` and `CredEnumerateW` are ordinary exports of a system DLL, which
+the standard library already knows how to call, where Security.framework needed
+`purego` to be reached at all without cgo. `golang.org/x/sys` is already a
+dependency and wraps none of these four, so the bindings are ours — and no new
+dependency is added, which is the whole of what rule 16 has to say here.
+
+**What guards the entry, and what does not.** A generic credential is encrypted
+under the account's own DPAPI key and handed back to any process running as that
+account, with no prompt, no per-item unlock and no per-application ACL. That is
+weaker than either wallet SSHakku already has — the Secret Service locks, the
+keychain asks per application — and the threat model already files it as A4. The
+answer is not to pretend otherwise but to say it: F54 states it as part of the
+promise rather than as a caveat under it, and `doctor` names it beside the wallet,
+so nobody reads "your passphrases are in the system wallet" and imports the
+guarantees of a different one.
+
+**Only the one wallet is offered here.** 1Password, Bitwarden and KeePassXC
+compile on this platform and are not on its list, and this phase leaves them off
+it. The reason is unchanged from what the empty list already said: being
+compilable here is not the same as having been shown to work here, and each one
+added is a matrix row owed (rule 19). The Credential Manager is the default and,
+for now, the whole of the choice.
+
+**The query is already narrow, so nothing narrows it twice.** `CredEnumerateW`
+takes a target-name prefix filter, which is exactly the shape of the service
+prefix SSHakku's own entries carry — so `List` asks only for its own and must
+not then run `ownServices` over the answer. That is not a detail: a second filter
+downstream would hide the absence of the first, and `ownServices` says so itself.
+F27 is what this is protecting — a wallet shared with every other program on the
+machine, where forgetting everything must forget only ours.
+
+**Two things to measure rather than assume**, both of which change what the
+matrix may claim. First, whether a container can reach the Credential Manager at
+all under `ContainerAdministrator` with no domain: if it can, the scenario Phase
+40 could not write becomes writable, and `load-keys` is finally driven end to end
+on this platform. Second, whether a credential written from a session someone
+signed into reads back under the token an OpenSSH public-key session runs as —
+DPAPI's user key may not be available there. If it is not, that is a degradation
+F17 already covers and not a broken promise, but it has to be measured, said in
+the matrix, and reported by `doctor`, rather than met by a user at the moment
+they needed the key.
+
+**The first was yes, and the scenario exists.** A native Windows container
+reaches the store, so `load-keys` is driven end to end here for the first time:
+a locked key, its passphrase put in the store by `cmdkey` — this system's own
+command, which means what SSHakku reads was written by something else entirely —
+and the real binary loading it into the real agent with nobody asked anything.
+`forget --all` then takes ours and leaves a credential another program saved. The
+second is **still unmeasured** and stays named here rather than quietly dropped.
+
+**What running it found, which no amount of testing would have.** The suite was
+green and the product did not work. `ssh-add` is started with an environment
+built up from nothing, and the list of what to carry over was nine names that
+mean something on Unix and nothing here — no `SystemRoot`, no `LOCALAPPDATA` for
+the helper to find the handoff under, and, decisively, no `ProgramData`, which
+is where this system keeps ssh's own configuration. Started without it, `ssh-add`
+exits 255 having printed nothing on either stream: no message, no clue, and an
+exit code that says only that something went wrong early. What SSHakku then
+concluded, and wrote in the session log, was that the user's stored passphrase
+had gone stale — of a passphrase that was perfect and a program that never got as
+far as reading it. The list is now this platform's own answer, as data behind the
+tag (rule 26).
+
+**And the test written to pin that measurement was itself too strong**, which
+the runner said before anybody else did. It asserted the 255 as a fact of the
+platform; on `windows-latest` the same environment exits 2, because the failure
+needs the machine-wide ssh configuration directory to exist and a fresh runner
+has never created one. So the entry is right on every machine — a child that
+cannot find that directory reads a different configuration from the session that
+started it — and what it costs is the machine's business. The test now asserts
+the outcome that holds everywhere, that ssh-add can start with what it is given,
+which catches this where it is fatal and is quiet where it is not. A test that
+had gone green on the machine it was written on and red in CI is the cheapest
+version of that lesson available.
+
+The other half of that failure was the scenario's own: the image carried
+`sshakku.exe` and not the askpass helper beside it, which is half an install and
+fails the same silent way. The image now places both, as `make install` does.
+
+Sub-steps, each committable: (1) the promise, in `docs/FEATURES.md` — F54 added,
+F48's illustration moved off the wallet it no longer describes and onto the
+dialog this platform still has none of — and this phase; (2) the `advapi32`
+bindings, with the platform's answer behind the tag and nothing else (rule 26);
+(3) the `wallet.Backend` over them; (4) the wiring — the platform table, the
+default backend, and what `doctor` says about a wallet with no lock; (5) the
+matrix rows, and the container driven through a key that loads with nothing
+typed.
+
+→ features F54, F48, F4–F9, F27; PLAN Phase 35 W5, Phase 40; open decisions 7, 8;
+rules 12, 16, 19, 21, 22, 23, 25, 26.
+
+**What this unblocks, and what it does not.** The scheduled task that would
+expire a key with nobody logged in was deferred until this platform had secret
+backends; it has one now, so that condition is met and the task can be taken up
+whenever it is wanted. Still open, and deliberately untouched here: the askpass
+helper wired into the shell rather than only into `ssh-add`'s own invocation
+(W3's deferred list, whose note that the handoff is a stub on this platform is
+out of date — it uses the socket rendezvous, as Darwin does); a passphrase
+prompt that is a dialog rather than a console read, which this build still draws
+nowhere on this platform (F48's illustration); and the three wallets reached by
+running a program of their own, each of which owes a matrix row before it is
+offered here.

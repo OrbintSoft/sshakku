@@ -234,9 +234,12 @@ jobs:
     # What the suite does not cover here is worth knowing. A promise that needs
     # a wallet is not asked on this platform, because there is none it can
     # reach yet: those tests are held to the systems that have one, and the
-    # files say so where they sit. Nothing here is an integration test either —
-    # no agent is started, no wallet is opened — so docs/TEST-MATRIX.md gains no
-    # row from this job, which tracks integration coverage and counts a unit
+    # files say so where they sit. One thing here does leave the process: the
+    # credential store's own round trip, which is opted into below because a
+    # runner's store is thrown away with the runner and a developer's is not.
+    # Nothing else is — no agent is started, no shell is wired — so the rows
+    # docs/TEST-MATRIX.md gains from this job are that round trip and nothing
+    # else, since that document tracks integration coverage and counts a unit
     # test with a faked dependency as not covered. The coverage this job
     # measures and publishes is unit coverage, and that is a different question
     # from the one that document asks.
@@ -283,6 +286,10 @@ jobs:
       - name: Run the test suite
         env:
           CGO_ENABLED: "1"
+          # Lets the credential-store tests read and write for real instead of
+          # skipping. They write only uniquely named entries and delete them
+          # again, and this runner's store goes when the runner does.
+          SSHAKKU_TEST_ALLOW_REAL_CREDENTIAL_MANAGER: "1"
         timeout-minutes: 15
         run: |
           gotestsum --jsonfile test.json -- -race -coverprofile=coverage.out ./...
