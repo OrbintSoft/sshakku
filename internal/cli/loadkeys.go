@@ -41,7 +41,8 @@ func (d deps) loadKeys(ctx context.Context, stderr io.Writer) int {
 	if lifetime != settings.KeyLifetime {
 		_ = log.Log("INFO", fmt.Sprintf(
 			"load-keys: the agent on this system holds no key lifetimes, so keys are added with no expiry"+
-				" and the configured %s is not in force", settings.KeyLifetime))
+				" and the configured %s is kept here instead: a key past it is taken out of the agent"+
+				" when a session next opens", settings.KeyLifetime))
 	}
 
 	var giveupStore keys.GiveupStore

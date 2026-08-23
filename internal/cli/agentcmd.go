@@ -57,6 +57,9 @@ func ensurerFor(keepsAgents bool) agentEnsurer {
 // agent rather than the fixed path. Only these assignments go to stdout;
 // diagnostics and anomalies go to stderr and the session log.
 //
+// A session is also where a key that has run out of time is taken back out of
+// the agent, on a system whose agent expires nothing itself (see expireKeys).
+//
 // --shell says which language to print them in (see shell.FromArgs); a shell
 // that says nothing gets the Bourne form above. An invocation that cannot be
 // printed for is answered before the agent is touched: it is a mistake in what
@@ -82,6 +85,7 @@ func (d deps) shellInit(ctx context.Context, stdout, stderr io.Writer, args []st
 	if code != 0 {
 		return code
 	}
+	d.expireKeys(ctx, layout, live)
 
 	assignments := []struct{ name, value string }{
 		{"agent_sock", endpointFor(dialect, live)},
