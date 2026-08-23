@@ -1,4 +1,4 @@
-#!/usr/bin/env pwsh
+﻿#!/usr/bin/env pwsh
 #
 # A key that has run out of time, on a machine whose agent expires nothing.
 #
