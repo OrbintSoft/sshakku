@@ -5,9 +5,9 @@
 # this same workflow run (not the GitHub Pages site, which only reflects the
 # last master merge). Artifacts get an opaque id only after upload, so their
 # ids are resolved here via the API. Takes the per-OS report JSON files as
-# arguments (e.g. report-linux.json report-macos.json). Needs the gh CLI
-# authenticated (GH_TOKEN), and GITHUB_SERVER_URL/GITHUB_REPOSITORY/
-# GITHUB_RUN_ID set (GitHub Actions sets these by default).
+# arguments (e.g. report-linux.json report-macos.json report-windows.json).
+# Needs the gh CLI authenticated (GH_TOKEN), and GITHUB_SERVER_URL/
+# GITHUB_REPOSITORY/GITHUB_RUN_ID set (GitHub Actions sets these by default).
 set -euo pipefail
 
 # artifact_url NAME -> the browser download URL of the named artifact in this
@@ -24,6 +24,8 @@ artifact_url() {
 go run ./tools/testreport render \
 	-report-url "linux=$(artifact_url report-html-linux)" \
 	-report-url "macos=$(artifact_url report-html-macos)" \
+	-report-url "windows=$(artifact_url report-html-windows)" \
 	-coverage-url "linux=$(artifact_url coverage-linux)" \
 	-coverage-url "macos=$(artifact_url coverage-macos)" \
+	-coverage-url "windows=$(artifact_url coverage-windows)" \
 	"$@"
