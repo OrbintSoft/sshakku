@@ -2572,7 +2572,8 @@ the marker block in the profile is the mechanism that has to work.
   **(c)** an agent of our own on an endpoint of our own, which the ssh-agent
   that ships with the system cannot be asked for and would mean keeping one.
   (a) is the only one that keeps the shape of the promise, and its cost is a
-  piece of the product that runs when nobody is logged in.
+  piece of the product that runs when nobody is logged in. Phase 40 takes it up,
+  and takes the half of it that costs nothing of the kind first.
 
 **Out of scope here, named so they are not mistaken for oversights**: Credential
 Manager and 1Password as Windows backends, WSL2 (Linux with an agent story of
@@ -2865,3 +2866,85 @@ after the hook started adding them. It now says where the one answer both of the
 turn on is worked out.
 
 → features F51; rules 15, 19, 21, 22, 23, 24, 25.
+
+### Phase 40 — The key that outlived every session ✅ Done
+
+W5 named this as the one promise this platform cannot keep, and left it needing a
+step of its own. This is that step. The agent here refuses `ssh-add -t` outright,
+so a key is added with no expiry at all, and it is kept in `HKCU` — which means
+the key outlives the session that loaded it, the agent, and the reboot. A user
+who wrote `key_lifetime` in their configuration has it enforced by nobody: on the
+other two platforms the agent drops the key, and here nothing ever does.
+
+**SSHakku expires the key itself, at the start of every session.** Of W5's three
+ways out, this is (a), and the cheaper half of it: the session on its way in
+notices what has run out of time and takes it out of the agent, rather than
+something staying alive to do it at the deadline. What that buys is the whole of
+the reboot — a key can no longer survive one — and what it does not buy is the
+stretch while nobody logs in, where a machine keeps the key until somebody opens
+a shell. The other half, a scheduled task that runs when nobody is logged in, is
+a piece of the product that runs with nobody in front of it: it is deliberately
+**deferred until the secret backends for this platform exist**, since a key that
+must be re-typed by hand at every expiry is a worse bargain than a slightly late
+expiry, and the backends are what make the exchange fair.
+
+**In every session, not only the ones somebody is sitting at.** `load-keys` runs
+in interactive sessions alone, which is right for asking questions and wrong for
+this: a key past its time is past it whoever opens the next shell, and a machine
+that mostly runs build steps would keep it for weeks. So the removal goes with
+`shell-init`, which every session runs, and says nothing on the stream that
+session is evaluating — the session log is where it is written down.
+
+**The record has to hold what was configured, not what the agent was told.**
+`effectiveKeyLifetime` zeroes the lifetime where the agent holds none, and the
+keystate record was written from that, so every record on this platform says "no
+expiry" — there was nothing to expire against. The record now keeps the
+configured lifetime and means what it always read as: this key is meant to live
+until then, whoever turns out to enforce it. `doctor` on this platform therefore
+stops saying a key has no expiry and gives it a remaining time, which becomes
+true in the same change.
+
+**It also has to say where the key is.** `ssh-add -d` names a file; the record
+was one file per key basename holding an instant and a duration. It gains the
+key's path, which makes expiry a directory read that needs neither the
+configuration nor the enumerator, and keeps `shell-init` as cheap as it was.
+Records already written, with no path in them, still parse and are simply not
+acted on.
+
+**Only what SSHakku added, and only where the agent holds nothing.** A key the
+user added themselves has no record and is never touched, whatever its age. And
+the whole mechanism is gated on the platform answer that already exists — the
+agent that keeps lifetimes keeps them, and nothing here runs on Linux or macOS.
+The answer arrives as an argument rather than as a build tag around the logic, so
+both outcomes stay checkable from either machine (rule 26).
+
+**The report had been describing the old arrangement.** Two of its sentences
+stopped being true the moment a session started removing keys, and one of them
+was worse than out of date: a key still in the agent past its recorded time was
+reported as one something must have re-added outside SSHakku, since an agent
+that holds lifetimes drops a key exactly at its deadline. Where the sessions
+keep the lifetime that is simply what the state between two logins looks like,
+so the report now says the key's time is up and what will happen to it. Where
+the agent does keep them, the old sentence is still the right one and is still
+there. This is the shape of a change that arrives with a rule: the behaviour
+moved, and every place that described the old behaviour is part of the move.
+
+**What the container can and cannot reach.** The scenario drives the removal
+through the real binary — the system's own agent, a real `ssh-add`, a session
+opened the way a person opens one — and arranges one thing: the record saying
+SSHakku added the key and gave it a lifetime. That cannot be driven here,
+because this platform has no wallet and the only other way SSHakku obtains a
+passphrase is by asking on a console, which a container has nobody to type at.
+It is the same limit the matrix already records against the keys themselves, and
+it is the argument for the backends: until they exist, a Windows user answers
+for every key at every expiry, which is exactly why the scheduled task waits for
+them.
+
+Sub-steps, each committable: (1) the promise, in `docs/FEATURES.md` — F52
+rewritten, F53 added — and this phase; (2) the record keeping the configured
+lifetime and the key's path; (3) the expiry mechanism itself; (4) its wiring into
+`shell-init`; (5) the report made to say what now happens; (6) the matrix row and
+the real binary driven through a key that runs out of time, in the Windows
+container.
+
+→ features F52, F53; PLAN Phase 35 W5; rules 19, 21, 22, 23, 25, 26.

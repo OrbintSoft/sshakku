@@ -53,12 +53,12 @@ type GiveupStore interface {
 
 // KeyState records, per key, when it was added to the agent and for how long
 // — so `sshakku doctor` can later report its remaining time there, which the
-// ssh-agent protocol itself has no query for. A nil KeyState disables
-// recording.
+// ssh-agent protocol itself has no query for, and so a session can find a key
+// whose time is up. A nil KeyState disables recording.
 type KeyState interface {
-	// Save records that key was just added to the agent with lifetime (zero
-	// meaning no expiry).
-	Save(key string, lifetime time.Duration) error
+	// Save records that the key in keyfile was just added to the agent with
+	// lifetime (zero meaning no expiry).
+	Save(keyfile string, lifetime time.Duration) error
 }
 
 // Notifier surfaces a user-facing notice — to the terminal of the interactive
@@ -86,9 +86,13 @@ type Config struct {
 	// excluded key is simply never considered here — it can still be added on
 	// demand via the askpass broker, which does not consult this policy.
 	AutoLoad func(keyname string) bool
-	// KeyLifetime is the value handed to the agent for each key added here
-	// (mirroring ExecKeyAdder.KeyLifetime, which actually enforces it); the
-	// Loader only needs it to record what it asked for in KeyState.
+	// KeyLifetime is how long a key added here is meant to stay in the agent,
+	// which is what the user configured — not necessarily what the agent was
+	// told. Where the agent holds lifetimes it is handed the same value and
+	// enforces it (ExecKeyAdder.KeyLifetime); where it holds none it is handed
+	// nothing, and the value still means what it says, because the record
+	// written from it is what a later session goes by when it takes an expired
+	// key back out. The Loader itself only records it.
 	KeyLifetime time.Duration
 	// OnDismiss is what closing a passphrase prompt without answering means
 	// for the keys that come after it: one of the OnDismiss* values, with ""
@@ -256,7 +260,7 @@ func (l Loader) addWithRetries(ctx context.Context, keyfile, keyname string) boo
 	switch l.loadViaVaultThenPrompt(ctx, keyfile, keyname, max) {
 	case keyLoaded:
 		l.clearGiveup(keyname)
-		l.saveKeyState(keyname)
+		l.saveKeyState(keyfile)
 	case attemptsExhausted:
 		l.logf("ERROR", "giving up on %s after %d attempts", keyname, max)
 		l.notify("could not load key %s after %d attempts", keyname, max)
@@ -410,15 +414,15 @@ func (l Loader) clearGiveup(keyname string) {
 	}
 }
 
-// saveKeyState records that keyname was just added to the agent with the
-// configured lifetime, best-effort: a failure to persist this bookkeeping
-// must not fail an otherwise-successful key load.
-func (l Loader) saveKeyState(keyname string) {
+// saveKeyState records that the key in keyfile was just added to the agent
+// with the configured lifetime, best-effort: a failure to persist this
+// bookkeeping must not fail an otherwise-successful key load.
+func (l Loader) saveKeyState(keyfile string) {
 	if l.KeyState == nil {
 		return
 	}
-	if err := l.KeyState.Save(keyname, l.Config.KeyLifetime); err != nil {
-		l.logf("ERROR", "record key state for %s: %v", keyname, err)
+	if err := l.KeyState.Save(keyfile, l.Config.KeyLifetime); err != nil {
+		l.logf("ERROR", "record key state for %s: %v", filepath.Base(keyfile), err)
 	}
 }
 

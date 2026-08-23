@@ -490,7 +490,7 @@ func gatherReport(ctx context.Context, env paths.Env, layout paths.Layout, setti
 		NoAgentMechanism:  !agent.KeepsAgents(),
 		// What was asked for and what this agent can do are both known here,
 		// so the report is handed the one answer rather than the two facts.
-		LifetimeNotEnforceable: settings.KeyLifetime > 0 && !agent.KeepsLifetimes(),
+		LifetimeKeptBySessions: settings.KeyLifetime > 0 && !agent.KeepsLifetimes(),
 	}, inspect.Inspector{}, platformProber(), newAncestrySource(), newCgroupSource(), keySource,
 		newHostSource(env.Home))
 }

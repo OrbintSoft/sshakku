@@ -25,6 +25,7 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/keys/prompt"
 	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
 	"github.com/OrbintSoft/sshakku/internal/paths"
+	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
 // askpassProgName is the name this binary answers ssh's passphrase prompts
@@ -129,6 +130,11 @@ type deps struct {
 	// view rather than the probe behind it also keeps that decision checkable
 	// from a machine whose wallet has no compartment at all.
 	wallet func(ctx context.Context, settings config.Settings) diagnose.WalletView
+	// runner runs the external programs a command drives directly rather than
+	// through a component that brings its own — today the ssh-add that takes a
+	// key whose lifetime has elapsed back out of the agent. Injected so a
+	// session's expiry runs on a machine with neither an agent nor an ssh-add.
+	runner run.Runner
 	// makeCompartment creates the compartment the configured wallet keeps
 	// SSHakku's entries in, and reports what it made. Nil where this system's
 	// wallet has no such thing to make. Only --fix ever calls it.
@@ -148,6 +154,7 @@ func realDeps() deps {
 		fetchHandoff:      handoff.Fetch,
 		tty:               dialog.TTY{},
 		wallet:            walletcheck.View,
+		runner:            run.ExecRunner{},
 		makeCompartment:   walletcheck.MakeCompartment,
 	}
 }

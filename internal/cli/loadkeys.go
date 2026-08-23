@@ -37,11 +37,12 @@ func (d deps) loadKeys(ctx context.Context, stderr io.Writer) int {
 	}
 
 	settings := loadSettings(layout, "load-keys", log)
-	lifetime := effectiveKeyLifetime(settings.KeyLifetime, agent.KeepsLifetimes())
+	lifetime, recorded := keyLifetimes(settings.KeyLifetime, agent.KeepsLifetimes())
 	if lifetime != settings.KeyLifetime {
 		_ = log.Log("INFO", fmt.Sprintf(
 			"load-keys: the agent on this system holds no key lifetimes, so keys are added with no expiry"+
-				" and the configured %s is not in force", settings.KeyLifetime))
+				" and the configured %s is kept here instead: a key past it is taken out of the agent"+
+				" when a session next opens", settings.KeyLifetime))
 	}
 
 	var giveupStore keys.GiveupStore
@@ -85,7 +86,7 @@ func (d deps) loadKeys(ctx context.Context, stderr io.Writer) int {
 			MaxAttempts:   settings.MaxAttempts,
 			WalletStore:   settings.StoresWallet,
 			AutoLoad:      settings.AutoLoads,
-			KeyLifetime:   lifetime,
+			KeyLifetime:   recorded,
 			ServicePrefix: settings.ServicePrefix,
 			OnDismiss:     settings.OnDismiss,
 		},
@@ -98,19 +99,24 @@ func (d deps) loadKeys(ctx context.Context, stderr io.Writer) int {
 	return 0
 }
 
-// effectiveKeyLifetime is the lifetime a key is really added with: the
-// configured one where the agent holds lifetimes, and none where it does not.
+// keyLifetimes splits one configured lifetime into the two things it decides:
+// what the agent is told to hold the key for, and what the record says the key
+// is meant to live for.
 //
-// Where it does not, asking for one is not a smaller version of the same
-// thing — the agent refuses the key outright — so the choice is between a key
-// that loads without an expiry and no key at all. It loads, and the session log
-// says the configured value is not in force. Which system this is comes in as
-// the answer it is, so both outcomes stay checkable from either machine.
-func effectiveKeyLifetime(configured time.Duration, agentKeepsLifetimes bool) time.Duration {
+// Where the agent holds lifetimes the two are the same, and the agent is what
+// enforces it. Where it holds none, asking for one is not a smaller version of
+// the same thing — the agent refuses the key outright — so the choice is
+// between a key that loads without an expiry and no key at all. It loads, and
+// the record still keeps the configured lifetime, since that is what the next
+// session goes by when it takes a key whose time is up back out of the agent: a
+// zero recorded there would mean nothing ever expires. Which system this is
+// comes in as the answer it is, so both outcomes stay checkable from either
+// machine.
+func keyLifetimes(configured time.Duration, agentKeepsLifetimes bool) (told, recorded time.Duration) {
 	if agentKeepsLifetimes {
-		return configured
+		return configured, configured
 	}
-	return 0
+	return 0, configured
 }
 
 // stderrNotifier surfaces a user-facing notice to the terminal of the

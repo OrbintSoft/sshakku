@@ -463,8 +463,9 @@ func TestLoadKeysSavesKeyStateOnSuccess(t *testing.T) {
 		KeyState: ks, Config: Config{KeyLifetime: 8 * time.Hour},
 	}
 	require.NoError(t, l.LoadKeys(t.Context()), "loading a login's keys must not fail")
-	assert.Equal(t, []keyStateCall{{"id_rsa", 8 * time.Hour}}, ks.saved,
-		"a key that opened must be recorded with how long it stays in the agent, or nothing knows when to refill it")
+	assert.Equal(t, []keyStateCall{{"/ssh/id_rsa", 8 * time.Hour}}, ks.saved,
+		"a key that opened must be recorded with how long it stays in the agent and which file it came from,"+
+			" or nothing knows when to refill it, nor what to name to ssh-add when its time is up")
 }
 
 func TestLoadKeysSkipsLoadedNeverSavesKeyState(t *testing.T) {

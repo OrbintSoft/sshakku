@@ -57,17 +57,21 @@ func TestAnAgentAnsweringWithNoProcessToShowForItIsStillAnAgent(t *testing.T) {
 		"what could not be read is still said, since the report is partial: %v", r.Findings)
 }
 
-// F52: a key that will still be in the agent tomorrow is said out loud where
-// somebody looks afterwards, and not only in the log at the moment it was
-// added. Where the agent does hold the lifetime that was asked for, there is
-// nothing to say and nothing is said.
+// F52, F53: a lifetime kept by the sessions rather than by the agent is worth
+// saying out loud where somebody looks afterwards, and not only in the log at
+// the moment the key was added — what a user gets is not what they asked for,
+// but a key removed at the next login rather than at its deadline. Where the
+// agent does hold the lifetime that was asked for, there is nothing to say and
+// nothing is said.
 func TestALifetimeTheAgentCannotHoldIsReported(t *testing.T) {
-	t.Run("configured and unenforceable", func(t *testing.T) {
-		r := Gather(t.Context(), Inputs{FixedSock: fixed, LifetimeNotEnforceable: true},
+	t.Run("configured and kept by the sessions", func(t *testing.T) {
+		r := Gather(t.Context(), Inputs{FixedSock: fixed, LifetimeKeptBySessions: true},
 			fakeSource{}, fakeProber{}, nil, nil, nil, nil)
 
 		assert.Truef(t, hasFinding(r, "holds none"),
 			"the report names what the configured lifetime is worth here: %v", r.Findings)
+		assert.Truef(t, hasFinding(r, "taken out of the agent as the next session opens"),
+			"and says what happens instead, which is the part a user can plan around: %v", r.Findings)
 	})
 
 	t.Run("honoured, so unremarkable", func(t *testing.T) {
