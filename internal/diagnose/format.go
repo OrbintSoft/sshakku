@@ -30,9 +30,14 @@ func Format(w io.Writer, r Report) {
 		p("  %-22s %s\n", r.AgentService.Name+":", serviceLine(r.AgentService))
 	}
 
-	p("\nssh-agent processes (%d):\n", len(r.Agents))
-	if len(r.Agents) == 0 {
-		p("  (none)\n")
+	if keepsNoAgentProcessList(r) {
+		p("\nssh-agent processes:\n")
+		p("  %s\n", processListNote(r))
+	} else {
+		p("\nssh-agent processes (%d):\n", len(r.Agents))
+		if len(r.Agents) == 0 {
+			p("  (none)\n")
+		}
 	}
 	for _, a := range r.Agents {
 		state := "dead"

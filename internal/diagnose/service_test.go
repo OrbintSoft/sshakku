@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/OrbintSoft/sshakku/internal/agent"
+	"github.com/OrbintSoft/sshakku/internal/platform"
 )
 
 // formatted renders a report and hands back what it printed. Every check below
@@ -71,6 +72,53 @@ func TestAServiceThatCouldNotBeReadIsStillReported(t *testing.T) {
 		"what the service manager said is what the reader needs, whole")
 	assert.NotContains(t, out, "not running, start type unknown",
 		"nothing is claimed about a service nobody could read")
+}
+
+// F13: a count of nothing is a claim to have looked and found nothing. Where
+// this system does not list agent processes at all, saying "0" tells a reader
+// the opposite of what the report has just told them one line above — that a
+// service is running and serving their agent.
+func TestASystemThatDoesNotListAgentProcessesIsNotReportedAsHavingNone(t *testing.T) {
+	out := formatted(t, Report{
+		FixedSock:    `\\.\pipe\openssh-ssh-agent`,
+		AgentService: agent.ServiceReading{Name: "ssh-agent", Running: true, Start: agent.ServiceStartAutomatic},
+		InspectErr:   platform.Unimplemented("enumerating ssh-agent processes"),
+	})
+
+	assert.NotContains(t, out, "ssh-agent processes (0)",
+		"nothing was counted, so no count is printed")
+	assert.NotContains(t, out, "(none)", "nor is the emptiness of a list nobody read")
+	assert.Contains(t, out, "not listed on this system",
+		"what a reader gets instead is why there is no list")
+	assert.Contains(t, out, "the service above",
+		"and where the answer they came for actually is")
+}
+
+// The same absence, in the findings: a report is partial when something it
+// meant to read could not be read. A list this system was never going to keep
+// is not a piece missing from the report — saying so on every single run would
+// train a reader to read past the findings.
+func TestASystemThatKeepsNoSuchListIsNotAPartialReport(t *testing.T) {
+	f := strings.Join(findings(Inputs{}, Report{
+		AgentService: agent.ServiceReading{Name: "ssh-agent", Running: true},
+		InspectErr:   platform.Unimplemented("enumerating ssh-agent processes"),
+	}), "\n")
+
+	assert.NotContains(t, f, "report is partial",
+		"nothing is missing from a report about a system built this way")
+}
+
+// An enumeration that was meant to work and did not is exactly what that
+// finding is for, and it still says so. The two are told apart by what the
+// failure is, not by which system it happened on.
+func TestAnEnumerationThatFailedIsStillAPartialReport(t *testing.T) {
+	f := strings.Join(findings(Inputs{}, Report{
+		InspectErr: errors.New("/proc: permission denied"),
+	}), "\n")
+
+	assert.Contains(t, f, "could not enumerate processes")
+	assert.Contains(t, f, "report is partial")
+	assert.Contains(t, f, "/proc: permission denied", "with what actually went wrong")
 }
 
 // A system whose agent is a process on a socket has no service, and the report

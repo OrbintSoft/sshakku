@@ -95,7 +95,11 @@ func findings(in Inputs, r Report) []string {
 			"a key past its lifetime is taken out of the agent as the next session opens, "+
 			"rather than at the moment it runs out")
 	}
-	if r.InspectErr != nil {
+	// A report is partial when something it meant to read could not be read. A
+	// list this system was never going to keep is not a piece missing from the
+	// report, and reported as one it would be there on every run of every
+	// session, saying nothing anybody can act on.
+	if r.InspectErr != nil && !keepsNoAgentProcessList(r) {
 		f = append(f, fmt.Sprintf("could not enumerate processes: %v (report is partial)", r.InspectErr))
 	}
 	if !in.EnvUnreadable && (in.EnvAskpass == "" || in.EnvAskpassRequire == "") {
