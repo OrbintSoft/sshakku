@@ -3,13 +3,13 @@ package keys
 import (
 	"context"
 	"errors"
-	"fmt"
 	"path/filepath"
 	"regexp"
 	"strings"
 
 	"github.com/OrbintSoft/sshakku/internal/keys/prompt"
 	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
+	"github.com/OrbintSoft/sshakku/internal/logline"
 )
 
 // passphrasePromptRe matches OpenSSH's key-passphrase prompt in both the ssh
@@ -122,10 +122,7 @@ func (b Broker) storePassphrase(ctx context.Context, service, keyname, passphras
 }
 
 func (b Broker) logf(level, format string, args ...any) {
-	if b.Log == nil {
-		return
-	}
-	_ = b.Log.Log(level, fmt.Sprintf(format, args...))
+	logline.Recordf(b.Log, level, format, args...)
 }
 
 // servicePrefixOf returns the per-key secret-store service prefix for c.
