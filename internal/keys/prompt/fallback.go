@@ -3,7 +3,8 @@ package prompt
 import (
 	"context"
 	"errors"
-	"fmt"
+
+	"github.com/OrbintSoft/sshakku/internal/logline"
 )
 
 // FallbackPrompter asks Primary, and asks Fallback instead when Primary could
@@ -30,9 +31,7 @@ func (p FallbackPrompter) Prompt(ctx context.Context, keyname string) (string, e
 	if err == nil || errors.Is(err, ErrCanceled) {
 		return pass, err
 	}
-	if p.Log != nil {
-		_ = p.Log.Log("ERROR", fmt.Sprintf("%s could not ask for %s (%v), asking %s instead", Name(p.Primary), keyname, err, Name(p.Fallback)))
-	}
+	logline.Recordf(p.Log, "ERROR", "%s could not ask for %s (%v), asking %s instead", Name(p.Primary), keyname, err, Name(p.Fallback))
 	return p.Fallback.Prompt(ctx, keyname)
 }
 

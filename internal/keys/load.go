@@ -10,6 +10,7 @@ import (
 
 	"github.com/OrbintSoft/sshakku/internal/keys/prompt"
 	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
+	"github.com/OrbintSoft/sshakku/internal/logline"
 	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
@@ -440,10 +441,7 @@ func autoLoads(c Config, keyname string) bool {
 }
 
 func (l Loader) logf(level, format string, args ...any) {
-	if l.Log == nil {
-		return
-	}
-	_ = l.Log.Log(level, fmt.Sprintf(format, args...))
+	logline.Recordf(l.Log, level, format, args...)
 }
 
 // notify emits a user-facing notice when a Notifier is configured.

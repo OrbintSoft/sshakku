@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/OrbintSoft/sshakku/internal/agent/inspect"
+	"github.com/OrbintSoft/sshakku/internal/logline"
 )
 
 // Situation names the agent landscape EnsureAgent found and resolved, following
@@ -76,11 +77,7 @@ type EnsureResult struct {
 // not start (reporting the anomaly) or starts its own. It never reimplements the
 // agent and, on success, never leaves the shell pointed at a dead socket.
 func (m Manager) EnsureAgent(ctx context.Context, cfg EnsureConfig, log Logger) (EnsureResult, error) {
-	logf := func(level, format string, a ...any) {
-		if log != nil {
-			_ = log.Log(level, fmt.Sprintf(format, a...))
-		}
-	}
+	logf := func(level, format string, a ...any) { logline.Recordf(log, level, format, a...) }
 
 	// Ours is already healthy on the fixed socket: attach and go, silently. This
 	// fast path runs before the lock, so the common login is never serialised.

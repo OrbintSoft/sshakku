@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/OrbintSoft/sshakku/internal/logline"
 	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
@@ -129,8 +130,5 @@ func (e Expirer) now() time.Time {
 }
 
 func (e Expirer) logf(level, format string, args ...any) {
-	if e.Log == nil {
-		return
-	}
-	_ = e.Log.Log(level, fmt.Sprintf(format, args...))
+	logline.Recordf(e.Log, level, format, args...)
 }

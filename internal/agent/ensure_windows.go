@@ -6,6 +6,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/OrbintSoft/sshakku/internal/logline"
 )
 
 // serviceStartWait bounds how long a login waits for the agent's service to
@@ -48,11 +50,7 @@ func ServiceLifecycle(prober Prober) ServiceAgent {
 // of ours — two logins arriving together cost one start whichever gets there
 // first.
 func (a ServiceAgent) EnsureAgent(ctx context.Context, _ EnsureConfig, log Logger) (EnsureResult, error) {
-	logf := func(level, format string, args ...any) {
-		if log != nil {
-			_ = log.Log(level, fmt.Sprintf(format, args...))
-		}
-	}
+	logf := func(level, format string, args ...any) { logline.Recordf(log, level, format, args...) }
 
 	if a.Prober.Reachable(ctx, a.Endpoint.Native()) {
 		return EnsureResult{Situation: SituationHealthy, Live: a.Endpoint}, nil

@@ -11,12 +11,12 @@ package dialog
 
 import (
 	"context"
-	"fmt"
 	"slices"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/keys"
 	"github.com/OrbintSoft/sshakku/internal/keys/prompt"
+	"github.com/OrbintSoft/sshakku/internal/logline"
 )
 
 // dialog pairs a prompter with the name gui_prompter chooses it by.
@@ -79,8 +79,5 @@ func namedDialog(ctx context.Context, dialogs []dialog, want string, terminal pr
 
 // logGUI records why there is no dialog, when there is something to say.
 func logGUI(log keys.Logger, format string, args ...any) {
-	if log == nil {
-		return
-	}
-	_ = log.Log("ERROR", fmt.Sprintf(format, args...))
+	logline.Recordf(log, "ERROR", format, args...)
 }
