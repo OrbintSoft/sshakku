@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/OrbintSoft/sshakku/internal/diagnose/launcher"
@@ -143,12 +144,7 @@ func ResolveShell(ctx context.Context, pid int, ancestry launcher.AncestrySource
 }
 
 func contains(kinds []ShellKind, kind ShellKind) bool {
-	for _, known := range kinds {
-		if known == kind {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(kinds, kind)
 }
 
 func list(kinds []ShellKind) string {

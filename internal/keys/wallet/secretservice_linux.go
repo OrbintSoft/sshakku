@@ -13,6 +13,14 @@ const (
 	secretServiceLabel = "sshakku"
 )
 
+// The attribute keys an entry is filed under. Storing writes them and every
+// lookup, delete and enumeration searches by them, so an entry written under
+// one spelling and searched for under another is one nothing finds again.
+const (
+	secretAttrService  = "service"
+	secretAttrUsername = "username"
+)
+
 // SecretServiceClient is the subset of the freedesktop Secret Service D-Bus
 // API SecretService needs; *secretservice.Client implements it. Kept
 // as an interface here so the backend is unit-testable without a real D-Bus
@@ -138,7 +146,7 @@ func (b *SecretService) Lookup(ctx context.Context, service string) (string, boo
 		defer func() { _ = b.Client.Lock(ctx, col) }()
 	}
 
-	items, err := b.Client.SearchItems(ctx, col, map[string]string{"service": service, "username": b.User})
+	items, err := b.Client.SearchItems(ctx, col, map[string]string{secretAttrService: service, secretAttrUsername: b.User})
 	if err != nil || len(items) == 0 {
 		return "", false, err
 	}
@@ -165,7 +173,7 @@ func (b *SecretService) Store(ctx context.Context, service, label, passphrase st
 		defer func() { _ = b.Client.Lock(ctx, col) }()
 	}
 
-	attrs := map[string]string{"service": service, "username": b.User}
+	attrs := map[string]string{secretAttrService: service, secretAttrUsername: b.User}
 	return b.Client.CreateItem(ctx, col, label, attrs, passphrase, true)
 }
 
@@ -186,7 +194,7 @@ func (b *SecretService) Delete(ctx context.Context, service string) error {
 		defer func() { _ = b.Client.Lock(ctx, col) }()
 	}
 
-	items, err := b.Client.SearchItems(ctx, col, map[string]string{"service": service, "username": b.User})
+	items, err := b.Client.SearchItems(ctx, col, map[string]string{secretAttrService: service, secretAttrUsername: b.User})
 	if err != nil {
 		return err
 	}
@@ -226,7 +234,7 @@ func (b *SecretService) List(ctx context.Context) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		if service := attrs["service"]; service != "" {
+		if service := attrs[secretAttrService]; service != "" {
 			services = append(services, service)
 		}
 	}

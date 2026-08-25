@@ -67,10 +67,7 @@ func Read(s Serial) ([]byte, error) {
 // whole seconds, minimum one), so a secret that is never read still cannot live
 // indefinitely.
 func SetTimeout(s Serial, d time.Duration) error {
-	secs := int((d + time.Second - 1) / time.Second)
-	if secs < 1 {
-		secs = 1
-	}
+	secs := max(int((d+time.Second-1)/time.Second), 1)
 	_, err := keyctlInt(unix.KEYCTL_SET_TIMEOUT, int(s), secs, 0, 0)
 	return err
 }

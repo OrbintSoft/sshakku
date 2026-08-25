@@ -105,7 +105,7 @@ var listBusNames = func(ctx context.Context, obj dbus.BusObject, timeout time.Du
 // lookCall is one bounded D-Bus round-trip on an object this package holds no
 // Client for — the message bus itself, which answers about names rather than
 // about secrets.
-func lookCall(ctx context.Context, obj dbus.BusObject, timeout time.Duration, method string, args ...interface{}) *dbus.Call {
+func lookCall(ctx context.Context, obj dbus.BusObject, timeout time.Duration, method string, args ...any) *dbus.Call {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	return obj.CallWithContext(ctx, method, 0, args...)

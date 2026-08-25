@@ -75,7 +75,7 @@ func (d deps) askpassFromHandoff(ctx context.Context, stdout io.Writer) int {
 		return 1
 	}
 	if len(pass) == 0 {
-		_ = log.Log("ERROR", fmt.Sprintf("askpass: empty passphrase for handoff token …%s", tail(token, 3)))
+		_ = log.Log("ERROR", "askpass: empty passphrase for handoff token …"+tail(token, 3))
 		return 1
 	}
 
@@ -84,7 +84,7 @@ func (d deps) askpassFromHandoff(ctx context.Context, stdout io.Writer) int {
 		_ = log.Log("ERROR", fmt.Sprintf("askpass: write passphrase: %v", err))
 		return 1
 	}
-	_ = log.Log("INFO", fmt.Sprintf("askpass: provided passphrase for handoff token …%s", tail(token, 3)))
+	_ = log.Log("INFO", "askpass: provided passphrase for handoff token …"+tail(token, 3))
 	return 0
 }
 

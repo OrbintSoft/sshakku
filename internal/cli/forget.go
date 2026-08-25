@@ -83,7 +83,7 @@ func (d deps) forget(ctx context.Context, stdout, stderr io.Writer, args []strin
 			continue
 		}
 		_, _ = fmt.Fprintf(stdout, "forgot %s\n", service)
-		_ = log.Log("INFO", fmt.Sprintf("forgot %s", service))
+		_ = log.Log("INFO", "forgot "+service)
 	}
 	if fail {
 		return 1

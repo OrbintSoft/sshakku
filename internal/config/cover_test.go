@@ -22,8 +22,8 @@ func TestOverruledNamesWhatDecidesInstead(t *testing.T) {
 	const mine = "/etc/sshakku/config.toml"
 	const dropIn = "/etc/sshakku/config.d/50-work.toml"
 	sources := []Source{
-		{Path: mine, File: File{KeyLifetime: ptr("1h"), MaxAttempts: ptr(5), Quiet: ptr(true)}},
-		{Path: dropIn, File: File{KeyLifetime: ptr("2h")}},
+		{Path: mine, File: File{KeyLifetime: new("1h"), MaxAttempts: new(5), Quiet: new(true)}},
+		{Path: dropIn, File: File{KeyLifetime: new("2h")}},
 	}
 	env := map[string]string{"SSHAKKU_MAX_ATTEMPTS": "9"}
 	lookup := func(name string) (string, bool) { v, ok := env[name]; return v, ok }
@@ -55,9 +55,9 @@ func TestOverruledNamesWhatDecidesInstead(t *testing.T) {
 // report has to show that value rather than the built-in one it replaced.
 func TestTheReportShowsWhatWasWrittenWhereSomethingWasWritten(t *testing.T) {
 	file := File{
-		KeyLifetime: ptr("3h"),
-		MaxAttempts: ptr(7),
-		KeyDir:      ptr("/srv/keys"),
+		KeyLifetime: new("3h"),
+		MaxAttempts: new(7),
+		KeyDir:      new("/srv/keys"),
 		KeyPatterns: []string{"work-*", "id_*"},
 	}
 	settings, errs := Resolve(file, func(string) (string, bool) { return "", false })
@@ -79,7 +79,7 @@ func TestTheReportShowsWhatWasWrittenWhereSomethingWasWritten(t *testing.T) {
 	// A duration of zero is a setting in its own right — no expiry, no
 	// give-up window — and "0s" alone reads as "immediately" just as easily
 	// as "never", which are opposite instructions to the person reading it.
-	zero, _ := Resolve(File{KeyLifetime: ptr("0s")}, func(string) (string, bool) { return "", false })
+	zero, _ := Resolve(File{KeyLifetime: new("0s")}, func(string) (string, bool) { return "", false })
 	for _, desc := range settingTable {
 		if desc.key != "key_lifetime" {
 			continue
@@ -256,11 +256,11 @@ func filledFile(t *testing.T, mark string) File {
 		field, name := v.Field(i), v.Type().Field(i).Name
 		switch field.Interface().(type) {
 		case *string:
-			field.Set(reflect.ValueOf(ptr(mark + "_" + name)))
+			field.Set(reflect.ValueOf(new(mark + "_" + name)))
 		case *int:
-			field.Set(reflect.ValueOf(ptr(len(mark) + i)))
+			field.Set(reflect.ValueOf(new(len(mark) + i)))
 		case *bool:
-			field.Set(reflect.ValueOf(ptr(mark == "other")))
+			field.Set(reflect.ValueOf(new(mark == "other")))
 		case []string:
 			field.Set(reflect.ValueOf([]string{mark + "_" + name}))
 		default:

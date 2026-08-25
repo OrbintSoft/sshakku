@@ -138,13 +138,13 @@ func TestLoadKeysWrongPassphraseRealTerminal(t *testing.T) {
 	master, slave := openPTY(t)
 	child := startTTYPromptHelper(t, env, slave)
 
-	var seen string
+	var prompts strings.Builder
 	for attempt := 1; attempt <= defaultMaxAttempts; attempt++ {
-		seen += readUntil(t, master, ttyPromptLine)
+		prompts.WriteString(readUntil(t, master, ttyPromptLine))
 		_, err := master.WriteString(wrong + "\n")
 		require.NoErrorf(t, err, "the user types a wrong passphrase (attempt %d)", attempt)
 	}
-	seen += drain(t, master)
+	seen := prompts.String() + drain(t, master)
 
 	require.NoErrorf(t, child.Wait(), "a key that never opened must not fail the login; terminal output:\n%q", seen)
 	assert.Equalf(t, defaultMaxAttempts, strings.Count(seen, ttyPromptLine),
@@ -184,13 +184,13 @@ func TestLoadKeysEmptyAnswerRealTerminal(t *testing.T) {
 	master, slave := openPTY(t)
 	child := startTTYPromptHelper(t, env, slave)
 
-	var seen string
+	var prompts strings.Builder
 	for attempt := 1; attempt <= defaultMaxAttempts; attempt++ {
-		seen += readUntil(t, master, ttyPromptLine)
+		prompts.WriteString(readUntil(t, master, ttyPromptLine))
 		_, err := master.WriteString("\n")
 		require.NoErrorf(t, err, "the user presses Enter on its own (attempt %d)", attempt)
 	}
-	seen += drain(t, master)
+	seen := prompts.String() + drain(t, master)
 
 	require.NoErrorf(t, child.Wait(), "a key that never opened must not fail the login; terminal output:\n%q", seen)
 	assert.Equalf(t, defaultMaxAttempts, strings.Count(seen, ttyPromptLine),

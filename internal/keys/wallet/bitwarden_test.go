@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -50,12 +51,7 @@ func bwVerbs(r *runtest.Runner) []string {
 
 func hasSessionEnv(c run.Cmd, session string) bool {
 	want := "BW_SESSION=" + session
-	for _, e := range c.Env {
-		if e == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(c.Env, want)
 }
 
 func TestBitwardenLookup(t *testing.T) {

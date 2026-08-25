@@ -36,7 +36,7 @@ func renderBadgeJSON(r Report) ([]byte, error) {
 	}
 	badge := shieldsBadge{
 		SchemaVersion: 1,
-		Label:         fmt.Sprintf("coverage %s", r.OS),
+		Label:         "coverage " + r.OS,
 		Message:       fmt.Sprintf("%.1f%%", r.CoveragePercent),
 		Color:         badgeColor(r.CoveragePercent),
 	}

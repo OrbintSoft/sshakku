@@ -2,6 +2,7 @@ package wallet
 
 import (
 	"errors"
+	"maps"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -197,12 +198,8 @@ func TestBitwardenStandaloneBracketAllMethods(t *testing.T) {
 	}
 	with := func(base map[string]func(run.Cmd) (run.Result, error), extra map[string]func(run.Cmd) (run.Result, error)) map[string]func(run.Cmd) (run.Result, error) {
 		m := map[string]func(run.Cmd) (run.Result, error){}
-		for k, v := range base {
-			m[k] = v
-		}
-		for k, v := range extra {
-			m[k] = v
-		}
+		maps.Copy(m, base)
+		maps.Copy(m, extra)
 		return m
 	}
 

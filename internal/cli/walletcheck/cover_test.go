@@ -2,6 +2,7 @@ package walletcheck
 
 import (
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
@@ -15,12 +16,7 @@ import (
 // test happens to run on.
 func probeWith(goos string, found []string, present []string, bus string, listening []string) walletProbe {
 	has := func(list []string, want string) bool {
-		for _, item := range list {
-			if item == want {
-				return true
-			}
-		}
-		return false
+		return slices.Contains(list, want)
 	}
 	return walletProbe{
 		goos: goos,

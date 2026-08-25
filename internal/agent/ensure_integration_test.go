@@ -145,7 +145,7 @@ func isZombie(pid int) bool {
 	if err != nil {
 		return false
 	}
-	for _, line := range strings.Split(string(data), "\n") {
+	for line := range strings.SplitSeq(string(data), "\n") {
 		if strings.HasPrefix(line, "State:") {
 			return strings.Contains(line, "Z (zombie)")
 		}
@@ -316,10 +316,7 @@ func TestEnsureAgentRealDisasterReapsAndAdoptsLowestPID(t *testing.T) {
 	sockB := filepath.Join(testtmp.ShortDir(t), "foreign-b.sock")
 	pidA := startForeignAgent(t, sockA)
 	pidB := startForeignAgent(t, sockB)
-	lowest := pidA
-	if pidB < pidA {
-		lowest = pidB
-	}
+	lowest := min(pidA, pidB)
 
 	res2, err := m.EnsureAgent(t.Context(), cfg, nil)
 	require.NoError(t, err, "EnsureAgent")

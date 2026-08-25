@@ -40,7 +40,7 @@ func AgentFingerprints(ctx context.Context, r run.Runner) (map[string]bool, erro
 		return nil, err
 	}
 	set := make(map[string]bool)
-	for _, line := range strings.Split(string(res.Stdout), "\n") {
+	for line := range strings.SplitSeq(string(res.Stdout), "\n") {
 		if fp := fingerprintField(line); fp != "" {
 			set[fp] = true
 		}

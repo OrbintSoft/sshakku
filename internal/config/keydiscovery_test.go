@@ -22,7 +22,7 @@ import (
 // can be used at all.
 func TestResolveKeyDiscovery(t *testing.T) {
 	t.Run("the directory is kept as written", func(t *testing.T) {
-		s, errs := Resolve(File{KeyDir: ptr("keys/ssh")}, lookupFrom(nil))
+		s, errs := Resolve(File{KeyDir: new("keys/ssh")}, lookupFrom(nil))
 		require.Empty(t, errs, "unexpected errors")
 		assert.Equal(t, "keys/ssh", s.KeyDir, "KeyDir must be the file's own value")
 	})

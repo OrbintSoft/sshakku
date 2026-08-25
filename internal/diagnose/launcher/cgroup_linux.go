@@ -5,6 +5,7 @@ package launcher
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -46,7 +47,7 @@ func (c ProcfsCgroup) root() string {
 // contain units are never returned, since a slice is a grouping, not something
 // that launches anything.
 func parseCgroupUnit(b []byte) (string, bool) {
-	for _, line := range strings.Split(strings.TrimSpace(string(b)), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(string(b)), "\n") {
 		_, path, ok := strings.Cut(line, ":")
 		if !ok {
 			continue
@@ -56,9 +57,9 @@ func parseCgroupUnit(b []byte) (string, bool) {
 			continue
 		}
 		segs := strings.Split(path, "/")
-		for i := len(segs) - 1; i >= 0; i-- {
-			if strings.HasSuffix(segs[i], ".service") || strings.HasSuffix(segs[i], ".scope") {
-				return segs[i], true
+		for _, seg := range slices.Backward(segs) {
+			if strings.HasSuffix(seg, ".service") || strings.HasSuffix(seg, ".scope") {
+				return seg, true
 			}
 		}
 	}

@@ -17,9 +17,9 @@ func TestParseFileVaultStatus(t *testing.T) {
 		out  string
 		want *bool
 	}{
-		{"on", "FileVault is On.\n", boolp(true)},
-		{"off", "FileVault is Off.\n", boolp(false)},
-		{"deferred/unknown", "FileVault is On (Deferred enable pending).\n", boolp(true)},
+		{"on", "FileVault is On.\n", new(true)},
+		{"off", "FileVault is Off.\n", new(false)},
+		{"deferred/unknown", "FileVault is On (Deferred enable pending).\n", new(true)},
 		{"unrecognized", "some other tool output", nil},
 		{"empty", "", nil},
 	}
@@ -57,5 +57,3 @@ func TestBridgeSecureEnclave(t *testing.T) {
 		})
 	}
 }
-
-func boolp(b bool) *bool { return &b }

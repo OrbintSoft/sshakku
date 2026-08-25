@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -152,9 +153,9 @@ func (d settingDesc) statedBy(sources []Source, lookup func(string) (string, boo
 			return Origin{Kind: OriginEnv, Name: d.env}
 		}
 	}
-	for i := len(sources) - 1; i >= 0; i-- {
-		if d.set(sources[i].File) {
-			return Origin{Kind: OriginFile, Name: sources[i].Path}
+	for _, source := range slices.Backward(sources) {
+		if d.set(source.File) {
+			return Origin{Kind: OriginFile, Name: source.Path}
 		}
 	}
 	return Origin{Kind: OriginDefault}

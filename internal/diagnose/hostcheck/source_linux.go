@@ -79,7 +79,7 @@ type mountEntry struct {
 // octal-escaped format as /etc/fstab). Malformed lines are skipped.
 func parseMounts(b []byte) []mountEntry {
 	var entries []mountEntry
-	for _, line := range strings.Split(strings.TrimSpace(string(b)), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(string(b)), "\n") {
 		fields := strings.Fields(line)
 		if len(fields) < 3 {
 			continue

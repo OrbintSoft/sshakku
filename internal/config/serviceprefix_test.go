@@ -17,13 +17,13 @@ import (
 // the default rather than being written into entry names nobody can find again.
 func TestResolveServicePrefix(t *testing.T) {
 	t.Run("a chosen name is used as given", func(t *testing.T) {
-		s, errs := Resolve(File{ServicePrefix: ptr("wallet-of-mine")}, lookupFrom(nil))
+		s, errs := Resolve(File{ServicePrefix: new("wallet-of-mine")}, lookupFrom(nil))
 		require.Empty(t, errs, "unexpected errors")
 		assert.Equal(t, "wallet-of-mine", s.ServicePrefix, "ServicePrefix must be the file's own value")
 	})
 
 	t.Run("absent or empty takes the default", func(t *testing.T) {
-		for _, file := range []File{{}, {ServicePrefix: ptr("")}} {
+		for _, file := range []File{{}, {ServicePrefix: new("")}} {
 			s, errs := Resolve(file, lookupFrom(nil))
 			require.Emptyf(t, errs, "unexpected errors for %+v", file)
 			assert.Equalf(t, wallet.DefaultServicePrefix, s.ServicePrefix, "ServicePrefix for %+v", file)
@@ -32,7 +32,7 @@ func TestResolveServicePrefix(t *testing.T) {
 
 	t.Run("whitespace or a slash is refused, and said so", func(t *testing.T) {
 		for _, bad := range []string{"my wallet", "sshakku/keys", "tab\there", "trailing "} {
-			s, errs := Resolve(File{ServicePrefix: ptr(bad)}, lookupFrom(nil))
+			s, errs := Resolve(File{ServicePrefix: new(bad)}, lookupFrom(nil))
 			assert.Equalf(t, wallet.DefaultServicePrefix, s.ServicePrefix, "ServicePrefix for %q must be the default", bad)
 			// The value must be named in the report: a login shell writes this
 			// to the session log and nowhere else, so an error that does not

@@ -15,7 +15,7 @@ import (
 // substring search, because "set" is a substring of "unset" and a report that
 // inverted the two would satisfy a looser assertion.
 func envState(out, name string) (string, bool) {
-	for _, line := range strings.Split(out, "\n") {
+	for line := range strings.SplitSeq(out, "\n") {
 		_, rest, found := strings.Cut(line, name+":")
 		if found {
 			return strings.TrimSpace(rest), true

@@ -36,9 +36,12 @@ type fakeProbeBackend struct {
 func (f *fakeProbeBackend) Lookup(context.Context, string) (string, bool, error) {
 	return f.lookupVal, f.lookupOK, f.lookupErr
 }
+
 func (f *fakeProbeBackend) Store(context.Context, string, string, string) error { return f.storeErr }
-func (f *fakeProbeBackend) Delete(context.Context, string) error                { return f.deleteErr }
-func (f *fakeProbeBackend) List(context.Context) ([]string, error)              { return f.listVal, f.listErr }
+
+func (f *fakeProbeBackend) Delete(context.Context, string) error { return f.deleteErr }
+
+func (f *fakeProbeBackend) List(context.Context) ([]string, error) { return f.listVal, f.listErr }
 
 // fakeProbeSession wraps fakeProbeBackend to also implement wallet.Session.
 type fakeProbeSession struct{ *fakeProbeBackend }

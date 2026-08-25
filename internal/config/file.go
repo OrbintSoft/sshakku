@@ -299,12 +299,7 @@ func resolveHomePath(home, dir string) string {
 }
 
 func containsKey(keys []string, keyname string) bool {
-	for _, k := range keys {
-		if k == keyname {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(keys, keyname)
 }
 
 // Merge returns f with every field other sets applied on top, so other takes
@@ -655,12 +650,7 @@ func DefaultSecretBackend() string { return platformDefaultSecretBackend }
 
 // SecretBackendAvailable reports whether name is a wallet this system has.
 func SecretBackendAvailable(name string) bool {
-	for _, available := range platformSecretBackends {
-		if name == available {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(platformSecretBackends, name)
 }
 
 // resolveSecretBackend is config-file only (no environment override, per
@@ -685,10 +675,8 @@ func resolveSecretBackendFrom(fileVal *string, available []string, fallback stri
 	if fileVal == nil || *fileVal == "" {
 		return fallback, nil
 	}
-	for _, name := range available {
-		if *fileVal == name {
-			return *fileVal, nil
-		}
+	if slices.Contains(available, *fileVal) {
+		return *fileVal, nil
 	}
 	return fallback, fmt.Errorf("secret_backend %q is not a wallet this system has, using %q", *fileVal, fallback)
 }
@@ -710,10 +698,8 @@ func resolveGUIPrompterFrom(fileVal *string, available []string) (string, error)
 	if fileVal == nil || *fileVal == "" {
 		return GUIPrompterAuto, nil
 	}
-	for _, name := range available {
-		if *fileVal == name {
-			return *fileVal, nil
-		}
+	if slices.Contains(available, *fileVal) {
+		return *fileVal, nil
 	}
 	return GUIPrompterAuto, fmt.Errorf("gui_prompter %q is not a dialog this system has, using %q", *fileVal, GUIPrompterAuto)
 }

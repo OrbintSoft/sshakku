@@ -129,12 +129,12 @@ func TestEverySettingIsExplained(t *testing.T) {
 		reported[s.Key] = true
 	}
 
-	fields := reflect.TypeOf(File{})
-	for i := range fields.NumField() {
-		key := fields.Field(i).Tag.Get("toml")
+	fields := reflect.TypeFor[File]()
+	for field := range fields.Fields() {
+		key := field.Tag.Get("toml")
 		if key == "" {
 			assert.Failf(t, "a setting nobody can name",
-				"%s has no toml tag, so no user can set it and no report can name it", fields.Field(i).Name)
+				"%s has no toml tag, so no user can set it and no report can name it", field.Name)
 			continue
 		}
 		assert.Truef(t, reported[key], "%s can be configured but is not in the report", key)

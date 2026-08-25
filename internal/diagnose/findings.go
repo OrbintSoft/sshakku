@@ -152,7 +152,7 @@ func hostChecksLine(h hostcheck.Checks) string {
 	case !*h.TmpTmpfs:
 		parts = append(parts, "/tmp: not tmpfs")
 	case h.TmpSizeBytes > 0:
-		parts = append(parts, fmt.Sprintf("/tmp: tmpfs, %s", humanBytes(h.TmpSizeBytes)))
+		parts = append(parts, "/tmp: tmpfs, "+humanBytes(h.TmpSizeBytes))
 	default:
 		parts = append(parts, "/tmp: tmpfs, size undetermined")
 	}

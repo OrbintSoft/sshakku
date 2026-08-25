@@ -12,6 +12,7 @@ package dialog
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/keys"
@@ -46,11 +47,11 @@ func chooseDialog(ctx context.Context, dialogs []dialog, want string, terminal p
 	// Built from the terminal backwards, so each dialog falls back to the next
 	// one after it and the last of them falls back to the terminal.
 	asked, found := terminal, false
-	for i := len(dialogs) - 1; i >= 0; i-- {
-		if !dialogs[i].prompter.Available(ctx) {
+	for _, d := range slices.Backward(dialogs) {
+		if !d.prompter.Available(ctx) {
 			continue
 		}
-		asked, found = prompt.FallbackPrompter{Primary: dialogs[i].prompter, Fallback: asked, Log: log}, true
+		asked, found = prompt.FallbackPrompter{Primary: d.prompter, Fallback: asked, Log: log}, true
 	}
 	if !found {
 		return nil

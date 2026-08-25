@@ -20,13 +20,13 @@ import (
 // SSHakku may take.
 func TestResolveSecretContainer(t *testing.T) {
 	t.Run("a chosen name is used as given", func(t *testing.T) {
-		s, errs := Resolve(File{SecretContainer: ptr("my-own-compartment")}, lookupFrom(nil))
+		s, errs := Resolve(File{SecretContainer: new("my-own-compartment")}, lookupFrom(nil))
 		require.Empty(t, errs, "unexpected errors")
 		assert.Equal(t, "my-own-compartment", s.SecretContainer, "SecretContainer must be the file's own value")
 	})
 
 	t.Run("absent or empty leaves each backend its own default", func(t *testing.T) {
-		for _, file := range []File{{}, {SecretContainer: ptr("")}} {
+		for _, file := range []File{{}, {SecretContainer: new("")}} {
 			s, errs := Resolve(file, lookupFrom(nil))
 			require.Emptyf(t, errs, "unexpected errors for %+v", file)
 			assert.Emptyf(t, s.SecretContainer, "SecretContainer for %+v must be left unset", file)
@@ -59,7 +59,7 @@ func TestResolveSecretContainer(t *testing.T) {
 // nothing to search the config file for.
 func assertRefused(t *testing.T, bad string) {
 	t.Helper()
-	s, errs := Resolve(File{SecretContainer: ptr(bad)}, lookupFrom(nil))
+	s, errs := Resolve(File{SecretContainer: new(bad)}, lookupFrom(nil))
 	assert.Emptyf(t, s.SecretContainer, "SecretContainer for %q must be left unset", bad)
 	var named bool
 	for _, err := range errs {

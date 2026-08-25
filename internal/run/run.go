@@ -134,8 +134,7 @@ func (r ExecRunner) Run(ctx context.Context, c Cmd) (Result, error) {
 	err := cmd.Run()
 	res := Result{Stdout: out.Bytes(), Stderr: errBuf.Bytes()}
 	if err != nil {
-		var ee *exec.ExitError
-		if errors.As(err, &ee) {
+		if ee, ok := errors.AsType[*exec.ExitError](err); ok {
 			res.Code = ee.ExitCode()
 			return res, nil
 		}

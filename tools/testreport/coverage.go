@@ -41,12 +41,11 @@ func parseCoverageProfile(r io.Reader) (total float64, perPackage []PackageCover
 			continue
 		}
 
-		colon := strings.IndexByte(line, ':')
-		if colon < 0 {
+		file, rest, ok := strings.Cut(line, ":")
+		if !ok {
 			return 0, nil, fmt.Errorf("testreport: malformed coverage line (no ':'): %q", line)
 		}
-		file := line[:colon]
-		fields := strings.Fields(line[colon+1:])
+		fields := strings.Fields(rest)
 		if len(fields) != 3 {
 			return 0, nil, fmt.Errorf("testreport: malformed coverage line (want 3 fields after position, got %d): %q", len(fields), line)
 		}

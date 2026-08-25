@@ -1,6 +1,7 @@
 package secretservice
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 	"testing"
@@ -166,7 +167,7 @@ func (s *fakeService) Get(iface, prop string) (dbus.Variant, *dbus.Error) {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		if s.failCollectionsProp {
-			return dbus.Variant{}, dbus.MakeFailedError(fmt.Errorf("collections unavailable"))
+			return dbus.Variant{}, dbus.MakeFailedError(errors.New("collections unavailable"))
 		}
 		if s.collectionsPropSet {
 			return dbus.MakeVariant(s.collectionsProp), nil
@@ -186,7 +187,7 @@ func (s *fakeService) CreateCollection(props map[string]dbus.Variant, alias stri
 	failGeneric := s.failCreateCollection
 	s.mu.Unlock()
 	if failGeneric {
-		return noPrompt, noPrompt, dbus.MakeFailedError(fmt.Errorf("create collection failed"))
+		return noPrompt, noPrompt, dbus.MakeFailedError(errors.New("create collection failed"))
 	}
 	if s.getRestrictAlias() && alias != "" && alias != "default" {
 		err := dbus.NewError(errNotSupported, []any{"Only the 'default' alias is supported"})

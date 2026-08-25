@@ -4,7 +4,6 @@ package walletcheck
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/diagnose"
@@ -27,9 +26,8 @@ func (p walletProbe) platformWalletView(_ context.Context, _ config.Settings, ba
 // on this operating system, and another one has to be chosen.
 func (p walletProbe) keepassxcSecretServiceRoute(ctx context.Context) []diagnose.Requirement {
 	return []diagnose.Requirement{{
-		Name: "secret service",
-		Detail: fmt.Sprintf(
-			"%s provides no freedesktop Secret Service — set keepassxc_route to native or cli", p.goos),
+		Name:   "secret service",
+		Detail: p.goos + " provides no freedesktop Secret Service — set keepassxc_route to native or cli",
 	}}
 }
 

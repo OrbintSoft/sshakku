@@ -24,6 +24,20 @@ const onePasswordBin = "op"
 // user's own.
 const onePasswordTag = "sshakku"
 
+// onePasswordItemCommand is op's command group for items: the first word of
+// each command line below that creates, gets, deletes or lists one.
+const onePasswordItemCommand = "item"
+
+// onePasswordVaultFlag confines every op command to Vault. An item created
+// in one vault and looked up without naming it is one op resolves against
+// whatever the account's default happens to be.
+const onePasswordVaultFlag = "--vault"
+
+// onePasswordPasswordField is the id and the label of the concealed field the
+// passphrase is written to, which is also the field a secret reference reads
+// back — the two have to spell it the same way.
+const onePasswordPasswordField = "password"
+
 // onePasswordField is one entry in an item JSON template's "fields" array
 // (the shape `op item create -`/`op item template get` use).
 type onePasswordField struct {
@@ -87,7 +101,7 @@ func (b *OnePassword) run(ctx context.Context, c run.Cmd) (run.Result, error) {
 // not an error — op does not distinguish "item not found" from other
 // failures by exit code alone, the same ambiguity SecretTool accepts.
 func (b *OnePassword) Lookup(ctx context.Context, service string) (string, bool, error) {
-	ref := fmt.Sprintf("op://%s/%s/password", b.Vault, service)
+	ref := fmt.Sprintf("op://%s/%s/%s", b.Vault, service, onePasswordPasswordField)
 	res, err := b.run(ctx, run.Cmd{Name: onePasswordBin, Args: []string{"read", ref, "--no-newline"}})
 	if err != nil {
 		return "", false, err
@@ -112,7 +126,7 @@ func (b *OnePassword) Store(ctx context.Context, service, label, passphrase stri
 		Tags:     []string{onePasswordTag},
 		Fields: []onePasswordField{
 			{ID: "label", Type: "STRING", Label: "label", Value: label},
-			{ID: "password", Type: "CONCEALED", Purpose: "PASSWORD", Label: "password", Value: passphrase},
+			{ID: onePasswordPasswordField, Type: "CONCEALED", Purpose: "PASSWORD", Label: onePasswordPasswordField, Value: passphrase},
 		},
 	})
 	if err != nil {
@@ -121,7 +135,7 @@ func (b *OnePassword) Store(ctx context.Context, service, label, passphrase stri
 
 	res, err := b.run(ctx, run.Cmd{
 		Name:  onePasswordBin,
-		Args:  []string{"item", "create", "--vault", b.Vault, "-"},
+		Args:  []string{onePasswordItemCommand, "create", onePasswordVaultFlag, b.Vault, "-"},
 		Stdin: string(payload),
 	})
 	if err != nil {
@@ -138,7 +152,7 @@ func (b *OnePassword) Store(ctx context.Context, service, label, passphrase stri
 // with a real deletion failure, the same shape SecretService.Delete
 // uses (search, then delete only what search found).
 func (b *OnePassword) Delete(ctx context.Context, service string) error {
-	res, err := b.run(ctx, run.Cmd{Name: onePasswordBin, Args: []string{"item", "get", service, "--vault", b.Vault, "--format", "json"}})
+	res, err := b.run(ctx, run.Cmd{Name: onePasswordBin, Args: []string{onePasswordItemCommand, "get", service, onePasswordVaultFlag, b.Vault, "--format", "json"}})
 	if err != nil {
 		return err
 	}
@@ -146,7 +160,7 @@ func (b *OnePassword) Delete(ctx context.Context, service string) error {
 		return nil
 	}
 
-	res, err = b.run(ctx, run.Cmd{Name: onePasswordBin, Args: []string{"item", "delete", service, "--vault", b.Vault}})
+	res, err = b.run(ctx, run.Cmd{Name: onePasswordBin, Args: []string{onePasswordItemCommand, "delete", service, onePasswordVaultFlag, b.Vault}})
 	if err != nil {
 		return err
 	}
@@ -159,7 +173,7 @@ func (b *OnePassword) Delete(ctx context.Context, service string) error {
 // List enumerates every sshakku-tagged item's title in Vault. Since Vault is
 // dedicated to sshakku (see the type doc), every title is a service string.
 func (b *OnePassword) List(ctx context.Context) ([]string, error) {
-	res, err := b.run(ctx, run.Cmd{Name: onePasswordBin, Args: []string{"item", "list", "--vault", b.Vault, "--tags", onePasswordTag, "--format", "json"}})
+	res, err := b.run(ctx, run.Cmd{Name: onePasswordBin, Args: []string{onePasswordItemCommand, "list", onePasswordVaultFlag, b.Vault, "--tags", onePasswordTag, "--format", "json"}})
 	if err != nil {
 		return nil, err
 	}
