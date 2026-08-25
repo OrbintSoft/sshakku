@@ -22,6 +22,7 @@ func Gather(ctx context.Context, in Inputs, src AgentSource, prober agent.Prober
 
 		NoAgentMechanism:       in.NoAgentMechanism,
 		LifetimeKeptBySessions: in.LifetimeKeptBySessions,
+		AgentService:           in.AgentService,
 	}
 	if in.EnvSock != "" {
 		r.EnvReachable = prober.Reachable(ctx, in.EnvSock)

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/OrbintSoft/sshakku/internal/agent"
 	"github.com/OrbintSoft/sshakku/internal/diagnose/hostcheck"
 	"github.com/OrbintSoft/sshakku/internal/diagnose/launcher"
 	"github.com/OrbintSoft/sshakku/internal/keystate"
@@ -120,6 +121,14 @@ type Inputs struct {
 	// system being reported on, which the caller knows and this does not go
 	// and read. The zero value is the ordinary case, a system with one.
 	NoAgentMechanism bool
+
+	// AgentService is what the system being reported on says about the service
+	// its agent is served from, taken by the caller — which is what keeps the
+	// report a look and not an action, since reading it is the caller's one
+	// chance to start something and it does not take it. Its zero value names
+	// no service, which is every system whose agent is a process on a socket,
+	// and the report then says nothing about one.
+	AgentService agent.ServiceReading
 
 	// LifetimeKeptBySessions says a key lifetime is configured that the agent
 	// on the system being reported on cannot hold to, so it is the sessions
@@ -271,6 +280,11 @@ type Report struct {
 	// none of what is observed. Stated by the caller rather than read from the
 	// machine, so both answers stay checkable from either one.
 	NoAgentMechanism bool
+
+	// AgentService is what the service manager on the system being reported on
+	// said about the service the agent is served from (see Inputs). Its zero
+	// value names no service, and the report then has no section for one.
+	AgentService agent.ServiceReading
 
 	// LifetimeKeptBySessions says the sessions on the system being reported on
 	// are what keep a key's lifetime, its agent holding none (see Inputs). It

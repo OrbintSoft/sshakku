@@ -488,6 +488,10 @@ func gatherReport(ctx context.Context, env paths.Env, layout paths.Layout, setti
 		Env:               shownEnv,
 		SecretEnv:         secretEnv,
 		NoAgentMechanism:  !agent.KeepsAgents(),
+		// Read here rather than inside the report, so that the one call in the
+		// whole picture that could have started something is made where it can
+		// be seen not to.
+		AgentService: agent.ReadAgentService(ctx),
 		// What was asked for and what this agent can do are both known here,
 		// so the report is handed the one answer rather than the two facts.
 		LifetimeKeptBySessions: settings.KeyLifetime > 0 && !agent.KeepsLifetimes(),
