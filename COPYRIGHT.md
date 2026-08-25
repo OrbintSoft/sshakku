@@ -34,6 +34,10 @@ Compiled into the distributed binary:
 - **github.com/ebitengine/purego** — Apache-2.0 (calling macOS's
   Security.framework and CoreFoundation, loaded at run time, so building for
   macOS needs no C toolchain).
+- **github.com/gofrs/flock** — BSD-3-Clause (the exclusive file lock the session
+  log takes while it rewrites itself, so that shells opening at once do not
+  overwrite each other's lines; one library rather than each platform's own
+  spelling of the same call).
 
 Imported only by tests, never linked into the distributed binary:
 

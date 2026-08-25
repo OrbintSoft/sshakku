@@ -9,7 +9,8 @@ packaging it.
 - **Go 1.26.5 or newer.** The only build-time requirement, on either platform;
   `go build ./...` (or `make build`) fetches the Go module dependencies itself
   (`github.com/godbus/dbus/v5`, `github.com/BurntSushi/toml`,
-  `golang.org/x/sys`, `github.com/ebitengine/purego`). All are pure Go: nothing
+  `golang.org/x/sys`, `github.com/ebitengine/purego`,
+  `github.com/gofrs/flock`). All are pure Go: nothing
   here needs a C compiler, an Apple SDK, or cgo, so a build for either platform
   can be produced on either one. The macOS Keychain backend reaches
   Security.framework by loading it at run time rather than by linking against it

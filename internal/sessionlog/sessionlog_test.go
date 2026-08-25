@@ -28,7 +28,8 @@ func TestLogAppends(t *testing.T) {
 
 func TestLogTrims(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sessions.log")
-	lg := &Logger{path: path, maxLines: 3}
+	lg := New(path)
+	lg.maxLines = 3
 	for i := range 10 {
 		require.NoError(t, lg.Log("INFO", fmt.Sprintf("line-%d", i)))
 	}
@@ -40,11 +41,24 @@ func TestLogTrims(t *testing.T) {
 	assert.Contains(t, lines[2], "line-9", "last kept line")
 }
 
-// TestLogOpenError covers the branch where the log file cannot be opened: a
-// parent directory that does not exist makes os.OpenFile fail.
-func TestLogOpenError(t *testing.T) {
+// TestLogLockOpenError covers the branch where the lock cannot even be attempted:
+// a parent directory that does not exist is one the lock file cannot be created
+// in either, and that is the first thing Log reaches for.
+func TestLogLockOpenError(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "missing-dir", "sessions.log")
 	assert.Error(t, New(path).Log("INFO", "x"), "Log into a missing directory must fail")
+}
+
+// TestLogAppendOpenError covers the branch where the lock was taken and the log
+// itself is what will not open. It needs the injected opener: a directory the
+// lock file could be created in is one the log file could be created in too, so
+// nothing about a real path puts the failure on this side of the lock.
+func TestLogAppendOpenError(t *testing.T) {
+	lg := New(filepath.Join(t.TempDir(), "sessions.log"))
+	lg.open = func(string, int, os.FileMode) (io.WriteCloser, error) {
+		return nil, errors.New("permission denied")
+	}
+	assert.Error(t, lg.Log("INFO", "x"), "Log must fail when the log file will not open")
 }
 
 // errWriteCloser is an injected log file whose Write and/or Close fail on demand,
@@ -69,22 +83,16 @@ func (w *errWriteCloser) Close() error {
 
 func TestLogWriteError(t *testing.T) {
 	wc := &errWriteCloser{writeErr: errors.New("disk full")}
-	lg := &Logger{
-		path:     filepath.Join(t.TempDir(), "sessions.log"),
-		maxLines: DefaultMaxLines,
-		open:     func(string, int, os.FileMode) (io.WriteCloser, error) { return wc, nil },
-	}
+	lg := New(filepath.Join(t.TempDir(), "sessions.log"))
+	lg.open = func(string, int, os.FileMode) (io.WriteCloser, error) { return wc, nil }
 	assert.Error(t, lg.Log("INFO", "x"), "Log with a failing Write must fail")
 	assert.True(t, wc.closed, "Log must close the file after a write failure")
 }
 
 func TestLogCloseError(t *testing.T) {
 	wc := &errWriteCloser{closeErr: errors.New("close failed")}
-	lg := &Logger{
-		path:     filepath.Join(t.TempDir(), "sessions.log"),
-		maxLines: DefaultMaxLines,
-		open:     func(string, int, os.FileMode) (io.WriteCloser, error) { return wc, nil },
-	}
+	lg := New(filepath.Join(t.TempDir(), "sessions.log"))
+	lg.open = func(string, int, os.FileMode) (io.WriteCloser, error) { return wc, nil }
 	assert.Error(t, lg.Log("INFO", "x"), "Log with a failing Close must fail")
 }
 

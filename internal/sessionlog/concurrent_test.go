@@ -8,7 +8,9 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/gofrs/flock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -46,7 +48,10 @@ func writeAsChild(path string) int {
 	if err != nil {
 		return 2
 	}
-	logger := &Logger{path: path, maxLines: maxLines}
+	// Built through New so the child queues for the lock on the same terms the
+	// product does; only the cap is the test's to choose.
+	logger := New(path)
+	logger.maxLines = maxLines
 	tag := os.Getenv(writerTagEnv)
 	for i := range lines {
 		if err := logger.Log("INFO", fmt.Sprintf("%s-%d", tag, i)); err != nil {
@@ -126,4 +131,42 @@ func TestLogKeepsEveryLineWrittenConcurrently(t *testing.T) {
 
 	kept := strings.Split(strings.TrimRight(got, "\n"), "\n")
 	assert.Len(t, kept, maxLines, "the log stays at its cap")
+}
+
+// TestLogUnderAHeldLockRecordsWithoutTrimming covers F12 from the side where the
+// promise is hardest to keep: the lock is not available at all, and the line
+// still has to be recorded.
+//
+// A writer that gives up on the lock appends anyway, because an unlocked append
+// is what the old code did to every line and it loses one only if a trim happens
+// to be rewriting the file just then. What it must not do is trim: that is the
+// half that overwrites, and doing it while somebody else holds the lock is
+// precisely the damage the lock was taken out against.
+func TestLogUnderAHeldLockRecordsWithoutTrimming(t *testing.T) {
+	const lines = 5
+
+	path := filepath.Join(t.TempDir(), "sessions.log")
+	logger := New(path)
+	// A cap far below what is about to be written, so a trim that ran would be
+	// impossible to miss.
+	logger.maxLines = 2
+	logger.lockWait = 20 * time.Millisecond
+	logger.lockPoll = 5 * time.Millisecond
+
+	// Somebody else holds the lock, and goes on holding it throughout.
+	other := flock.New(path + lockSuffix)
+	taken, err := other.TryLock()
+	require.NoError(t, err, "taking the lock this test holds against the logger")
+	require.True(t, taken, "the lock has to start free for this to be a test of contention")
+	t.Cleanup(func() { _ = other.Unlock() })
+
+	for i := range lines {
+		require.NoErrorf(t, logger.Log("INFO", fmt.Sprintf("line-%d", i)), "line %d", i)
+	}
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err, "reading the log")
+	got := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+	assert.Len(t, got, lines, "every line is recorded, including the ones written unlocked")
+	assert.Contains(t, got[0], "line-0", "nothing was trimmed away while another writer held the lock")
 }
