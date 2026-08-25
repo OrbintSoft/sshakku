@@ -40,7 +40,7 @@ func wired(t *testing.T, args ...string) (int, string, string) {
 func reported(t *testing.T, stdout string) map[string]string {
 	t.Helper()
 	fields := map[string]string{}
-	for _, line := range strings.Split(stdout, "\n") {
+	for line := range strings.SplitSeq(stdout, "\n") {
 		if !strings.HasPrefix(line, "  ") {
 			continue
 		}

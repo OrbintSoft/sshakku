@@ -29,7 +29,7 @@ func TestLogAppends(t *testing.T) {
 func TestLogTrims(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sessions.log")
 	lg := &Logger{path: path, maxLines: 3}
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		require.NoError(t, lg.Log("INFO", fmt.Sprintf("line-%d", i)))
 	}
 	data, err := os.ReadFile(path)

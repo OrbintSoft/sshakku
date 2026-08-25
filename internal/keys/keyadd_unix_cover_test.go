@@ -47,8 +47,7 @@ func TestRunSSHAddExitCode(t *testing.T) {
 	// A real non-zero process exit yields the *exec.ExitError runSSHAdd must
 	// translate into a returned exit code (a wrong passphrase, not a failure).
 	realExit := exec.CommandContext(t.Context(), "sh", "-c", "exit 3").Run()
-	var ee *exec.ExitError
-	if !errors.As(realExit, &ee) {
+	if _, ok := errors.AsType[*exec.ExitError](realExit); !ok {
 		t.Skipf("could not obtain an ExitError in this environment: %v", realExit)
 	}
 	runCmd = func(*exec.Cmd) error { return realExit }

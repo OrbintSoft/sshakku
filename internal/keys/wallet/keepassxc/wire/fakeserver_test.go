@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -246,7 +247,7 @@ func (s *fakeServer) clientKey() (*[keyLen]byte, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.clientPub == nil {
-		return nil, fmt.Errorf("the client sent an encrypted frame before exchanging keys")
+		return nil, errors.New("the client sent an encrypted frame before exchanging keys")
 	}
 	return s.clientPub, nil
 }
@@ -259,7 +260,7 @@ func (s *fakeServer) record(inner map[string]any) {
 }
 
 // errServerHungUp ends serve, which closes the connection.
-var errServerHungUp = fmt.Errorf("the server hung up")
+var errServerHungUp = errors.New("the server hung up")
 
 // writeJSON sends one frame.
 func writeJSON(conn net.Conn, v any) error {

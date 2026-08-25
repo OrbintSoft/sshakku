@@ -133,7 +133,7 @@ func TestConfigNamesAFileItCouldNotRead(t *testing.T) {
 	require.Zero(t, code, "a file that cannot be read is reported, not fatal")
 
 	listed := ""
-	for _, line := range strings.Split(out, "\n") {
+	for line := range strings.SplitSeq(out, "\n") {
 		if strings.Contains(line, "70-stray.toml") {
 			listed = line
 			break
@@ -186,7 +186,7 @@ func runConfig(t *testing.T) (string, string, int) {
 // settingLine returns the report's line for one config key.
 func settingLine(t *testing.T, report, key string) string {
 	t.Helper()
-	for _, line := range strings.Split(report, "\n") {
+	for line := range strings.SplitSeq(report, "\n") {
 		if strings.HasPrefix(strings.TrimSpace(line), key) {
 			return line
 		}

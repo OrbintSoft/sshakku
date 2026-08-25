@@ -233,7 +233,7 @@ func TestKeePassXCCLIReportsARefusedPrompt(t *testing.T) {
 // not installed, for instance, which is a different thing from it failing.
 func runnerErr(n int) *runtest.Recorder {
 	r := &runtest.Recorder{}
-	for i := 0; i < n; i++ {
+	for range n {
 		r.Errs = append(r.Errs, errors.New("keepassxc-cli: no such file"))
 	}
 	return r
