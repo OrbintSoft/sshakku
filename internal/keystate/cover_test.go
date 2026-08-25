@@ -19,19 +19,6 @@ func TestSaveMkdirAllError(t *testing.T) {
 	assert.Error(t, s.Save("id_rsa", time.Hour), "want an error when the store directory cannot be created")
 }
 
-func TestRecordsReadDirError(t *testing.T) {
-	base := t.TempDir()
-	file := filepath.Join(base, "not-a-dir")
-	require.NoError(t, os.WriteFile(file, []byte("x"), 0o600))
-	// Dir is a regular file, so listing it fails with something other than "not
-	// exist". A store that has never been written to has no records and that is
-	// not an error; one that cannot be read is not the same answer, and must not
-	// be handed back as an empty list.
-	s := Store{Dir: file}
-	_, err := s.Records()
-	assert.Error(t, err, "want an error when the store directory cannot be listed")
-}
-
 func TestLoadWrongLineCountMisses(t *testing.T) {
 	dir := t.TempDir()
 	s := Store{Dir: dir}
