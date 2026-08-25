@@ -45,7 +45,7 @@ func (b SecretTool) run(ctx context.Context, c run.Cmd) (run.Result, error) {
 func (b SecretTool) Lookup(ctx context.Context, service string) (string, bool, error) {
 	res, err := b.run(ctx, run.Cmd{
 		Name: secretToolBin,
-		Args: []string{"lookup", "service", service, "username", b.User},
+		Args: []string{"lookup", secretAttrService, service, secretAttrUsername, b.User},
 	})
 	if err != nil {
 		return "", false, err
@@ -62,7 +62,7 @@ func (b SecretTool) Lookup(ctx context.Context, service string) (string, bool, e
 func (b SecretTool) Store(ctx context.Context, service, label, passphrase string) error {
 	res, err := b.run(ctx, run.Cmd{
 		Name:  secretToolBin,
-		Args:  []string{"store", "--label=" + label, "service", service, "username", b.User},
+		Args:  []string{"store", "--label=" + label, secretAttrService, service, secretAttrUsername, b.User},
 		Stdin: passphrase,
 	})
 	if err != nil {
@@ -84,7 +84,7 @@ func (b SecretTool) Store(ctx context.Context, service, label, passphrase string
 func (b SecretTool) Delete(ctx context.Context, service string) error {
 	res, err := b.run(ctx, run.Cmd{
 		Name: secretToolBin,
-		Args: []string{"clear", "service", service, "username", b.User},
+		Args: []string{"clear", secretAttrService, service, secretAttrUsername, b.User},
 	})
 	if err != nil {
 		return err

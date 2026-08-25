@@ -34,6 +34,16 @@ const EnvBitwardenPassword = "SSHAKKU_BW_PASSWORD"
 // has a built-in password field.
 const bitwardenLoginItemType = 1
 
+// The bw words this file spells more than once. Store names its verb twice —
+// once to run and once to report which of the two it ran — so what runs and
+// what the failure says can only ever be the same word.
+const (
+	bitwardenGetVerb    = "get"
+	bitwardenCreateVerb = "create"
+	bitwardenEditVerb   = "edit"
+	bitwardenItemObject = "item"
+)
+
 // bitwardenLogin is the "login" section of a Bitwarden Login item.
 type bitwardenLogin struct {
 	Username string   `json:"username"`
@@ -212,7 +222,7 @@ var _ Session = (*Bitwarden)(nil)
 // findItemID looks up service by name and returns its id. A miss is
 // found=false, not an error.
 func (b *Bitwarden) findItemID(ctx context.Context, service string) (string, bool, error) {
-	res, err := b.run(ctx, run.Cmd{Name: bitwardenBin, Args: []string{"get", "item", service}, Env: b.env()})
+	res, err := b.run(ctx, run.Cmd{Name: bitwardenBin, Args: []string{bitwardenGetVerb, bitwardenItemObject, service}, Env: b.env()})
 	if err != nil {
 		return "", false, err
 	}
@@ -239,7 +249,7 @@ func (b *Bitwarden) Lookup(ctx context.Context, service string) (string, bool, e
 		defer func() { _ = b.Lock(ctx) }()
 	}
 
-	res, err := b.run(ctx, run.Cmd{Name: bitwardenBin, Args: []string{"get", "password", service}, Env: b.env()})
+	res, err := b.run(ctx, run.Cmd{Name: bitwardenBin, Args: []string{bitwardenGetVerb, "password", service}, Env: b.env()})
 	if err != nil {
 		return "", false, err
 	}
@@ -278,9 +288,9 @@ func (b *Bitwarden) Store(ctx context.Context, service, label, passphrase string
 	}
 	encoded := base64.StdEncoding.EncodeToString(payload)
 
-	verb, args := "create", []string{"create", "item"}
+	verb, args := bitwardenCreateVerb, []string{bitwardenCreateVerb, bitwardenItemObject}
 	if found {
-		verb, args = "edit", []string{"edit", "item", id}
+		verb, args = bitwardenEditVerb, []string{bitwardenEditVerb, bitwardenItemObject, id}
 	}
 	res, err := b.run(ctx, run.Cmd{Name: bitwardenBin, Args: args, Stdin: encoded, Env: b.env()})
 	if err != nil {
@@ -313,7 +323,7 @@ func (b *Bitwarden) Delete(ctx context.Context, service string) error {
 		return nil
 	}
 
-	res, err := b.run(ctx, run.Cmd{Name: bitwardenBin, Args: []string{"delete", "item", id, "--permanent"}, Env: b.env()})
+	res, err := b.run(ctx, run.Cmd{Name: bitwardenBin, Args: []string{"delete", bitwardenItemObject, id, "--permanent"}, Env: b.env()})
 	if err != nil {
 		return err
 	}

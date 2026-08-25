@@ -22,10 +22,19 @@ var installFlags = map[string]bool{
 	"--no-path":   false,
 }
 
+// The names the two wiring commands answer to. Each is carried in the wiring
+// the command builds and read back where the report has to tell which of the
+// two ran, so the name a user types and the name the report reasons about are
+// one string.
+const (
+	installCmdName   = "install"
+	uninstallCmdName = "uninstall"
+)
+
 // install wires the login hook into one shell.
 func (d deps) install(ctx context.Context, stdout, stderr io.Writer, args []string) int {
 	return d.wire(ctx, stdout, stderr, wiring{
-		name:     "install",
+		name:     installCmdName,
 		headline: "wired the sshakku hook into one shell:",
 		apply:    install.Install,
 	}, args)
@@ -34,7 +43,7 @@ func (d deps) install(ctx context.Context, stdout, stderr io.Writer, args []stri
 // uninstall takes that wiring back out.
 func (d deps) uninstall(ctx context.Context, stdout, stderr io.Writer, args []string) int {
 	return d.wire(ctx, stdout, stderr, wiring{
-		name:     "uninstall",
+		name:     uninstallCmdName,
 		headline: "removed the sshakku hook:",
 		apply:    install.Uninstall,
 	}, args)
@@ -181,7 +190,7 @@ func pathStep(command wiring, request install.Request, outcome install.Outcome) 
 	switch {
 	case request.NoPath:
 		return "not recorded (--no-path)"
-	case outcome.PathChanged && command.name == "install":
+	case outcome.PathChanged && command.name == installCmdName:
 		return "recorded " + outcome.PathEntry
 	case outcome.PathChanged:
 		return "no longer recorded: " + outcome.PathEntry

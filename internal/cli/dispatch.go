@@ -226,9 +226,9 @@ func (d deps) run(ctx context.Context, stdout, stderr io.Writer, args []string) 
 		return d.doctor(ctx, stdout, stderr, args[1:])
 	case "forget":
 		return d.forget(ctx, stdout, stderr, args[1:])
-	case "install":
+	case installCmdName:
 		return d.install(ctx, stdout, stderr, args[1:])
-	case "uninstall":
+	case uninstallCmdName:
 		return d.uninstall(ctx, stdout, stderr, args[1:])
 	case crossuser.ReadSocketTokenCmd:
 		return readSocketTokenInternal(stdout)
