@@ -56,9 +56,13 @@ func writeAsChild(path string) int {
 	return 0
 }
 
-// TestLogKeepsEveryLineWrittenConcurrently drives the log the way a burst of
-// simultaneous logins does: several processes appending to one file that is
-// already at its line cap, so that every single write also trims.
+// TestLogKeepsEveryLineWrittenConcurrently verifies F12: shells opening at the
+// same moment each get their lines into the log, and none is lost for having
+// been written while another session was writing too.
+//
+// It drives the log the way a burst of simultaneous logins does: several
+// processes appending to one file that is already at its line cap, so that
+// every single write also trims.
 //
 // The writers are real processes because that is what the case is. Two login
 // shells are two programs, each holding its own Logger, and a defect in how they
