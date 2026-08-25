@@ -177,3 +177,68 @@ func TestRecordsThatCannotBeReadAreReportedRatherThanPassedOver(t *testing.T) {
 	require.Error(t, err, "a store that cannot be read is not an empty store")
 	assert.Empty(t, r.Calls, "and nothing is removed on the strength of a list that could not be read")
 }
+
+// The key is out of the agent by the time the record is disposed of, so a record
+// that will not go leaves the agent right and the store wrong — and the next
+// session reading that store will ask for a removal the agent has nothing to do.
+// Nothing here can put that right, which is why it is written down rather than
+// returned: the session it is holding up must open either way.
+func TestARecordThatCannotBeForgottenIsWrittenDownRatherThanRaised(t *testing.T) {
+	records := &fakeAddedKeys{
+		keys: []AddedKey{{
+			KeyFile:   "/ssh/id_rsa",
+			AddedAt:   expiryClock.Add(-9 * time.Hour),
+			ExpiresAt: expiryClock.Add(-time.Hour),
+		}},
+		forgetErr: errors.New("permission denied"),
+	}
+	r := runtest.NewRunner().On("ssh-add", runtest.Stdout("", 0))
+	log := &fakeLogger{}
+
+	require.NoError(t, expirerWith(records, r, log).ExpireKeys(t.Context()),
+		"a session must open whether or not the record could be disposed of")
+
+	require.Len(t, r.Calls, 1, "the key was still taken out of the agent")
+	assert.True(t, log.contains("could not forget the record for id_rsa"),
+		"and what was left behind is named; lines were: %v", log.lines)
+}
+
+// An Expirer built without a clock reads the real one. Every other test here
+// hands it a fixed instant, which is what makes the comparison against a
+// record's expiry checkable — and would also hide a default that answered with
+// the zero time, under which nothing is ever past its expiry.
+func TestAnExpirerGivenNoClockReadsTheRealOne(t *testing.T) {
+	realNow := time.Now()
+	records := &fakeAddedKeys{keys: []AddedKey{{
+		KeyFile:   "/ssh/id_rsa",
+		AddedAt:   realNow.Add(-9 * time.Hour),
+		ExpiresAt: realNow.Add(-time.Hour),
+	}}}
+	r := runtest.NewRunner().On("ssh-add", runtest.Stdout("", 0))
+
+	e := Expirer{Records: records, Runner: r, Log: &fakeLogger{}}
+	require.NoError(t, e.ExpireKeys(t.Context()), "ExpireKeys")
+
+	require.Len(t, r.Calls, 1, "a key an hour past its time is past it by the real clock too")
+	assert.Equal(t, []string{"/ssh/id_rsa"}, records.forgotten, "and its record goes with it")
+}
+
+// The log is somewhere to write, not something to have: an Expirer given none
+// still does the work. This runs while a shell is opening, and a session that
+// could not be logged must not be a session that will not start.
+func TestAnExpirerGivenNoLogStillTakesTheKeyOut(t *testing.T) {
+	records := &fakeAddedKeys{keys: []AddedKey{{
+		KeyFile:   "/ssh/id_rsa",
+		AddedAt:   expiryClock.Add(-9 * time.Hour),
+		ExpiresAt: expiryClock.Add(-time.Hour),
+	}}}
+	r := runtest.NewRunner().On("ssh-add", runtest.Stdout("", 0))
+
+	e := expirerWith(records, r, nil)
+	require.NotPanics(t, func() {
+		require.NoError(t, e.ExpireKeys(t.Context()), "ExpireKeys")
+	}, "nowhere to write the line is not a reason to stop")
+
+	require.Len(t, r.Calls, 1, "the key past its time is still taken out")
+	assert.Equal(t, []string{"/ssh/id_rsa"}, records.forgotten, "and its record still goes")
+}
