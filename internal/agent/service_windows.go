@@ -37,7 +37,7 @@ func (s systemService) State(ctx context.Context) (serviceState, error) {
 		return serviceSomethingElse, err
 	}
 	state := serviceSomethingElse
-	err := s.withService(func(handle windows.Handle) error {
+	err := s.withService(windows.SERVICE_QUERY_STATUS, func(handle windows.Handle) error {
 		var status windows.SERVICE_STATUS
 		if err := windows.QueryServiceStatus(handle, &status); err != nil {
 			return fmt.Errorf("asking what the %s service is doing: %w", s.name(), err)
@@ -55,7 +55,7 @@ func (s systemService) Start(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	return s.withService(func(handle windows.Handle) error {
+	return s.withService(windows.SERVICE_START, func(handle windows.Handle) error {
 		if err := windows.StartService(handle, 0, nil); err != nil {
 			return s.explain(err)
 		}
@@ -63,15 +63,18 @@ func (s systemService) Start(ctx context.Context) error {
 	})
 }
 
-// withService opens the agent's service and hands it to do.
+// withService opens the agent's service for the given access and hands it to
+// do.
 //
-// It asks for exactly the two rights used — reading the state, and starting —
-// because that is what an ordinary account is granted, and an ordinary account
-// is who this is for. A handle opened for everything, which is what a
+// The access is the caller's to name, and each names exactly the one right it
+// uses, because that is how an ordinary account is granted them: the service's
+// own security descriptor hands out reading its state, reading its
+// configuration and starting it separately, and reserves changing it for
+// administrators. A handle opened for everything, which is what a
 // general-purpose service library asks for, is refused for anyone who is not
 // an administrator, and the refusal would look like the service being out of
 // reach rather than like too much having been asked for.
-func (s systemService) withService(do func(windows.Handle) error) error {
+func (s systemService) withService(access uint32, do func(windows.Handle) error) error {
 	manager, err := windows.OpenSCManager(nil, nil, windows.SC_MANAGER_CONNECT)
 	if err != nil {
 		return fmt.Errorf("reaching this system's service manager: %w", err)
@@ -82,8 +85,7 @@ func (s systemService) withService(do func(windows.Handle) error) error {
 	if err != nil {
 		return fmt.Errorf("naming the %s service: %w", s.name(), err)
 	}
-	service, err := windows.OpenService(manager, wide,
-		windows.SERVICE_QUERY_STATUS|windows.SERVICE_START)
+	service, err := windows.OpenService(manager, wide, access)
 	if err != nil {
 		return s.explain(err)
 	}
