@@ -343,6 +343,12 @@ func (p *plan) forBourne(ctx context.Context, req Request) error {
 	if req.Scope == Machine {
 		target, err := machineWiringFor(p.kind)
 		if err != nil {
+			// A Bourne shell this system keeps no machine-wide answer for. Which
+			// shells those are is the system's own business, and where its table
+			// answers for every Bourne shell it can wire there is no refusal here
+			// to be met. Checked because a block written into a guessed file is a
+			// wiring no session ever reads, reported as done.
+			//coverage:ignore
 			return err
 		}
 		return p.forMachine(ctx, target)

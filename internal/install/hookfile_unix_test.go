@@ -95,3 +95,32 @@ func TestAWiringInADirectoryThisAccountMayNotWriteIsReported(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), dropIn)
 }
+
+// F44: the other direction, and the same account. A shell names a startup file
+// it will read whether or not anybody has made one, so the directory to hold it
+// is this install's to create — and an account that may not create it has to be
+// told which file went unwired. An install that reported success here would name
+// a hook file in its report and leave every login without it.
+func TestAnInstallThatCannotMakeTheDirectoryForTheStartupFileNamesIt(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("this account may write anywhere, so there is no refusal to be had")
+	}
+
+	home := t.TempDir()
+	installInto(t, home)
+
+	// A level below the closed directory rather than inside it, so that the
+	// drop-in question is answered plainly — there is no such directory, and
+	// looking for one under a directory that can still be entered is not itself
+	// a failure — leaving the making of the directory as the step that fails.
+	closed := filepath.Join(home, "closed")
+	require.NoError(t, os.Mkdir(closed, 0o555))
+	t.Cleanup(func() { _ = os.Chmod(closed, 0o755) })
+	profile := filepath.Join(closed, "shell", "startup-file")
+
+	_, err := Install(t.Context(), wiringRequest(t, home, profile), Ancestry{})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), profile, "the file that could not be wired is the one to name")
+	assert.NoFileExists(t, profile, "and nothing is left where the wiring would have gone")
+}

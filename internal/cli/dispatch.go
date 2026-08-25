@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/OrbintSoft/sshakku/internal/agent"
 	"github.com/OrbintSoft/sshakku/internal/cli/backend"
 	"github.com/OrbintSoft/sshakku/internal/cli/crossuser"
 	"github.com/OrbintSoft/sshakku/internal/cli/dialog"
@@ -139,23 +140,31 @@ type deps struct {
 	// SSHakku's entries in, and reports what it made. Nil where this system's
 	// wallet has no such thing to make. Only --fix ever calls it.
 	makeCompartment func(ctx context.Context, settings config.Settings) (string, error)
+	// agentKeepsLifetimes is whether the agent on this system holds a key for a
+	// stated time and drops it at that deadline itself. It decides two things a
+	// session does: what lifetime a key is added with, and whether taking the
+	// expired ones back out is this session's job at all. Injected so both
+	// answers run from either machine, since which one a system gives is the
+	// system's own (agent.KeepsLifetimes).
+	agentKeepsLifetimes bool
 }
 
 // realDeps wires deps to the production implementations.
 func realDeps() deps {
 	return deps{
-		newSecret:         backend.Open,
-		ensurer:           realEnsurer(),
-		gather:            gatherReport,
-		tokenSource:       crossuser.Exec{},
-		geteuid:           os.Geteuid,
-		self:              os.Executable,
-		graphicalPrompter: dialog.Graphical,
-		fetchHandoff:      handoff.Fetch,
-		tty:               dialog.TTY{},
-		wallet:            walletcheck.View,
-		runner:            run.ExecRunner{},
-		makeCompartment:   walletcheck.MakeCompartment,
+		newSecret:           backend.Open,
+		ensurer:             realEnsurer(),
+		gather:              gatherReport,
+		tokenSource:         crossuser.Exec{},
+		geteuid:             os.Geteuid,
+		self:                os.Executable,
+		graphicalPrompter:   dialog.Graphical,
+		fetchHandoff:        handoff.Fetch,
+		tty:                 dialog.TTY{},
+		wallet:              walletcheck.View,
+		runner:              run.ExecRunner{},
+		makeCompartment:     walletcheck.MakeCompartment,
+		agentKeepsLifetimes: agent.KeepsLifetimes(),
 	}
 }
 

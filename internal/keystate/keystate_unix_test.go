@@ -29,3 +29,21 @@ func TestSavedRecordIsPrivate(t *testing.T) {
 	require.NoError(t, err, "stat record")
 	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm(), "record permissions")
 }
+
+// A store that cannot be listed must say so rather than answer with an empty
+// list: a store nobody has written to yet has no records and that is not an
+// error, and the two must not arrive as the same answer — read as "no keys",
+// a key past its lifetime stays in the agent with nothing logged.
+//
+// The refusal is asked for with a regular file where the directory belongs,
+// which is a question only this kind of system answers. Listing one here fails;
+// on a system that opens a file as a directory and finds it empty, there is no
+// refusal to be had and the caller is told there are no records.
+func TestRecordsThatCannotBeListedAreNotAnEmptyStore(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "not-a-dir")
+	require.NoError(t, os.WriteFile(file, []byte("x"), 0o600))
+
+	_, err := Store{Dir: file}.Records()
+
+	assert.Error(t, err, "want an error when the store directory cannot be listed")
+}

@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/OrbintSoft/sshakku/internal/agent"
 	"github.com/OrbintSoft/sshakku/internal/giveup"
 	"github.com/OrbintSoft/sshakku/internal/keys"
 	"github.com/OrbintSoft/sshakku/internal/keys/prompt"
@@ -37,7 +36,7 @@ func (d deps) loadKeys(ctx context.Context, stderr io.Writer) int {
 	}
 
 	settings := loadSettings(layout, "load-keys", log)
-	lifetime, recorded := keyLifetimes(settings.KeyLifetime, agent.KeepsLifetimes())
+	lifetime, recorded := keyLifetimes(settings.KeyLifetime, d.agentKeepsLifetimes)
 	if lifetime != settings.KeyLifetime {
 		_ = log.Log("INFO", fmt.Sprintf(
 			"load-keys: the agent on this system holds no key lifetimes, so keys are added with no expiry"+

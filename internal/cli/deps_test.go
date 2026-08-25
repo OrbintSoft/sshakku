@@ -145,6 +145,39 @@ func TestLoadKeys(t *testing.T) {
 	})
 }
 
+// F53: where the agent holds no lifetimes the configured one is not dropped, it
+// changes hands — the key goes in with no expiry and the sessions keep the time.
+// That is a difference between what was asked for and what the agent was told,
+// and a person reading the log has to find it there rather than infer it from a
+// key that outlives its lifetime. Which system this is comes in as the answer it
+// is, so the line is checked from either machine.
+func TestALifetimeTheAgentWillNotHoldIsWrittenDownAsKeptBySessions(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("XDG_STATE_HOME", tmp)
+	t.Setenv("WAYLAND_DISPLAY", "")
+	t.Setenv("DISPLAY", "")
+
+	// The log is appended to, not created along with the directory holding it:
+	// on a machine in use the agent's own start has been there first.
+	logFile := paths.Resolve(paths.FromOS(), paths.ProbeDir).LogFile
+	require.NoError(t, os.MkdirAll(filepath.Dir(logFile), 0o700), "seed the directory the session log lives in")
+
+	d := depsReturning(newMemoryBackend())
+	d.agentKeepsLifetimes = false
+
+	var errOut bytes.Buffer
+	require.Zerof(t, d.loadKeys(t.Context(), &errOut),
+		"a directory with no key in it is nothing to complain about; stderr=%q", errOut.String())
+
+	logged, err := os.ReadFile(logFile)
+	require.NoError(t, err, "the session log must have been written")
+	assert.Contains(t, string(logged), "holds no key lifetimes",
+		"the log says the agent would not hold the lifetime")
+	assert.Contains(t, string(logged), "when a session next opens",
+		"and what keeps it instead, since that is the part a person has to know")
+}
+
 // TestRunLoadKeys covers run's load-keys case: it dispatches to d.loadKeys with
 // the injected backend. Headless with a temp HOME and no ~/.ssh, the load is a
 // silent no-op, so this exercises the dispatch wiring without a subprocess.
