@@ -107,14 +107,17 @@ func (b *CLI) run(ctx context.Context, args []string, extraInput ...string) (run
 	if b.KeyFile != "" {
 		full = append(full, "--key-file", b.KeyFile)
 	}
-	input := password + "\n"
+	var input strings.Builder
+	input.WriteString(password)
+	input.WriteString("\n")
 	for _, extra := range extraInput {
-		input += extra + "\n"
+		input.WriteString(extra)
+		input.WriteString("\n")
 	}
 	res, err := b.Runner.Run(ctx, run.Cmd{
 		Name:    keepassxcCLIBin,
 		Args:    full,
-		Stdin:   input,
+		Stdin:   input.String(),
 		Timeout: b.Timeout,
 	})
 	if err != nil {
@@ -222,7 +225,7 @@ func (b *CLI) List(ctx context.Context) ([]string, error) {
 		return nil, nil
 	}
 	var services []string
-	for _, line := range strings.Split(string(res.Stdout), "\n") {
+	for line := range strings.SplitSeq(string(res.Stdout), "\n") {
 		name := strings.TrimSpace(line)
 		// A trailing slash marks a nested group, not an entry.
 		if name == "" || strings.HasSuffix(name, "/") {

@@ -124,7 +124,7 @@ func ReadState(path string) (State, error) {
 		return State{}, err
 	}
 	var s State
-	for _, line := range strings.Split(string(b), "\n") {
+	for line := range strings.SplitSeq(string(b), "\n") {
 		key, val, ok := strings.Cut(line, "=")
 		if !ok {
 			continue
@@ -184,8 +184,7 @@ func (r ExecRunner) Start(ctx context.Context, socket string) (int, error) {
 // refuses to start — a socket path the kernel will not accept, a directory
 // that is not there, one it may not write in — are all on its stderr.
 func withAgentComplaint(err error) error {
-	var exit *exec.ExitError
-	if errors.As(err, &exit) {
+	if exit, ok := errors.AsType[*exec.ExitError](err); ok {
 		if said := strings.TrimSpace(string(exit.Stderr)); said != "" {
 			return fmt.Errorf("%w: %s", err, said)
 		}

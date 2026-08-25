@@ -95,8 +95,7 @@ func (a ExecKeyAdder) runSSHAdd(ctx context.Context, env []string, keyfile strin
 
 	err := runCmd(cmd)
 	if err != nil {
-		var ee *exec.ExitError
-		if errors.As(err, &ee) {
+		if ee, ok := errors.AsType[*exec.ExitError](err); ok {
 			return ee.ExitCode(), nil
 		}
 		return 0, err

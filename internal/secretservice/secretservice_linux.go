@@ -113,7 +113,7 @@ func (c *Client) callTimeout() time.Duration {
 // connected-but-unresponsive daemon surfaces a deadline error instead of
 // blocking forever. CallWithContext returns only once the call completes or the
 // deadline fires, so cancelling the context as call returns is safe.
-func (c *Client) call(ctx context.Context, obj dbus.BusObject, method string, args ...interface{}) *dbus.Call {
+func (c *Client) call(ctx context.Context, obj dbus.BusObject, method string, args ...any) *dbus.Call {
 	ctx, cancel := context.WithTimeout(ctx, c.callTimeout())
 	defer cancel()
 	return obj.CallWithContext(ctx, method, 0, args...)

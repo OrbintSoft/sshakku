@@ -82,7 +82,7 @@ func (l PathList) Remove(raw, dir string) (string, bool) {
 
 // has reports whether the list already names dir.
 func (l PathList) has(raw, dir string) bool {
-	for _, entry := range strings.Split(raw, l.Separator) {
+	for entry := range strings.SplitSeq(raw, l.Separator) {
 		if l.same(entry, dir) {
 			return true
 		}
