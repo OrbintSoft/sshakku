@@ -3,61 +3,28 @@ version: "2"
 # Standard set: errcheck, govet, ineffassign, staticcheck, unused.
 linters:
   default: standard
+  # Kept in alphabetical order, so a linter can be found without reading the
+  # reason it was added.
   enable:
-    # Assertions are where a test says what it is for, and testify makes them
-    # easy to write in a way that compiles, passes, and checks nothing: the
-    # arguments the wrong way round, an error asserted present when absent was
-    # meant, a require inside a goroutine — which calls FailNow off the test's
-    # own goroutine and leaves the run hanging instead of failing.
-    - testifylint
+    # A []any handed to a variadic ...any arrives as one argument, not as its
+    # elements: the call compiles, and the message prints the slice where the
+    # values were meant. Errors wrapped for the user are built this way.
+    - asasalint
 
-    # A build tag is the one comment in this tree the compiler acts on, and the
-    # one that fails open: `// go:build darwin` with a space is not a directive
-    # at all, so the file it guards is compiled into every platform instead of
-    # one, and nothing says so.
-    - gocheckcompilerdirectives
-
-    # An error seen and then not returned: the check runs, the branch is taken,
-    # and the caller is still told the operation worked.
-    - nilerr
-
-    # `%v` on an error flattens it into text, so the cause stops being something
-    # errors.Is can find. This package family is built on sentinels callers
-    # match against, and a caller cannot match what was turned into a string.
-    - errorlint
-
-    # Multiplying two durations gives a number in units nobody meant —
-    # `timeout * time.Second` is seconds squared. Key lifetimes, agent timeouts
-    # and prompt budgets are most of this program's arithmetic.
-    - durationcheck
-
-    # An unchecked type assertion is a panic waiting for the input nobody
-    # thought of, and this program parses what other tools print.
-    - forcetypeassert
-
-    # Callers here match on sentinels — ErrNoTerminal, ErrPromptCanceled — so
-    # what a sentinel is called is part of the package's interface.
-    - errname
+    # An identifier that is not ASCII reads as one name and resolves as
+    # another — a Cyrillic о is a different letter from the o beside it. Same
+    # class as bidichk, on names rather than on direction.
+    - asciicheck
 
     # Bidirectional and zero-width Unicode can make a line read one way and
     # compile another. A tool that handles passphrases and accepts patches from
     # strangers should not rely on a reviewer noticing.
     - bidichk
 
-    # The testing package owns cleanup: t.TempDir and t.Setenv undo themselves
-    # when the test ends, and their os equivalents leave the next test to find
-    # what this one left behind.
-    - usetesting
-
-    # A helper that does not announce itself reports every failure at its own
-    # line, so several tests that fail for different reasons all point at the
-    # same place and none of them points at itself.
-    - thelper
-
-    # Every suppression must name the linter it silences and say why, so a
-    # nolint stays an argument someone can disagree with rather than a way to
-    # make a warning disappear.
-    - nolintlint
+    # A context kept in a struct field is scoped to the object rather than to
+    # the call, and nothing then says which call it belonged to. It travels as
+    # the first argument or it does not travel.
+    - containedctx
 
     # A context that arrives and is not passed on: the function takes one,
     # then starts its own work from a fresh root, and the deadline the caller
@@ -67,25 +34,104 @@ linters:
     # to those waits is that one of them can be ended from above.
     - contextcheck
 
+    # Since the loop variable became per-iteration, `x := x` inside the body
+    # copies a value that was already the body's own. It is a no-op that still
+    # reads like the fix for a bug, so the next loop written next to it may
+    # leave the copy out and look wrong.
+    - copyloopvar
+
+    # Multiplying two durations gives a number in units nobody meant —
+    # `timeout * time.Second` is seconds squared. Key lifetimes, agent timeouts
+    # and prompt budgets are most of this program's arithmetic.
+    - durationcheck
+
+    # json.Marshal fails only for what cannot be encoded — a chan, a func, a
+    # map with keys that are neither — so the check on a plain struct is dead
+    # code, while the type that can actually fail is the one that tends to be
+    # marshalled unchecked. This program speaks JSON to other tools' sockets.
+    - errchkjson
+
+    # Callers here match on sentinels — ErrNoTerminal, ErrPromptCanceled — so
+    # what a sentinel is called is part of the package's interface.
+    - errname
+
+    # `%v` on an error flattens it into text, so the cause stops being something
+    # errors.Is can find. This package family is built on sentinels callers
+    # match against, and a caller cannot match what was turned into a string.
+    - errorlint
+
+    # A context re-wrapped inside a loop grows one layer per iteration, so what
+    # started as a deadline becomes a chain of them nobody can read back.
+    - fatcontext
+
+    # An unchecked type assertion is a panic waiting for the input nobody
+    # thought of, and this program parses what other tools print.
+    - forcetypeassert
+
+    # A build tag is the one comment in this tree the compiler acts on, and the
+    # one that fails open: `// go:build darwin` with a space is not a directive
+    # at all, so the file it guards is compiled into every platform instead of
+    # one, and nothing says so.
+    - gocheckcompilerdirectives
+
+    # The same literal written out at each use is a rename waiting to be done
+    # in three places out of four: a backend's name, an env var, a subcommand
+    # the dispatcher and the command itself must agree on.
+    - goconst
+
+    # An error seen and then not returned: the check runs, the branch is taken,
+    # and the caller is still told the operation worked.
+    - nilerr
+
     # The call that offers both shapes and gets the one without: exec.Command
     # where exec.CommandContext exists, net.Dial where a Dialer would take a
     # context. A timeout ends the wait; a context ends the work, and only one
     # of the two releases what the caller has given up on.
     - noctx
 
-    # A context re-wrapped inside a loop grows one layer per iteration, so what
-    # started as a deadline becomes a chain of them nobody can read back.
-    - fatcontext
+    # Every suppression must name the linter it silences and say why, so a
+    # nolint stays an argument someone can disagree with rather than a way to
+    # make a warning disappear.
+    - nolintlint
 
-    # A context kept in a struct field is scoped to the object rather than to
-    # the call, and nothing then says which call it belonged to. It travels as
-    # the first argument or it does not travel.
-    - containedctx
+    # Assertions are where a test says what it is for, and testify makes them
+    # easy to write in a way that compiles, passes, and checks nothing: the
+    # arguments the wrong way round, an error asserted present when absent was
+    # meant, a require inside a goroutine — which calls FailNow off the test's
+    # own goroutine and leaves the run hanging instead of failing.
+    - testifylint
+
+    # A helper that does not announce itself reports every failure at its own
+    # line, so several tests that fail for different reasons all point at the
+    # same place and none of them points at itself.
+    - thelper
+
+    # The testing package owns cleanup: t.TempDir and t.Setenv undo themselves
+    # when the test ends, and their os equivalents leave the next test to find
+    # what this one left behind.
+    - usetesting
 
   settings:
+    goconst:
+      # In a table-driven test the repeated literal is the case's own data —
+      # the OS a fixture describes, the flag an argument list passes — and
+      # lifting it into a constant hides what the case is about behind a name
+      # the reader has to go and resolve.
+      ignore-tests: true
+
     nolintlint:
       require-explanation: true
       require-specific: true
+
+    testifylint:
+      disable:
+        # require-error wants every error assertion to stop the test. Several
+        # tests here check a handful of independent operations in a row — three
+        # calls that must all be no-ops, say — and one report naming every one
+        # that failed is worth more than a report naming the first. Which of the
+        # two a given assertion wants is a judgement about that test, not
+        # something a checker can read off the call.
+        - require-error
 
     usetesting:
       # A test that roots its own context keeps it after the test that made it
@@ -99,16 +145,6 @@ linters:
       # where a directory shared between test binaries is the whole point.
       os-setenv: true
       os-temp-dir: true
-
-    testifylint:
-      disable:
-        # require-error wants every error assertion to stop the test. Several
-        # tests here check a handful of independent operations in a row — three
-        # calls that must all be no-ops, say — and one report naming every one
-        # that failed is worth more than a report naming the first. Which of the
-        # two a given assertion wants is a judgement about that test, not
-        # something a checker can read off the call.
-        - require-error
 
 formatters:
   # gofumpt is gofmt plus the rules gofmt leaves to taste, so it subsumes a
