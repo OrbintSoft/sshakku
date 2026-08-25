@@ -2,6 +2,7 @@ package backend
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 
@@ -75,7 +76,7 @@ func keepassxcRouteUnavailable(route, goos, database string) error {
 		return nil
 	case config.KeePassXCRouteCLI:
 		if database == "" {
-			return fmt.Errorf("the cli route works on a database file, so keepassxc_database has to name one")
+			return errors.New("the cli route works on a database file, so keepassxc_database has to name one")
 		}
 		return nil
 	default:

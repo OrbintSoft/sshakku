@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -85,7 +86,7 @@ func runRender(args []string, out io.Writer) error {
 	}
 	paths := fs.Args()
 	if len(paths) == 0 {
-		return fmt.Errorf("usage: testreport render [-report-url os=url] [-coverage-url os=url] <report.json> [report.json ...]")
+		return errors.New("usage: testreport render [-report-url os=url] [-coverage-url os=url] <report.json> [report.json ...]")
 	}
 	reports := make([]Report, 0, len(paths))
 	for _, path := range paths {
@@ -113,7 +114,7 @@ func runRender(args []string, out io.Writer) error {
 // action) and writes its shields.io endpoint badge JSON to out.
 func runBadge(args []string, out io.Writer) error {
 	if len(args) != 1 {
-		return fmt.Errorf("usage: testreport badge <report.json>")
+		return errors.New("usage: testreport badge <report.json>")
 	}
 	f, err := openFile(args[0])
 	if err != nil {

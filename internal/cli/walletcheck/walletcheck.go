@@ -236,7 +236,7 @@ func (p walletProbe) databaseFile(path string) diagnose.Requirement {
 		return diagnose.Requirement{Name: name, Detail: "keepassxc_database has to name the database file to use"}
 	}
 	if !p.exists(path) {
-		return diagnose.Requirement{Name: name, Detail: fmt.Sprintf("%s does not exist", path)}
+		return diagnose.Requirement{Name: name, Detail: path + " does not exist"}
 	}
 	return diagnose.Requirement{Name: name, Detail: path, Present: true}
 }

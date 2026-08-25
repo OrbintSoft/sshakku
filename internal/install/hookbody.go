@@ -3,6 +3,7 @@ package install
 import (
 	"bytes"
 	_ "embed"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -67,7 +68,7 @@ const (
 // quoted the same way as every other line this program prints for that shell.
 func RenderHook(template []byte, placeholder, binary string, dialect shell.Dialect) ([]byte, error) {
 	if binary == "" {
-		return nil, fmt.Errorf("no binary was named to write into the hook")
+		return nil, errors.New("no binary was named to write into the hook")
 	}
 	if !bytes.Contains(template, []byte(placeholder)) {
 		// A template that has lost its placeholder renders a hook naming some

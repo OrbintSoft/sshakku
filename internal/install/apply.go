@@ -2,6 +2,7 @@ package install
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -243,7 +244,7 @@ func (p *plan) forKind(ctx context.Context, req Request) error {
 	case Bash, Zsh:
 		return p.forBourne(ctx, req)
 	case Auto:
-		return fmt.Errorf("the shell was not worked out, so there is nothing to wire")
+		return errors.New("the shell was not worked out, so there is nothing to wire")
 	default:
 		return fmt.Errorf("there is no wiring defined for a %s shell", p.kind)
 	}
