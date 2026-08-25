@@ -14,14 +14,14 @@ func TestResolveKeePassXCRoute(t *testing.T) {
 		wantErr bool
 	}{
 		{"absent means SSHakku chooses", nil, KeePassXCRouteAuto, false},
-		{"empty means SSHakku chooses", ptr(""), KeePassXCRouteAuto, false},
-		{"auto", ptr(KeePassXCRouteAuto), KeePassXCRouteAuto, false},
-		{"secret-service", ptr(KeePassXCRouteSecretService), KeePassXCRouteSecretService, false},
-		{"native", ptr(KeePassXCRouteNative), KeePassXCRouteNative, false},
-		{"cli", ptr(KeePassXCRouteCLI), KeePassXCRouteCLI, false},
+		{"empty means SSHakku chooses", new(""), KeePassXCRouteAuto, false},
+		{"auto", new(KeePassXCRouteAuto), KeePassXCRouteAuto, false},
+		{"secret-service", new(KeePassXCRouteSecretService), KeePassXCRouteSecretService, false},
+		{"native", new(KeePassXCRouteNative), KeePassXCRouteNative, false},
+		{"cli", new(KeePassXCRouteCLI), KeePassXCRouteCLI, false},
 		// A typo must not silently pin something: it falls back to choosing,
 		// and says so.
-		{"an unknown route is reported", ptr("nativ"), KeePassXCRouteAuto, true},
+		{"an unknown route is reported", new("nativ"), KeePassXCRouteAuto, true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -41,36 +41,36 @@ func TestResolveKeePassXCRoute(t *testing.T) {
 // all, so they are in wallet_unix_test.go.
 
 func TestResolveReportsAnInvalidKeePassXCRoute(t *testing.T) {
-	s, errs := Resolve(File{KeePassXCRoute: ptr("browser")}, lookupFrom(nil))
+	s, errs := Resolve(File{KeePassXCRoute: new("browser")}, lookupFrom(nil))
 	assert.NotEmpty(t, errs, "an unrecognised route must be reported")
 	assert.Equal(t, KeePassXCRouteAuto, s.KeePassXCRoute, "route must fall back")
 }
 
 func TestMergeOverridesTheKeePassXCSettings(t *testing.T) {
 	base := File{
-		KeePassXCRoute:    ptr(KeePassXCRouteNative),
-		KeePassXCDatabase: ptr("/base.kdbx"),
-		KeePassXCKeyFile:  ptr("/base.key"),
+		KeePassXCRoute:    new(KeePassXCRouteNative),
+		KeePassXCDatabase: new("/base.kdbx"),
+		KeePassXCKeyFile:  new("/base.key"),
 	}
 	other := File{
-		KeePassXCRoute:    ptr(KeePassXCRouteCLI),
-		KeePassXCDatabase: ptr("/other.kdbx"),
-		KeePassXCKeyFile:  ptr("/other.key"),
+		KeePassXCRoute:    new(KeePassXCRouteCLI),
+		KeePassXCDatabase: new("/other.kdbx"),
+		KeePassXCKeyFile:  new("/other.key"),
 	}
 	got := base.Merge(other)
-	assert.Equal(t, ptr(KeePassXCRouteCLI), got.KeePassXCRoute, "route must be other's")
-	assert.Equal(t, ptr("/other.kdbx"), got.KeePassXCDatabase, "database must be other's")
-	assert.Equal(t, ptr("/other.key"), got.KeePassXCKeyFile, "key file must be other's")
+	assert.Equal(t, new(KeePassXCRouteCLI), got.KeePassXCRoute, "route must be other's")
+	assert.Equal(t, new("/other.kdbx"), got.KeePassXCDatabase, "database must be other's")
+	assert.Equal(t, new("/other.key"), got.KeePassXCKeyFile, "key file must be other's")
 }
 
 func TestMergeKeepsTheBaseKeePassXCSettingsWhenOtherIsSilent(t *testing.T) {
 	base := File{
-		KeePassXCRoute:    ptr(KeePassXCRouteNative),
-		KeePassXCDatabase: ptr("/base.kdbx"),
-		KeePassXCKeyFile:  ptr("/base.key"),
+		KeePassXCRoute:    new(KeePassXCRouteNative),
+		KeePassXCDatabase: new("/base.kdbx"),
+		KeePassXCKeyFile:  new("/base.key"),
 	}
 	got := base.Merge(File{})
-	assert.Equal(t, ptr(KeePassXCRouteNative), got.KeePassXCRoute, "route must be the base's")
-	assert.Equal(t, ptr("/base.kdbx"), got.KeePassXCDatabase, "database must be the base's")
-	assert.Equal(t, ptr("/base.key"), got.KeePassXCKeyFile, "key file must be the base's")
+	assert.Equal(t, new(KeePassXCRouteNative), got.KeePassXCRoute, "route must be the base's")
+	assert.Equal(t, new("/base.kdbx"), got.KeePassXCDatabase, "database must be the base's")
+	assert.Equal(t, new("/base.key"), got.KeePassXCKeyFile, "key file must be the base's")
 }

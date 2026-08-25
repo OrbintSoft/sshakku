@@ -25,7 +25,7 @@ func TestSecretBackendChoicesOnWindows(t *testing.T) {
 	})
 
 	t.Run("the secret service is not a wallet this system has", func(t *testing.T) {
-		s, errs := Resolve(File{SecretBackend: ptr("secret-service")}, lookupFrom(nil))
+		s, errs := Resolve(File{SecretBackend: new("secret-service")}, lookupFrom(nil))
 
 		require.NotEmpty(t, errs, "naming a wallet this platform has not got must be reported, not silently accepted")
 		assert.Contains(t, errs[0].Error(), "secret-service", "the error must name the value that cannot be used here")
@@ -33,7 +33,7 @@ func TestSecretBackendChoicesOnWindows(t *testing.T) {
 	})
 
 	t.Run("the store this system keeps can be named outright", func(t *testing.T) {
-		s, errs := Resolve(File{SecretBackend: ptr("credential-manager")}, lookupFrom(nil))
+		s, errs := Resolve(File{SecretBackend: new("credential-manager")}, lookupFrom(nil))
 		require.Empty(t, errs, "unexpected errors")
 		assert.Equal(t, "credential-manager", s.SecretBackend, "SecretBackend")
 	})

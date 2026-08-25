@@ -25,7 +25,7 @@ func TestSecretBackendChoicesOnLinux(t *testing.T) {
 	})
 
 	t.Run("the keychain is not a wallet this system has", func(t *testing.T) {
-		s, errs := Resolve(File{SecretBackend: ptr("keychain")}, lookupFrom(nil))
+		s, errs := Resolve(File{SecretBackend: new("keychain")}, lookupFrom(nil))
 
 		require.NotEmpty(t, errs, "naming a wallet this platform has not got must be reported, not silently accepted")
 		assert.Contains(t, errs[0].Error(), "keychain", "the error must name the value that cannot be used here")

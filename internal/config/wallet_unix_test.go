@@ -33,7 +33,7 @@ func TestSecretBackendsIsTheOneList(t *testing.T) {
 	for _, name := range names {
 		assert.Truef(t, SecretBackendAvailable(name),
 			"SecretBackendAvailable(%q) = false for a wallet the same package offers", name)
-		s, errs := Resolve(File{SecretBackend: ptr(name)}, lookupFrom(nil))
+		s, errs := Resolve(File{SecretBackend: new(name)}, lookupFrom(nil))
 		assert.Emptyf(t, errs, "naming the offered wallet %q must not be reported", name)
 		assert.Equalf(t, name, s.SecretBackend, "an offered wallet must be accepted")
 	}
@@ -50,10 +50,10 @@ func TestSecretBackendsIsTheOneList(t *testing.T) {
 
 func TestResolveSecretBackendAccountFieldsPassThrough(t *testing.T) {
 	file := File{
-		SecretBackend:    ptr(SecretBackendBitwarden),
-		OnePasswordVault: ptr("sshakku-vault"),
-		BitwardenEmail:   ptr("user@example.invalid"),
-		BitwardenServer:  ptr("https://vault.example.invalid"),
+		SecretBackend:    new(SecretBackendBitwarden),
+		OnePasswordVault: new("sshakku-vault"),
+		BitwardenEmail:   new("user@example.invalid"),
+		BitwardenServer:  new("https://vault.example.invalid"),
 	}
 	s, errs := Resolve(file, lookupFrom(nil))
 	require.Empty(t, errs, "unexpected errors")
@@ -63,17 +63,17 @@ func TestResolveSecretBackendAccountFieldsPassThrough(t *testing.T) {
 }
 
 func TestResolveAcceptsKeePassXCAsABackend(t *testing.T) {
-	s, errs := Resolve(File{SecretBackend: ptr(SecretBackendKeePassXC)}, lookupFrom(nil))
+	s, errs := Resolve(File{SecretBackend: new(SecretBackendKeePassXC)}, lookupFrom(nil))
 	require.Empty(t, errs, "unexpected errors")
 	assert.Equal(t, SecretBackendKeePassXC, s.SecretBackend, "the wallet is named, not the mechanism")
 }
 
 func TestResolveCarriesTheKeePassXCSettings(t *testing.T) {
 	s, errs := Resolve(File{
-		SecretBackend:     ptr(SecretBackendKeePassXC),
-		KeePassXCRoute:    ptr(KeePassXCRouteCLI),
-		KeePassXCDatabase: ptr("/home/someone/secrets.kdbx"),
-		KeePassXCKeyFile:  ptr("/home/someone/secrets.key"),
+		SecretBackend:     new(SecretBackendKeePassXC),
+		KeePassXCRoute:    new(KeePassXCRouteCLI),
+		KeePassXCDatabase: new("/home/someone/secrets.kdbx"),
+		KeePassXCKeyFile:  new("/home/someone/secrets.key"),
 	}, lookupFrom(nil))
 	require.Empty(t, errs, "unexpected errors")
 	assert.Equal(t, KeePassXCRouteCLI, s.KeePassXCRoute, "route")
