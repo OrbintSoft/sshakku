@@ -25,9 +25,12 @@ type credentialStore interface {
 type systemCredentialStore struct{}
 
 func (systemCredentialStore) Read(target string) (credential, bool, error) { return credRead(target) }
-func (systemCredentialStore) Write(entry credential) error                 { return credWrite(entry) }
-func (systemCredentialStore) Delete(target string) (bool, error)           { return credDelete(target) }
-func (systemCredentialStore) List(prefix string) ([]string, error)         { return credList(prefix) }
+
+func (systemCredentialStore) Write(entry credential) error { return credWrite(entry) }
+
+func (systemCredentialStore) Delete(target string) (bool, error) { return credDelete(target) }
+
+func (systemCredentialStore) List(prefix string) ([]string, error) { return credList(prefix) }
 
 // CredentialManager keeps passphrases in the credential store this system
 // provides, one generic credential per service, filed under the service's own
