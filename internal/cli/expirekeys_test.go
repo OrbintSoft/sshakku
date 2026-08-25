@@ -73,11 +73,12 @@ func TestAKeyAddedWithNoLifetimeIsReadAsNeverRunningOut(t *testing.T) {
 	assert.True(t, got[0].ExpiresAt.IsZero(), "no lifetime was asked for, so there is no moment it runs out")
 }
 
-// F53: the session takes the key out — so a shell opening is what has to do it,
-// not a command a person would have to remember to run. Which half of this runs
-// depends on the machine, exactly as the promise does: where the agent holds
-// lifetimes there is nothing for a session to expire.
-func TestAShellOpeningTakesOutAKeyWhoseTimeIsUp(t *testing.T) {
+// aShellOpeningOver seeds a key added nine hours ago to live one hour, opens a
+// shell against an agent that either keeps lifetimes or does not, and hands back
+// what ssh-add was asked to do and the store as it was left.
+func aShellOpeningOver(t *testing.T, agentKeepsLifetimes bool) (*runtest.Runner, keystate.Store, string) {
+	t.Helper()
+
 	tempRuntimeEnv(t)
 	layout := paths.Resolve(paths.FromOS(), paths.ProbeDir).WithSocketToken(paths.SocketToken())
 	keyfile := filepath.Join(t.TempDir(), "keys", "id_rsa")
@@ -90,21 +91,63 @@ func TestAShellOpeningTakesOutAKeyWhoseTimeIsUp(t *testing.T) {
 	r := runtest.NewRunner().On("ssh-add", runtest.Stdout("", 0))
 	d := depsWithEnsurer(fakeEnsurer{res: agent.EnsureResult{Live: agent.SocketEndpoint("/run/sshakku/agent.sock")}})
 	d.runner = r
+	d.agentKeepsLifetimes = agentKeepsLifetimes
 
 	var out, errOut bytes.Buffer
 	require.Zerof(t, d.shellInit(t.Context(), &out, &errOut, nil),
 		"shellInit must succeed; stderr=%q", errOut.String())
+	return r, store, keyfile
+}
 
-	if agent.KeepsLifetimes() {
+// F53: the session takes the key out — so a shell opening is what has to do it,
+// not a command a person would have to remember to run. Which half runs is
+// decided by what this system's agent does with lifetimes, and both answers are
+// driven here rather than only the one this machine gives: the other is somebody
+// else's every login.
+func TestAShellOpeningTakesOutAKeyWhoseTimeIsUp(t *testing.T) {
+	t.Run("an agent that keeps no lifetimes leaves the keeping of them to the session", func(t *testing.T) {
+		r, store, keyfile := aShellOpeningOver(t, false)
+
+		require.Len(t, r.Calls, 1, "the key whose time is up must be taken out as the shell opens")
+		assert.Equal(t, "ssh-add", r.Calls[0].Name, "the agent is reached through the program that speaks to it")
+		assert.Equal(t, []string{"-d", keyfile}, r.Calls[0].Args, "and the key is named by the file it was added from")
+		_, found := store.Load("id_rsa")
+		assert.False(t, found, "the record goes with the key, or every later session tries again")
+	})
+
+	t.Run("a store that cannot be read is written down, and the shell still opens", func(t *testing.T) {
+		tempRuntimeEnv(t)
+		layout := paths.Resolve(paths.FromOS(), paths.ProbeDir).WithSocketToken(paths.SocketToken())
+		// A regular file where the records are kept: listing it fails with
+		// something other than "there are none", which is the one answer this
+		// must not be read as.
+		require.NoError(t, os.MkdirAll(filepath.Dir(keystateDir(layout)), 0o700))
+		require.NoError(t, os.WriteFile(keystateDir(layout), []byte("not a directory"), 0o600))
+		require.NoError(t, os.MkdirAll(filepath.Dir(layout.LogFile), 0o700))
+
+		r := runtest.NewRunner().On("ssh-add", runtest.Stdout("", 0))
+		d := depsWithEnsurer(fakeEnsurer{res: agent.EnsureResult{Live: agent.SocketEndpoint("/run/sshakku/agent.sock")}})
+		d.runner, d.agentKeepsLifetimes = r, false
+
+		var out, errOut bytes.Buffer
+		require.Zerof(t, d.shellInit(t.Context(), &out, &errOut, nil),
+			"a session must open whether or not its records could be read; stderr=%q", errOut.String())
+
+		assert.Empty(t, r.Calls, "nothing is taken out of the agent on the strength of a list that was never read")
+		logged, err := os.ReadFile(layout.LogFile)
+		require.NoError(t, err, "the session log must have been written")
+		assert.Contains(t, string(logged), "expire keys",
+			"what went wrong goes to the log, which is the only place a shell opening can put it")
+	})
+
+	t.Run("an agent that keeps lifetimes has already dropped it", func(t *testing.T) {
+		r, store, _ := aShellOpeningOver(t, true)
+
 		assert.Empty(t, r.Calls,
 			"this agent expires keys itself, so a session that removed one would be removing what somebody re-added")
-		return
-	}
-	require.Len(t, r.Calls, 1, "the key whose time is up must be taken out as the shell opens")
-	assert.Equal(t, "ssh-add", r.Calls[0].Name, "the agent is reached through the program that speaks to it")
-	assert.Equal(t, []string{"-d", keyfile}, r.Calls[0].Args, "and the key is named by the file it was added from")
-	_, found := store.Load("id_rsa")
-	assert.False(t, found, "the record goes with the key, or every later session tries again")
+		_, found := store.Load("id_rsa")
+		assert.True(t, found, "and the record stays, since nothing here has taken the key away")
+	})
 }
 
 func TestAShellOpeningLeavesAKeyStillWithinItsTime(t *testing.T) {

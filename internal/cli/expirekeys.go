@@ -26,7 +26,7 @@ import (
 // the one that shell is being handed — a store that cannot be read is not
 // something to act on at that moment, and the session opens either way.
 func (d deps) expireKeys(ctx context.Context, layout paths.Layout, live agent.Endpoint) {
-	if !expiryIsThisSessionsJob(agent.KeepsLifetimes(), live.Native()) {
+	if !expiryIsThisSessionsJob(d.agentKeepsLifetimes, live.Native()) {
 		return
 	}
 	log := sessionlog.New(layout.LogFile)
