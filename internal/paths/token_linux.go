@@ -41,11 +41,13 @@ func SocketToken() string {
 	if _, err := keyringAdd(tokenDescription, []byte(token)); err != nil {
 		return ""
 	}
-	// Read back so all racing creators converge on whichever payload won.
-	if back := readToken(); back != "" {
-		return back
-	}
-	return token
+	// Read back so all racing creators converge on whichever payload won — and
+	// so that a keyring which took the key and will not give it back is treated
+	// as the unavailable keyring it is. What was just created is a name only
+	// this process could produce; handing it out would give every shell of the
+	// login a token of its own, which is a socket directory of its own and an
+	// agent of its own. The tokenless path shares one instead.
+	return readToken()
 }
 
 // ReadSocketToken returns the per-login token from the @u user keyring without
