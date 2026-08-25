@@ -79,6 +79,12 @@ linters:
     # the dispatcher and the command itself must agree on.
     - goconst
 
+    # A loop that searches a slice, copies one into another, or picks the
+    # larger of two numbers is a loop whose edge cases have to be read to be
+    # trusted; the standard function it replaces has a name that says what the
+    # answer is.
+    - modernize
+
     # An error seen and then not returned: the check runs, the branch is taken,
     # and the caller is still told the operation worked.
     - nilerr
@@ -93,6 +99,12 @@ linters:
     # nolint stays an argument someone can disagree with rather than a way to
     # make a warning disappear.
     - nolintlint
+
+    # A Sprintf whose format string is one verb is a conversion written the
+    # long way round: strconv.Itoa says it returns a number's digits, and
+    # `a + b` says it joins two strings, where `%d` and `%s` first say only
+    # that something is being formatted.
+    - perfsprint
 
     # Assertions are where a test says what it is for, and testify makes them
     # easy to write in a way that compiles, passes, and checks nothing: the
