@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -47,6 +48,19 @@ func TestARecordIsReadAsWhenTheKeyWasAddedAndWhenItRunsOut(t *testing.T) {
 	got, err = records.Added()
 	require.NoError(t, err, "Added after Forget")
 	assert.Empty(t, got, "a forgotten key is no longer one the store says was added")
+}
+
+// A store that cannot be read is not a store with nothing in it: answering with
+// an empty list would tell the expirer there is no key to take out, which is the
+// same thing it hears about a machine that has none, and the key would stay in
+// the agent past its time with nothing said.
+func TestRecordsThatCannotBeReadAreNotNoKeysAtAll(t *testing.T) {
+	unreadable := filepath.Join(t.TempDir(), "not-a-dir")
+	require.NoError(t, os.WriteFile(unreadable, []byte("x"), 0o600))
+
+	_, err := keyRecords{store: keystate.Store{Dir: unreadable}}.Added()
+
+	assert.Error(t, err, "the read failed, and the caller has to hear that rather than a count of zero")
 }
 
 func TestAKeyAddedWithNoLifetimeIsReadAsNeverRunningOut(t *testing.T) {
