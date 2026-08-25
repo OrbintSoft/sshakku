@@ -126,15 +126,24 @@ func TestSocketTokenSeams(t *testing.T) {
 		assert.Empty(t, SocketToken(), "a refused add yields no token")
 	})
 
-	t.Run("returns the freshly created token when read-back is empty", func(t *testing.T) {
+	// F1: every shell of one login must land on the same socket, and the token
+	// is what decides which. A keyring that takes the key and will not give it
+	// back cannot be where the shells meet: what this process created, only this
+	// process can name. Answering with it anyway hands each shell a token of its
+	// own — a socket directory of its own, an agent of its own, and a passphrase
+	// asked for again in every window.
+	t.Run("a token that cannot be read back is not one a login can share", func(t *testing.T) {
 		saveTokenSeams(t)
 		keyringSearch = func(string) (keyring.Serial, bool) { return 0, false }
 		randRead = rand.Read
 		keyringAdd = func(string, []byte) (keyring.Serial, error) { return 1, nil }
-		tok := SocketToken()
-		assert.Len(t, tok, tokenByteLen*2, "token length")
-		_, err := hex.DecodeString(tok)
-		assert.NoError(t, err, "the token must be hex")
+
+		first, second := SocketToken(), SocketToken()
+
+		assert.Equal(t, first, second,
+			"two shells of one login must arrive at one answer, or they are two logins as far as the agent is concerned")
+		assert.Empty(t, first,
+			"and where there is nowhere to share one, the answer is the tokenless path rather than a private token")
 	})
 
 	t.Run("converges on the read-back value", func(t *testing.T) {
