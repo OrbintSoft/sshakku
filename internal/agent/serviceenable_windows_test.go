@@ -56,17 +56,27 @@ func TestAServiceIsNotEnabledForACallerWhoHasGoneAway(t *testing.T) {
 	require.ErrorIs(t, systemService{Name: noSuchService}.enable(ctx), context.Canceled)
 }
 
-// Enabling asks for the one right that does it, which is the right this account
-// has not got: the service's security descriptor grants changing its
-// configuration to administrators alone. An ordinary account running the test
-// suite is therefore refused, and that refusal is the measurement — the same
-// account reads the configuration in the test beside this one.
-func TestAnOrdinaryAccountMayNotEnableTheAgentsService(t *testing.T) {
+// Enabling asks for the one right that does it, and that right is where an
+// ordinary account is stopped: the service's own security descriptor grants
+// changing its configuration to administrators alone. The refusal arrives at
+// the opening of the handle, before there is anything to change, which is what
+// this measures — the same account reads the configuration in the test beside
+// this one, so what is being shown is the boundary and not a service out of
+// reach.
+//
+// It asks for the handle and does nothing with it, deliberately. Calling enable
+// here would be a test that writes to the machine it runs on the day some
+// machine answers this differently, and a suite that can reconfigure a system
+// service by being run on the wrong host is not one anybody should have to
+// trust.
+func TestAnOrdinaryAccountMayNotOpenTheAgentsServiceToChangeIt(t *testing.T) {
 	if elevated(t) {
-		t.Skip("this suite is running with privileges; the refusal being measured cannot happen")
+		t.Skip("this session has the privileges; the refusal being measured cannot happen here")
 	}
+	svc := systemService{}
 
-	err := systemService{}.enable(t.Context())
+	err := svc.withServiceHandle(windows.SERVICE_CHANGE_CONFIG,
+		func(windows.Handle) error { return nil }, svc.explainEnabling)
 
 	require.Error(t, err, "changing a service's configuration is an administrator's")
 	assert.Contains(t, err.Error(), "sshakku doctor --fix",
