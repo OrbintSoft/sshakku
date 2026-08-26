@@ -10,10 +10,37 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/diagnose/launcher"
 )
 
+// section is how each part of the report writes itself. The parts below take
+// one rather than the builder, so none of them can do anything to the buffer
+// but add to it.
+type section func(format string, a ...any)
+
+// Format writes a human-readable rendering of r to w. It builds the whole
+// report first and writes it once, so a short write cannot leave a half-printed
+// report.
+//
+// Each part of the report is its own function, so this reads as the order the
+// reader meets them in and nothing else; what any one part decides to show is
+// that part's own business.
 func Format(w io.Writer, r Report) {
 	var b strings.Builder
-	p := func(format string, a ...any) { _, _ = fmt.Fprintf(&b, format, a...) }
+	p := section(func(format string, a ...any) { _, _ = fmt.Fprintf(&b, format, a...) })
 
+	formatEndpoints(p, r)
+	formatAgentService(p, r)
+	formatAgents(p, r)
+	formatKeys(p, r)
+	formatWallet(p, r)
+	formatEnvironment(p, r)
+	formatFindings(p, r)
+	formatLogTail(p, r)
+
+	_, _ = io.WriteString(w, b.String())
+}
+
+// formatEndpoints opens the report with the two sockets and, where one was
+// recorded, the pid — the three facts every other part is read against.
+func formatEndpoints(p section, r Report) {
 	p("sshakku doctor — ssh-agent diagnostics\n\n")
 	p("state: %s\n\n", r.State)
 	p("fixed socket:  %s\n", orNone(r.FixedSock))
@@ -21,15 +48,21 @@ func Format(w io.Writer, r Report) {
 	if r.RecordedPID != 0 {
 		p("recorded pid:  %d (agent.state)\n", r.RecordedPID)
 	}
+}
 
-	// What serves the endpoint, where that is a service rather than a process
-	// somebody started. A system whose agent is a process on a socket names no
-	// service and gets no heading for one.
-	if r.AgentService.ServedByAService() {
-		p("\nagent service:\n")
-		p("  %-22s %s\n", r.AgentService.Name+":", serviceLine(r.AgentService))
+// formatAgentService names what serves the endpoint, where that is a service
+// rather than a process somebody started. A system whose agent is a process on
+// a socket names no service and gets no heading for one.
+func formatAgentService(p section, r Report) {
+	if !r.AgentService.ServedByAService() {
+		return
 	}
+	p("\nagent service:\n")
+	p("  %-22s %s\n", r.AgentService.Name+":", serviceLine(r.AgentService))
+}
 
+// formatAgents lists the agent processes, or says why there is no list to give.
+func formatAgents(p section, r Report) {
 	if keepsNoAgentProcessList(r) {
 		p("\nssh-agent processes:\n")
 		p("  %s\n", processListNote(r))
@@ -51,41 +84,54 @@ func Format(w io.Writer, r Report) {
 			p("    %s\n", launcher.Chain(a.Ancestry))
 		}
 	}
+}
 
-	// A directory that was read and held no key still gets the section, empty:
-	// that is the case where naming the directory is worth the most, since a
-	// name rule matching nothing and a directory that is not the one the user
-	// meant look identical from the outside. KeysDir is set only where the keys
-	// were actually looked for, which is what keeps a report that never looked
-	// — one about another user, say — silent about them.
-	if r.KeysDir != "" || len(r.Keys) > 0 || r.KeysErr != nil {
-		p("\nkeys in %s (%d):\n", keysDirName(r.KeysDir), len(r.Keys))
-		for _, k := range r.Keys {
-			p("  %-28s %s\n", k.Name, keyStatus(k, r.LifetimeKeptBySessions))
-		}
-		if r.KeysErr != nil {
-			p("  could not enumerate %s: %v\n", keysDirName(r.KeysDir), r.KeysErr)
-		}
+// formatKeys lists the keys and what each one's state is.
+//
+// A directory that was read and held no key still gets the section, empty: that
+// is the case where naming the directory is worth the most, since a name rule
+// matching nothing and a directory that is not the one the user meant look
+// identical from the outside. KeysDir is set only where the keys were actually
+// looked for, which is what keeps a report that never looked — one about
+// another user, say — silent about them.
+func formatKeys(p section, r Report) {
+	if r.KeysDir == "" && len(r.Keys) == 0 && r.KeysErr == nil {
+		return
 	}
-
-	if r.Wallet.Backend != "" {
-		p("\nwallet:\n")
-		p("  %-22s %s\n", "backend:", walletBackendLine(r.Wallet))
-		if r.Wallet.Guard != "" {
-			p("  %-22s %s\n", "guarded by:", r.Wallet.Guard)
-		}
-		for _, req := range r.Wallet.Requirements {
-			state := "found"
-			switch {
-			case req.Undetermined:
-				state = "undetermined"
-			case !req.Present:
-				state = "missing"
-			}
-			p("  %-22s %s — %s\n", req.Name+":", state, req.Detail)
-		}
+	p("\nkeys in %s (%d):\n", keysDirName(r.KeysDir), len(r.Keys))
+	for _, k := range r.Keys {
+		p("  %-28s %s\n", k.Name, keyStatus(k, r.LifetimeKeptBySessions))
 	}
+	if r.KeysErr != nil {
+		p("  could not enumerate %s: %v\n", keysDirName(r.KeysDir), r.KeysErr)
+	}
+}
 
+// formatWallet describes the configured wallet and each thing it needs.
+func formatWallet(p section, r Report) {
+	if r.Wallet.Backend == "" {
+		return
+	}
+	p("\nwallet:\n")
+	p("  %-22s %s\n", "backend:", walletBackendLine(r.Wallet))
+	if r.Wallet.Guard != "" {
+		p("  %-22s %s\n", "guarded by:", r.Wallet.Guard)
+	}
+	for _, req := range r.Wallet.Requirements {
+		state := "found"
+		switch {
+		case req.Undetermined:
+			state = "undetermined"
+		case !req.Present:
+			state = "missing"
+		}
+		p("  %-22s %s — %s\n", req.Name+":", state, req.Detail)
+	}
+}
+
+// formatEnvironment shows the variables that decide what SSHakku does, and what
+// the checks on the surrounding session found.
+func formatEnvironment(p section, r Report) {
 	if len(r.Env) > 0 || len(r.SecretEnv) > 0 {
 		p("\nenvironment variables:\n")
 		for _, v := range r.Env {
@@ -99,7 +145,13 @@ func Format(w io.Writer, r Report) {
 	if line := hostChecksLine(r.Host); line != "" {
 		p("\nenvironment:\n  %s\n", line)
 	}
+}
 
+// formatFindings is what is wrong, and what would put it right. The heading is
+// printed whether or not anything was found: a report that names no findings is
+// an answer, and one that leaves the section out looks like a report that did
+// not get that far.
+func formatFindings(p section, r Report) {
 	p("\nfindings:\n")
 	for _, s := range r.Findings {
 		p("  - %s\n", s)
@@ -108,15 +160,19 @@ func Format(w io.Writer, r Report) {
 	if rec := recommend(r); rec != "" {
 		p("\nrecommendation:\n  %s\n", rec)
 	}
+}
 
-	if len(r.LogTail) > 0 {
-		p("\nrecent log:\n")
-		for _, line := range r.LogTail {
-			p("  %s\n", line)
-		}
+// formatLogTail ends with the last lines of the session log, where there are
+// any: what happened before the report was asked for is usually the answer to
+// why it says what it says.
+func formatLogTail(p section, r Report) {
+	if len(r.LogTail) == 0 {
+		return
 	}
-
-	_, _ = io.WriteString(w, b.String())
+	p("\nrecent log:\n")
+	for _, line := range r.LogTail {
+		p("  %s\n", line)
+	}
 }
 
 // uidNote labels an agent's owning uid, marking the invoking user's own agents.
