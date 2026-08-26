@@ -12,6 +12,13 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/run/runtest"
 )
 
+// The failures these tests hand their seams. Each stands for a real one the
+// code under test cannot be made to produce on demand.
+var (
+	errExecNoSuchFile   = errors.New("exec: no such file")
+	errPermissionDenied = errors.New("permission denied")
+)
+
 // fakeAddedKeys is an in-memory AddedKeys: it answers Added from a scripted
 // list and records what was forgotten.
 type fakeAddedKeys struct {
@@ -125,7 +132,7 @@ func TestSSHAddThatWillNotStartLeavesTheRecordForTheNextSession(t *testing.T) {
 		AddedAt:   expiryClock.Add(-9 * time.Hour),
 		ExpiresAt: expiryClock.Add(-time.Hour),
 	}}}
-	r := runtest.NewRunner().On("ssh-add", runtest.Fails(errors.New("exec: no such file")))
+	r := runtest.NewRunner().On("ssh-add", runtest.Fails(errExecNoSuchFile))
 	log := &fakeLogger{}
 
 	require.NoError(t, expirerWith(records, r, log).ExpireKeys(t.Context()),
@@ -143,7 +150,7 @@ func TestEveryExpiredKeyIsTriedEvenAfterOneCannotBeRemoved(t *testing.T) {
 	first.KeyFile = "/ssh/id_first"
 	second.KeyFile = "/ssh/id_second"
 	records := &fakeAddedKeys{keys: []AddedKey{first, second}}
-	r := &runtest.Recorder{Errs: []error{errors.New("exec: no such file")}}
+	r := &runtest.Recorder{Errs: []error{errExecNoSuchFile}}
 
 	require.NoError(t, expirerWith(records, r, &fakeLogger{}).ExpireKeys(t.Context()), "ExpireKeys")
 
@@ -169,7 +176,7 @@ func TestTheAgentSSHAddIsPointedAtIsTheOneThisSessionHas(t *testing.T) {
 }
 
 func TestRecordsThatCannotBeReadAreReportedRatherThanPassedOver(t *testing.T) {
-	records := &fakeAddedKeys{err: errors.New("permission denied")}
+	records := &fakeAddedKeys{err: errPermissionDenied}
 	r := runtest.NewRunner()
 
 	err := expirerWith(records, r, &fakeLogger{}).ExpireKeys(t.Context())
@@ -190,7 +197,7 @@ func TestARecordThatCannotBeForgottenIsWrittenDownRatherThanRaised(t *testing.T)
 			AddedAt:   expiryClock.Add(-9 * time.Hour),
 			ExpiresAt: expiryClock.Add(-time.Hour),
 		}},
-		forgetErr: errors.New("permission denied"),
+		forgetErr: errPermissionDenied,
 	}
 	r := runtest.NewRunner().On("ssh-add", runtest.Stdout("", 0))
 	log := &fakeLogger{}

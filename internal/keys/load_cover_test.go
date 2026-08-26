@@ -10,13 +10,25 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/run/runtest"
 )
 
+// The failures these tests hand their seams. Each stands for a real one the
+// code under test cannot be made to produce on demand.
+var (
+	errGiveupStoreClearDenied = errors.New("giveup store clear denied")
+	errGiveupStoreWriteDenied = errors.New("giveup store write denied")
+	errKdialogCrashed         = errors.New("kdialog crashed")
+	errKeystateWriteDenied    = errors.New("keystate write denied")
+	errSshAddExecBoom         = errors.New("ssh-add exec boom")
+	errSshKeygenNotFound      = errors.New("ssh-keygen not found")
+	errWalletLockDenied       = errors.New("wallet lock denied")
+)
+
 // TestLoadKeysStoredAddErrorFailsAndNotifies covers failAdd on the stored-
 // passphrase path: ssh-add cannot be run at all, which is logged at ERROR and
 // surfaced to the user, and the key is abandoned without a give-up record.
 func TestLoadKeysStoredAddErrorFailsAndNotifies(t *testing.T) {
 	r := runtest.NewRunner().On("ssh-add", agentEmpty()).On("ssh-keygen", keygen("SHA256:NEW"))
 	secret := &fakeSecret{lookupPass: "stored-pass", lookupFound: true}
-	adder := &fakeKeyAdder{err: errors.New("ssh-add exec boom")}
+	adder := &fakeKeyAdder{err: errSshAddExecBoom}
 	log := &fakeLogger{}
 	notify := &fakeNotifier{}
 	giveup := newFakeGiveup()
@@ -39,7 +51,7 @@ func TestLoadKeysPromptAddErrorFailsAndNotifies(t *testing.T) {
 	r := runtest.NewRunner().On("ssh-add", agentEmpty()).On("ssh-keygen", keygen("SHA256:NEW"))
 	secret := &fakeSecret{lookupFound: false}
 	prompter := &fakePrompter{pass: "typed-pass"}
-	adder := &fakeKeyAdder{err: errors.New("ssh-add exec boom")}
+	adder := &fakeKeyAdder{err: errSshAddExecBoom}
 	log := &fakeLogger{}
 	notify := &fakeNotifier{}
 	l := Loader{
@@ -59,7 +71,7 @@ func TestLoadKeysPromptAddErrorFailsAndNotifies(t *testing.T) {
 func TestLoadKeysPromptHardErrorFailsAndNotifies(t *testing.T) {
 	r := runtest.NewRunner().On("ssh-add", agentEmpty()).On("ssh-keygen", keygen("SHA256:NEW"))
 	secret := &fakeSecret{lookupFound: false}
-	prompter := &fakePrompter{err: errors.New("kdialog crashed")}
+	prompter := &fakePrompter{err: errKdialogCrashed}
 	adder := &fakeKeyAdder{}
 	log := &fakeLogger{}
 	notify := &fakeNotifier{}
@@ -80,7 +92,7 @@ func TestLoadKeysPromptHardErrorFailsAndNotifies(t *testing.T) {
 // logged at ERROR but does not fail the load.
 func TestLoadKeysStoreErrorLogged(t *testing.T) {
 	r := runtest.NewRunner().On("ssh-add", agentEmpty()).On("ssh-keygen", keygen("SHA256:NEW"))
-	secret := &fakeSecret{lookupFound: false, storeErr: errors.New("wallet write denied")}
+	secret := &fakeSecret{lookupFound: false, storeErr: errWalletWriteDenied}
 	prompter := &fakePrompter{pass: "typed-pass"}
 	adder := &fakeKeyAdder{withCodes: []int{0}}
 	log := &fakeLogger{}
@@ -103,7 +115,7 @@ func TestLoadKeysRecordGiveupErrorLogged(t *testing.T) {
 	adder := &fakeKeyAdder{withCodes: []int{1, 1, 1}}
 	log := &fakeLogger{}
 	giveup := newFakeGiveup()
-	giveup.recordErr = errors.New("giveup store write denied")
+	giveup.recordErr = errGiveupStoreWriteDenied
 	l := Loader{
 		Keys:   fakeLister{paths: []string{"/ssh/id_rsa"}},
 		Runner: r, Secret: secret, Prompt: prompter, Adder: adder, Log: log,
@@ -124,7 +136,7 @@ func TestLoadKeysClearGiveupErrorLogged(t *testing.T) {
 	adder := &fakeKeyAdder{withCodes: []int{0}}
 	log := &fakeLogger{}
 	giveup := newFakeGiveup()
-	giveup.clearErr = errors.New("giveup store clear denied")
+	giveup.clearErr = errGiveupStoreClearDenied
 	l := Loader{
 		Keys:   fakeLister{paths: []string{"/ssh/id_rsa"}},
 		Runner: r, Secret: secret, Prompt: &fakePrompter{}, Adder: adder, Log: log,
@@ -150,7 +162,7 @@ func TestLoadKeysSaveKeyStateErrorLogged(t *testing.T) {
 		Prompt:   &fakePrompter{},
 		Adder:    adder,
 		Log:      log,
-		KeyState: &fakeKeyState{err: errors.New("keystate write denied")},
+		KeyState: &fakeKeyState{err: errKeystateWriteDenied},
 	}
 	require.NoError(t, l.LoadKeys(t.Context()), "one key that could not be loaded must not fail the whole login")
 	assert.Truef(t, log.contains("ERROR record key state for id_rsa"),
@@ -164,7 +176,7 @@ func TestLoadKeysSaveKeyStateErrorLogged(t *testing.T) {
 func TestLoadKeysFingerprintErrorPressesOn(t *testing.T) {
 	r := runtest.NewRunner().
 		On("ssh-add", agentEmpty()).
-		On("ssh-keygen", runtest.Fails(errors.New("ssh-keygen not found")))
+		On("ssh-keygen", runtest.Fails(errSshKeygenNotFound))
 	secret := &fakeSecret{lookupPass: "stored-pass", lookupFound: true}
 	adder := &fakeKeyAdder{withCodes: []int{0}}
 	log := &fakeLogger{}
@@ -184,7 +196,7 @@ func TestLoadKeysFingerprintErrorPressesOn(t *testing.T) {
 // fails.
 func TestLoadKeysSessionLockErrorLogged(t *testing.T) {
 	r := runtest.NewRunner().On("ssh-add", agentEmpty()).On("ssh-keygen", keygen("SHA256:NEW"))
-	secret := &fakeSecret{lookupPass: "stored-pass", lookupFound: true, lockErr: errors.New("wallet lock denied")}
+	secret := &fakeSecret{lookupPass: "stored-pass", lookupFound: true, lockErr: errWalletLockDenied}
 	adder := &fakeKeyAdder{withCodes: []int{0}}
 	log := &fakeLogger{}
 	l := Loader{

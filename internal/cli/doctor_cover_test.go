@@ -17,6 +17,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// The failures these tests hand their seams. Each stands for a real one the
+// code under test cannot be made to produce on demand.
+var (
+	errKeyringBoom = errors.New("keyring boom")
+	errMustNotRun  = errors.New("must not run")
+)
+
 // fakeTokenSource stands in for crossuser.Exec so doctorCrossUser runs without
 // root or a second uid: it returns a canned token, or an error to drive the
 // read-failure branch.
@@ -81,7 +88,7 @@ func TestDoctorCrossUserRefused(t *testing.T) {
 	if _, err := lookupUser("nobody"); err != nil {
 		t.Skip("no 'nobody' user on this host")
 	}
-	d := doctorDeps(diagnose.Report{}, fakeTokenSource{err: errors.New("must not run")}, 1000)
+	d := doctorDeps(diagnose.Report{}, fakeTokenSource{err: errMustNotRun}, 1000)
 	var out, errOut bytes.Buffer
 	assert.Equal(t, 2, d.doctor(t.Context(), &out, &errOut, []string{"--user", "nobody"}),
 		"reading another user's session takes root, and the refusal comes before anything is read")
@@ -157,7 +164,7 @@ func TestDoctorFix(t *testing.T) {
 	t.Run("ensure failure propagates its code", func(t *testing.T) {
 		tempRuntimeEnv(t)
 		d := doctorDeps(diagnose.Report{}, fakeTokenSource{}, 1000)
-		d.ensurer = fakeEnsurer{err: errors.New("boom")}
+		d.ensurer = fakeEnsurer{err: errBoom}
 		var out, errOut bytes.Buffer
 		assert.Equal(t, 1, d.doctor(t.Context(), &out, &errOut, []string{"--fix"}),
 			"an agent that could not be ensured must not be reported as repaired")
@@ -174,7 +181,7 @@ func TestDoctorCrossUser(t *testing.T) {
 	}
 
 	t.Run("token read failure returns 1", func(t *testing.T) {
-		d := doctorDeps(diagnose.Report{}, fakeTokenSource{err: errors.New("keyring boom")}, 0)
+		d := doctorDeps(diagnose.Report{}, fakeTokenSource{err: errKeyringBoom}, 0)
 		var out, errOut bytes.Buffer
 		assert.Equal(t, 1, d.doctor(t.Context(), &out, &errOut, []string{"--user", "nobody"}),
 			"a session that could not be reached must not be reported on as though it had been")

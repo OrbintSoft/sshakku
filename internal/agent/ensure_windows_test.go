@@ -4,7 +4,6 @@ package agent
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -81,7 +80,7 @@ func TestAServiceSomebodyElseStartedIsNotClaimed(t *testing.T) {
 // F51: a refusal is what the person in front of the shell has to act on, so it
 // arrives exactly as the service manager worded it.
 func TestAServiceThatCannotBeStartedIsReportedInItsOwnWords(t *testing.T) {
-	refused := errors.New("the ssh-agent service is disabled; an administrator can enable it")
+	refused := errTheSshAgentServiceIs
 	prober := &scriptedProber{answers: []bool{false}}
 	service := &scriptedService{states: []serviceState{serviceStopped}, startErr: refused}
 	lifecycle := ServiceAgent{Prober: prober, Service: service, Endpoint: PipeEndpoint(`\\.\pipe\test`)}

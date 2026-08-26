@@ -14,6 +14,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// errTheBusStoppedAnswering is the failure this test hands its seam, standing for a real one the
+// code under test cannot be made to produce on demand.
+var errTheBusStoppedAnswering = errors.New("the bus stopped answering")
+
 // lookTestTimeout is short on purpose: a look that has to be waited for is the
 // case these tests are here to catch.
 const lookTestTimeout = 2 * time.Second
@@ -43,7 +47,7 @@ func failBusNames(t *testing.T, method string) {
 
 	listBusNames = func(ctx context.Context, obj dbus.BusObject, timeout time.Duration, called string) ([]string, error) {
 		if strings.HasSuffix(called, method) {
-			return nil, errors.New("the bus stopped answering")
+			return nil, errTheBusStoppedAnswering
 		}
 		return original(ctx, obj, timeout, called)
 	}

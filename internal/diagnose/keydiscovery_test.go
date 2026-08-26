@@ -8,6 +8,10 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// errNoSuchDirectory is the failure this test hands its seam, standing for a real one the
+// code under test cannot be made to produce on demand.
+var errNoSuchDirectory = errors.New("no such directory")
+
 // TestReportNamesTheKeyDirectoryItRead covers the part of F34 that makes the
 // setting checkable: once the directory can be configured, a report that calls
 // it "~/.ssh" is telling the user about a directory it may never have opened.
@@ -24,7 +28,7 @@ func TestReportNamesTheKeyDirectoryItRead(t *testing.T) {
 	})
 
 	t.Run("a directory that could not be read is named too", func(t *testing.T) {
-		ks := &KeySource{Dir: dir, Lister: fakeKeyLister{err: errors.New("no such directory")}}
+		ks := &KeySource{Dir: dir, Lister: fakeKeyLister{err: errNoSuchDirectory}}
 		out := formatGathered(t, ks)
 		assert.Contains(t, out, dir, "the failure line must name the directory that could not be read")
 	})

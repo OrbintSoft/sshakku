@@ -19,6 +19,10 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+// errNoDeadlineHere is the failure this test hands its seam, standing for a real one the
+// code under test cannot be made to produce on demand.
+var errNoDeadlineHere = errors.New("no deadline here")
+
 // pipeName is a name no other test and no other run is using, since the pipe
 // namespace is the machine's rather than this process's.
 func pipeName(t *testing.T) string {
@@ -180,7 +184,7 @@ func TestPipeProberStopsWhenTheCallerHasGoneAway(t *testing.T) {
 func TestPipeProberRefusesAHandleThatTakesNoDeadline(t *testing.T) {
 	original := setPipeDeadline
 	t.Cleanup(func() { setPipeDeadline = original })
-	setPipeDeadline = func(*os.File, time.Time) error { return errors.New("no deadline here") }
+	setPipeDeadline = func(*os.File, time.Time) error { return errNoDeadlineHere }
 
 	p := PipeProber{Timeout: 2 * time.Second}
 	assert.False(t, p.Reachable(t.Context(), fakeAgentPipe(t, pipeReplyIdentities(1))),

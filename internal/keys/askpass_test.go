@@ -12,6 +12,10 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
 )
 
+// errDbusNotReachable is the failure this test hands its seam, standing for a real one the
+// code under test cannot be made to produce on demand.
+var errDbusNotReachable = errors.New("dbus: not reachable")
+
 // fakeTTY scripts one terminal answer and records how it was prompted.
 type fakeTTY struct {
 	answer string
@@ -178,7 +182,7 @@ func TestBrokerNoTerminal(t *testing.T) {
 // anything other than no controlling terminal — still logs at ERROR.
 func TestBrokerPromptFailureLogsError(t *testing.T) {
 	secret := &fakeSecret{lookupFound: false}
-	tty := &fakeTTY{err: errors.New("terminal ioctl boom")}
+	tty := &fakeTTY{err: errTerminalIoctlBoom}
 	log := &fakeLogger{}
 	b := Broker{Secret: secret, TTY: tty, Log: log}
 
@@ -193,7 +197,7 @@ func TestBrokerPromptFailureLogsError(t *testing.T) {
 // usually the configured backend not being reachable in this environment —
 // is logged at INFO and still falls through to the terminal prompt.
 func TestBrokerLookupErrorLogsInfoNotError(t *testing.T) {
-	secret := &fakeSecret{lookupErr: errors.New("dbus: not reachable")}
+	secret := &fakeSecret{lookupErr: errDbusNotReachable}
 	tty := &fakeTTY{answer: "typed-pass"}
 	log := &fakeLogger{}
 	b := Broker{Secret: secret, TTY: tty, Log: log}

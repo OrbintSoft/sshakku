@@ -3,6 +3,7 @@ package wallet
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -11,6 +12,9 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/run"
 	"github.com/OrbintSoft/sshakku/internal/run/runtest"
 )
+
+// errUnexpectedOpVerb is errUnexpectedBwVerb for the fake op.
+var errUnexpectedOpVerb = errors.New("unexpected op verb")
 
 // opCall dispatches a runtest.Runner "op" handler by its first two arguments
 // (e.g. "item get", "item create", "read"), since OnePassword issues
@@ -24,7 +28,7 @@ func opCall(handlers map[string]func(run.Cmd) (run.Result, error)) func(run.Cmd)
 		}
 		h, ok := handlers[verb]
 		if !ok {
-			return run.Result{}, errors.New("unexpected op verb " + verb)
+			return run.Result{}, fmt.Errorf("%w %s", errUnexpectedOpVerb, verb)
 		}
 		return h(c)
 	}
@@ -53,7 +57,7 @@ func TestOnePasswordLookup(t *testing.T) {
 	})
 
 	t.Run("a failure to start op is an error", func(t *testing.T) {
-		wantErr := errors.New("boom")
+		wantErr := errBoom
 		b := &OnePassword{Runner: runtest.NewRunner().On(onePasswordBin, runtest.Fails(wantErr)), Vault: "sshakku"}
 		_, _, err := b.Lookup(t.Context(), "x")
 		assert.ErrorIs(t, err, wantErr, "a vault tool that would not run must be reported, not read as a miss")

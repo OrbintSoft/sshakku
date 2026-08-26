@@ -12,6 +12,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// The failures these tests hand their seams. Each stands for a real one the
+// code under test cannot be made to produce on demand.
+var (
+	errEKEYEXPIRED = errors.New("EKEYEXPIRED")
+	errENOKEY      = errors.New("ENOKEY")
+)
+
 // saveKeyctlSeams snapshots the syscall seams and restores them when the
 // (sub)test ends, so a test can inject failures without a live kernel keyring
 // and without leaking into its siblings.
@@ -79,7 +86,7 @@ func TestAddSeam(t *testing.T) {
 
 	t.Run("propagates the syscall error", func(t *testing.T) {
 		saveKeyctlSeams(t)
-		addKey = func(string, string, []byte, int) (int, error) { return 0, errors.New("EDQUOT") }
+		addKey = func(string, string, []byte, int) (int, error) { return 0, errEDQUOT }
 		s, err := Add("desc", nil)
 		assert.Error(t, err, "Add must propagate the syscall error")
 		assert.Zero(t, s, "Add serial")
@@ -97,7 +104,7 @@ func TestSearchSeam(t *testing.T) {
 
 	t.Run("a missing key is ok=false, not an error", func(t *testing.T) {
 		saveKeyctlSeams(t)
-		keyctlSearch = func(int, string, string, int) (int, error) { return 0, errors.New("ENOKEY") }
+		keyctlSearch = func(int, string, string, int) (int, error) { return 0, errENOKEY }
 		s, ok := Search("desc")
 		assert.False(t, ok, "Search must report a miss")
 		assert.Zero(t, s, "Search serial")
@@ -107,7 +114,7 @@ func TestSearchSeam(t *testing.T) {
 func TestReadSeam(t *testing.T) {
 	t.Run("sizing call fails", func(t *testing.T) {
 		saveKeyctlSeams(t)
-		keyctlBuffer = func(int, int, []byte, int) (int, error) { return 0, errors.New("ENOKEY") }
+		keyctlBuffer = func(int, int, []byte, int) (int, error) { return 0, errENOKEY }
 		got, err := Read(1)
 		assert.Error(t, err, "Read must propagate the sizing failure")
 		assert.Nil(t, got, "Read payload")
@@ -141,7 +148,7 @@ func TestReadSeam(t *testing.T) {
 			if buf == nil {
 				return 5, nil
 			}
-			return 0, errors.New("EKEYEXPIRED")
+			return 0, errEKEYEXPIRED
 		}
 		got, err := Read(1)
 		assert.Error(t, err, "Read must propagate the second failure")
@@ -183,7 +190,7 @@ func TestSetTimeoutSeam(t *testing.T) {
 
 	t.Run("propagates the syscall error", func(t *testing.T) {
 		saveKeyctlSeams(t)
-		keyctlInt = func(int, int, int, int, int) (int, error) { return 0, errors.New("ENOKEY") }
+		keyctlInt = func(int, int, int, int, int) (int, error) { return 0, errENOKEY }
 		assert.Error(t, SetTimeout(1, time.Minute), "SetTimeout must propagate the syscall error")
 	})
 }
@@ -197,7 +204,7 @@ func TestUnlinkSeam(t *testing.T) {
 
 	t.Run("propagates the syscall error", func(t *testing.T) {
 		saveKeyctlSeams(t)
-		keyctlInt = func(int, int, int, int, int) (int, error) { return 0, errors.New("ENOKEY") }
+		keyctlInt = func(int, int, int, int, int) (int, error) { return 0, errENOKEY }
 		assert.Error(t, Unlink(1), "Unlink must propagate the syscall error")
 	})
 }

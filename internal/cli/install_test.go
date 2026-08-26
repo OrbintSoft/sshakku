@@ -14,6 +14,10 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/install"
 )
 
+// errThisProgramHasNoPath is the failure this test hands its seam, standing for a real one the
+// code under test cannot be made to produce on demand.
+var errThisProgramHasNoPath = errors.New("this program has no path")
+
 // The install and uninstall commands, against what docs/FEATURES.md promises:
 // F44 — one command wires one shell, you can say which, and what it did is
 // something you can go and look at; F47 — the environment step is skipped when
@@ -290,7 +294,7 @@ func TestAnInstallThatCannotFindThisProgramSaysSoAndWritesNothing(t *testing.T) 
 	profile := aStartupFile(t)
 	exe, _ := aWiredShell(t)
 	d := realDeps()
-	d.self = func() (string, error) { return "", errors.New("this program has no path") }
+	d.self = func() (string, error) { return "", errThisProgramHasNoPath }
 	var stdout, stderr bytes.Buffer
 
 	code := d.run(t.Context(), &stdout, &stderr,

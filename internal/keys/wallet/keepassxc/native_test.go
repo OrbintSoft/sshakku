@@ -10,6 +10,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// The failures these tests hand their seams. Each stands for a real one the
+// code under test cannot be made to produce on demand.
+var (
+	errReadOnly   = errors.New("read-only")
+	errUnreadable = errors.New("unreadable")
+)
+
 // memoryAssociations is an association store held in memory. It stands in for
 // the file on disk, which is upstream of every decision these tests make.
 type memoryAssociations struct {
@@ -167,14 +174,14 @@ func TestKeePassXCReportsAnUnreachableKeePassXC(t *testing.T) {
 
 func TestKeePassXCReportsAnUnreadableAssociation(t *testing.T) {
 	kp := &fakeKeePassXC{}
-	b := kp.backendFor(&memoryAssociations{loadErr: errors.New("unreadable")})
+	b := kp.backendFor(&memoryAssociations{loadErr: errUnreadable})
 	_, _, err := b.Lookup(t.Context(), "id_ed25519")
 	assert.Error(t, err, "an approval that could not be read must be reported, not treated as never granted")
 }
 
 func TestKeePassXCReportsAnUnwritableAssociation(t *testing.T) {
 	kp := &fakeKeePassXC{}
-	b := kp.backendFor(&memoryAssociations{saveErr: errors.New("read-only")})
+	b := kp.backendFor(&memoryAssociations{saveErr: errReadOnly})
 	assert.Error(t, b.Store(t.Context(), "id_ed25519", "", "p"),
 		"an approval that could not be written down must be reported: the next run would raise the dialog again")
 }

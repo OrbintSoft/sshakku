@@ -3,7 +3,6 @@
 package prompt
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -14,7 +13,7 @@ import (
 func TestHasGraphicalSession(t *testing.T) {
 	xsetOK := func() *runtest.Runner { return runtest.NewRunner().On("xset", runtest.Stdout("", 0)) }
 	xsetDead := func() *runtest.Runner { return runtest.NewRunner().On("xset", runtest.Stdout("", 1)) }
-	xsetMissing := func() *runtest.Runner { return runtest.NewRunner().On("xset", runtest.Fails(errors.New("not found"))) }
+	xsetMissing := func() *runtest.Runner { return runtest.NewRunner().On("xset", runtest.Fails(errNotFound)) }
 
 	cases := []struct {
 		name    string

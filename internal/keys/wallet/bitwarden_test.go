@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"slices"
 	"testing"
 
@@ -14,6 +15,15 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/run"
 	"github.com/OrbintSoft/sshakku/internal/run/runtest"
 )
+
+// errUnexpectedBwVerb is the fake bw refusing a subcommand no handler was
+// registered for. It names the verb, which is what tells a test it stubbed one
+// call and the backend made another.
+var errUnexpectedBwVerb = errors.New("unexpected bw verb")
+
+// errBoom is the failure this test hands its seam, standing for a real one the
+// code under test cannot be made to produce on demand.
+var errBoom = errors.New("boom")
 
 // bwCall dispatches a runtest.Runner "bw" handler by its first two arguments
 // (e.g. "get item", "get password", "create item"), since Bitwarden
@@ -32,7 +42,7 @@ func bwCall(handlers map[string]func(run.Cmd) (run.Result, error)) func(run.Cmd)
 		}
 		h, ok := handlers[verb]
 		if !ok {
-			return run.Result{}, errors.New("unexpected bw verb " + verb)
+			return run.Result{}, fmt.Errorf("%w %s", errUnexpectedBwVerb, verb)
 		}
 		return h(c)
 	}
@@ -83,7 +93,7 @@ func TestBitwardenLookup(t *testing.T) {
 	})
 
 	t.Run("a failure to start bw is an error", func(t *testing.T) {
-		wantErr := errors.New("boom")
+		wantErr := errBoom
 		b := &Bitwarden{Runner: runtest.NewRunner().On(bitwardenBin, runtest.Fails(wantErr)), Session: "sess-token", held: true}
 		_, _, err := b.Lookup(t.Context(), "x")
 		assert.ErrorIs(t, err, wantErr, "a vault tool that would not run must be reported, not read as a miss")

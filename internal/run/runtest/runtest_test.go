@@ -10,6 +10,13 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
+// The failures these tests hand their seams. Each stands for a real one the
+// code under test cannot be made to produce on demand.
+var (
+	errExecutableFileNotFoundIn = errors.New("executable file not found in $PATH")
+	errKeepassxcCliVanished     = errors.New("keepassxc-cli vanished")
+)
+
 // The stand-ins here are what every other package's tests read their answers
 // from, so one that answers the wrong call, or quietly answers a call nobody
 // registered, does not fail — it makes the tests above it agree with something
@@ -54,7 +61,7 @@ func TestRunnerRecordsEveryCall(t *testing.T) {
 }
 
 func TestFailsReportsAProcessThatNeverStarted(t *testing.T) {
-	boom := errors.New("executable file not found in $PATH")
+	boom := errExecutableFileNotFoundIn
 	r := NewRunner().On("zenity", Fails(boom))
 
 	_, err := r.Run(t.Context(), run.Cmd{Name: "zenity"})
@@ -80,7 +87,7 @@ func TestRecorderAnswersInCallOrder(t *testing.T) {
 }
 
 func TestRecorderErrsTakePrecedenceAtTheSameIndex(t *testing.T) {
-	boom := errors.New("keepassxc-cli vanished")
+	boom := errKeepassxcCliVanished
 	r := &Recorder{
 		Results: []run.Result{{Code: 0}, {Code: 0}},
 		Errs:    []error{nil, boom},

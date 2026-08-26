@@ -11,6 +11,13 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// The failures these tests hand their seams. Each stands for a real one the
+// code under test cannot be made to produce on demand.
+var (
+	errBoom          = errors.New("boom")
+	errNoSuchProcess = errors.New("no such process")
+)
+
 // kinfo builds the one thing platformAgents reads out of a kern.proc.all
 // entry: which process it is and who owns it. Everything else the kernel
 // returns is ignored, and a literal here says so.
@@ -38,7 +45,7 @@ func stubSysctls(t *testing.T, procs []unix.KinfoProc, argv map[int][]string) {
 	sysctlProcArgs = func(_ string, args ...int) ([]byte, error) {
 		a, ok := argv[args[0]]
 		if !ok {
-			return nil, errors.New("no such process")
+			return nil, errNoSuchProcess
 		}
 		return procArgsBuffer(t, a), nil
 	}
@@ -96,7 +103,7 @@ func TestPlatformAgentsSysctlError(t *testing.T) {
 	orig := sysctlProcList
 	t.Cleanup(func() { sysctlProcList = orig })
 	sysctlProcList = func(string, ...int) ([]unix.KinfoProc, error) {
-		return nil, errors.New("boom")
+		return nil, errBoom
 	}
 
 	_, err := (Inspector{}).Agents()

@@ -12,6 +12,14 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/run/runtest"
 )
 
+// The failures these tests hand their seams. Each stands for a real one the
+// code under test cannot be made to produce on demand.
+var (
+	errBwExecBoom  = errors.New("bw exec boom")
+	errMarshalBoom = errors.New("marshal boom")
+	errPromptBoom  = errors.New("prompt boom")
+)
+
 // saveJSONMarshal snapshots the jsonMarshal seam and restores it when the
 // (sub)test ends, so a test can force the otherwise-unreachable marshal-failure
 // branch of a Store without leaking into its siblings.
@@ -22,7 +30,7 @@ func saveJSONMarshal(t *testing.T) {
 }
 
 func TestBitwardenUnlockErrorBranches(t *testing.T) {
-	boom := errors.New("bw exec boom")
+	boom := errBwExecBoom
 
 	t.Run("login --check fails to run", func(t *testing.T) {
 		r := runtest.NewRunner().On(bitwardenBin, bwCall(map[string]func(run.Cmd) (run.Result, error){
@@ -85,7 +93,7 @@ func TestBitwardenUnlockErrorBranches(t *testing.T) {
 
 func TestBitwardenLockErrorBranches(t *testing.T) {
 	t.Run("lock fails to run", func(t *testing.T) {
-		boom := errors.New("bw exec boom")
+		boom := errBwExecBoom
 		r := runtest.NewRunner().On(bitwardenBin, runtest.Fails(boom))
 		b := &Bitwarden{Runner: r, Session: "sess", held: true}
 		assert.ErrorIs(t, b.Lock(t.Context()), boom, "a lock command that would not run must be reported")
@@ -105,7 +113,7 @@ func TestBitwardenLockErrorBranches(t *testing.T) {
 
 func TestBitwardenFindItemIDErrorBranches(t *testing.T) {
 	t.Run("get item fails to run", func(t *testing.T) {
-		boom := errors.New("bw exec boom")
+		boom := errBwExecBoom
 		r := runtest.NewRunner().On(bitwardenBin, bwCall(map[string]func(run.Cmd) (run.Result, error){
 			"get item": runtest.Fails(boom),
 		}))
@@ -126,7 +134,7 @@ func TestBitwardenFindItemIDErrorBranches(t *testing.T) {
 
 func TestBitwardenStoreMarshalError(t *testing.T) {
 	saveJSONMarshal(t)
-	jsonMarshal = func(any) ([]byte, error) { return nil, errors.New("marshal boom") }
+	jsonMarshal = func(any) ([]byte, error) { return nil, errMarshalBoom }
 	r := runtest.NewRunner().On(bitwardenBin, bwCall(map[string]func(run.Cmd) (run.Result, error){
 		"get item": runtest.Stdout("Not found.", 1),
 	}))
@@ -136,7 +144,7 @@ func TestBitwardenStoreMarshalError(t *testing.T) {
 }
 
 func TestBitwardenStoreCreateRunError(t *testing.T) {
-	boom := errors.New("bw exec boom")
+	boom := errBwExecBoom
 	r := runtest.NewRunner().On(bitwardenBin, bwCall(map[string]func(run.Cmd) (run.Result, error){
 		"get item":    runtest.Stdout("Not found.", 1),
 		"create item": runtest.Fails(boom),
@@ -147,7 +155,7 @@ func TestBitwardenStoreCreateRunError(t *testing.T) {
 }
 
 func TestBitwardenDeleteRunErrors(t *testing.T) {
-	boom := errors.New("bw exec boom")
+	boom := errBwExecBoom
 
 	t.Run("get item fails to run", func(t *testing.T) {
 		r := runtest.NewRunner().On(bitwardenBin, bwCall(map[string]func(run.Cmd) (run.Result, error){
@@ -171,7 +179,7 @@ func TestBitwardenDeleteRunErrors(t *testing.T) {
 
 func TestBitwardenListErrorBranches(t *testing.T) {
 	t.Run("list items fails to run", func(t *testing.T) {
-		boom := errors.New("bw exec boom")
+		boom := errBwExecBoom
 		r := runtest.NewRunner().On(bitwardenBin, runtest.Fails(boom))
 		b := &Bitwarden{Runner: r, Session: "sess", held: true}
 		_, err := b.List(t.Context())
@@ -235,7 +243,7 @@ func TestBitwardenStandaloneBracketAllMethods(t *testing.T) {
 
 	t.Run("a failed Unlock short-circuits each method", func(t *testing.T) {
 		for _, name := range []string{"store", "delete", "list"} {
-			p := &fakePrompter{err: errors.New("prompt boom")}
+			p := &fakePrompter{err: errPromptBoom}
 			b := &Bitwarden{Runner: runtest.NewRunner(), Prompter: p}
 			var err error
 			switch name {

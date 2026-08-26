@@ -10,6 +10,13 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/run/runtest"
 )
 
+// The failures these tests hand their seams. Each stands for a real one the
+// code under test cannot be made to produce on demand.
+var (
+	errBoom                  = errors.New("boom")
+	errExecSshKeygenNotFound = errors.New("exec: \"ssh-keygen\": not found")
+)
+
 func TestFileFingerprint(t *testing.T) {
 	t.Run("reads the SHA256 field", func(t *testing.T) {
 		r := runtest.NewRunner().On("ssh-keygen", runtest.Stdout("256 SHA256:abc123 user@host (ED25519)\n", 0))
@@ -30,7 +37,7 @@ func TestFileFingerprint(t *testing.T) {
 	})
 
 	t.Run("a failure to start ssh-keygen is an error", func(t *testing.T) {
-		wantErr := errors.New("exec: \"ssh-keygen\": not found")
+		wantErr := errExecSshKeygenNotFound
 		r := runtest.NewRunner().On("ssh-keygen", runtest.Fails(wantErr))
 		_, err := FileFingerprint(t.Context(), r, "/home/u/.ssh/id_rsa")
 		assert.ErrorIs(t, err, wantErr, "ssh-keygen missing altogether is something the caller has to hear about")
@@ -79,7 +86,7 @@ func TestAgentFingerprints(t *testing.T) {
 	})
 
 	t.Run("a failure to start ssh-add is an error", func(t *testing.T) {
-		wantErr := errors.New("boom")
+		wantErr := errBoom
 		r := runtest.NewRunner().On("ssh-add", runtest.Fails(wantErr))
 		_, err := AgentFingerprints(t.Context(), r)
 		assert.ErrorIs(t, err, wantErr,

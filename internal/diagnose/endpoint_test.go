@@ -10,6 +10,10 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/agent/inspect"
 )
 
+// errProcessesCannotBeEnumeratedHere is the failure this test hands its seam, standing for a real one the
+// code under test cannot be made to produce on demand.
+var errProcessesCannotBeEnumeratedHere = errors.New("processes cannot be enumerated here")
+
 // The two writings of an endpoint on a system that has two, as F50 hands them
 // to a shell of that system's own and to one emulating POSIX.
 const (
@@ -45,7 +49,7 @@ func TestAnAgentAnsweringWithNoProcessToShowForItIsStillAnAgent(t *testing.T) {
 		FixedSock:      pipeNative,
 		FixedSockPosix: pipePosix,
 		EnvSock:        pipePosix,
-	}, fakeSource{err: errors.New("processes cannot be enumerated here")},
+	}, fakeSource{err: errProcessesCannotBeEnumeratedHere},
 		fakeProber{up: map[string]bool{pipeNative: true, pipePosix: true}},
 		nil, nil, nil, nil)
 

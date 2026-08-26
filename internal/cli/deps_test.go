@@ -3,7 +3,6 @@ package cli
 import (
 	"bytes"
 	"context"
-	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -81,7 +80,7 @@ func TestTestSecretBackend(t *testing.T) {
 	})
 
 	t.Run("fail when the backend's store fails", func(t *testing.T) {
-		d := depsReturning(&fakeProbeBackend{storeErr: errors.New("boom")})
+		d := depsReturning(&fakeProbeBackend{storeErr: errBoom})
 		var out, errOut bytes.Buffer
 		assert.Equal(t, 1, d.testSecretBackend(t.Context(), &out, &errOut, paths.Layout{ConfigDir: t.TempDir()}, fakeLogger{}, "keychain"),
 			"a wallet that cannot store must not be reported as working")
@@ -221,7 +220,7 @@ func TestForget(t *testing.T) {
 	})
 
 	t.Run("delete failure returns non-zero", func(t *testing.T) {
-		d := depsReturning(&fakeProbeBackend{deleteErr: errors.New("boom")})
+		d := depsReturning(&fakeProbeBackend{deleteErr: errBoom})
 		var out, errOut bytes.Buffer
 		assert.Equal(t, 1, d.forget(t.Context(), &out, &errOut, []string{"id_rsa"}),
 			"a passphrase still in the wallet must not be reported as forgotten")

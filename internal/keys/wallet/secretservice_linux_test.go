@@ -10,6 +10,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// The failures these tests hand their seams. Each stands for a real one the
+// code under test cannot be made to produce on demand.
+var (
+	errDismissed        = errors.New("dismissed")
+	errNoSuchCollection = errors.New("no such collection")
+	errUnlockRefused    = errors.New("unlock refused")
+)
+
 // fakeSecretServiceClient scripts SecretServiceClient for SecretService
 // tests, recording the objects passed to Unlock/Lock so tests can assert the
 // unlock/lock bracket around a Lookup/Store.
@@ -166,7 +174,7 @@ func TestSecretServiceLookup(t *testing.T) {
 	})
 
 	t.Run("a collection error is returned, nothing is unlocked", func(t *testing.T) {
-		wantErr := errors.New("boom")
+		wantErr := errBoom
 		c := &fakeSecretServiceClient{collectionErr: wantErr}
 		b := &SecretService{Client: c, User: "alice"}
 
@@ -176,7 +184,7 @@ func TestSecretServiceLookup(t *testing.T) {
 	})
 
 	t.Run("an unlock error is returned, the collection is not locked", func(t *testing.T) {
-		wantErr := errors.New("dismissed")
+		wantErr := errDismissed
 		c := &fakeSecretServiceClient{collection: col, unlockErr: wantErr}
 		b := &SecretService{Client: c, User: "alice"}
 
@@ -186,7 +194,7 @@ func TestSecretServiceLookup(t *testing.T) {
 	})
 
 	t.Run("a search error is returned, the collection is still locked", func(t *testing.T) {
-		wantErr := errors.New("boom")
+		wantErr := errBoom
 		c := &fakeSecretServiceClient{collection: col, searchErr: wantErr}
 		b := &SecretService{Client: c, User: "alice"}
 
@@ -196,7 +204,7 @@ func TestSecretServiceLookup(t *testing.T) {
 	})
 
 	t.Run("a get-secret error is returned, the collection is still locked", func(t *testing.T) {
-		wantErr := errors.New("boom")
+		wantErr := errBoom
 		c := &fakeSecretServiceClient{collection: col, items: []dbus.ObjectPath{item}, secretErr: wantErr}
 		b := &SecretService{Client: c, User: "alice"}
 
@@ -237,7 +245,7 @@ func TestSecretServiceSession(t *testing.T) {
 	})
 
 	t.Run("an Unlock collection error leaves held false", func(t *testing.T) {
-		wantErr := errors.New("boom")
+		wantErr := errBoom
 		c := &fakeSecretServiceClient{collectionErr: wantErr}
 		b := &SecretService{Client: c, User: "alice"}
 
@@ -269,7 +277,7 @@ func TestSecretServiceStore(t *testing.T) {
 	})
 
 	t.Run("a collection error is returned, nothing is unlocked", func(t *testing.T) {
-		wantErr := errors.New("boom")
+		wantErr := errBoom
 		c := &fakeSecretServiceClient{collectionErr: wantErr}
 		b := &SecretService{Client: c, User: "alice"}
 
@@ -279,7 +287,7 @@ func TestSecretServiceStore(t *testing.T) {
 	})
 
 	t.Run("an unlock error is returned, the collection is not locked", func(t *testing.T) {
-		wantErr := errors.New("dismissed")
+		wantErr := errDismissed
 		c := &fakeSecretServiceClient{collection: col, unlockErr: wantErr}
 		b := &SecretService{Client: c, User: "alice"}
 
@@ -288,7 +296,7 @@ func TestSecretServiceStore(t *testing.T) {
 	})
 
 	t.Run("a create-item error is returned, the collection is still locked", func(t *testing.T) {
-		wantErr := errors.New("boom")
+		wantErr := errBoom
 		c := &fakeSecretServiceClient{collection: col, createErr: wantErr}
 		b := &SecretService{Client: c, User: "alice"}
 
@@ -324,7 +332,7 @@ func TestSecretServiceDelete(t *testing.T) {
 	})
 
 	t.Run("a collection error is returned, nothing is unlocked", func(t *testing.T) {
-		wantErr := errors.New("boom")
+		wantErr := errBoom
 		c := &fakeSecretServiceClient{collectionErr: wantErr}
 		b := &SecretService{Client: c, User: "alice"}
 
@@ -334,7 +342,7 @@ func TestSecretServiceDelete(t *testing.T) {
 	})
 
 	t.Run("an unlock error is returned, the collection is not locked", func(t *testing.T) {
-		wantErr := errors.New("dismissed")
+		wantErr := errDismissed
 		c := &fakeSecretServiceClient{collection: col, unlockErr: wantErr}
 		b := &SecretService{Client: c, User: "alice"}
 
@@ -343,7 +351,7 @@ func TestSecretServiceDelete(t *testing.T) {
 	})
 
 	t.Run("a search error is returned, the collection is still locked", func(t *testing.T) {
-		wantErr := errors.New("boom")
+		wantErr := errBoom
 		c := &fakeSecretServiceClient{collection: col, searchErr: wantErr}
 		b := &SecretService{Client: c, User: "alice"}
 
@@ -352,7 +360,7 @@ func TestSecretServiceDelete(t *testing.T) {
 	})
 
 	t.Run("a delete-item error is returned, the collection is still locked", func(t *testing.T) {
-		wantErr := errors.New("boom")
+		wantErr := errBoom
 		c := &fakeSecretServiceClient{collection: col, items: []dbus.ObjectPath{item}, deleteItemErr: wantErr}
 		b := &SecretService{Client: c, User: "alice"}
 
@@ -396,7 +404,7 @@ func TestSecretServiceList(t *testing.T) {
 	})
 
 	t.Run("a collection error is returned, nothing is unlocked", func(t *testing.T) {
-		wantErr := errors.New("boom")
+		wantErr := errBoom
 		c := &fakeSecretServiceClient{collectionErr: wantErr}
 		b := &SecretService{Client: c, User: "alice"}
 
@@ -406,7 +414,7 @@ func TestSecretServiceList(t *testing.T) {
 	})
 
 	t.Run("an unlock error is returned, the collection is not locked", func(t *testing.T) {
-		wantErr := errors.New("dismissed")
+		wantErr := errDismissed
 		c := &fakeSecretServiceClient{collection: col, unlockErr: wantErr}
 		b := &SecretService{Client: c, User: "alice"}
 
@@ -416,7 +424,7 @@ func TestSecretServiceList(t *testing.T) {
 	})
 
 	t.Run("an items error is returned, the collection is still locked", func(t *testing.T) {
-		wantErr := errors.New("boom")
+		wantErr := errBoom
 		c := &fakeSecretServiceClient{collection: col, itemsErr: wantErr}
 		b := &SecretService{Client: c, User: "alice"}
 
@@ -426,7 +434,7 @@ func TestSecretServiceList(t *testing.T) {
 	})
 
 	t.Run("an attributes error is returned, the collection is still locked", func(t *testing.T) {
-		wantErr := errors.New("boom")
+		wantErr := errBoom
 		c := &fakeSecretServiceClient{
 			collection:        col,
 			itemsByCollection: map[dbus.ObjectPath][]dbus.ObjectPath{col: {item1}},
@@ -443,7 +451,7 @@ func TestSecretServiceList(t *testing.T) {
 // TestSecretServiceUnlockClientError covers Unlock's client-error branch: the
 // collection resolves but the D-Bus Unlock call fails.
 func TestSecretServiceUnlockClientError(t *testing.T) {
-	client := &fakeSecretServiceClient{collection: "/org/collection/sshakku", unlockErr: errors.New("unlock refused")}
+	client := &fakeSecretServiceClient{collection: "/org/collection/sshakku", unlockErr: errUnlockRefused}
 	b := &SecretService{Client: client, User: "u"}
 	assert.Error(t, b.Unlock(t.Context()), "a collection the bus refused to unlock must not be reported as open")
 }
@@ -451,7 +459,7 @@ func TestSecretServiceUnlockClientError(t *testing.T) {
 // TestSecretServiceLockCollectionError covers Lock's resolve-failure branch:
 // the collection cannot be resolved, so Lock returns before touching the bus.
 func TestSecretServiceLockCollectionError(t *testing.T) {
-	client := &fakeSecretServiceClient{collectionErr: errors.New("no such collection")}
+	client := &fakeSecretServiceClient{collectionErr: errNoSuchCollection}
 	b := &SecretService{Client: client, User: "u"}
 	assert.Error(t, b.Lock(t.Context()), "a collection that could not be resolved cannot be reported as locked")
 	assert.Empty(t, client.locked, "and nothing may be locked on the strength of a collection nobody found")

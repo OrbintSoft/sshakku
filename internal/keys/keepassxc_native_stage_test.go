@@ -24,6 +24,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// errNoAdvertisedSocket is the stage giving up on finding KeePassXC's socket.
+// It stands where the dial errors would be if there had been anything to dial.
+var errNoAdvertisedSocket = errors.New("keepassxc advertises no socket path on this system")
+
 // Staging a KeePassXC for the full round to talk to, where nothing else
 // provides one. It is scaffolding, not the subject: everything the round
 // asserts still happens through the real binary against the app started here.
@@ -179,7 +183,7 @@ func dialAnyKeePassXCSocket(ctx context.Context) (net.Conn, error) {
 		}
 	}
 	if err == nil {
-		err = errors.New("keepassxc advertises no socket path on this system")
+		err = errNoAdvertisedSocket
 	}
 	return nil, err
 }

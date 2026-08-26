@@ -15,6 +15,14 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/run/runtest"
 )
 
+// The failures these tests hand their seams. Each stands for a real one the
+// code under test cannot be made to produce on demand.
+var (
+	errDismissed   = errors.New("dismissed")
+	errNoSshAdd    = errors.New("no ssh-add")
+	errReaddirBoom = errors.New("readdir boom")
+)
+
 // assertNothingWentWrong reads the session log the way a user would when they
 // go looking for a problem: an ERROR line is the product saying something is
 // broken, and several outcomes below are ordinary rather than broken.
@@ -97,7 +105,7 @@ func TestLoadKeysPromptThenStore(t *testing.T) {
 // stored passphrase, an exhausted retry loop) still is.
 func TestLoadKeysLookupErrorLogsInfoNotError(t *testing.T) {
 	r := runtest.NewRunner().On("ssh-add", agentEmpty()).On("ssh-keygen", keygen("SHA256:NEW"))
-	secret := &fakeSecret{lookupErr: errors.New("dbus: not reachable")}
+	secret := &fakeSecret{lookupErr: errDbusNotReachable}
 	prompter := &fakePrompter{pass: "typed-pass"}
 	adder := &fakeKeyAdder{withCodes: []int{0}}
 	log := &fakeLogger{}
@@ -535,7 +543,7 @@ func TestLoadKeysSessionSkipsUnlockWhenNothingNeeded(t *testing.T) {
 
 func TestLoadKeysSessionUnlockFailureFallsBackPerKey(t *testing.T) {
 	r := runtest.NewRunner().On("ssh-add", agentEmpty()).On("ssh-keygen", keygen("SHA256:NEW"))
-	secret := &fakeSecret{lookupPass: "stored-pass", lookupFound: true, unlockErr: errors.New("dismissed")}
+	secret := &fakeSecret{lookupPass: "stored-pass", lookupFound: true, unlockErr: errDismissed}
 	adder := &fakeKeyAdder{withCodes: []int{0, 0}}
 	l := Loader{
 		Keys:   fakeLister{paths: []string{"/ssh/id_rsa", "/ssh/id_ed25519"}},
@@ -559,13 +567,13 @@ func TestLoadKeysNoKeys(t *testing.T) {
 }
 
 func TestLoadKeysEnumerateError(t *testing.T) {
-	l := Loader{Keys: fakeLister{err: errors.New("readdir boom")}, Runner: runtest.NewRunner()}
+	l := Loader{Keys: fakeLister{err: errReaddirBoom}, Runner: runtest.NewRunner()}
 	assert.Error(t, l.LoadKeys(t.Context()),
 		"a key directory that could not be read must be reported, not read as a login with no keys")
 }
 
 func TestLoadKeysAgentSnapshotError(t *testing.T) {
-	r := runtest.NewRunner().On("ssh-add", runtest.Fails(errors.New("no ssh-add")))
+	r := runtest.NewRunner().On("ssh-add", runtest.Fails(errNoSshAdd))
 	l := Loader{Keys: fakeLister{paths: []string{"/ssh/id_rsa"}}, Runner: r}
 	assert.Error(t, l.LoadKeys(t.Context()),
 		"an agent that could not be asked what it holds must be reported: every key would look unloaded")

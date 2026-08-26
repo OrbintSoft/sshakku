@@ -12,6 +12,10 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/testproc"
 )
 
+// errCannotExecute is the failure this test hands its seam, standing for a real one the
+// code under test cannot be made to produce on demand.
+var errCannotExecute = errors.New("cannot execute")
+
 func TestExecRunnerStart(t *testing.T) {
 	orig := execOutput
 	t.Cleanup(func() { execOutput = orig })
@@ -44,7 +48,7 @@ func TestExecRunnerStart(t *testing.T) {
 
 	t.Run("wraps an exec failure", func(t *testing.T) {
 		execOutput = func(context.Context, string, ...string) ([]byte, error) {
-			return nil, errors.New("cannot execute")
+			return nil, errCannotExecute
 		}
 		_, err := (ExecRunner{}).Start(t.Context(), "/run/agent.sock")
 		assert.Error(t, err, "an ssh-agent that cannot be executed must be reported")

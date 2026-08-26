@@ -3,7 +3,6 @@
 package prompt
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -32,7 +31,7 @@ func TestGraphicalSession(t *testing.T) {
 		{"a launchd daemon", "System\n", 0, nil, false},
 		{"launchctl answered nothing", "", 0, nil, false},
 		{"launchctl failed", "Aqua\n", 1, nil, false},
-		{"launchctl could not be run at all", "", 0, errors.New("no such file"), false},
+		{"launchctl could not be run at all", "", 0, errNoSuchFile, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

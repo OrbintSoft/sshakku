@@ -20,6 +20,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// errMustNotBePromptedA is the failure this test hands its seam, standing for a real one the
+// code under test cannot be made to produce on demand.
+var errMustNotBePromptedA = errors.New("must not be prompted: a vault hit should never reach the prompt step")
+
 // TestLoadKeysHeadlessVaultHit confirms the full proactive path — a real
 // ssh-agent, real ssh-add, and the real keyring+SSH_ASKPASS handoff — loads a
 // key from a stored passphrase with no graphical prompter involved at all: a
@@ -56,7 +60,7 @@ func TestLoadKeysHeadlessVaultHit(t *testing.T) {
 		Keys:   fakeLister{paths: []string{keyfile}},
 		Runner: run.ExecRunner{},
 		Secret: &fakeSecret{lookupPass: passphrase, lookupFound: true},
-		Prompt: &fakePrompter{err: errors.New("must not be prompted: a vault hit should never reach the prompt step")},
+		Prompt: &fakePrompter{err: errMustNotBePromptedA},
 		Adder:  ExecKeyAdder{AskpassProg: askpassScript},
 		Log:    &fakeLogger{},
 	}

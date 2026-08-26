@@ -3,7 +3,6 @@
 package wallet
 
 import (
-	"errors"
 	"sort"
 	"testing"
 
@@ -91,7 +90,7 @@ func TestKeychainBackendLookup(t *testing.T) {
 		assert.False(t, found, "and nothing may be reported found")
 	})
 	t.Run("client error", func(t *testing.T) {
-		wantErr := errors.New("boom")
+		wantErr := errBoom
 		c := &fakeKeychainClient{findErr: wantErr}
 		b := &Keychain{Client: c, Account: "alice"}
 		_, _, err := b.Lookup(t.Context(), "svc")
@@ -120,21 +119,21 @@ func TestKeychainBackendStore(t *testing.T) {
 		assert.Equal(t, "new", c.items["svc"], "and hold the passphrase that replaced the old one")
 	})
 	t.Run("find error", func(t *testing.T) {
-		wantErr := errors.New("boom")
+		wantErr := errBoom
 		c := &fakeKeychainClient{findErr: wantErr}
 		b := &Keychain{Client: c, Account: "alice"}
 		assert.ErrorIs(t, b.Store(t.Context(), "svc", "label", "x"), wantErr,
 			"a keychain that could not be read must be reported: writing blind could overwrite the wrong item")
 	})
 	t.Run("add error", func(t *testing.T) {
-		wantErr := errors.New("boom")
+		wantErr := errBoom
 		c := &fakeKeychainClient{addErr: wantErr}
 		b := &Keychain{Client: c, Account: "alice"}
 		assert.ErrorIs(t, b.Store(t.Context(), "svc", "label", "x"), wantErr,
 			"a passphrase the keychain refused to add must not be reported as saved")
 	})
 	t.Run("update error", func(t *testing.T) {
-		wantErr := errors.New("boom")
+		wantErr := errBoom
 		c := &fakeKeychainClient{items: map[string]string{"svc": "old"}, updateErr: wantErr}
 		b := &Keychain{Client: c, Account: "alice"}
 		assert.ErrorIs(t, b.Store(t.Context(), "svc", "label", "x"), wantErr,
@@ -156,7 +155,7 @@ func TestKeychainBackendDelete(t *testing.T) {
 			"a passphrase that is already not there is the outcome that was asked for")
 	})
 	t.Run("client error", func(t *testing.T) {
-		wantErr := errors.New("boom")
+		wantErr := errBoom
 		c := &fakeKeychainClient{deleteErr: wantErr}
 		b := &Keychain{Client: c, Account: "alice"}
 		assert.ErrorIs(t, b.Delete(t.Context(), "svc"), wantErr,
@@ -214,7 +213,7 @@ func TestKeychainBackendList(t *testing.T) {
 			"every item must be named, by the key it belongs to")
 	})
 	t.Run("client error", func(t *testing.T) {
-		wantErr := errors.New("boom")
+		wantErr := errBoom
 		c := &fakeKeychainClient{listErr: wantErr}
 		b := &Keychain{Client: c, Account: "alice"}
 		_, err := b.List(t.Context())

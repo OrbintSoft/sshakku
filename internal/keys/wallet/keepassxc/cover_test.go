@@ -16,6 +16,14 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/testtmp"
 )
 
+// The failures these tests hand their seams. Each stands for a real one the
+// code under test cannot be made to produce on demand.
+var (
+	errReadOnlyDatabase       = errors.New("read-only database")
+	errSearchUnavailable      = errors.New("search unavailable")
+	errTheUserClosedTheDialog = errors.New("the user closed the dialog")
+)
+
 func TestDialKeePassXCNamesEveryPathItTried(t *testing.T) {
 	absent := []string{
 		filepath.Join(testtmp.ShortDir(t), "a"),
@@ -115,7 +123,7 @@ func TestKeePassXCLookupReportsAFailedSearch(t *testing.T) {
 }
 
 func TestKeePassXCStoreReportsARefusedApproval(t *testing.T) {
-	refused := errors.New("the user closed the dialog")
+	refused := errTheUserClosedTheDialog
 	kp := &fakeKeePassXC{associateErr: refused}
 	b := kp.backendFor(&memoryAssociations{})
 
@@ -127,7 +135,7 @@ func TestKeePassXCStoreReportsARefusedApproval(t *testing.T) {
 // the lookup for an existing entry could not run: without a uuid it creates one
 // rather than giving up on saving the passphrase.
 func TestKeePassXCStoreCreatesWhenTheSearchFails(t *testing.T) {
-	kp := &fakeKeePassXC{getLoginsErr: errors.New("search unavailable")}
+	kp := &fakeKeePassXC{getLoginsErr: errSearchUnavailable}
 	b := kp.backendFor(&memoryAssociations{stored: wire.Association{ID: "db", IDKey: "k"}, present: true})
 
 	require.NoError(t, b.Store(t.Context(), "id_ed25519", "", "p"),
@@ -137,7 +145,7 @@ func TestKeePassXCStoreCreatesWhenTheSearchFails(t *testing.T) {
 }
 
 func TestKeePassXCStoreReportsAFailedWrite(t *testing.T) {
-	kp := &fakeKeePassXC{setLoginErr: errors.New("read-only database")}
+	kp := &fakeKeePassXC{setLoginErr: errReadOnlyDatabase}
 	b := kp.backendFor(&memoryAssociations{stored: wire.Association{ID: "db", IDKey: "k"}, present: true})
 
 	assert.Error(t, b.Store(t.Context(), "id_ed25519", "", "p"),

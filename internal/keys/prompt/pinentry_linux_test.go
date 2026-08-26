@@ -15,6 +15,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// The failures these tests hand their seams. Each stands for a real one the
+// code under test cannot be made to produce on demand.
+var (
+	errStdinAlreadySet  = errors.New("stdin already set")
+	errStdoutAlreadySet = errors.New("stdout already set")
+)
+
 // fakePinentry is the path to a program that speaks the protocol for real, so
 // these tests drive a process and a pipe rather than a stand-in for one.
 const fakePinentry = "../../../test/fakes/pinentry.sh"
@@ -80,7 +87,7 @@ func TestPinentryAvailable(t *testing.T) {
 	installed := func(string) (string, error) { return "/usr/bin/pinentry", nil }
 
 	t.Run("not installed", func(t *testing.T) {
-		p := PinentryPrompter{lookPath: func(string) (string, error) { return "", errors.New("not found") }}
+		p := PinentryPrompter{lookPath: func(string) (string, error) { return "", errNotFound }}
 		assert.False(t, p.Available(t.Context()), "a program that is not installed cannot put a dialog on any screen")
 	})
 
@@ -202,14 +209,14 @@ func TestPinentryConversationWithNoPipesToTalkOver(t *testing.T) {
 
 	t.Run("nothing to write to", func(t *testing.T) {
 		saved(t)
-		stdinPipe = func(*exec.Cmd) (io.WriteCloser, error) { return nil, errors.New("stdin already set") }
+		stdinPipe = func(*exec.Cmd) (io.WriteCloser, error) { return nil, errStdinAlreadySet }
 		_, err := PinentryPrompter{Bin: fakePinentry}.Prompt(t.Context(), "id_rsa")
 		assert.Error(t, err, "with no way to put the question, the caller must be told rather than left waiting")
 	})
 
 	t.Run("nothing to read from", func(t *testing.T) {
 		saved(t)
-		stdoutPipe = func(*exec.Cmd) (io.ReadCloser, error) { return nil, errors.New("stdout already set") }
+		stdoutPipe = func(*exec.Cmd) (io.ReadCloser, error) { return nil, errStdoutAlreadySet }
 		_, err := PinentryPrompter{Bin: fakePinentry}.Prompt(t.Context(), "id_rsa")
 		assert.Error(t, err, "with no way to hear the answer, no dialog may be left running with nobody reading it")
 	})

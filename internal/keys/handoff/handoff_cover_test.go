@@ -7,6 +7,10 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// errRngBoom is the failure this test hands its seam, standing for a real one the
+// code under test cannot be made to produce on demand.
+var errRngBoom = errors.New("rng boom")
+
 // saveRandSeam snapshots the token RNG seam, restoring it when the (sub)test
 // ends.
 func saveRandSeam(t *testing.T) {
@@ -17,7 +21,7 @@ func saveRandSeam(t *testing.T) {
 
 func TestRandomHandoffTokenReadError(t *testing.T) {
 	saveRandSeam(t)
-	randRead = func([]byte) (int, error) { return 0, errors.New("rng boom") }
+	randRead = func([]byte) (int, error) { return 0, errRngBoom }
 	_, err := randomToken()
 	assert.Error(t, err,
 		"a token that is not random is one another process can guess, so an RNG that failed must stop the handoff")

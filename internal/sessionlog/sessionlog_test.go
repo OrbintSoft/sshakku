@@ -13,6 +13,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// The failures these tests hand their seams. Each stands for a real one the
+// code under test cannot be made to produce on demand.
+var (
+	errCloseFailed      = errors.New("close failed")
+	errDiskFull         = errors.New("disk full")
+	errPermissionDenied = errors.New("permission denied")
+)
+
 func TestLogAppends(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sessions.log")
 	lg := New(path)
@@ -56,7 +64,7 @@ func TestLogLockOpenError(t *testing.T) {
 func TestLogAppendOpenError(t *testing.T) {
 	lg := New(filepath.Join(t.TempDir(), "sessions.log"))
 	lg.open = func(string, int, os.FileMode) (io.WriteCloser, error) {
-		return nil, errors.New("permission denied")
+		return nil, errPermissionDenied
 	}
 	assert.Error(t, lg.Log("INFO", "x"), "Log must fail when the log file will not open")
 }
@@ -82,7 +90,7 @@ func (w *errWriteCloser) Close() error {
 }
 
 func TestLogWriteError(t *testing.T) {
-	wc := &errWriteCloser{writeErr: errors.New("disk full")}
+	wc := &errWriteCloser{writeErr: errDiskFull}
 	lg := New(filepath.Join(t.TempDir(), "sessions.log"))
 	lg.open = func(string, int, os.FileMode) (io.WriteCloser, error) { return wc, nil }
 	assert.Error(t, lg.Log("INFO", "x"), "Log with a failing Write must fail")
@@ -90,7 +98,7 @@ func TestLogWriteError(t *testing.T) {
 }
 
 func TestLogCloseError(t *testing.T) {
-	wc := &errWriteCloser{closeErr: errors.New("close failed")}
+	wc := &errWriteCloser{closeErr: errCloseFailed}
 	lg := New(filepath.Join(t.TempDir(), "sessions.log"))
 	lg.open = func(string, int, os.FileMode) (io.WriteCloser, error) { return wc, nil }
 	assert.Error(t, lg.Log("INFO", "x"), "Log with a failing Close must fail")

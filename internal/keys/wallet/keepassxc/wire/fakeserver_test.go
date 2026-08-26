@@ -18,6 +18,19 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/testtmp"
 )
 
+// nonceLengthError is the fake server refusing a nonce of the wrong width. It
+// carries both numbers for the same reason the client's keyLengthError does:
+// what is wrong with the value is the difference between them.
+type nonceLengthError struct{ want, got int }
+
+func (e nonceLengthError) Error() string {
+	return fmt.Sprintf("a nonce must be %d bytes, got %d", e.want, e.got)
+}
+
+// errTheClientSentAnEncrypted is the failure this test hands its seam, standing for a real one the
+// code under test cannot be made to produce on demand.
+var errTheClientSentAnEncrypted = errors.New("the client sent an encrypted frame before exchanging keys")
+
 // fakeServer is a stand-in for KeePassXC that speaks the real protocol: it
 // generates its own key pair, decrypts what the client sends with NaCl box, and
 // encrypts its replies back under the incremented nonce.
@@ -247,7 +260,7 @@ func (s *fakeServer) clientKey() (*[keyLen]byte, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.clientPub == nil {
-		return nil, errors.New("the client sent an encrypted frame before exchanging keys")
+		return nil, errTheClientSentAnEncrypted
 	}
 	return s.clientPub, nil
 }
@@ -283,7 +296,7 @@ func decodeNonce(encoded string) ([nonceLen]byte, error) {
 		return nonce, err
 	}
 	if len(raw) != nonceLen {
-		return nonce, fmt.Errorf("a nonce must be %d bytes, got %d", nonceLen, len(raw))
+		return nonce, nonceLengthError{want: nonceLen, got: len(raw)}
 	}
 	copy(nonce[:], raw)
 	return nonce, nil

@@ -14,6 +14,13 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/diagnose"
 )
 
+// errMayNotEnableTheService is what the service manager refuses an unprivileged
+// enable with. It is spelled out here rather than borrowed from the agent
+// package because what this test is about is that the sentence reaches the user
+// intact, whatever it says.
+var errMayNotEnableTheService = errors.New("this session may not enable the ssh-agent service; " +
+	"run sshakku doctor --fix again from an administrator session, which is what it is for")
+
 // enablerSpy stands in for the act of enabling the service, recording whether
 // it was asked for at all. What it replaces is the write to the machine's
 // service manager, not the decision: whether anything is enabled, and on the
@@ -89,9 +96,7 @@ func TestDoctorFixEnablesTheAgentsService(t *testing.T) {
 	})
 
 	t.Run("a session that may not enable it is told, and the run carries on", func(t *testing.T) {
-		refused := errors.New("this session may not enable the ssh-agent service; " +
-			"run sshakku doctor --fix again from an administrator session, which is what it is for")
-		enabler := &enablerSpy{err: refused}
+		enabler := &enablerSpy{err: errMayNotEnableTheService}
 		d := serviceDeps(t, serviceReport(agent.ServiceStartDisabled), enabler)
 
 		var out, errOut bytes.Buffer

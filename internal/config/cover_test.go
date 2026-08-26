@@ -14,6 +14,10 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
+// errNotADuration is the failure this test hands its seam, standing for a real one the
+// code under test cannot be made to produce on demand.
+var errNotADuration = errors.New("not a duration")
+
 // TestOverruledNamesWhatDecidesInstead verifies the part of F36 a person only
 // finds out about by being told: editing a key that something later decides is
 // an edit with no effect, and the file being edited is the one place that
@@ -116,7 +120,7 @@ func TestKeyDirWrittenAsHome(t *testing.T) {
 // by what it wraps rather than by the text it prints, since that is how the
 // report tells one refusal from another.
 func TestSettingErrorCarriesTheErrorItRefused(t *testing.T) {
-	inner := errors.New("not a duration")
+	inner := errNotADuration
 	var err error = &SettingError{Key: "key_lifetime", Err: inner}
 
 	assert.ErrorIs(t, err, inner, "the refusal must be recognisable by the error it was made of")

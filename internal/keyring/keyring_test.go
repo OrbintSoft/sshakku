@@ -7,6 +7,13 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// The failures these tests hand their seams. Each stands for a real one the
+// code under test cannot be made to produce on demand.
+var (
+	errEACCES = errors.New("EACCES")
+	errEDQUOT = errors.New("EDQUOT")
+)
+
 // saveProbeSeams snapshots Available's probe seams and restores them when the
 // (sub)test ends, so a test can drive its branches without a live keyring.
 func saveProbeSeams(t *testing.T) {
@@ -18,7 +25,7 @@ func saveProbeSeams(t *testing.T) {
 func TestAvailableSeam(t *testing.T) {
 	t.Run("a failed add means unavailable", func(t *testing.T) {
 		saveProbeSeams(t)
-		probeAdd = func(string, []byte) (Serial, error) { return 0, errors.New("EDQUOT") }
+		probeAdd = func(string, []byte) (Serial, error) { return 0, errEDQUOT }
 		assert.False(t, Available(), "a probe add that fails means unavailable")
 	})
 
@@ -26,7 +33,7 @@ func TestAvailableSeam(t *testing.T) {
 		saveProbeSeams(t)
 		unlinked := false
 		probeAdd = func(string, []byte) (Serial, error) { return 1, nil }
-		probeRead = func(Serial) ([]byte, error) { return nil, errors.New("EACCES") }
+		probeRead = func(Serial) ([]byte, error) { return nil, errEACCES }
 		probeUnlink = func(Serial) error { unlinked = true; return nil }
 		assert.False(t, Available(), "a probe read that fails means unavailable")
 		assert.True(t, unlinked, "the probe key must be unlinked")

@@ -10,6 +10,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// The failures these tests hand their seams. Each stands for a real one the
+// code under test cannot be made to produce on demand.
+var (
+	errNoSuchFile         = errors.New("no such file")
+	errNoWindowServerHere = errors.New("no window server here")
+)
+
 // namedFake is a prompter that says what it is, the way the real ones do.
 type namedFake struct {
 	name   string
@@ -63,7 +70,7 @@ func TestFallbackPrompter(t *testing.T) {
 	})
 
 	t.Run("a dialog that will not run asks on the terminal", func(t *testing.T) {
-		dialog := &namedFake{name: "pinentry", err: errors.New("no such file")}
+		dialog := &namedFake{name: "pinentry", err: errNoSuchFile}
 		terminal := &namedFake{name: "the terminal", answer: "typed on the terminal"}
 		log := &fakeLogger{}
 
@@ -94,7 +101,7 @@ func TestFallbackPrompter(t *testing.T) {
 	})
 
 	t.Run("the log says where the question actually went", func(t *testing.T) {
-		dialog := &namedFake{name: "pinentry", err: errors.New("no window server here")}
+		dialog := &namedFake{name: "pinentry", err: errNoWindowServerHere}
 		// What a session with more than one dialog really hands over to: the
 		// rest of the chain, which is asked by asking the dialog at its head.
 		other := FallbackPrompter{

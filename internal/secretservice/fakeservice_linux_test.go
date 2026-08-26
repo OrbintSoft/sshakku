@@ -10,6 +10,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// The failures these tests hand their seams. Each stands for a real one the
+// code under test cannot be made to produce on demand.
+var (
+	errCollectionsUnavailable = errors.New("collections unavailable")
+	errCreateCollectionFailed = errors.New("create collection failed")
+	errUnknownProperty        = errors.New("unknown property")
+)
+
 // propsIface is the standard D-Bus interface GetProperty calls land on;
 // fakeCollection and fakeItem answer it alongside their own interface.
 const propsIface = "org.freedesktop.DBus.Properties"
@@ -167,7 +175,7 @@ func (s *fakeService) Get(iface, prop string) (dbus.Variant, *dbus.Error) {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		if s.failCollectionsProp {
-			return dbus.Variant{}, dbus.MakeFailedError(errors.New("collections unavailable"))
+			return dbus.Variant{}, dbus.MakeFailedError(errCollectionsUnavailable)
 		}
 		if s.collectionsPropSet {
 			return dbus.MakeVariant(s.collectionsProp), nil
@@ -178,7 +186,7 @@ func (s *fakeService) Get(iface, prop string) (dbus.Variant, *dbus.Error) {
 		}
 		return dbus.MakeVariant(collections), nil
 	}
-	return dbus.Variant{}, dbus.MakeFailedError(fmt.Errorf("unknown property %s.%s", iface, prop))
+	return dbus.Variant{}, dbus.MakeFailedError(fmt.Errorf("%w %s.%s", errUnknownProperty, iface, prop))
 }
 
 func (s *fakeService) CreateCollection(props map[string]dbus.Variant, alias string) (dbus.ObjectPath, dbus.ObjectPath, *dbus.Error) {
@@ -187,7 +195,7 @@ func (s *fakeService) CreateCollection(props map[string]dbus.Variant, alias stri
 	failGeneric := s.failCreateCollection
 	s.mu.Unlock()
 	if failGeneric {
-		return noPrompt, noPrompt, dbus.MakeFailedError(errors.New("create collection failed"))
+		return noPrompt, noPrompt, dbus.MakeFailedError(errCreateCollectionFailed)
 	}
 	if s.getRestrictAlias() && alias != "" && alias != "default" {
 		err := dbus.NewError(errNotSupported, []any{"Only the 'default' alias is supported"})
@@ -264,7 +272,7 @@ func (c *fakeCollection) Get(iface, prop string) (dbus.Variant, *dbus.Error) {
 	if iface == collectionIface && prop == "Label" {
 		return dbus.MakeVariant(c.label), nil
 	}
-	return dbus.Variant{}, dbus.MakeFailedError(fmt.Errorf("unknown property %s.%s", iface, prop))
+	return dbus.Variant{}, dbus.MakeFailedError(fmt.Errorf("%w %s.%s", errUnknownProperty, iface, prop))
 }
 
 func (c *fakeCollection) SearchItems(attrs map[string]string) ([]dbus.ObjectPath, *dbus.Error) {
@@ -334,7 +342,7 @@ func (it *fakeItem) Get(iface, prop string) (dbus.Variant, *dbus.Error) {
 	if iface == itemIface && prop == "Attributes" {
 		return dbus.MakeVariant(it.attrs), nil
 	}
-	return dbus.Variant{}, dbus.MakeFailedError(fmt.Errorf("unknown property %s.%s", iface, prop))
+	return dbus.Variant{}, dbus.MakeFailedError(fmt.Errorf("%w %s.%s", errUnknownProperty, iface, prop))
 }
 
 // Delete removes the item from its collection, following the same

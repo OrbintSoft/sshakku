@@ -1,7 +1,6 @@
 package prompt
 
 import (
-	"errors"
 	"strings"
 	"testing"
 
@@ -22,7 +21,7 @@ func TestADialogThatFailsIsNamedByItsOwnName(t *testing.T) {
 	// does when exec fails, which is what the fallback exists for.
 	wontRun := func(name string) *runtest.Runner {
 		return runtest.NewRunner().On(name, func(run.Cmd) (run.Result, error) {
-			return run.Result{}, errors.New("exec: \"" + name + "\": executable file not found in $PATH")
+			return run.Result{}, notOnPathError{name: name}
 		})
 	}
 	cases := []struct {

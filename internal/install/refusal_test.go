@@ -13,6 +13,13 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/cli/shell"
 )
 
+// The failures these tests hand their seams. Each stands for a real one the
+// code under test cannot be made to produce on demand.
+var (
+	errNoPathTranslatorAnswered = errors.New("no path translator answered")
+	errTheEnvironmentCouldNotBe = errors.New("the environment could not be written")
+)
+
 // spellingThatRefuses points the install at a system whose shell spells paths
 // differently from this program and whose translator will not answer.
 //
@@ -25,7 +32,7 @@ func spellingThatRefuses(t *testing.T, forShell, forUs bool) {
 	t.Helper()
 
 	refuse := func(context.Context, string) (string, error) {
-		return "", errors.New("no path translator answered")
+		return "", errNoPathTranslatorAnswered
 	}
 	previous := spellingForShell
 	spellingForShell = func(string) spelling {
@@ -47,7 +54,7 @@ func spellingThatRefuses(t *testing.T, forShell, forUs bool) {
 func searchListThatRefuses(t *testing.T) {
 	t.Helper()
 
-	refuse := func(Scope, string) (bool, error) { return false, errors.New("the environment could not be written") }
+	refuse := func(Scope, string) (bool, error) { return false, errTheEnvironmentCouldNotBe }
 	previousAdd, previousRemove := addToPath, removeFromPath
 	addToPath, removeFromPath = refuse, refuse
 	t.Cleanup(func() { addToPath, removeFromPath = previousAdd, previousRemove })

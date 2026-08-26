@@ -19,6 +19,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// The failures these tests hand their seams. Each stands for a real one the
+// code under test cannot be made to produce on demand.
+var (
+	errLocked    = errors.New("locked")
+	errNoEntropy = errors.New("no entropy")
+	errStuck     = errors.New("stuck")
+)
+
 // fakeTTY stands in for the /dev/tty prompter so the broker's terminal-fallback
 // decisions run without a controlling terminal: it returns a canned reply, or an
 // error (e.g. prompt.ErrNoTerminal) to drive the decline path.
@@ -57,7 +65,7 @@ func TestForgetSession(t *testing.T) {
 	})
 
 	t.Run("unlock failure still sweeps", func(t *testing.T) {
-		backend := &fakeProbeBackend{unlockErr: errors.New("locked")}
+		backend := &fakeProbeBackend{unlockErr: errLocked}
 		d := depsReturning(fakeProbeSession{backend})
 		var out, errOut bytes.Buffer
 		require.Zerof(t, d.forget(t.Context(), &out, &errOut, []string{"id_rsa"}),
@@ -67,7 +75,7 @@ func TestForgetSession(t *testing.T) {
 	})
 
 	t.Run("lock failure on exit is tolerated", func(t *testing.T) {
-		backend := &fakeProbeBackend{lockErr: errors.New("stuck")}
+		backend := &fakeProbeBackend{lockErr: errStuck}
 		d := depsReturning(fakeProbeSession{backend})
 		var out, errOut bytes.Buffer
 		assert.Zerof(t, d.forget(t.Context(), &out, &errOut, []string{"id_rsa"}),
@@ -102,7 +110,7 @@ func TestForgetErrors(t *testing.T) {
 	})
 
 	t.Run("--all with a failing List reports the error", func(t *testing.T) {
-		d := depsReturning(&fakeProbeBackend{listErr: errors.New("boom")})
+		d := depsReturning(&fakeProbeBackend{listErr: errBoom})
 		var out, errOut bytes.Buffer
 		assert.Equal(t, 1, d.forget(t.Context(), &out, &errOut, []string{"--all"}),
 			"a wallet that could not be read must not be reported as emptied")
@@ -116,7 +124,7 @@ func TestForgetErrors(t *testing.T) {
 // the result.
 func TestProbeSecretBackendLookupErrors(t *testing.T) {
 	t.Run("lookup error is reported", func(t *testing.T) {
-		backend := &fakeProbeBackend{lookupErr: errors.New("boom")}
+		backend := &fakeProbeBackend{lookupErr: errBoom}
 		var buf bytes.Buffer
 		assert.Equal(t, 1, probeSecretBackend(t.Context(), &buf, fakeLogger{}, backend, "probe"),
 			"a wallet that errors when read has failed the probe")
@@ -124,7 +132,7 @@ func TestProbeSecretBackendLookupErrors(t *testing.T) {
 	})
 
 	t.Run("lock failure on exit is logged", func(t *testing.T) {
-		backend := &fakeProbeBackend{lookupVal: "probe", lookupOK: true, lockErr: errors.New("stuck")}
+		backend := &fakeProbeBackend{lookupVal: "probe", lookupOK: true, lockErr: errStuck}
 		session := fakeProbeSession{backend}
 		var buf bytes.Buffer
 		assert.Zero(t, probeSecretBackend(t.Context(), &buf, fakeLogger{}, session, "probe"),
@@ -235,7 +243,7 @@ func TestAskpassBrokerTerminal(t *testing.T) {
 func TestRandomProbeValueError(t *testing.T) {
 	orig := randRead
 	t.Cleanup(func() { randRead = orig })
-	randRead = func([]byte) (int, error) { return 0, errors.New("no entropy") }
+	randRead = func([]byte) (int, error) { return 0, errNoEntropy }
 
 	t.Run("randomProbeValue reports it", func(t *testing.T) {
 		_, err := randomProbeValue()
@@ -260,7 +268,7 @@ func TestLoadKeysSeams(t *testing.T) {
 	t.Run("executable lookup failure returns 1", func(t *testing.T) {
 		tempRuntimeEnv(t)
 		d := depsReturning(newMemoryBackend())
-		d.self = func() (string, error) { return "", errors.New("no exe") }
+		d.self = func() (string, error) { return "", errNoExe }
 		var errOut bytes.Buffer
 		assert.Equal(t, 1, d.loadKeys(t.Context(), &errOut),
 			"without a path to itself there is no askpass to hand ssh, and loading must not pretend otherwise")

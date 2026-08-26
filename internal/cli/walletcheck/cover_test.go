@@ -11,6 +11,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// errNotFound is the failure this test hands its seam, standing for a real one the
+// code under test cannot be made to produce on demand.
+var errNotFound = errors.New("not found")
+
 // probeWith builds a walletProbe answering exactly what a case describes, so
 // each branch is reached from any platform rather than only from the one the
 // test happens to run on.
@@ -24,7 +28,7 @@ func probeWith(goos string, found []string, present []string, bus string, listen
 			if has(found, name) {
 				return "/usr/bin/" + name, nil
 			}
-			return "", errors.New("not found")
+			return "", errNotFound
 		},
 		exists:     func(path string) bool { return has(present, path) },
 		busAddress: bus,

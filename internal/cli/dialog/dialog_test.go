@@ -12,6 +12,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// errInappropriateIoctlForDevice is what a terminal open fails with when there
+// is no terminal behind the descriptor. The capital is the kernel's, not ours:
+// this fixture stands for the string the system really produces, and rewriting
+// it to suit a style rule would make it stand for something else.
+//
+//nolint:staticcheck // ST1005: the wording is the operating system's own.
+var errInappropriateIoctlForDevice = errors.New("Inappropriate ioctl for device")
+
 // TestADialogThatCannotDrawIsFollowedByOneThatCan verifies F37 for the case a
 // list of installed programs cannot see coming: a dialog is installed, says it
 // can ask, and then puts no window anywhere — GnuPG's pinentry does exactly
@@ -28,7 +36,7 @@ import (
 func TestADialogThatCannotDrawIsFollowedByOneThatCan(t *testing.T) {
 	const typed = "the-one-typed-into-the-second-dialog"
 
-	cannotDraw := &fakeDialog{name: "pinentry", installed: true, err: errors.New("Inappropriate ioctl for device")}
+	cannotDraw := &fakeDialog{name: "pinentry", installed: true, err: errInappropriateIoctlForDevice}
 	notInstalled := &fakeDialog{name: "kdialog"}
 	canDraw := &fakeDialog{name: "zenity", installed: true, answer: typed}
 	terminal := &fakeDialog{name: "the terminal", installed: true, answer: "the-one-typed-on-the-terminal"}
@@ -58,7 +66,7 @@ func TestADialogThatCannotDrawIsFollowedByOneThatCan(t *testing.T) {
 func TestANamedDialogThatCannotDrawGoesToTheTerminal(t *testing.T) {
 	const onTheTerminal = "the-one-typed-on-the-terminal"
 
-	cannotDraw := &fakeDialog{name: "pinentry", installed: true, err: errors.New("Inappropriate ioctl for device")}
+	cannotDraw := &fakeDialog{name: "pinentry", installed: true, err: errInappropriateIoctlForDevice}
 	canDraw := &fakeDialog{name: "zenity", installed: true, answer: "the-one-nobody-asked-for"}
 	terminal := &fakeDialog{name: "the terminal", installed: true, answer: onTheTerminal}
 
