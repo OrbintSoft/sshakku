@@ -12,6 +12,10 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/diagnose/launcher"
 )
 
+// errPermissionDenied is the failure this test hands its seam, standing for a real one the
+// code under test cannot be made to produce on demand.
+var errPermissionDenied = errors.New("permission denied")
+
 // fakeHostSource returns a fixed hostcheck.Checks, so Gather's host!=nil branch can be
 // exercised without touching the real /proc or /sys.
 type fakeHostSource struct{ hc hostcheck.Checks }
@@ -38,7 +42,7 @@ func TestFormatRemainingBranches(t *testing.T) {
 			PID:      9,
 			Ancestry: []launcher.ProcInfo{{PID: 9, Name: "ssh-agent"}, {PID: 8, Name: "bash"}},
 		}},
-		KeysErr: errors.New("permission denied"),
+		KeysErr: errPermissionDenied,
 	})
 	out := buf.String()
 	// Three independent things the report has to say; assert so one run names

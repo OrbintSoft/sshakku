@@ -17,6 +17,15 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/testtmp"
 )
 
+// The failures these tests hand their seams. Each stands for a real one the
+// code under test cannot be made to produce on demand.
+var (
+	errChmodBoom  = errors.New("chmod boom")
+	errListenBoom = errors.New("listen boom")
+	errNoBase     = errors.New("no base")
+	errReadBoom   = errors.New("read boom")
+)
+
 // saveHandoffSocketSeams snapshots the RNG, listen, and chmod seams shared by
 // the token and socket-handoff code, restoring them when the (sub)test ends.
 func saveHandoffSocketSeams(t *testing.T) {
@@ -39,7 +48,7 @@ func TestSocketHandoffFetchReadError(t *testing.T) {
 
 	token, err := socketHandoffStash("s3cr3t", 5*time.Second, fixedBase(testtmp.ShortDir(t)), addrLimit)
 	require.NoError(t, err, "putting a passphrase aside must succeed")
-	readAll = func(io.Reader) ([]byte, error) { return nil, errors.New("read boom") }
+	readAll = func(io.Reader) ([]byte, error) { return nil, errReadBoom }
 	_, err = socketHandoffFetch(t.Context(), token)
 	assert.Error(t, err, "a passphrase that could not be read must be reported, not handed on as an empty one")
 }
@@ -54,7 +63,7 @@ func TestSocketHandoffDirErrors(t *testing.T) {
 
 	t.Run("the directory cannot be made private", func(t *testing.T) {
 		saveHandoffSocketSeams(t)
-		chmodDir = func(string, os.FileMode) error { return errors.New("chmod boom") }
+		chmodDir = func(string, os.FileMode) error { return errChmodBoom }
 		_, err := socketHandoffDir(testtmp.ShortDir(t))
 		assert.Error(t, err,
 			"a directory that could not be made private must not be used: a passphrase would rendezvous in the open")
@@ -87,7 +96,7 @@ func TestSocketHandoffAddressTooLong(t *testing.T) {
 func TestSocketHandoffStashErrors(t *testing.T) {
 	t.Run("the base cannot be resolved at all", func(t *testing.T) {
 		_, err := socketHandoffStash("s", time.Second, func() (string, error) {
-			return "", errors.New("no base")
+			return "", errNoBase
 		}, addrLimit)
 		assert.Error(t, err, "with nowhere to put the passphrase, it must not be put anywhere")
 	})
@@ -101,21 +110,21 @@ func TestSocketHandoffStashErrors(t *testing.T) {
 
 	t.Run("token RNG fails", func(t *testing.T) {
 		saveHandoffSocketSeams(t)
-		randRead = func([]byte) (int, error) { return 0, errors.New("rng boom") }
+		randRead = func([]byte) (int, error) { return 0, errRngBoom }
 		_, err := socketHandoffStash("s", time.Second, fixedBase(testtmp.ShortDir(t)), addrLimit)
 		assert.Error(t, err, "a rendezvous another process could guess the name of must not be opened")
 	})
 
 	t.Run("listen fails", func(t *testing.T) {
 		saveHandoffSocketSeams(t)
-		netListen = func(string, string) (net.Listener, error) { return nil, errors.New("listen boom") }
+		netListen = func(string, string) (net.Listener, error) { return nil, errListenBoom }
 		_, err := socketHandoffStash("s", time.Second, fixedBase(testtmp.ShortDir(t)), addrLimit)
 		assert.Error(t, err, "a rendezvous nothing is listening at cannot hand anything over")
 	})
 
 	t.Run("chmod fails and the socket is cleaned up", func(t *testing.T) {
 		saveHandoffSocketSeams(t)
-		chmodSock = func(string, os.FileMode) error { return errors.New("chmod boom") }
+		chmodSock = func(string, os.FileMode) error { return errChmodBoom }
 		_, err := socketHandoffStash("s", time.Second, fixedBase(testtmp.ShortDir(t)), addrLimit)
 		assert.Error(t, err,
 			"a socket that could not be made private must not be left serving: anything that connects gets the passphrase")

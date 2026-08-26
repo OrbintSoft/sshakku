@@ -153,48 +153,71 @@ func crossUserGuard(target targetUser, fix, testBackend bool, euid int) string {
 // misconfigured backend surfaces here instead of as a broken ssh prompt
 // later. Refused cross-user for the same reason as --fix (see
 // crossUserGuard): it acts, it does not just read.
-func (d deps) doctor(ctx context.Context, stdout, stderr io.Writer, args []string) int {
-	fix := false
-	testBackend := false
-	var userArg, testBackendName string
+// doctorRequest is what the doctor was asked to do, once its arguments have
+// been read.
+type doctorRequest struct {
+	// fix says whether to repair what the report finds rather than only report
+	// it.
+	fix bool
+	// testBackend says whether to exercise the secret backend afterwards, and
+	// testBackendName which one — empty meaning the configured one.
+	testBackend     bool
+	testBackendName string
+	// user is the account to report on instead of this one.
+	user string
+}
+
+// parseDoctorArgs reads the doctor's flags, and writes its own refusals: what
+// is wrong with an argument is a sentence about that argument, and a caller has
+// nothing to add to it. The bool reports whether the arguments were usable.
+func parseDoctorArgs(stderr io.Writer, args []string) (doctorRequest, bool) {
+	var asked doctorRequest
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--fix":
-			fix = true
+			asked.fix = true
 		case "--user":
 			i++
 			if i >= len(args) {
 				_, _ = fmt.Fprintln(stderr, "sshakku: doctor: --user requires a value")
-				return 2
+				return doctorRequest{}, false
 			}
-			userArg = args[i]
+			asked.user = args[i]
 		case "--test-backend":
-			testBackend = true
+			asked.testBackend = true
 			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "--") {
 				i++
-				testBackendName = args[i]
+				asked.testBackendName = args[i]
 			}
 		default:
 			_, _ = fmt.Fprintf(stderr, "sshakku: doctor: unknown argument %q\n", args[i])
-			return 2
+			return doctorRequest{}, false
 		}
 	}
-	if testBackendName != "" && !config.SecretBackendAvailable(testBackendName) {
+	if asked.testBackendName != "" && !config.SecretBackendAvailable(asked.testBackendName) {
 		// The wallets are listed from the one place that knows them, so this
 		// never offers the user a name this system has not got.
 		_, _ = fmt.Fprintf(stderr,
 			"sshakku: doctor --test-backend: %q is not a wallet this system has (want %s)\n",
-			testBackendName, strings.Join(config.SecretBackends(), ", "))
+			asked.testBackendName, strings.Join(config.SecretBackends(), ", "))
+		return doctorRequest{}, false
+	}
+	return asked, true
+}
+
+func (d deps) doctor(ctx context.Context, stdout, stderr io.Writer, args []string) int {
+	asked, ok := parseDoctorArgs(stderr, args)
+	if !ok {
 		return 2
 	}
 
 	env := paths.FromOS()
-	target, err := resolveTargetUser(userArg, env)
+	target, err := resolveTargetUser(asked.user, env)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "sshakku: doctor: %v\n", err)
 		return 2
 	}
-	if msg := crossUserGuard(target, fix, testBackend, d.geteuid()); msg != "" {
+	if msg := crossUserGuard(target, asked.fix, asked.testBackend, d.geteuid()); msg != "" {
 		_, _ = fmt.Fprintf(stderr, "sshakku: doctor: %s\n", msg)
 		return 2
 	}
@@ -213,12 +236,12 @@ func (d deps) doctor(ctx context.Context, stdout, stderr io.Writer, args []strin
 	diagnose.Format(stdout, report)
 
 	exitCode := 0
-	if testBackend {
+	if asked.testBackend {
 		_, _ = io.WriteString(stdout, "\n── testing secret backend ──\n")
 		log := sessionlog.New(layout.LogFile)
-		exitCode = d.testSecretBackend(ctx, stdout, stderr, layout, log, testBackendName)
+		exitCode = d.testSecretBackend(ctx, stdout, stderr, layout, log, asked.testBackendName)
 	}
-	if !fix {
+	if !asked.fix {
 		return exitCode
 	}
 

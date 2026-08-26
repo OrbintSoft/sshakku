@@ -5,6 +5,7 @@ package prompt
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os/exec"
@@ -235,22 +236,28 @@ func (c *assuanConv) reply() (string, error) {
 	}
 }
 
+// errPinentry heads whatever the dialog program said went wrong. It is one
+// sentinel rather than three because the three differ only in how much the
+// program managed to say — a described error, a bare code, an unparseable line
+// — and none of them is a different failure to act on.
+var errPinentry = errors.New("pinentry")
+
 // assuanError turns an ERR line into an error, recognising the one that is not a
 // failure at all: a dialog the user closed on purpose.
 func assuanError(rest string) error {
 	number, desc, _ := strings.Cut(rest, " ")
 	code, err := strconv.Atoi(number)
 	if err != nil {
-		return fmt.Errorf("pinentry: %s", rest)
+		return fmt.Errorf("%w: %s", errPinentry, rest)
 	}
 	switch code & gpgErrCodeMask {
 	case gpgErrCanceled, gpgErrFullyCanceled:
 		return ErrCanceled
 	}
 	if desc == "" {
-		return fmt.Errorf("pinentry: error %d", code)
+		return fmt.Errorf("%w: error %d", errPinentry, code)
 	}
-	return fmt.Errorf("pinentry: %s", desc)
+	return fmt.Errorf("%w: %s", errPinentry, desc)
 }
 
 // assuanDecode undoes the percent-escaping the protocol requires of any byte

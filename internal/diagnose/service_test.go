@@ -12,6 +12,17 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/platform"
 )
 
+// errNoAgentService is what the service manager refuses with when the service
+// is not installed. The report carries it rather than reducing it to
+// "unavailable", which is what this test is about, so the whole sentence — the
+// remedy included — is written out here.
+var errNoAgentService = errors.New("this system has no ssh-agent service, so there is no agent to reach; " +
+	"an administrator can add it with: Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0")
+
+// errProcPermissionDenied is the failure this test hands its seam, standing for a real one the
+// code under test cannot be made to produce on demand.
+var errProcPermissionDenied = errors.New("/proc: permission denied")
+
 // formatted renders a report and hands back what it printed. Every check below
 // reads the report a user reads, rather than the structure behind it: what this
 // step is about is what the report says.
@@ -62,10 +73,7 @@ func TestTheReportNamesTheServiceAndWhatItIsDoing(t *testing.T) {
 // What the service manager refused with is already a sentence naming what would
 // put it right, so it is carried rather than reduced to "unavailable".
 func TestAServiceThatCouldNotBeReadIsStillReported(t *testing.T) {
-	refused := errors.New("this system has no ssh-agent service, so there is no agent to reach; " +
-		"an administrator can add it with: Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0")
-
-	out := formatted(t, Report{AgentService: agent.ServiceReading{Name: "ssh-agent", Err: refused}})
+	out := formatted(t, Report{AgentService: agent.ServiceReading{Name: "ssh-agent", Err: errNoAgentService}})
 
 	require.Contains(t, out, "agent service:", "a section that could not be filled is still a section")
 	assert.Contains(t, out, "Add-WindowsCapability",
@@ -113,7 +121,7 @@ func TestASystemThatKeepsNoSuchListIsNotAPartialReport(t *testing.T) {
 // failure is, not by which system it happened on.
 func TestAnEnumerationThatFailedIsStillAPartialReport(t *testing.T) {
 	f := strings.Join(findings(Inputs{}, Report{
-		InspectErr: errors.New("/proc: permission denied"),
+		InspectErr: errProcPermissionDenied,
 	}), "\n")
 
 	assert.Contains(t, f, "could not enumerate processes")
@@ -176,4 +184,45 @@ func TestASystemWithNoServiceHasNoSectionForOne(t *testing.T) {
 
 	assert.NotContains(t, out, "agent service:",
 		"there is no service here, so there is nothing to head a section with")
+}
+
+// F41: a report that names a disabled service says so through a value, not
+// through the sentence it printed. The repair reads the same report the user
+// was shown rather than taking a second reading that could disagree with it,
+// so this is the reading it acts on.
+func TestAReportSaysWhetherTheServiceIsOneNothingMayStart(t *testing.T) {
+	disabled := Report{AgentService: agent.ServiceReading{
+		Name:  "ssh-agent",
+		Start: agent.ServiceStartDisabled,
+	}}
+	assert.True(t, disabled.AgentServiceDisabled(),
+		"a service nothing may start is the one thing here a repair reaches outside this account for")
+
+	running := Report{AgentService: agent.ServiceReading{
+		Name:    "ssh-agent",
+		Running: true,
+		Start:   agent.ServiceStartAutomatic,
+	}}
+	assert.False(t, running.AgentServiceDisabled(),
+		"a service that starts on its own is not one to enable")
+
+	assert.False(t, Report{}.AgentServiceDisabled(),
+		"a system whose agent is a process has no service to call disabled")
+}
+
+// F41: where this system keeps no list of agent processes, the report says
+// where the answer actually is instead of leaving an empty heading. A machine
+// whose agent is served by a service is pointed at that service, because the
+// section above it is the answer the reader came for.
+func TestAReportWithNoProcessListPointsAtWhatAnsweredInstead(t *testing.T) {
+	served := Report{AgentService: agent.ServiceReading{
+		Name:    "ssh-agent",
+		Running: true,
+		Start:   agent.ServiceStartAutomatic,
+	}}
+	assert.Contains(t, processListNote(served), "served by the service above",
+		"a reader told there is no list must be told where to look instead")
+
+	assert.Equal(t, "not listed on this system", processListNote(Report{}),
+		"and where no service answered either, there is nothing to point at")
 }

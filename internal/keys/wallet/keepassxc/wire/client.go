@@ -41,6 +41,30 @@ type Entry struct {
 	UUID     string `json:"uuid"`
 }
 
+// The refusals this protocol answers with. The two that name an action put it
+// in front, because which call was refused is what a reader needs first; the
+// rest are whole sentences about the session as a whole.
+var (
+	errKeyExchangeRefused         = errors.New("keepassxc: the key exchange was refused")
+	errKeyExchangeGaveNoKey       = errors.New("keepassxc: the key exchange returned no public key")
+	errAssociationNamedNoDatabase = errors.New("keepassxc: the association was accepted but named no database")
+	errNoKeyExchangeYet           = errors.New("keepassxc: no key exchange has happened yet")
+	errReplyHadNoMessage          = errors.New("returned no message")
+	errActionRefused              = errors.New("was refused")
+)
+
+// actionFailedError is a call KeePassXC answered with a failure of its own. It
+// carries what KeePassXC said, which is the only part this program did not
+// write and the only part that says what went wrong there.
+type actionFailedError struct {
+	action string
+	said   string
+}
+
+func (e actionFailedError) Error() string {
+	return fmt.Sprintf("keepassxc: %s failed: %s", e.action, e.said)
+}
+
 // Client is a connected, key-exchanged session with KeePassXC. Not safe for
 // concurrent use: one request is in flight at a time, and each reply is matched
 // to its request by nonce.
@@ -120,10 +144,10 @@ func (c *Client) changePublicKeys() error {
 	// is stated on the envelope, since there is no encrypted message to put it
 	// in. Every other reply says so inside; see replyStatus.
 	if reply.Success != "true" {
-		return errors.New("keepassxc: the key exchange was refused")
+		return errKeyExchangeRefused
 	}
 	if reply.PublicKey == "" {
-		return errors.New("keepassxc: the key exchange returned no public key")
+		return errKeyExchangeGaveNoKey
 	}
 	hostKey, err := decodeKey(reply.PublicKey)
 	if err != nil {
@@ -143,6 +167,7 @@ type associateRequest struct {
 // associateReply is what associate and test-associate answer with.
 type associateReply struct {
 	replyStatus
+
 	ID    string `json:"id"`
 	Hash  string `json:"hash"`
 	Nonce string `json:"nonce"`
@@ -174,7 +199,7 @@ func (c *Client) Associate() (Association, error) {
 		return Association{}, err
 	}
 	if reply.ID == "" {
-		return Association{}, errors.New("keepassxc: the association was accepted but named no database")
+		return Association{}, errAssociationNamedNoDatabase
 	}
 	return Association{ID: reply.ID, IDKey: idKey}, nil
 }
@@ -222,6 +247,7 @@ type getLoginsRequest struct {
 // getLoginsReply is what get-logins answers with.
 type getLoginsReply struct {
 	replyStatus
+
 	Count   int     `json:"count"`
 	Entries []Entry `json:"entries"`
 	Nonce   string  `json:"nonce"`
@@ -267,6 +293,7 @@ type setLoginRequest struct {
 // setLoginReply is what set-login answers with.
 type setLoginReply struct {
 	replyStatus
+
 	Nonce string `json:"nonce"`
 	Error string `json:"error"`
 }
@@ -304,7 +331,7 @@ func (c *Client) request(action string, payload any, out encryptedReply) error {
 // itself.
 func (c *Client) requestWithin(budget time.Duration, action string, payload any, out encryptedReply) error {
 	if c.hostKey == nil {
-		return errors.New("keepassxc: no key exchange has happened yet")
+		return errNoKeyExchangeYet
 	}
 	nonce, err := newNonce()
 	if err != nil {
@@ -324,7 +351,7 @@ func (c *Client) requestWithin(budget time.Duration, action string, payload any,
 		return err
 	}
 	if reply.Message == "" {
-		return fmt.Errorf("keepassxc: %s returned no message", action)
+		return fmt.Errorf("keepassxc: %s %w", action, errReplyHadNoMessage)
 	}
 	// The reply is encrypted under the request's nonce plus one. Opening it
 	// with anything else fails, which is what rejects a reply that was not
@@ -333,7 +360,7 @@ func (c *Client) requestWithin(budget time.Duration, action string, payload any,
 		return err
 	}
 	if !out.succeeded() {
-		return fmt.Errorf("keepassxc: %s was refused", action)
+		return fmt.Errorf("keepassxc: %s %w", action, errActionRefused)
 	}
 	return nil
 }
@@ -396,7 +423,7 @@ func replyError(reply envelope) error {
 		return errNoLogins
 	}
 	if reply.Error != "" {
-		return fmt.Errorf("keepassxc: %s failed: %s", reply.Action, reply.Error)
+		return actionFailedError{action: reply.Action, said: reply.Error}
 	}
 	return nil
 }

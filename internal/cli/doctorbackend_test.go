@@ -3,7 +3,6 @@ package cli
 import (
 	"bytes"
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
@@ -63,7 +62,7 @@ func TestProbeSecretBackendPass(t *testing.T) {
 }
 
 func TestProbeSecretBackendStoreFails(t *testing.T) {
-	backend := &fakeProbeBackend{storeErr: errors.New("boom")}
+	backend := &fakeProbeBackend{storeErr: errBoom}
 	var buf bytes.Buffer
 
 	assert.Equal(t, 1, probeSecretBackend(t.Context(), &buf, fakeLogger{}, backend, "probe-value"),
@@ -99,7 +98,7 @@ func TestProbeSecretBackendLookupMiss(t *testing.T) {
 }
 
 func TestProbeSecretBackendDeleteFails(t *testing.T) {
-	backend := &fakeProbeBackend{lookupVal: "probe-value", lookupOK: true, deleteErr: errors.New("boom")}
+	backend := &fakeProbeBackend{lookupVal: "probe-value", lookupOK: true, deleteErr: errBoom}
 	var buf bytes.Buffer
 
 	assert.Equal(t, 1, probeSecretBackend(t.Context(), &buf, fakeLogger{}, backend, "probe-value"),
@@ -108,7 +107,7 @@ func TestProbeSecretBackendDeleteFails(t *testing.T) {
 }
 
 func TestProbeSecretBackendUnlockFails(t *testing.T) {
-	backend := &fakeProbeBackend{unlockErr: errors.New("boom")}
+	backend := &fakeProbeBackend{unlockErr: errBoom}
 	session := fakeProbeSession{backend}
 	var buf bytes.Buffer
 

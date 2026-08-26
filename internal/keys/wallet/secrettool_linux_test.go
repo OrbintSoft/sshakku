@@ -3,7 +3,6 @@
 package wallet
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -36,7 +35,7 @@ func TestSecretToolLookup(t *testing.T) {
 	})
 
 	t.Run("a failure to start secret-tool is an error", func(t *testing.T) {
-		wantErr := errors.New("boom")
+		wantErr := errBoom
 		b := SecretTool{Runner: runtest.NewRunner().On("secret-tool", runtest.Fails(wantErr)), User: "alice"}
 		_, _, err := b.Lookup(t.Context(), "x")
 		assert.ErrorIs(t, err, wantErr, "a wallet tool that would not run must be reported, not read as a miss")
@@ -93,7 +92,7 @@ func TestSecretToolDelete(t *testing.T) {
 	})
 
 	t.Run("a failure to start secret-tool is an error", func(t *testing.T) {
-		wantErr := errors.New("boom")
+		wantErr := errBoom
 		b := SecretTool{Runner: runtest.NewRunner().On("secret-tool", runtest.Fails(wantErr)), User: "alice"}
 		assert.ErrorIs(t, b.Delete(t.Context(), "x"), wantErr,
 			"a wallet tool that would not run must be reported, not read as a passphrase forgotten")

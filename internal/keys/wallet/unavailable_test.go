@@ -7,8 +7,15 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// The failures these tests hand their seams. Each stands for a real one the
+// code under test cannot be made to produce on demand.
+var (
+	errTheSecretServiceRouteNeeds = errors.New("the secret-service route needs an API this platform has none of")
+	errUnreachable                = errors.New("unreachable")
+)
+
 func TestUnavailableBackendFailsEveryOperationWithItsReason(t *testing.T) {
-	reason := errors.New("the secret-service route needs an API this platform has none of")
+	reason := errTheSecretServiceRouteNeeds
 	b := Unavailable{Reason: reason}
 
 	_, _, err := b.Lookup(t.Context(), "k")
@@ -24,7 +31,7 @@ func TestUnavailableBackendFailsEveryOperationWithItsReason(t *testing.T) {
 // exists for: reporting "nothing stored" would let a later store overwrite
 // whatever is really in the wallet.
 func TestUnavailableBackendLookupIsNotAMiss(t *testing.T) {
-	_, found, err := Unavailable{Reason: errors.New("unreachable")}.Lookup(t.Context(), "k")
+	_, found, err := Unavailable{Reason: errUnreachable}.Lookup(t.Context(), "k")
 	assert.False(t, found,
 		"a wallet nobody reached must not claim to have looked: a later store would overwrite what is really in it")
 	assert.Error(t, err, "and must say why it was not reached")

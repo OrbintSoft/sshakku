@@ -10,6 +10,10 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// errPsNoSuchProcess is the failure this test hands its seam, standing for a real one the
+// code under test cannot be made to produce on demand.
+var errPsNoSuchProcess = errors.New("ps: no such process")
+
 // These verify F13 for the half of it macOS could not answer at all: until
 // there was a PSAncestry, doctor had only a procfs walk, so on a Mac every
 // agent was attributed to nobody and the report said so about all of them.
@@ -75,7 +79,7 @@ func TestPSAncestryParent(t *testing.T) {
 	t.Run("a failed read is an unknown parent, not a crash", func(t *testing.T) {
 		restore := psParent
 		defer func() { psParent = restore }()
-		psParent = func(context.Context, int) ([]byte, error) { return nil, errors.New("ps: no such process") }
+		psParent = func(context.Context, int) ([]byte, error) { return nil, errPsNoSuchProcess }
 
 		_, _, ok := PSAncestry{}.Parent(t.Context(), 4242)
 		assert.False(t, ok, "a ps that failed must leave the parent unknown, not invent one")

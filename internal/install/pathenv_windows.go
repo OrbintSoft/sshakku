@@ -87,6 +87,19 @@ func readPath(where environmentLocation) (string, uint32, error) {
 	return raw, kind, nil
 }
 
+// unwritableValueKindError is a stored search list of a kind this program has
+// no way to write back as it found it. Writing it as something else would
+// change what the value is, so it is left alone and reported instead.
+type unwritableValueKindError struct {
+	path string
+	kind uint32
+}
+
+func (e unwritableValueKindError) Error() string {
+	return fmt.Sprintf("the search list in %s is stored as kind %d, which this does not know how to write back"+
+		" without changing what it is; leaving it alone", e.path, e.kind)
+}
+
 // writePath stores the search list back under the kind it was found as.
 //
 // A kind this does not understand is refused rather than converted. Rewriting a
@@ -105,8 +118,7 @@ func writePath(where environmentLocation, raw string, kind uint32) error {
 	case registry.SZ:
 		err = key.SetStringValue(pathValue, raw)
 	default:
-		return fmt.Errorf("the search list in %s is stored as kind %d, which this does not know how to write back"+
-			" without changing what it is; leaving it alone", where.path, kind)
+		return unwritableValueKindError{path: where.path, kind: kind}
 	}
 	if err != nil {
 		return fmt.Errorf("writing the search list to %s: %w", where.path, err)

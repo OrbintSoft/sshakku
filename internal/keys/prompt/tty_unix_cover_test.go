@@ -13,6 +13,14 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// The failures these tests hand their seams. Each stands for a real one the
+// code under test cannot be made to produce on demand.
+var (
+	errEINVAL           = errors.New("EINVAL")
+	errENOTTY           = errors.New("ENOTTY")
+	errOpenDevTtyNoSuch = errors.New("open /dev/tty: no such device")
+)
+
 // saveTTYSeams snapshots the terminal seams and restores them when the
 // (sub)test ends.
 func saveTTYSeams(t *testing.T) {
@@ -145,7 +153,7 @@ func TestReadTTYLineReadErrorOnEmpty(t *testing.T) {
 
 func TestReadTTYLineOpenError(t *testing.T) {
 	saveTTYSeams(t)
-	cause := errors.New("open /dev/tty: no such device")
+	cause := errOpenDevTtyNoSuch
 	openTTY = func() (*os.File, error) { return nil, cause }
 	_, err := ReadTTYLine("Answer: ", false)
 	assert.ErrorIs(t, err, ErrNoTerminal,
@@ -171,7 +179,7 @@ func TestReadTTYLinePromptWriteError(t *testing.T) {
 
 func TestReadTTYLineDisableEchoGetError(t *testing.T) {
 	_ = fakeTTYPair(t)
-	getTermios = func(int, uint) (*unix.Termios, error) { return nil, errors.New("ENOTTY") }
+	getTermios = func(int, uint) (*unix.Termios, error) { return nil, errENOTTY }
 	_, err := ReadTTYLine("Passphrase: ", true)
 	assert.Error(t, err,
 		"a terminal whose echo could not be turned off must not be asked for a passphrase in the clear")
@@ -179,7 +187,7 @@ func TestReadTTYLineDisableEchoGetError(t *testing.T) {
 
 func TestReadTTYLineDisableEchoSetError(t *testing.T) {
 	_ = fakeTTYPair(t)
-	setTermios = func(int, uint, *unix.Termios) error { return errors.New("EINVAL") }
+	setTermios = func(int, uint, *unix.Termios) error { return errEINVAL }
 	_, err := ReadTTYLine("Passphrase: ", true)
 	assert.Error(t, err,
 		"a terminal whose echo could not be turned off must not be asked for a passphrase in the clear")

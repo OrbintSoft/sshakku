@@ -16,12 +16,21 @@ import (
 // separate artifact with its own opaque id) for the Test/Coverage columns.
 type osURLFlag map[string]string
 
+// The three ways this program is invoked wrongly. Each is a sentence the user
+// reads on stderr, so the two usages carry their whole text and the flag
+// refusal keeps the value it was given at the end where the eye lands.
+var (
+	errNotOSEqualsURL = errors.New("expected os=url, got")
+	errRenderUsage    = errors.New("usage: testreport render [-report-url os=url] [-coverage-url os=url] <report.json> [report.json ...]")
+	errBadgeUsage     = errors.New("usage: testreport badge <report.json>")
+)
+
 func (f osURLFlag) String() string { return "" }
 
 func (f osURLFlag) Set(v string) error {
 	key, url, ok := strings.Cut(v, "=")
 	if !ok || key == "" || url == "" {
-		return fmt.Errorf("expected os=url, got %q", v)
+		return fmt.Errorf("%w %q", errNotOSEqualsURL, v)
 	}
 	f[key] = url
 	return nil
@@ -86,7 +95,7 @@ func runRender(args []string, out io.Writer) error {
 	}
 	paths := fs.Args()
 	if len(paths) == 0 {
-		return errors.New("usage: testreport render [-report-url os=url] [-coverage-url os=url] <report.json> [report.json ...]")
+		return errRenderUsage
 	}
 	reports := make([]Report, 0, len(paths))
 	for _, path := range paths {
@@ -114,7 +123,7 @@ func runRender(args []string, out io.Writer) error {
 // action) and writes its shields.io endpoint badge JSON to out.
 func runBadge(args []string, out io.Writer) error {
 	if len(args) != 1 {
-		return errors.New("usage: testreport badge <report.json>")
+		return errBadgeUsage
 	}
 	f, err := openFile(args[0])
 	if err != nil {

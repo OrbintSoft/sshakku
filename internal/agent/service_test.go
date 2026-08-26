@@ -10,6 +10,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// The failures these tests hand their seams. Each stands for a real one the
+// code under test cannot be made to produce on demand.
+var (
+	errAccessIsDenied       = errors.New("access is denied")
+	errTheSshAgentServiceIs = errors.New("the ssh-agent service is disabled; an administrator can enable it")
+)
+
 // scriptedService answers with the states it was given, one per question, and
 // repeats the last one for as long as it is asked. It records how many times it
 // was asked to start, which is the difference between a service driven up once
@@ -78,7 +85,7 @@ func TestAServiceComingUpIsWaitedForRatherThanStartedAgain(t *testing.T) {
 // those are what name the command to put it right. The refusal is passed up
 // whole rather than turned into a failure of our own.
 func TestAStartThatIsRefusedIsReportedAsItWasRefused(t *testing.T) {
-	refused := errors.New("the ssh-agent service is disabled; an administrator can enable it")
+	refused := errTheSshAgentServiceIs
 	svc := &scriptedService{states: []serviceState{serviceStopped}, startErr: refused}
 
 	started, err := ensureServiceRunning(t.Context(), svc, time.Second)
@@ -117,7 +124,7 @@ func TestWaitingForAServiceEndsAtTheBoundItWasGiven(t *testing.T) {
 // A service manager that will not say what the service is doing is not
 // answered with a guess: nothing here knows whether starting one would help.
 func TestAServiceManagerThatWillNotAnswerIsReported(t *testing.T) {
-	refused := errors.New("access is denied")
+	refused := errAccessIsDenied
 	svc := &scriptedService{states: []serviceState{serviceStopped}, stateErr: refused}
 
 	started, err := ensureServiceRunning(t.Context(), svc, time.Second)

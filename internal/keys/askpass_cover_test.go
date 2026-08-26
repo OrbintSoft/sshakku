@@ -10,6 +10,13 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/keys/prompt"
 )
 
+// The failures these tests hand their seams. Each stands for a real one the
+// code under test cannot be made to produce on demand.
+var (
+	errTerminalIoctlBoom = errors.New("terminal ioctl boom")
+	errWalletWriteDenied = errors.New("wallet write denied")
+)
+
 // TestParsePassphrasePromptWhitespaceKeyfile covers the empty-keyfile guard:
 // a prompt whose captured path is only whitespace is not treated as a real
 // key-passphrase request.
@@ -38,7 +45,7 @@ func TestBrokerNonPassphraseNoTerminalLogsInfo(t *testing.T) {
 // path when prompting fails for an operator-actionable reason.
 func TestBrokerNonPassphraseHardErrorLogsError(t *testing.T) {
 	log := &fakeLogger{}
-	tty := &fakeTTY{err: errors.New("terminal ioctl boom")}
+	tty := &fakeTTY{err: errTerminalIoctlBoom}
 	b := Broker{Secret: &fakeSecret{}, TTY: tty, Log: log}
 
 	reply, ok := b.Answer(t.Context(), "Please enter your login password:")
@@ -53,7 +60,7 @@ func TestBrokerNonPassphraseHardErrorLogsError(t *testing.T) {
 // logged at ERROR while the typed value is still returned to ssh.
 func TestBrokerStoreErrorLogged(t *testing.T) {
 	log := &fakeLogger{}
-	secret := &fakeSecret{lookupFound: false, storeErr: errors.New("wallet write denied")}
+	secret := &fakeSecret{lookupFound: false, storeErr: errWalletWriteDenied}
 	tty := &fakeTTY{answer: "typed-pass"}
 	b := Broker{Secret: secret, TTY: tty, Log: log}
 

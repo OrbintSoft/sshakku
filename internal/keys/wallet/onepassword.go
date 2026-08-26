@@ -142,7 +142,7 @@ func (b *OnePassword) Store(ctx context.Context, service, label, passphrase stri
 		return err
 	}
 	if res.Code != 0 {
-		return fmt.Errorf("op item create exited %d: %s", res.Code, strings.TrimSpace(string(res.Stderr)))
+		return exitError{command: "op item create", code: res.Code, stderr: strings.TrimSpace(string(res.Stderr))}
 	}
 	return nil
 }
@@ -165,7 +165,7 @@ func (b *OnePassword) Delete(ctx context.Context, service string) error {
 		return err
 	}
 	if res.Code != 0 {
-		return fmt.Errorf("op item delete exited %d: %s", res.Code, strings.TrimSpace(string(res.Stderr)))
+		return exitError{command: "op item delete", code: res.Code, stderr: strings.TrimSpace(string(res.Stderr))}
 	}
 	return nil
 }
@@ -178,7 +178,7 @@ func (b *OnePassword) List(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 	if res.Code != 0 {
-		return nil, fmt.Errorf("op item list exited %d: %s", res.Code, strings.TrimSpace(string(res.Stderr)))
+		return nil, exitError{command: "op item list", code: res.Code, stderr: strings.TrimSpace(string(res.Stderr))}
 	}
 
 	var items []struct {

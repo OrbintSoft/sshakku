@@ -11,6 +11,13 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// The failures these tests hand their seams. Each stands for a real one the
+// code under test cannot be made to produce on demand.
+var (
+	errBrokenPipe        = errors.New("broken pipe")
+	errCannotSetDeadline = errors.New("cannot set deadline")
+)
+
 // errReadWriter is an in-process io.ReadWriter that fails Write with writeErr (when
 // set), otherwise serves reads from a fixed buffer. It lets identitiesAnswered be
 // exercised directly, without a real socket, for the framing edge cases.
@@ -46,7 +53,7 @@ func TestIdentitiesAnsweredEdges(t *testing.T) {
 
 	t.Run("write fails", func(t *testing.T) {
 		wellFormed := append([]byte{0, 0, 0, 1}, answer...)
-		assert.False(t, identitiesAnswered(&errReadWriter{writeErr: errors.New("broken pipe"), readBuf: wellFormed}),
+		assert.False(t, identitiesAnswered(&errReadWriter{writeErr: errBrokenPipe, readBuf: wellFormed}),
 			"a request that could not be written must not be believed answered")
 	})
 	t.Run("short header", func(t *testing.T) {
@@ -79,7 +86,7 @@ func TestIdentitiesAnsweredEdges(t *testing.T) {
 func TestSocketProberSetDeadlineError(t *testing.T) {
 	orig := setDeadline
 	t.Cleanup(func() { setDeadline = orig })
-	setDeadline = func(net.Conn, time.Time) error { return errors.New("cannot set deadline") }
+	setDeadline = func(net.Conn, time.Time) error { return errCannotSetDeadline }
 
 	sock := fakeAgent(t, replyIdentities(1))
 	assert.False(t, (SocketProber{Timeout: time.Second}).Reachable(t.Context(), sock),

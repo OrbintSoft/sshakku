@@ -9,11 +9,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// errReadBoom is the failure this test hands its seam, standing for a real one the
+// code under test cannot be made to produce on demand.
+var errReadBoom = errors.New("read boom")
+
 // errReader fails on the first read, so parseCoverageProfile's scanner-error
 // path is exercised rather than a clean EOF.
 type errReader struct{}
 
-func (errReader) Read([]byte) (int, error) { return 0, errors.New("read boom") }
+func (errReader) Read([]byte) (int, error) { return 0, errReadBoom }
 
 func TestParseCoverageProfileSkipsBlankLines(t *testing.T) {
 	in := fixture(

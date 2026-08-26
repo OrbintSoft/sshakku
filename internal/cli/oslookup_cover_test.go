@@ -8,6 +8,10 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// errNoSuchUser is the failure this test hands its seam, standing for a real one the
+// code under test cannot be made to produce on demand.
+var errNoSuchUser = errors.New("no such user")
+
 // TestCurrentUserLookupFailure covers currentUser's last fallback: with $USER
 // unset and the OS user lookup failing, it returns the empty string. userCurrent
 // is stubbed so the failure is simulated rather than requiring an unresolvable
@@ -16,7 +20,7 @@ func TestCurrentUserLookupFailure(t *testing.T) {
 	t.Setenv("USER", "")
 	orig := userCurrent
 	t.Cleanup(func() { userCurrent = orig })
-	userCurrent = func() (*user.User, error) { return nil, errors.New("no such user") }
+	userCurrent = func() (*user.User, error) { return nil, errNoSuchUser }
 
 	assert.Empty(t, currentUser(), "with no $USER and no lookup to fall back on, there is no name to give")
 }

@@ -21,6 +21,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// errTheDialogWasDismissed is the failure this test hands its seam, standing for a real one the
+// code under test cannot be made to produce on demand.
+var errTheDialogWasDismissed = errors.New("the dialog was dismissed")
+
 // theCompartment is the name the cases below watch for. Any name would do; a
 // distinctive one makes "the report said what it made" impossible to satisfy by
 // accident from some other line.
@@ -166,7 +170,7 @@ func TestDoctorMakesTheCompartment(t *testing.T) {
 
 	t.Run("a wallet that refuses says so, and the report still comes back", func(t *testing.T) {
 		wallet := &walletSpy{views: []diagnose.WalletView{compartmentView(answering, true)}}
-		maker := &makerSpy{err: errors.New("the dialog was dismissed")}
+		maker := &makerSpy{err: errTheDialogWasDismissed}
 		d := compartmentDeps(t, wallet, maker)
 
 		var out, errOut bytes.Buffer

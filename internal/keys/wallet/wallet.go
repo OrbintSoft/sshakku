@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 )
 
@@ -11,6 +12,21 @@ import (
 // 1Password) use to build their stdin payloads. It is a seam so the otherwise
 // unreachable marshal-failure branch of each Store can be exercised.
 var jsonMarshal = json.Marshal
+
+// exitError is an external wallet program that ran and refused. Every
+// shell-out backend here reports a refusal the same way — the command as the
+// reader should see it named, the status it exited with, and what it said on
+// its error stream — and one type saying it once means a caller can read the
+// status back instead of matching on the sentence.
+type exitError struct {
+	command string
+	code    int
+	stderr  string
+}
+
+func (e exitError) Error() string {
+	return fmt.Sprintf("%s exited %d: %s", e.command, e.code, e.stderr)
+}
 
 // ErrListUnsupported is returned by List on a backend that cannot enumerate
 // its stored entries — e.g. SecretTool, which has no generic

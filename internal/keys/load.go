@@ -180,6 +180,7 @@ func (l Loader) LoadKeys(ctx context.Context) error {
 // locks it back up once, after the whole batch — not after each call.
 type sessionBackend struct {
 	wallet.Backend
+
 	sess     wallet.Session
 	unlocked bool
 }

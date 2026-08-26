@@ -192,13 +192,22 @@ func withAgentComplaint(err error) error {
 	return err
 }
 
+// The two ways ssh-agent's own output can fail to name the process it started.
+// They are told apart because they mean different things about the program
+// that printed them: one is output of a shape nobody here expects, the other is
+// the expected shape with a value that is not a number.
+var (
+	errNoAgentPID        = errors.New("ssh-agent output had no SSH_AGENT_PID")
+	errMalformedAgentPID = errors.New("ssh-agent output had a malformed SSH_AGENT_PID")
+)
+
 // parseAgentPID extracts the pid from ssh-agent's `SSH_AGENT_PID=<pid>;` line.
 func parseAgentPID(out []byte) (int, error) {
 	const key = "SSH_AGENT_PID="
 	s := string(out)
 	i := strings.Index(s, key)
 	if i < 0 {
-		return 0, errors.New("ssh-agent output had no SSH_AGENT_PID")
+		return 0, errNoAgentPID
 	}
 	s = s[i+len(key):]
 	end := 0
@@ -206,7 +215,7 @@ func parseAgentPID(out []byte) (int, error) {
 		end++
 	}
 	if end == 0 {
-		return 0, errors.New("ssh-agent output had a malformed SSH_AGENT_PID")
+		return 0, errMalformedAgentPID
 	}
 	return strconv.Atoi(s[:end])
 }

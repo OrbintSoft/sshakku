@@ -14,6 +14,14 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/keyring"
 )
 
+// The failures these tests hand their seams. Each stands for a real one the
+// code under test cannot be made to produce on demand.
+var (
+	errAddDenied  = errors.New("add denied")
+	errNoEntropy  = errors.New("no entropy")
+	errReadDenied = errors.New("read denied")
+)
+
 // saveTokenSeams snapshots the keyring/RNG seams and restores them when the
 // (sub)test ends, so a test can swap them without leaking into its siblings.
 func saveTokenSeams(t *testing.T) {
@@ -85,7 +93,7 @@ func TestReadTokenSeams(t *testing.T) {
 	t.Run("read failure returns empty", func(t *testing.T) {
 		saveTokenSeams(t)
 		keyringSearch = func(string) (keyring.Serial, bool) { return 1, true }
-		keyringRead = func(keyring.Serial) ([]byte, error) { return nil, errors.New("read denied") }
+		keyringRead = func(keyring.Serial) ([]byte, error) { return nil, errReadDenied }
 		assert.Empty(t, ReadSocketToken(), "a read failure yields no token")
 	})
 
@@ -114,7 +122,7 @@ func TestSocketTokenSeams(t *testing.T) {
 	t.Run("rand failure returns empty", func(t *testing.T) {
 		saveTokenSeams(t)
 		keyringSearch = func(string) (keyring.Serial, bool) { return 0, false }
-		randRead = func([]byte) (int, error) { return 0, errors.New("no entropy") }
+		randRead = func([]byte) (int, error) { return 0, errNoEntropy }
 		assert.Empty(t, SocketToken(), "no entropy yields no token")
 	})
 
@@ -122,7 +130,7 @@ func TestSocketTokenSeams(t *testing.T) {
 		saveTokenSeams(t)
 		keyringSearch = func(string) (keyring.Serial, bool) { return 0, false }
 		randRead = rand.Read
-		keyringAdd = func(string, []byte) (keyring.Serial, error) { return 0, errors.New("add denied") }
+		keyringAdd = func(string, []byte) (keyring.Serial, error) { return 0, errAddDenied }
 		assert.Empty(t, SocketToken(), "a refused add yields no token")
 	})
 

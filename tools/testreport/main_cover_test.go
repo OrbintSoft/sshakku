@@ -14,11 +14,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// The failures these tests hand their seams. Each stands for a real one the
+// code under test cannot be made to produce on demand.
+var (
+	errCloseBoom = errors.New("close boom")
+	errWriteBoom = errors.New("write boom")
+)
+
 // badCloser is a ReadCloser whose Close returns closeErr, so the openFile seam
 // can hand runRender/runBadge/runSummarize a source that reads fine but fails
 // to close — the close-error branch a real *os.File almost never reaches.
 type badCloser struct {
 	io.Reader
+
 	closeErr error
 }
 
@@ -27,7 +35,7 @@ func (b badCloser) Close() error { return b.closeErr }
 // errWriter fails every Write, so the report-encoding error path is exercised.
 type errWriter struct{}
 
-func (errWriter) Write([]byte) (int, error) { return 0, errors.New("write boom") }
+func (errWriter) Write([]byte) (int, error) { return 0, errWriteBoom }
 
 // withOpenFile swaps the openFile seam for the duration of the test.
 func withOpenFile(t *testing.T, f func(string) (io.ReadCloser, error)) {
@@ -152,7 +160,7 @@ func TestRunRender(t *testing.T) {
 
 	t.Run("a close error surfaces", func(t *testing.T) {
 		withOpenFile(t, func(string) (io.ReadCloser, error) {
-			return badCloser{Reader: strings.NewReader(`{"os":"linux"}`), closeErr: errors.New("close boom")}, nil
+			return badCloser{Reader: strings.NewReader(`{"os":"linux"}`), closeErr: errCloseBoom}, nil
 		})
 		err := runRender([]string{"any.json"}, io.Discard)
 		require.Error(t, err, "a file that could not be closed must be reported")
@@ -197,7 +205,7 @@ func TestRunBadge(t *testing.T) {
 
 	t.Run("a close error surfaces", func(t *testing.T) {
 		withOpenFile(t, func(string) (io.ReadCloser, error) {
-			return badCloser{Reader: strings.NewReader(`{"os":"linux","package_coverage":[{"package":"p","percent":50}]}`), closeErr: errors.New("close boom")}, nil
+			return badCloser{Reader: strings.NewReader(`{"os":"linux","package_coverage":[{"package":"p","percent":50}]}`), closeErr: errCloseBoom}, nil
 		})
 		err := runBadge([]string{"any.json"}, io.Discard)
 		require.Error(t, err, "a file that could not be closed must be reported")
@@ -246,7 +254,7 @@ func TestRunSummarize(t *testing.T) {
 
 	t.Run("a coverage-profile close error surfaces", func(t *testing.T) {
 		withOpenFile(t, func(string) (io.ReadCloser, error) {
-			return badCloser{Reader: strings.NewReader("mode: set\n"), closeErr: errors.New("close boom")}, nil
+			return badCloser{Reader: strings.NewReader("mode: set\n"), closeErr: errCloseBoom}, nil
 		})
 		err := runSummarize([]string{"-coverprofile", "any.cover"}, strings.NewReader(validStream), io.Discard)
 		require.Error(t, err, "a file that could not be closed must be reported")

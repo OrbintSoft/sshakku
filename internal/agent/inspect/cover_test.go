@@ -12,6 +12,10 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/agent/inspect/inspecttest"
 )
 
+// errThisPlatformCannotEnumerateProcesses is the failure this test hands its seam, standing for a real one the
+// code under test cannot be made to produce on demand.
+var errThisPlatformCannotEnumerateProcesses = errors.New("this platform cannot enumerate processes")
+
 // TestReadStatusUIDMalformed covers readStatusUID's fallbacks for a status file
 // whose Uid line is missing, has too few fields, or is non-numeric — shapes the
 // real /proc never produces, so they are only reachable through a crafted file.
@@ -78,7 +82,7 @@ func TestAgentsChoosesItsSource(t *testing.T) {
 func TestAgentsReportsWhatThePlatformRefused(t *testing.T) {
 	orig := platformSource
 	t.Cleanup(func() { platformSource = orig })
-	refusal := errors.New("this platform cannot enumerate processes")
+	refusal := errThisPlatformCannotEnumerateProcesses
 	platformSource = func() ([]AgentProc, error) { return nil, refusal }
 
 	procs, err := Inspector{}.Agents()

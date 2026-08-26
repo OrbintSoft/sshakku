@@ -57,6 +57,14 @@ func (c Cygpath) ToWindows(ctx context.Context, path string) (string, error) {
 	return c.translate(ctx, "-w", path)
 }
 
+// The two ways a path translation can fail before the translator's own errors.
+// Neither names the path or the program: the caller puts both in front, so the
+// sentence reads as one line whichever of the two it is.
+var (
+	errNoPathTranslator         = errors.New("no path translator was found for this environment")
+	errTranslatorPrintedNothing = errors.New("it printed nothing")
+)
+
 // translate runs the translator and returns the single path it prints.
 //
 // The translation is lexical: a path that does not exist is translated as
@@ -72,7 +80,7 @@ func (c Cygpath) ToWindows(ctx context.Context, path string) (string, error) {
 // and a path cannot contain a line ending on the system this applies to.
 func (c Cygpath) translate(ctx context.Context, how, path string) (string, error) {
 	if c.Exe == "" {
-		return "", errors.New("no path translator was found for this environment")
+		return "", errNoPathTranslator
 	}
 
 	cmd := exec.CommandContext(ctx, c.Exe, how, "-f", "-")
@@ -98,7 +106,7 @@ func parseTranslation(stdout []byte, stderr, path, exe string) (string, error) {
 	// file name unopenable in a way nothing would explain.
 	translated := strings.Trim(string(stdout), "\r\n")
 	if translated == "" {
-		return "", fmt.Errorf("translating %q with %s: it printed nothing%s", path, exe, explain(stderr))
+		return "", fmt.Errorf("translating %q with %s: %w%s", path, exe, errTranslatorPrintedNothing, explain(stderr))
 	}
 	return translated, nil
 }

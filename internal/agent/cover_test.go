@@ -16,6 +16,10 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/testtmp"
 )
 
+// errNoSshAgent is the failure this test hands its seam, standing for a real one the
+// code under test cannot be made to produce on demand.
+var errNoSshAgent = errors.New("no ssh-agent")
+
 // TestSituationStringUnknown covers Situation.String's default arm for a value
 // outside the defined set.
 func TestSituationStringUnknown(t *testing.T) {
@@ -51,7 +55,7 @@ func TestManagerStartRunnerError(t *testing.T) {
 	dir := testtmp.ShortDir(t)
 	socket := filepath.Join(dir, "agent.sock")
 	state := filepath.Join(dir, "agent.state")
-	m := Manager{Prober: mapProber{}, Runner: &recordRunner{err: errors.New("no ssh-agent")}}
+	m := Manager{Prober: mapProber{}, Runner: &recordRunner{err: errNoSshAgent}}
 
 	_, err := m.Start(t.Context(), socket, state)
 	assert.Error(t, err, "a runner that fails must be reported")
@@ -111,7 +115,7 @@ func TestEnsureAgentStartError(t *testing.T) {
 	m := Manager{
 		Prober:    mapProber{},
 		Inspector: inspect.Inspector{ProcRoot: testtmp.ShortDir(t)},
-		Runner:    &recordRunner{err: errors.New("no ssh-agent")},
+		Runner:    &recordRunner{err: errNoSshAgent},
 		Signaler:  &recordSignaler{},
 	}
 	_, err := m.EnsureAgent(t.Context(), EnsureConfig{FixedSock: fixed, StatePath: filepath.Join(dir, "st"), OurUID: 1000}, nil)

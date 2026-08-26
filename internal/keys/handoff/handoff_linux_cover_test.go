@@ -12,6 +12,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// The failures these tests hand their seams. Each stands for a real one the
+// code under test cannot be made to produce on demand.
+var (
+	errEDQUOT      = errors.New("EDQUOT")
+	errEKEYEXPIRED = errors.New("EKEYEXPIRED")
+)
+
 // saveKeyringHandoffSeams snapshots the keyring-op seams (and the shared RNG)
 // used by the Linux passphrase handoff, restoring them when the (sub)test ends.
 func saveKeyringHandoffSeams(t *testing.T) {
@@ -27,14 +34,14 @@ func saveKeyringHandoffSeams(t *testing.T) {
 func TestStashPassphrase(t *testing.T) {
 	t.Run("token RNG fails", func(t *testing.T) {
 		saveKeyringHandoffSeams(t)
-		randRead = func([]byte) (int, error) { return 0, errors.New("rng boom") }
+		randRead = func([]byte) (int, error) { return 0, errRngBoom }
 		_, err := Stash("secret", time.Minute)
 		assert.Error(t, err, "a key another process could guess the name of must not be added to the keyring")
 	})
 
 	t.Run("keyring add fails", func(t *testing.T) {
 		saveKeyringHandoffSeams(t)
-		keyringAdd = func(string, []byte) (keyring.Serial, error) { return 0, errors.New("EDQUOT") }
+		keyringAdd = func(string, []byte) (keyring.Serial, error) { return 0, errEDQUOT }
 		_, err := Stash("secret", time.Minute)
 		assert.Error(t, err,
 			"with the passphrase nowhere the helper can collect it, ssh-add would prompt on a terminal nobody is watching")
@@ -62,7 +69,7 @@ func TestFetchPassphrase(t *testing.T) {
 	t.Run("keyring read fails, key still unlinked", func(t *testing.T) {
 		saveKeyringHandoffSeams(t)
 		unlinked := false
-		keyringRead = func(keyring.Serial) ([]byte, error) { return nil, errors.New("EKEYEXPIRED") }
+		keyringRead = func(keyring.Serial) ([]byte, error) { return nil, errEKEYEXPIRED }
 		keyringUnlink = func(keyring.Serial) error { unlinked = true; return nil }
 		_, err := Fetch(t.Context(), "7")
 		assert.Error(t, err, "a passphrase that could not be read must be reported, not handed on as an empty one")

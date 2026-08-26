@@ -17,6 +17,10 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/testtmp"
 )
 
+// errCannotOpenLock is the failure this test hands its seam, standing for a real one the
+// code under test cannot be made to produce on demand.
+var errCannotOpenLock = errors.New("cannot open lock")
+
 // fakeLogger records the level-tagged lines EnsureAgent emits.
 type fakeLogger struct{ lines []string }
 
@@ -285,7 +289,7 @@ func TestEnsureAgentLockError(t *testing.T) {
 	dir := testtmp.ShortDir(t)
 	fixed := filepath.Join(dir, "agent.sock")
 	runner := &recordRunner{pid: 1}
-	lk := &fakeLocker{err: errors.New("cannot open lock")}
+	lk := &fakeLocker{err: errCannotOpenLock}
 
 	m := Manager{Prober: mapProber{}, Inspector: inspect.Inspector{ProcRoot: testtmp.ShortDir(t)}, Runner: runner, Signaler: &recordSignaler{}, Locker: lk}
 	_, err := m.EnsureAgent(t.Context(), EnsureConfig{FixedSock: fixed, LockPath: filepath.Join(dir, "lock"), OurUID: 1000}, nil)

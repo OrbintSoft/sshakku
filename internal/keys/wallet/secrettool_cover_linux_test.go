@@ -12,6 +12,10 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/run/runtest"
 )
 
+// errSecretToolExecBoom is the failure this test hands its seam, standing for a real one the
+// code under test cannot be made to produce on demand.
+var errSecretToolExecBoom = errors.New("secret-tool exec boom")
+
 // TestSecretToolStoreNonZeroExit covers Store's non-zero-exit branch: a failing
 // secret-tool store is reported as an error carrying its stderr.
 func TestSecretToolStoreNonZeroExit(t *testing.T) {
@@ -26,7 +30,7 @@ func TestSecretToolStoreNonZeroExit(t *testing.T) {
 // TestSecretToolStoreRunError covers Store's start-failure branch: secret-tool
 // cannot be run at all, which propagates as an error.
 func TestSecretToolStoreRunError(t *testing.T) {
-	boom := errors.New("secret-tool exec boom")
+	boom := errSecretToolExecBoom
 	r := runtest.NewRunner().On("secret-tool", runtest.Fails(boom))
 	b := SecretTool{Runner: r, User: "u"}
 	assert.ErrorIs(t, b.Store(t.Context(), "svc", "label", "pass"), boom,

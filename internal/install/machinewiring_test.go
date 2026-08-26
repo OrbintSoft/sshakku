@@ -105,12 +105,22 @@ func TestAMachineWideWiringIsTakenBackOutAndNotJustEmptied(t *testing.T) {
 // itself — a kind that was never settled, or one its own table names and it has no
 // wiring for — and the one thing neither may do is write a file anyway.
 func TestAKindTheWiringWasNeverDefinedForWritesNothing(t *testing.T) {
-	for _, kind := range []ShellKind{Auto, ShellKind("fish")} {
-		p := plan{kind: kind}
+	for _, tc := range []struct {
+		kind ShellKind
+		says string
+	}{
+		{Auto, "the shell was not worked out"},
+		{ShellKind("fish"), "there is no wiring defined for a fish shell"},
+	} {
+		p := plan{kind: tc.kind}
 
 		err := p.forKind(t.Context(), Request{Scope: User})
 
 		require.Error(t, err)
+		// The refusal has to name which of the two it is: they are told apart
+		// only by what they say, and both mean a different thing went wrong
+		// inside this program.
+		assert.ErrorContains(t, err, tc.says)
 		assert.Empty(t, p.placement.Path)
 		assert.Empty(t, p.sweep)
 	}

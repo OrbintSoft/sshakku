@@ -34,19 +34,24 @@ func TestFileAssociationRejectsUnreadableContent(t *testing.T) {
 	tests := []struct {
 		name    string
 		content string
+		says    string
 	}{
-		{"not JSON at all", "{{{"},
-		{"a version this build does not know", `{"version":99,"id":"db","idKey":"k"}`},
-		{"no database id", `{"version":1,"idKey":"k"}`},
-		{"no identification key", `{"version":1,"id":"db"}`},
+		{"not JSON at all", "{{{", "reading the KeePassXC association"},
+		{"a version this build does not know", `{"version":99,"id":"db","idKey":"k"}`, "is version 99, which this build does not understand"},
+		{"no database id", `{"version":1,"idKey":"k"}`, "is incomplete"},
+		{"no identification key", `{"version":1,"id":"db"}`, "is incomplete"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "assoc.json")
 			require.NoError(t, os.WriteFile(path, []byte(tc.content), 0o600), "seed the stored approval")
 			_, found, err := FileAssociationStore{Path: path}.Load()
-			assert.Error(t, err,
+			require.Error(t, err,
 				"an approval that cannot be understood must be reported, not read as one nobody ever granted")
+			// Which of the four it was: a file written by another build and a
+			// file missing half its contents are told apart only here, and
+			// only one of them is worth going and looking at.
+			assert.ErrorContains(t, err, tc.says)
 			assert.False(t, found, "and nothing usable was read, so nothing may be reported as found")
 		})
 	}

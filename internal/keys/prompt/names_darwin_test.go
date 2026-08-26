@@ -3,7 +3,6 @@
 package prompt
 
 import (
-	"errors"
 	"strings"
 	"testing"
 
@@ -26,7 +25,7 @@ func TestTheDialogThatFailsIsNamedByItsOwnName(t *testing.T) {
 	// A dialog whose interpreter is not there at all: the runner answers the
 	// way it does when exec fails, which is what the fallback exists for.
 	wontRun := runtest.NewRunner().On(osascriptBin, func(run.Cmd) (run.Result, error) {
-		return run.Result{}, errors.New("exec: \"" + osascriptBin + "\": executable file not found in $PATH")
+		return run.Result{}, notOnPathError{name: osascriptBin}
 	})
 	prompter := OsascriptPrompter{Runner: wontRun}
 

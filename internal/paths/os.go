@@ -1,6 +1,7 @@
 package paths
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -66,6 +67,11 @@ func CleanupLegacyAgentDir(home string) {
 	_ = os.Remove(dir) // rmdir; harmless if the dir is not empty
 }
 
+// errNotADirectory is a path that was made but is not a real directory when
+// it is looked at again — a symlink planted in its place, most of all. The
+// path leads the sentence because it is what the reader has to go and inspect.
+var errNotADirectory = errors.New("is not a directory")
+
 func ensureDir(path string, chmod func(string, os.FileMode) error) error {
 	if err := os.MkdirAll(path, 0o700); err != nil {
 		return fmt.Errorf("create %s: %w", path, err)
@@ -76,7 +82,7 @@ func ensureDir(path string, chmod func(string, os.FileMode) error) error {
 	// Reject a symlink planted in our place: the leaf must be a real directory.
 	fi, err := os.Lstat(path)
 	if err != nil || fi.Mode()&os.ModeSymlink != 0 || !fi.IsDir() {
-		return fmt.Errorf("%s is not a directory", path)
+		return fmt.Errorf("%s %w", path, errNotADirectory)
 	}
 	return nil
 }

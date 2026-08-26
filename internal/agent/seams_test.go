@@ -15,6 +15,10 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/testtmp"
 )
 
+// errProcessScanFailed is the failure this test hands its seam, standing for a real one the
+// code under test cannot be made to produce on demand.
+var errProcessScanFailed = errors.New("process scan failed")
+
 // nthErrLister wraps a ProcLister and forces the failOn-th (1-based) Agents call to
 // error, so EnsureAgent's reap and healthy-survey scans can be made to succeed and
 // fail independently even though both go through the same collaborator.
@@ -27,7 +31,7 @@ type nthErrLister struct {
 func (l *nthErrLister) Agents() ([]inspect.AgentProc, error) {
 	l.calls++
 	if l.calls == l.failOn {
-		return nil, errors.New("process scan failed")
+		return nil, errProcessScanFailed
 	}
 	return l.inner.Agents()
 }

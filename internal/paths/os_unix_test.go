@@ -12,6 +12,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// errChmodBoom is the failure this test hands its seam, standing for a real one the
+// code under test cannot be made to produce on demand.
+var errChmodBoom = errors.New("chmod boom")
+
 func TestEnsureCreatesLayout(t *testing.T) {
 	root := t.TempDir()
 	runtime := filepath.Join(root, "run", "sshakku")
@@ -229,7 +233,7 @@ func TestEnsureDirErrors(t *testing.T) {
 	require.NoError(t, os.WriteFile(file, nil, 0o600))
 	assert.Error(t, ensureDir(filepath.Join(file, "child"), os.Chmod), "ensureDir under a file must fail")
 
-	failChmod := func(string, os.FileMode) error { return errors.New("chmod boom") }
+	failChmod := func(string, os.FileMode) error { return errChmodBoom }
 	assert.Error(t, ensureDir(filepath.Join(root, "d"), failChmod), "ensureDir with a failing chmod must fail")
 }
 
@@ -240,6 +244,6 @@ func TestEnsureFileErrors(t *testing.T) {
 	dir := t.TempDir()
 	assert.Error(t, ensureFile(dir, 0o600, os.Chmod), "ensureFile on a directory must fail")
 
-	failChmod := func(string, os.FileMode) error { return errors.New("chmod boom") }
+	failChmod := func(string, os.FileMode) error { return errChmodBoom }
 	assert.Error(t, ensureFile(filepath.Join(dir, "f"), 0o600, failChmod), "ensureFile with a failing chmod must fail")
 }

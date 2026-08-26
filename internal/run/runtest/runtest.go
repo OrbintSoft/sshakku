@@ -12,10 +12,16 @@ package runtest
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/OrbintSoft/sshakku/internal/run"
 )
+
+// errUnexpectedCommand is a command run against this fake that no handler was
+// registered for. It names the binary, which is what tells a test it stubbed
+// one program and the code reached for another.
+var errUnexpectedCommand = errors.New("unexpected command")
 
 // Runner answers Run from a per-binary handler table, so a test can stub
 // ssh-keygen, ssh-add, secret-tool, etc. independently and inspect the calls.
@@ -45,7 +51,7 @@ func (f *Runner) Run(_ context.Context, c run.Cmd) (run.Result, error) {
 	if h, ok := f.handlers[c.Name]; ok {
 		return h(c)
 	}
-	return run.Result{}, fmt.Errorf("unexpected command %q", c.Name)
+	return run.Result{}, fmt.Errorf("%w %q", errUnexpectedCommand, c.Name)
 }
 
 // Stdout builds a handler that returns out on stdout with the given exit code.

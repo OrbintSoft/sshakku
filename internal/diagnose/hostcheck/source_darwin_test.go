@@ -11,6 +11,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// The failures these tests hand their seams. Each stands for a real one the
+// code under test cannot be made to produce on demand.
+var (
+	errFdesetupMissing      = errors.New("fdesetup missing")
+	errNotArm64             = errors.New("not arm64")
+	errSystemProfilerFailed = errors.New("system_profiler failed")
+)
+
 // settled fails the test when a check was left undetermined, and returns the
 // answer it reached. nil and false are different answers — "nobody could tell"
 // and "no" — and the report says different things about them, so a test that
@@ -53,9 +61,9 @@ func TestDarwinChecksAppleSilicon(t *testing.T) {
 // failed fdesetup yields nil (undetermined) rather than a guess.
 func TestFileVaultStatusRunError(t *testing.T) {
 	stubHostProbes(t,
-		func(context.Context) ([]byte, error) { return nil, errors.New("fdesetup missing") },
+		func(context.Context) ([]byte, error) { return nil, errFdesetupMissing },
 		func(context.Context) ([]byte, error) { return nil, nil },
-		func() (uint32, error) { return 0, errors.New("not arm64") },
+		func() (uint32, error) { return 0, errNotArm64 },
 	)
 	assert.Nil(t, fileVaultStatus(t.Context()), "a probe that could not run settles nothing, and must not guess")
 }
@@ -64,7 +72,7 @@ func TestFileVaultStatusRunError(t *testing.T) {
 // sysctl reports non-Apple-Silicon, so the T1/T2 bridge probe decides. It also
 // covers the bridge-probe run-failure branch (undetermined).
 func TestSecureEnclaveInfoIntel(t *testing.T) {
-	notARM64 := func() (uint32, error) { return 0, errors.New("not arm64") }
+	notARM64 := func() (uint32, error) { return 0, errNotArm64 }
 
 	stubHostProbes(t, nil, func(context.Context) ([]byte, error) { return []byte("Apple T2 Security Chip"), nil }, notARM64)
 	present, kind := secureEnclaveInfo(t.Context())
@@ -76,7 +84,7 @@ func TestSecureEnclaveInfoIntel(t *testing.T) {
 	assert.False(t, settled(t, present, "secure hardware"), "an Intel Mac with no security chip has none")
 	assert.Empty(t, kind, "there is no chip to name")
 
-	stubHostProbes(t, nil, func(context.Context) ([]byte, error) { return nil, errors.New("system_profiler failed") }, notARM64)
+	stubHostProbes(t, nil, func(context.Context) ([]byte, error) { return nil, errSystemProfilerFailed }, notARM64)
 	present, kind = secureEnclaveInfo(t.Context())
 	assert.Nil(t, present, "a probe that could not run settles nothing, and must not guess")
 	assert.Empty(t, kind, "nothing was learned to name")

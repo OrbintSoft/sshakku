@@ -37,6 +37,20 @@ var ErrNoDatabase = errors.New("keepassxc: no database file is configured")
 // prompt no one can answer.
 var ErrPasswordNotAccepted = errors.New("keepassxc: keepassxc-cli would not take the database password on standard input")
 
+// cliRefusalError is keepassxc-cli exiting non-zero for a reason that is not a
+// rejected password. It carries the verb and the database, so a log says which
+// operation on which file went wrong, and the first line of what the program
+// said — the rest is usually its usage text.
+type cliRefusalError struct {
+	verb string
+	path string
+	said string
+}
+
+func (e cliRefusalError) Error() string {
+	return fmt.Sprintf("keepassxc-cli %s %s: %s", e.verb, e.path, e.said)
+}
+
 // CLI reaches a KeePassXC database through keepassxc-cli,
 // without a running KeePassXC.
 //
@@ -188,7 +202,7 @@ func (b *CLI) Store(ctx context.Context, service, label, passphrase string) erro
 		if refusedPassword(res) {
 			return ErrPasswordNotAccepted
 		}
-		return fmt.Errorf("keepassxc-cli %s %s: %s", verb, path, firstLine(res.Stderr))
+		return cliRefusalError{verb: verb, path: path, said: firstLine(res.Stderr)}
 	}
 	return nil
 }

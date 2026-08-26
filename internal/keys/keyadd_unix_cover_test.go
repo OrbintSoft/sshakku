@@ -12,6 +12,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// The failures these tests hand their seams. Each stands for a real one the
+// code under test cannot be made to produce on demand.
+var (
+	errForkExecPermissionDenied = errors.New("fork/exec: permission denied")
+	errNoKeyring                = errors.New("no keyring")
+)
+
 // saveKeyaddSeams snapshots the stash and ssh-add-run seams, restoring them
 // when the (sub)test ends.
 func saveKeyaddSeams(t *testing.T) {
@@ -22,7 +29,7 @@ func saveKeyaddSeams(t *testing.T) {
 
 func TestAddWithAskpassStashError(t *testing.T) {
 	saveKeyaddSeams(t)
-	stashPass = func(string, time.Duration) (string, error) { return "", errors.New("no keyring") }
+	stashPass = func(string, time.Duration) (string, error) { return "", errNoKeyring }
 	a := ExecKeyAdder{AskpassProg: "/usr/bin/sshakku"}
 	_, err := a.AddWithAskpass(t.Context(), "/home/u/.ssh/id_rsa", "pw")
 	assert.Error(t, err,
@@ -60,7 +67,7 @@ func TestRunSSHAddExitCode(t *testing.T) {
 
 func TestRunSSHAddStartFailure(t *testing.T) {
 	saveKeyaddSeams(t)
-	runCmd = func(*exec.Cmd) error { return errors.New("fork/exec: permission denied") }
+	runCmd = func(*exec.Cmd) error { return errForkExecPermissionDenied }
 	rc, err := (ExecKeyAdder{}).runSSHAdd(t.Context(), nil, "/home/u/.ssh/id_rsa")
 	assert.Error(t, err, "ssh-add not running at all is not a wrong passphrase, and retrying would not help")
 	assert.Zero(t, rc, "so there is no exit code to report")

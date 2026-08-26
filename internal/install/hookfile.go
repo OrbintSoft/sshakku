@@ -18,6 +18,7 @@ package install
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -178,6 +179,13 @@ func WriteDropIn(path string, content []byte) error {
 	return replace(path, content, dropInMode)
 }
 
+// errDropInIsDirectory is a drop-in hook path that turns out to name a
+// directory. It is refused rather than removed: the path is assembled from a
+// directory and a file name, so a directory at the end of it means the name was
+// wrong, and the one thing worse than failing to unwire a hook is removing a
+// directory somebody else put there.
+var errDropInIsDirectory = errors.New("it is a directory")
+
 // RemoveDropIn deletes the wrapper at path. One that is already gone is not an
 // error, for the same reason StripBlockFile tolerates a missing file.
 //
@@ -188,7 +196,7 @@ func WriteDropIn(path string, content []byte) error {
 // there.
 func RemoveDropIn(path string) error {
 	if info, err := os.Lstat(path); err == nil && info.IsDir() {
-		return fmt.Errorf("removing the drop-in hook %s: it is a directory", path)
+		return fmt.Errorf("removing the drop-in hook %s: %w", path, errDropInIsDirectory)
 	}
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("removing the drop-in hook %s: %w", path, err)

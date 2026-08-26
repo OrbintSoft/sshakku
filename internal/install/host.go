@@ -149,6 +149,14 @@ func scriptOnDisk(name string, content []byte, mode fs.FileMode) (string, func()
 	return path, cleanup, nil
 }
 
+// The two ways a PowerShell can answer the query without answering it. Both
+// are sentences about the host, so a caller naming the interpreter it asked
+// reads as one line.
+var (
+	errHostPrintedNothing  = errors.New("it printed nothing")
+	errHostNamedNoProfiles = errors.New("it named none of its profiles")
+)
+
 // parseHost reads the one line of JSON the query prints.
 //
 // Nothing at all is an error and not an empty answer. A host that ran the
@@ -158,14 +166,14 @@ func scriptOnDisk(name string, content []byte, mode fs.FileMode) (string, func()
 // would be worse than reporting it as a failure.
 func parseHost(stdout []byte) (Host, error) {
 	if len(bytes.TrimSpace(stdout)) == 0 {
-		return Host{}, errors.New("it printed nothing")
+		return Host{}, errHostPrintedNothing
 	}
 	var host Host
 	if err := json.Unmarshal(stdout, &host); err != nil {
 		return Host{}, fmt.Errorf("it did not answer with JSON: %w", err)
 	}
 	if host.Profiles.CurrentUserAllHosts == "" {
-		return Host{}, errors.New("it named none of its profiles")
+		return Host{}, errHostNamedNoProfiles
 	}
 	return host, nil
 }

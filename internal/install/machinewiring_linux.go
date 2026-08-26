@@ -2,8 +2,6 @@
 
 package install
 
-import "fmt"
-
 // machineWiringFor is this system's table of where a machine-wide wiring goes.
 //
 // Every login shell here reads `/etc/profile.d`, one file at a time, by way of
@@ -19,6 +17,5 @@ func machineWiringFor(kind ShellKind) (machineWiring, error) {
 	if kind == Bash {
 		return machineWiring{DropInDir: "/etc/profile.d"}, nil
 	}
-	return machineWiring{}, fmt.Errorf("this system has no machine-wide startup file for a %s that an"+
-		" install may assume; name the file with --profile, or install for your account with --scope=user", kind)
+	return machineWiring{}, noMachineWiringError{kind: kind}
 }

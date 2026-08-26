@@ -4,7 +4,6 @@ package wallet
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -69,7 +68,7 @@ func (b SecretTool) Store(ctx context.Context, service, label, passphrase string
 		return err
 	}
 	if res.Code != 0 {
-		return fmt.Errorf("secret-tool store exited %d: %s", res.Code, strings.TrimSpace(string(res.Stderr)))
+		return exitError{command: "secret-tool store", code: res.Code, stderr: strings.TrimSpace(string(res.Stderr))}
 	}
 	return nil
 }
@@ -90,7 +89,7 @@ func (b SecretTool) Delete(ctx context.Context, service string) error {
 		return err
 	}
 	if res.Code != 0 {
-		return fmt.Errorf("secret-tool clear exited %d: %s", res.Code, strings.TrimSpace(string(res.Stderr)))
+		return exitError{command: "secret-tool clear", code: res.Code, stderr: strings.TrimSpace(string(res.Stderr))}
 	}
 	return nil
 }

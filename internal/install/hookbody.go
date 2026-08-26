@@ -57,6 +57,20 @@ const (
 	BourneBinaryPlaceholder = `"/usr/local/bin/sshakku"`
 )
 
+// errNoBinaryNamed is a render asked to write no path into the hook. A hook
+// naming nothing is one that runs nothing at every login.
+var errNoBinaryNamed = errors.New("no binary was named to write into the hook")
+
+// templateWithoutPlaceholderError is a hook template that has lost the token
+// the binary's path goes into. Rendering it would produce a hook naming some
+// other binary, or none, which would be written out and wired up all the same.
+type templateWithoutPlaceholderError struct{ placeholder string }
+
+func (e templateWithoutPlaceholderError) Error() string {
+	return fmt.Sprintf("this hook template does not contain %s, so there is nowhere to write the"+
+		" path of the binary into it", e.placeholder)
+}
+
 // RenderHook returns the hook template with the path of the binary written into
 // it, as a literal the template's own language reads back unchanged.
 //
@@ -68,14 +82,13 @@ const (
 // quoted the same way as every other line this program prints for that shell.
 func RenderHook(template []byte, placeholder, binary string, dialect shell.Dialect) ([]byte, error) {
 	if binary == "" {
-		return nil, errors.New("no binary was named to write into the hook")
+		return nil, errNoBinaryNamed
 	}
 	if !bytes.Contains(template, []byte(placeholder)) {
 		// A template that has lost its placeholder renders a hook naming some
 		// other binary, or none. It would be written out, wired up, and would
 		// quietly do nothing or the wrong thing at every login.
-		return nil, fmt.Errorf("this hook template does not contain %s, so there is nowhere to write the"+
-			" path of the binary into it", placeholder)
+		return nil, templateWithoutPlaceholderError{placeholder: placeholder}
 	}
 	return bytes.ReplaceAll(template, []byte(placeholder), []byte(dialect.Quote(binary))), nil
 }

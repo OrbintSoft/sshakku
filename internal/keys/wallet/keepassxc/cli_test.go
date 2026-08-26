@@ -14,6 +14,14 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/run/runtest"
 )
 
+// The failures these tests hand their seams. Each stands for a real one the
+// code under test cannot be made to produce on demand.
+var (
+	errKeepassxcCliNoSuchFile    = errors.New("keepassxc-cli: no such file")
+	errKeepassxcCliVanished      = errors.New("keepassxc-cli vanished")
+	errTheUserDismissedTheDialog = errors.New("the user dismissed the dialog")
+)
+
 // countingPrompter answers with a set password and counts how often it was asked.
 type countingPrompter struct {
 	password string
@@ -222,7 +230,7 @@ func TestKeePassXCCLIPassesTheKeyFileWhenConfigured(t *testing.T) {
 }
 
 func TestKeePassXCCLIReportsARefusedPrompt(t *testing.T) {
-	refused := errors.New("the user dismissed the dialog")
+	refused := errTheUserDismissedTheDialog
 	b := cliBackend(&runtest.Recorder{}, &countingPrompter{err: refused})
 
 	_, _, err := b.Lookup(t.Context(), wallet.DefaultServicePrefix+"-id_ed25519")
@@ -234,7 +242,7 @@ func TestKeePassXCCLIReportsARefusedPrompt(t *testing.T) {
 func runnerErr(n int) *runtest.Recorder {
 	r := &runtest.Recorder{}
 	for range n {
-		r.Errs = append(r.Errs, errors.New("keepassxc-cli: no such file"))
+		r.Errs = append(r.Errs, errKeepassxcCliNoSuchFile)
 	}
 	return r
 }
@@ -333,7 +341,7 @@ func TestFirstLine(t *testing.T) {
 func TestKeePassXCCLIStoreReportsAWriteThatCannotRun(t *testing.T) {
 	runner := &runtest.Recorder{
 		Results: []run.Result{{Code: 1}, {Code: 0}},
-		Errs:    []error{nil, nil, errors.New("keepassxc-cli vanished")},
+		Errs:    []error{nil, nil, errKeepassxcCliVanished},
 	}
 	b := cliBackend(runner, &countingPrompter{password: "p"})
 
@@ -346,7 +354,7 @@ func TestKeePassXCCLIStoreReportsAWriteThatCannotRun(t *testing.T) {
 func TestKeePassXCCLIStoreReportsAGroupThatCannotBeMade(t *testing.T) {
 	runner := &runtest.Recorder{
 		Results: []run.Result{{Code: 1}},
-		Errs:    []error{nil, errors.New("keepassxc-cli vanished")},
+		Errs:    []error{nil, errKeepassxcCliVanished},
 	}
 	b := cliBackend(runner, &countingPrompter{password: "p"})
 

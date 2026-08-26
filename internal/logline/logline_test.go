@@ -8,6 +8,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// The failures these tests hand their seams. Each stands for a real one the
+// code under test cannot be made to produce on demand.
+var (
+	errNoDisplay           = errors.New("no display")
+	errNoSpaceLeftOnDevice = errors.New("no space left on device")
+)
+
 // recorder is a Logger that keeps what it was told, and fails on demand so the
 // caller's indifference to that can be checked rather than assumed.
 type recorder struct {
@@ -24,7 +31,7 @@ func (r *recorder) Log(level, message string) error {
 
 func TestRecordfFormatsTheLineAndItsLevel(t *testing.T) {
 	rec := &recorder{}
-	Recordf(rec, "ERROR", "%s could not ask for %s (%v)", "zenity", "id_rsa", errors.New("no display"))
+	Recordf(rec, "ERROR", "%s could not ask for %s (%v)", "zenity", "id_rsa", errNoDisplay)
 
 	require.Len(t, rec.messages, 1, "one call records one line")
 	assert.Equal(t, "ERROR", rec.levels[0], "the level is passed through, not folded into the message")
@@ -43,7 +50,7 @@ func TestRecordfWithNoLoggerRecordsNothing(t *testing.T) {
 // written is not a reason to fail the thing being logged about: these callers
 // are on the path of somebody's login shell.
 func TestRecordfIgnoresALoggerThatFails(t *testing.T) {
-	rec := &recorder{err: errors.New("no space left on device")}
+	rec := &recorder{err: errNoSpaceLeftOnDevice}
 	assert.NotPanics(t, func() { Recordf(rec, "INFO", "loaded %s", "id_rsa") },
 		"a Logger that fails is not reported and does not stop the caller")
 	assert.Len(t, rec.messages, 1, "the line was still offered to the Logger")

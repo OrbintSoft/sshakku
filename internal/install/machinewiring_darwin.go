@@ -2,8 +2,6 @@
 
 package install
 
-import "fmt"
-
 // machineWiringFor is this system's table of where a machine-wide wiring goes.
 //
 // zsh is the login shell here and reads `/etc/zprofile`; bash, for somebody who
@@ -19,7 +17,6 @@ func machineWiringFor(kind ShellKind) (machineWiring, error) {
 	case Bash:
 		return machineWiring{File: "/etc/profile"}, nil
 	default:
-		return machineWiring{}, fmt.Errorf("this system has no machine-wide startup file for a %s that an"+
-			" install may assume; name the file with --profile, or install for your account with --scope=user", kind)
+		return machineWiring{}, noMachineWiringError{kind: kind}
 	}
 }

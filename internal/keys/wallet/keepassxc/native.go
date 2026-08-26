@@ -141,13 +141,18 @@ func dialKeePassXCAt(ctx context.Context, paths []string) (net.Conn, error) {
 	return nil, fmt.Errorf("%w (tried %s)", wire.ErrNotRunning, strings.Join(paths, ", "))
 }
 
+// errNoAssociationStore is a native backend built without anywhere to keep the
+// association. Nothing can be looked up: associating is what raises a dialog,
+// and this route exists to avoid one.
+var errNoAssociationStore = errors.New("keepassxc: no association store was configured")
+
 // association returns the stored association, having confirmed KeePassXC still
 // honours it. It never asks for a new one: associating raises a dialog, and a
 // lookup that pops a dialog is exactly the silence a stored passphrase exists
 // to preserve.
 func (b Native) association(client Session) (wire.Association, error) {
 	if b.Associations == nil {
-		return wire.Association{}, errors.New("keepassxc: no association store was configured")
+		return wire.Association{}, errNoAssociationStore
 	}
 	stored, found, err := b.Associations.Load()
 	if err != nil {

@@ -20,59 +20,58 @@ func namesTheFixedEndpoint(in Inputs) bool {
 		(in.FixedSockPosix != "" && in.EnvSock == in.FixedSockPosix)
 }
 
-func findings(in Inputs, r Report) []string {
-	var reachable, dead, elsewhere int
-	for _, a := range r.Agents {
-		switch {
-		case differentUser(a, r.OurUID):
-			if a.Socket != "" {
-				elsewhere++
-			}
-		case a.Reachable:
-			reachable++
-		case a.Socket != "":
-			dead++
-		}
-	}
-
-	var f []string
+// endpointFinding is what is wrong with what this shell holds in
+// SSH_AUTH_SOCK, or "" where nothing is. The cases are ordered by how little
+// the reader can do about the one before: a variable that cannot be read is not
+// an unset one, and an unset one is not a wrong one.
+func endpointFinding(in Inputs, r Report) string {
 	switch {
 	case in.EnvUnreadable:
-		f = append(f, envUnreadableMsg)
+		return envUnreadableMsg
 	case in.EnvSock == "":
-		f = append(f, "SSH_AUTH_SOCK is unset — this shell cannot reach any agent; "+loginShellHint)
+		return "SSH_AUTH_SOCK is unset — this shell cannot reach any agent; " + loginShellHint
 	case !r.EnvReachable:
-		f = append(f, fmt.Sprintf("SSH_AUTH_SOCK points at %s, which is not answering", in.EnvSock))
+		return fmt.Sprintf("SSH_AUTH_SOCK points at %s, which is not answering", in.EnvSock)
 	case !namesTheFixedEndpoint(in):
 		if label, ok := knownForeignShape(in.EnvSock); ok {
-			f = append(f, fmt.Sprintf("SSH_AUTH_SOCK is %s (%s), not our fixed socket %s", in.EnvSock, label, in.FixedSock))
-		} else {
-			f = append(f, fmt.Sprintf("SSH_AUTH_SOCK is %s, not our fixed socket %s", in.EnvSock, in.FixedSock))
+			return fmt.Sprintf("SSH_AUTH_SOCK is %s (%s), not our fixed socket %s", in.EnvSock, label, in.FixedSock)
 		}
+		return fmt.Sprintf("SSH_AUTH_SOCK is %s, not our fixed socket %s", in.EnvSock, in.FixedSock)
 	}
+	return ""
+}
 
+// answeringFinding is what the number of answering agents is worth saying about,
+// or "" where it is worth saying nothing.
+//
+// Whether anything answers is asked of the endpoint too, not of the process list
+// alone: a system whose agent is a service has no process to count, and counting
+// is what would report an answering agent as none at all.
+func answeringFinding(r Report, reachable int) string {
 	switch {
-	// Whether anything answers is asked of the endpoint too, not of the process
-	// list alone: a system whose agent is a service has no process to count,
-	// and counting is what would report an answering agent as none at all.
 	case answersWithNoProcessToShowForIt(r):
+		return ""
 	case reachable == 0 && r.NoAgentMechanism:
-		f = append(f, "no ssh-agent is answering, and this build has no way to keep one on this system yet")
+		return "no ssh-agent is answering, and this build has no way to keep one on this system yet"
 	case reachable == 0 && serviceIsDisabled(r):
-		// Said below in its own words, which name what will actually help. A
-		// new login shell will not start this one, and saying both would leave
+		// Said elsewhere in its own words, which name what will actually help.
+		// A new login shell will not start this one, and saying both would leave
 		// the reader to work out which of the two sentences to believe.
+		return ""
 	case reachable == 0:
-		f = append(f, "no ssh-agent is answering; a new login shell will start one")
+		return "no ssh-agent is answering; a new login shell will start one"
 	case reachable > 1:
-		f = append(f, fmt.Sprintf("%d agents are answering; normally only one should serve you", reachable))
+		return fmt.Sprintf("%d agents are answering; normally only one should serve you", reachable)
 	}
-	if dead > 0 {
-		f = append(f, fmt.Sprintf("%d dead ssh-agent process(es) with a stale socket are lingering", dead))
-	}
-	if elsewhere > 0 {
-		f = append(f, fmt.Sprintf("%d ssh-agent process(es) belong to a different user account — visible here, but not part of this account's session", elsewhere))
-	}
+	return ""
+}
+
+// foreignAgentFindings names each answering agent of this account's that
+// sshakku did not start. One whose socket carries our own naming shape under a
+// different per-login token is called what it most likely is — a leftover of
+// ours — rather than reported as somebody else's tool.
+func foreignAgentFindings(r Report) []string {
+	var f []string
 	for _, a := range r.Agents {
 		if a.Kind != inspect.KindForeign || !a.Reachable || differentUser(a, r.OurUID) {
 			continue
@@ -89,6 +88,47 @@ func findings(in Inputs, r Report) []string {
 		}
 		f = append(f, fmt.Sprintf("a foreign ssh-agent (pid %d) started by %s is answering", a.PID, who))
 	}
+	return f
+}
+
+// countAgents is the census every count-shaped finding is drawn from: how many
+// agents answer, how many are dead with a socket still on disk, and how many
+// belong to somebody else. An agent of another user's with no socket is counted
+// nowhere — there is nothing about it this account could act on.
+func countAgents(r Report) (reachable, dead, elsewhere int) {
+	for _, a := range r.Agents {
+		switch {
+		case differentUser(a, r.OurUID):
+			if a.Socket != "" {
+				elsewhere++
+			}
+		case a.Reachable:
+			reachable++
+		case a.Socket != "":
+			dead++
+		}
+	}
+	return reachable, dead, elsewhere
+}
+
+func findings(in Inputs, r Report) []string {
+	reachable, dead, elsewhere := countAgents(r)
+
+	var f []string
+	if line := endpointFinding(in, r); line != "" {
+		f = append(f, line)
+	}
+
+	if line := answeringFinding(r, reachable); line != "" {
+		f = append(f, line)
+	}
+	if dead > 0 {
+		f = append(f, fmt.Sprintf("%d dead ssh-agent process(es) with a stale socket are lingering", dead))
+	}
+	if elsewhere > 0 {
+		f = append(f, fmt.Sprintf("%d ssh-agent process(es) belong to a different user account — visible here, but not part of this account's session", elsewhere))
+	}
+	f = append(f, foreignAgentFindings(r)...)
 	// Where a key's lifetime is kept by the sessions rather than by the agent,
 	// what it is worth differs from what was asked for, and that is worth
 	// saying out loud once wherever the reader is looking — the session log
@@ -122,9 +162,6 @@ func findings(in Inputs, r Report) []string {
 	}
 	return f
 }
-
-// Format writes a human-readable rendering of r to w. It builds the whole report
-// first and writes it once, so a short write cannot leave a half-printed report.
 
 const minTmpBytes = 512 * 1024 * 1024
 

@@ -12,12 +12,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// The failures these tests hand their seams. Each stands for a real one the
+// code under test cannot be made to produce on demand.
+var (
+	errCannotSetADeadline = errors.New("cannot set a deadline")
+	errNoEntropy          = errors.New("no entropy")
+	errNoEntropyLeft      = errors.New("no entropy left")
+	errTheSocketWentAway  = errors.New("the socket went away")
+)
+
 // failingReader stands in for an entropy source that cannot deliver. The real
 // one does not fail, which is exactly why the branches that handle it would
 // otherwise never run.
 type failingReader struct{}
 
-func (failingReader) Read([]byte) (int, error) { return 0, errors.New("no entropy") }
+func (failingReader) Read([]byte) (int, error) { return 0, errNoEntropy }
 
 // withoutEntropy points the package's randomness at a reader that always fails,
 // and restores it when the test ends.
@@ -35,7 +44,7 @@ type exhaustibleReader struct {
 
 func (r *exhaustibleReader) Read(p []byte) (int, error) {
 	if r.left <= 0 {
-		return 0, errors.New("no entropy left")
+		return 0, errNoEntropyLeft
 	}
 	r.left--
 	for i := range p {
@@ -220,20 +229,21 @@ func TestUnnamedFailureStillReportsTheAction(t *testing.T) {
 // not stub any behaviour under test.
 type brokenConn struct {
 	net.Conn
+
 	failDeadline bool
 	failWrite    bool
 }
 
 func (c *brokenConn) SetDeadline(t time.Time) error {
 	if c.failDeadline {
-		return errors.New("cannot set a deadline")
+		return errCannotSetADeadline
 	}
 	return c.Conn.SetDeadline(t)
 }
 
 func (c *brokenConn) Write(p []byte) (int, error) {
 	if c.failWrite {
-		return 0, errors.New("the socket went away")
+		return 0, errTheSocketWentAway
 	}
 	return c.Conn.Write(p)
 }

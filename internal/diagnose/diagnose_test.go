@@ -17,6 +17,10 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/agent/inspect"
 )
 
+// errBoom is the failure this test hands its seam, standing for a real one the
+// code under test cannot be made to produce on demand.
+var errBoom = errors.New("boom")
+
 // fakeSource returns a fixed set of agent processes and an optional error.
 type fakeSource struct {
 	procs []inspect.AgentProc
@@ -238,7 +242,7 @@ func TestGatherEnvSockKnownForeignShape(t *testing.T) {
 }
 
 func TestGatherInspectError(t *testing.T) {
-	src := fakeSource{err: errors.New("boom")}
+	src := fakeSource{err: errBoom}
 	r := Gather(t.Context(), Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000},
 		src, fakeProber{up: map[string]bool{fixed: true}}, nil, nil, nil, nil)
 	assert.Error(t, r.InspectErr, "processes that could not be listed must be reported")

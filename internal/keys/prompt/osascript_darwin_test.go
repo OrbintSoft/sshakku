@@ -15,6 +15,10 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/run/runtest"
 )
 
+// errReadOnlyFileSystem is the failure this test hands its seam, standing for a real one the
+// code under test cannot be made to produce on demand.
+var errReadOnlyFileSystem = errors.New("read-only file system")
+
 func TestOsascriptPrompt(t *testing.T) {
 	t.Run("returns the entered passphrase, newline trimmed", func(t *testing.T) {
 		r := runtest.NewRunner().On(osascriptBin, runtest.Stdout("typed-pass\n", 0))
@@ -67,7 +71,7 @@ func TestOsascriptPrompt(t *testing.T) {
 	})
 
 	t.Run("a failure to start osascript is an error", func(t *testing.T) {
-		wantErr := errors.New("boom")
+		wantErr := errBoom
 		r := runtest.NewRunner().On(osascriptBin, runtest.Fails(wantErr))
 		_, err := OsascriptPrompter{Runner: r}.Prompt(t.Context(), "id_rsa")
 		assert.ErrorIs(t, err, wantErr,
@@ -75,7 +79,7 @@ func TestOsascriptPrompt(t *testing.T) {
 	})
 
 	t.Run("a script file that cannot be created is an error, not a silent no-prompt", func(t *testing.T) {
-		wantErr := errors.New("read-only file system")
+		wantErr := errReadOnlyFileSystem
 		defer stubCreateDialogScript(t, func() (*os.File, error) { return nil, wantErr })()
 
 		r := runtest.NewRunner().On(osascriptBin, runtest.Stdout("typed-pass\n", 0))
@@ -120,7 +124,7 @@ func stubCreateDialogScript(t *testing.T, f func() (*os.File, error)) func() {
 func TestOsascriptAvailable(t *testing.T) {
 	found := OsascriptPrompter{lookPath: func(string) (string, error) { return "/usr/bin/osascript", nil }}
 	assert.True(t, found.Available(t.Context()), "a dialog that is installed can be asked in")
-	missing := OsascriptPrompter{lookPath: func(string) (string, error) { return "", errors.New("not found") }}
+	missing := OsascriptPrompter{lookPath: func(string) (string, error) { return "", errNotFound }}
 	assert.False(t, missing.Available(t.Context()), "and one that is not installed cannot")
 }
 

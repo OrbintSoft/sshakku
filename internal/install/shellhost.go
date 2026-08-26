@@ -69,6 +69,14 @@ func shellScriptOnDisk() (string, func(), error) {
 	return scriptOnDisk("query-shell.sh", queryShellScript, queryShellMode)
 }
 
+// The two ways a Bourne shell can answer the query without answering it. A home
+// directory is the whole point: without one there is no file to wire, and an
+// empty home would wire the current directory.
+var (
+	errShellPrintedNothing = errors.New("it printed nothing")
+	errShellNamedNoHome    = errors.New("it named no home directory, so there is nothing to wire")
+)
+
 // parseShell reads the key=value lines the query prints.
 //
 // A key nobody here knows is ignored rather than refused, so that the script
@@ -77,7 +85,7 @@ func shellScriptOnDisk() (string, func(), error) {
 // as a shell whose home is the empty string would wire the current directory.
 func parseShell(stdout []byte) (Shell, error) {
 	if len(bytes.TrimSpace(stdout)) == 0 {
-		return Shell{}, errors.New("it printed nothing")
+		return Shell{}, errShellPrintedNothing
 	}
 
 	var shell Shell
@@ -97,7 +105,7 @@ func parseShell(stdout []byte) (Shell, error) {
 	}
 
 	if shell.Home == "" {
-		return Shell{}, errors.New("it named no home directory, so there is nothing to wire")
+		return Shell{}, errShellNamedNoHome
 	}
 	return shell, nil
 }

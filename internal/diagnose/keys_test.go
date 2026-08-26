@@ -2,7 +2,6 @@ package diagnose
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -209,7 +208,7 @@ func TestGatherKeysExpiredWhereTheSessionsKeepTheLifetime(t *testing.T) {
 }
 
 func TestGatherKeysEnumerateError(t *testing.T) {
-	ks := &KeySource{Lister: fakeKeyLister{err: errors.New("boom")}}
+	ks := &KeySource{Lister: fakeKeyLister{err: errBoom}}
 	r := Gather(t.Context(), Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, fakeSource{}, fakeProber{}, nil, nil, ks, nil)
 
 	assert.Error(t, r.KeysErr, "a directory that could not be listed must be reported")

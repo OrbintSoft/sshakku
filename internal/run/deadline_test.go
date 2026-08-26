@@ -9,6 +9,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// errNoSuchItem is the failure this test hands its seam, standing for a real one the
+// code under test cannot be made to produce on demand.
+var errNoSuchItem = errors.New("no such item")
+
 func TestWithDeadline(t *testing.T) {
 	t.Run("an answer inside the budget is the answer", func(t *testing.T) {
 		got, err := WithDeadline("the store", time.Minute, func() (string, error) {
@@ -19,7 +23,7 @@ func TestWithDeadline(t *testing.T) {
 	})
 
 	t.Run("a failure inside the budget is that failure, not a timeout", func(t *testing.T) {
-		wantErr := errors.New("no such item")
+		wantErr := errNoSuchItem
 		_, err := WithDeadline("the store", time.Minute, func() (string, error) {
 			return "", wantErr
 		})

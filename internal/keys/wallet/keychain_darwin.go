@@ -273,15 +273,33 @@ func newQuery(account, service string) uintptr {
 	return d
 }
 
+// keychainError is a Security framework call that refused. The status is what
+// the framework said, and it is carried rather than only printed so a caller
+// can tell one refusal from another — a locked keychain from a denied item —
+// without matching on the sentence. The message is the framework's own where
+// it has one for that status, and absent where it has not.
+type keychainError struct {
+	op      string
+	status  int32
+	message string
+}
+
+func (e keychainError) Error() string {
+	if e.message == "" {
+		return fmt.Sprintf("%s: OSStatus %d", e.op, e.status)
+	}
+	return fmt.Sprintf("%s: %s (OSStatus %d)", e.op, e.message, e.status)
+}
+
 // secError formats a non-zero OSStatus as an error, using
 // SecCopyErrorMessageString for a human-readable message when available.
 func secError(op string, status int32) error {
 	msg := secCopyErrorMessageString(status, 0)
 	if msg == 0 {
-		return fmt.Errorf("%s: OSStatus %d", op, status)
+		return keychainError{op: op, status: status}
 	}
 	defer release(msg)
-	return fmt.Errorf("%s: %s (OSStatus %d)", op, goCFString(msg), status)
+	return keychainError{op: op, status: status, message: goCFString(msg)}
 }
 
 // Find implements KeychainClient.

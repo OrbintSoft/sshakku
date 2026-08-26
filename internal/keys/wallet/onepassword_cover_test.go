@@ -10,8 +10,12 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/run/runtest"
 )
 
+// errOpExecBoom is the failure this test hands its seam, standing for a real one the
+// code under test cannot be made to produce on demand.
+var errOpExecBoom = errors.New("op exec boom")
+
 func TestOnePasswordStoreDeleteErrorPropagates(t *testing.T) {
-	boom := errors.New("op exec boom")
+	boom := errOpExecBoom
 	r := runtest.NewRunner().On(onePasswordBin, opCall(map[string]func(run.Cmd) (run.Result, error){
 		"item get": runtest.Fails(boom),
 	}))
@@ -22,7 +26,7 @@ func TestOnePasswordStoreDeleteErrorPropagates(t *testing.T) {
 
 func TestOnePasswordStoreMarshalError(t *testing.T) {
 	saveJSONMarshal(t)
-	jsonMarshal = func(any) ([]byte, error) { return nil, errors.New("marshal boom") }
+	jsonMarshal = func(any) ([]byte, error) { return nil, errMarshalBoom }
 	r := runtest.NewRunner().On(onePasswordBin, opCall(map[string]func(run.Cmd) (run.Result, error){
 		"item get": runtest.Stdout("", 1), // nothing to delete
 	}))
@@ -32,7 +36,7 @@ func TestOnePasswordStoreMarshalError(t *testing.T) {
 }
 
 func TestOnePasswordStoreCreateRunError(t *testing.T) {
-	boom := errors.New("op exec boom")
+	boom := errOpExecBoom
 	r := runtest.NewRunner().On(onePasswordBin, opCall(map[string]func(run.Cmd) (run.Result, error){
 		"item get":    runtest.Stdout("", 1), // nothing to delete
 		"item create": runtest.Fails(boom),
@@ -43,7 +47,7 @@ func TestOnePasswordStoreCreateRunError(t *testing.T) {
 }
 
 func TestOnePasswordDeleteItemDeleteRunError(t *testing.T) {
-	boom := errors.New("op exec boom")
+	boom := errOpExecBoom
 	r := runtest.NewRunner().On(onePasswordBin, opCall(map[string]func(run.Cmd) (run.Result, error){
 		"item get":    runtest.Stdout(`{"id":"abc"}`, 0), // found
 		"item delete": runtest.Fails(boom),
@@ -55,7 +59,7 @@ func TestOnePasswordDeleteItemDeleteRunError(t *testing.T) {
 
 func TestOnePasswordListErrorBranches(t *testing.T) {
 	t.Run("item list fails to run", func(t *testing.T) {
-		boom := errors.New("op exec boom")
+		boom := errOpExecBoom
 		r := runtest.NewRunner().On(onePasswordBin, opCall(map[string]func(run.Cmd) (run.Result, error){
 			"item list": runtest.Fails(boom),
 		}))

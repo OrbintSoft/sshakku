@@ -12,6 +12,14 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+// The failures these tests hand their seams. Each stands for a real one the
+// code under test cannot be made to produce on demand.
+var (
+	errNotAConsole        = errors.New("not a console")
+	errRefused            = errors.New("refused")
+	errTheHandleIsInvalid = errors.New("the handle is invalid")
+)
+
 // The handles a fake console answers to. They are never opened: what stands in
 // for a console is the pair of seams below, and these only tell the two halves
 // apart in what the fake records.
@@ -140,7 +148,7 @@ func TestNoConsoleIsReportedAsNobodyToAsk(t *testing.T) {
 	oldOpen := openConsole
 	t.Cleanup(func() { openConsole = oldOpen })
 	openConsole = func() (console, func(), error) {
-		return console{}, func() {}, errors.New("the handle is invalid")
+		return console{}, func() {}, errTheHandleIsInvalid
 	}
 
 	_, err := ReadTTYLine("passphrase: ", true)
@@ -153,7 +161,7 @@ func TestNoConsoleIsReportedAsNobodyToAsk(t *testing.T) {
 // into: echo could not be turned off, so the question is not asked at all.
 func TestAConsoleWhoseEchoCannotBeTurnedOffIsNotAskedOn(t *testing.T) {
 	t.Run("the mode cannot be read", func(t *testing.T) {
-		con := &fakeConsole{modeErr: errors.New("not a console"), line: "secret\r\n"}
+		con := &fakeConsole{modeErr: errNotAConsole, line: "secret\r\n"}
 		con.install(t)
 		_, err := ReadTTYLine("passphrase: ", true)
 		require.ErrorIs(t, err, ErrNoTerminal)
@@ -161,7 +169,7 @@ func TestAConsoleWhoseEchoCannotBeTurnedOffIsNotAskedOn(t *testing.T) {
 	})
 
 	t.Run("the mode cannot be set", func(t *testing.T) {
-		con := &fakeConsole{setErr: errors.New("refused"), line: "secret\r\n"}
+		con := &fakeConsole{setErr: errRefused, line: "secret\r\n"}
 		con.install(t)
 		_, err := ReadTTYLine("passphrase: ", true)
 		require.Error(t, err)

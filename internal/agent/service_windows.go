@@ -109,6 +109,32 @@ func (s systemService) withServiceHandle(
 	return do(service)
 }
 
+// The three states that stand between an account and its agent, each carrying
+// the service name because the command that puts it right names the service.
+// They are separate types rather than one message because a caller — the
+// doctor's --fix, above all — has to tell "there is no such service" from
+// "it is there and disabled" without reading the sentence.
+type (
+	noAgentServiceError     struct{ name string }
+	serviceDisabledError    struct{ name string }
+	mayNotStartServiceError struct{ name string }
+)
+
+func (e noAgentServiceError) Error() string {
+	return fmt.Sprintf("this system has no %s service, so there is no agent to reach; "+
+		"an administrator can add it with: Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0", e.name)
+}
+
+func (e serviceDisabledError) Error() string {
+	return fmt.Sprintf("the %s service is disabled, so nothing can start it from here; "+
+		"an administrator can enable it with: Set-Service %s -StartupType Automatic", e.name, e.name)
+}
+
+func (e mayNotStartServiceError) Error() string {
+	return fmt.Sprintf("this account may not start the %s service; "+
+		"an administrator can start it with: Start-Service %s", e.name, e.name)
+}
+
 // explain turns what the service manager said into a sentence the person in
 // front of the shell can act on, naming the command that puts it right. An
 // exit status on its own names nothing anybody can do anything about, and
@@ -119,14 +145,11 @@ func (s systemService) explain(err error) error {
 	case errors.Is(err, windows.ERROR_SERVICE_ALREADY_RUNNING):
 		return nil
 	case errors.Is(err, windows.ERROR_SERVICE_DOES_NOT_EXIST):
-		return fmt.Errorf("this system has no %s service, so there is no agent to reach; "+
-			"an administrator can add it with: Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0", name)
+		return noAgentServiceError{name: name}
 	case errors.Is(err, windows.ERROR_SERVICE_DISABLED):
-		return fmt.Errorf("the %s service is disabled, so nothing can start it from here; "+
-			"an administrator can enable it with: Set-Service %s -StartupType Automatic", name, name)
+		return serviceDisabledError{name: name}
 	case errors.Is(err, windows.ERROR_ACCESS_DENIED):
-		return fmt.Errorf("this account may not start the %s service; "+
-			"an administrator can start it with: Start-Service %s", name, name)
+		return mayNotStartServiceError{name: name}
 	default:
 		return fmt.Errorf("starting the %s service: %w", name, err)
 	}

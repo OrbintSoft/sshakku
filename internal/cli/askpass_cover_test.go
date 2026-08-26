@@ -12,6 +12,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// errNoExe is the failure this test hands its seam, standing for a real one the
+// code under test cannot be made to produce on demand.
+var errNoExe = errors.New("no exe")
+
 // TestAskpassEnv covers askpass-env against a fake executable lookup, so it runs
 // regardless of where the test binary lives: a resolved path emits the three
 // export lines, an os.Executable failure returns 1, and a failing stdout
@@ -64,7 +68,7 @@ func TestAskpassEnv(t *testing.T) {
 
 	t.Run("executable lookup failure returns 1", func(t *testing.T) {
 		d := realDeps()
-		d.self = func() (string, error) { return "", errors.New("no exe") }
+		d.self = func() (string, error) { return "", errNoExe }
 		var out, errOut bytes.Buffer
 		assert.Equal(t, 1, d.askpassEnv(&out, &errOut, nil), "with no path to the binary there is nothing to export")
 		assert.Empty(t, out.String(), "and a shell must not be given exports pointing at nothing")
@@ -101,7 +105,7 @@ func TestAskpassFromHandoff(t *testing.T) {
 
 	t.Run("fetch error returns 1", func(t *testing.T) {
 		d := realDeps()
-		d.fetchHandoff = func(context.Context, string) (string, error) { return "", errors.New("boom") }
+		d.fetchHandoff = func(context.Context, string) (string, error) { return "", errBoom }
 		assert.Equal(t, 1, d.askpassFromHandoff(t.Context(), &bytes.Buffer{}),
 			"a stash that could not be read must be reported, not answered with nothing")
 	})

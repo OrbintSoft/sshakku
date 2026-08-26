@@ -13,6 +13,10 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
+// errTheStoreSaidNo is the failure this test hands its seam, standing for a real one the
+// code under test cannot be made to produce on demand.
+var errTheStoreSaidNo = errors.New("the store said no")
+
 // CredentialManager is a Backend, and nothing else in this package has to be
 // asked whether it still is.
 var _ Backend = (*CredentialManager)(nil)
@@ -214,7 +218,7 @@ func TestAStoreThatFailsSaysSoRatherThanLookingEmpty(t *testing.T) {
 	t.Parallel()
 
 	store := newFakeCredentialStore()
-	store.err = errors.New("the store said no")
+	store.err = errTheStoreSaidNo
 
 	_, err := backedBy(store, "").List(t.Context())
 	require.Error(t, err)

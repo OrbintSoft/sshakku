@@ -226,34 +226,33 @@ func TestAPowerShellThatWillNotRunItsProfileIsReportedWithTheRemedy(t *testing.T
 		{"constrained", "RemoteSigned", "ConstrainedLanguage", "ConstrainedLanguage"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			note, willNot := willNotRunItsProfile(Host{
+			err := willNotRunItsProfile(Host{
 				EffectiveExecutionPolicy: c.policy,
 				LanguageMode:             c.mode,
 			})
 
-			assert.True(t, willNot)
-			assert.Contains(t, note, c.wants)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), c.wants)
 		})
 	}
 }
 
 func TestAnOrdinaryPowerShellIsWiredWithoutComment(t *testing.T) {
-	note, willNot := willNotRunItsProfile(Host{
+	err := willNotRunItsProfile(Host{
 		EffectiveExecutionPolicy: "RemoteSigned",
 		LanguageMode:             "FullLanguage",
 	})
 
-	assert.False(t, willNot)
-	assert.Empty(t, note)
+	assert.NoError(t, err)
 }
 
 // A host that said nothing about its language mode is not a host in a
 // restricted one. Refusing on an empty answer would refuse every interpreter
 // whose query lost that field.
 func TestAHostThatNamedNoLanguageModeIsNotRefusedForIt(t *testing.T) {
-	_, willNot := willNotRunItsProfile(Host{EffectiveExecutionPolicy: "RemoteSigned"})
+	err := willNotRunItsProfile(Host{EffectiveExecutionPolicy: "RemoteSigned"})
 
-	assert.False(t, willNot)
+	assert.NoError(t, err)
 }
 
 // The round trip, driven through the real interpreter this machine has: the

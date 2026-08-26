@@ -13,6 +13,10 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+// errSomethingTheServiceManagerHas is the failure this test hands its seam, standing for a real one the
+// code under test cannot be made to produce on demand.
+var errSomethingTheServiceManagerHas = errors.New("something the service manager has not said before")
+
 // noSuchService names a service no system has, so the refusals below are
 // exercised for real rather than against whatever this machine is running.
 const noSuchService = "sshakku-no-such-service"
@@ -43,7 +47,7 @@ func TestARefusalNamesTheCommandThatPutsItRight(t *testing.T) {
 			"a service that is not there is added, not started")
 	})
 	t.Run("anything else", func(t *testing.T) {
-		odd := errors.New("something the service manager has not said before")
+		odd := errSomethingTheServiceManagerHas
 		require.ErrorIs(t, svc.explain(odd), odd,
 			"what is not one of the three arrives whole rather than reworded")
 	})

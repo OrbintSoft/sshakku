@@ -5,6 +5,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -12,6 +13,11 @@ import (
 
 	"github.com/OrbintSoft/sshakku/internal/run"
 )
+
+// errNotPositive is what a duration setting is refused with when it parses but
+// names no time at all. Every budget here bounds a wait, and a wait of zero or
+// less is not a shorter wait but an absent one, so the default applies instead.
+var errNotPositive = errors.New("must be greater than zero")
 
 // DefaultKeyLifetime caps how long an added key stays in the agent before it
 // expires and must be re-added from the wallet. A zero or negative configured
@@ -95,7 +101,7 @@ func positiveDuration(raw string, fallback time.Duration, what string) (time.Dur
 		return fallback, fmt.Errorf("invalid %s %q: %w", what, raw, err)
 	}
 	if d <= 0 {
-		return fallback, fmt.Errorf("invalid %s %q: must be greater than zero", what, raw)
+		return fallback, fmt.Errorf("invalid %s %q: %w", what, raw, errNotPositive)
 	}
 	return d, nil
 }

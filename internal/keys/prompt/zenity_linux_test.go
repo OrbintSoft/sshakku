@@ -3,7 +3,6 @@
 package prompt
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -32,7 +31,7 @@ func TestZenityPrompt(t *testing.T) {
 	})
 
 	t.Run("a failure to start zenity is an error", func(t *testing.T) {
-		wantErr := errors.New("boom")
+		wantErr := errBoom
 		r := runtest.NewRunner().On("zenity", runtest.Fails(wantErr))
 		_, err := ZenityPrompter{Runner: r}.Prompt(t.Context(), "id_rsa")
 		assert.ErrorIs(t, err, wantErr,
@@ -43,7 +42,7 @@ func TestZenityPrompt(t *testing.T) {
 func TestZenityAvailable(t *testing.T) {
 	found := ZenityPrompter{lookPath: func(string) (string, error) { return "/usr/bin/zenity", nil }}
 	assert.True(t, found.Available(t.Context()), "a dialog that is installed can be asked in")
-	missing := ZenityPrompter{lookPath: func(string) (string, error) { return "", errors.New("not found") }}
+	missing := ZenityPrompter{lookPath: func(string) (string, error) { return "", errNotFound }}
 	assert.False(t, missing.Available(t.Context()), "and one that is not installed cannot")
 }
 

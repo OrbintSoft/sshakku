@@ -16,6 +16,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// errNoReply is the failure this test hands its seam, standing for a real one the
+// code under test cannot be made to produce on demand.
+var errNoReply = errors.New("no reply")
+
 // withLook fixes what looking at the session bus found, and whether the session
 // has a screen, so every combination of the two can be described from a machine
 // that has neither. Looking at the session bus is a thing only Linux does, so
@@ -233,7 +237,7 @@ func TestALookThatSucceededIsReportedAsTaken(t *testing.T) {
 
 	t.Run("a wallet that would not answer is not a look that failed", func(t *testing.T) {
 		lookForCollection = func(context.Context, string, string, time.Duration) (secretservice.Look, error) {
-			return secretservice.Look{Running: true, AskErr: errors.New("no reply")}, nil
+			return secretservice.Look{Running: true, AskErr: errNoReply}, nil
 		}
 
 		look := realSecretServiceLook(t.Context(), "sshakku", "sshakku")

@@ -16,6 +16,26 @@ import (
 // necessarily a shell an install has any business wiring, and a wiring written
 // into the wrong one goes to a filesystem no session of this machine reads.
 //
+// noInterpreterKindError is a shell kind this system has no candidates for at
+// all: not one that could not be found, but one there is nowhere to look for.
+type noInterpreterKindError struct{ kind ShellKind }
+
+func (e noInterpreterKindError) Error() string {
+	return fmt.Sprintf("this system has no %s an install can wire", e.kind)
+}
+
+// interpreterNotFoundError is a shell kind that was looked for and not found.
+// It carries the names that were tried, because the remedy is --shell-exe and
+// naming a program is easier when you can see which ones were ruled out.
+type interpreterNotFoundError struct {
+	kind  ShellKind
+	tried []string
+}
+
+func (e interpreterNotFoundError) Error() string {
+	return fmt.Sprintf("no %s was found: none of %v is one; name the program with --shell-exe", e.kind, e.tried)
+}
+
 // Finding none is reported with what was looked at, because the remedy is to
 // name the program with --shell-exe and that is easier when you can see which
 // places were already tried.
@@ -31,9 +51,9 @@ func lookInterpreter(ctx context.Context, kind ShellKind) (string, error) {
 		}
 	}
 	if len(tried) == 0 {
-		return "", fmt.Errorf("this system has no %s an install can wire", kind)
+		return "", noInterpreterKindError{kind: kind}
 	}
-	return "", fmt.Errorf("no %s was found: none of %v is one; name the program with --shell-exe", kind, tried)
+	return "", interpreterNotFoundError{kind: kind, tried: tried}
 }
 
 // namedInPatterns is every name this system's table gives to one kind, to be

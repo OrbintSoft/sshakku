@@ -16,6 +16,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// The failures these tests hand their seams. Each stands for a real one the
+// code under test cannot be made to produce on demand.
+var (
+	errBoom        = errors.New("boom")
+	errWriteFailed = errors.New("write failed")
+)
+
 // fakeEnsurer stands in for agent.Manager so shell-init/ensure-agent and
 // runEnsure run their result-handling logic without spawning, reaping, or
 // adopting a real ssh-agent on the test host.
@@ -31,7 +38,7 @@ func (f fakeEnsurer) EnsureAgent(context.Context, agent.EnsureConfig, agent.Logg
 // errWriter fails every write, so a command's output-write error branch runs.
 type errWriter struct{}
 
-func (errWriter) Write([]byte) (int, error) { return 0, errors.New("write failed") }
+func (errWriter) Write([]byte) (int, error) { return 0, errWriteFailed }
 
 // refusingEnsurer fails the test if the agent lifecycle is driven at all. It
 // stands in wherever the command must answer before it acts: an invocation that
@@ -83,7 +90,7 @@ func TestShellInit(t *testing.T) {
 
 	t.Run("ensure failure propagates the exit code", func(t *testing.T) {
 		tempRuntimeEnv(t)
-		d := depsWithEnsurer(fakeEnsurer{err: errors.New("boom")})
+		d := depsWithEnsurer(fakeEnsurer{err: errBoom})
 		var out, errOut bytes.Buffer
 		assert.Equal(t, 1, d.shellInit(t.Context(), &out, &errOut, nil), "an agent that could not be ensured is a failed init")
 		assert.Empty(t, out.String(),
@@ -203,7 +210,7 @@ func TestEnsureAgent(t *testing.T) {
 
 	t.Run("ensure failure propagates the exit code", func(t *testing.T) {
 		tempRuntimeEnv(t)
-		d := depsWithEnsurer(fakeEnsurer{err: errors.New("boom")})
+		d := depsWithEnsurer(fakeEnsurer{err: errBoom})
 		assert.Equal(t, 1, d.ensureAgent(t.Context(), io.Discard, io.Discard, nil),
 			"an agent that could not be ensured must be reported as such")
 	})
@@ -254,7 +261,7 @@ func TestRunEnsure(t *testing.T) {
 	})
 
 	t.Run("ensure error returns 1", func(t *testing.T) {
-		d := depsWithEnsurer(fakeEnsurer{err: errors.New("boom")})
+		d := depsWithEnsurer(fakeEnsurer{err: errBoom})
 		var errOut bytes.Buffer
 		sock, code := d.runEnsure(t.Context(), &errOut, env, layout)
 		assert.Equal(t, 1, code, "an agent that could not be ensured is a failure")

@@ -10,6 +10,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// errNoHome is the failure this test hands its seam, standing for a real one the
+// code under test cannot be made to produce on demand.
+var errNoHome = errors.New("no home")
+
 // TestChooseSocketBase covers which directory a passphrase rendezvous is
 // allowed to be made in: the short per-user one when it really is private,
 // and the fallback whenever anything about that is not so.
@@ -43,7 +47,7 @@ func TestChooseSocketBase(t *testing.T) {
 
 	t.Run("and no cache directory either", func(t *testing.T) {
 		_, err := chooseSocketBase("", func(string) bool { return true }, func() (string, error) {
-			return "", errors.New("no home")
+			return "", errNoHome
 		})
 		assert.Error(t, err, "with nowhere private to put it, the handoff must not happen at all")
 	})

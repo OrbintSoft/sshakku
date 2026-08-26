@@ -27,6 +27,20 @@ import (
 // nonceLen is the NaCl box nonce width. The protocol carries it base64-encoded.
 const nonceLen = 24
 
+// errReplyDidNotDecrypt is a reply the session key would not open. There is no
+// way to tell a wrong key from a tampered message apart from here, and both
+// answers are the same: this is not a reply from the KeePassXC we exchanged
+// keys with.
+var errReplyDidNotDecrypt = errors.New("keepassxc: a reply did not decrypt — wrong key or tampered message")
+
+// keyLengthError is a key of the wrong width. It carries both numbers, since
+// what is wrong with the key is exactly the difference between them.
+type keyLengthError struct{ want, got int }
+
+func (e keyLengthError) Error() string {
+	return fmt.Sprintf("keepassxc: a key must be %d bytes, got %d", e.want, e.got)
+}
+
 // keyLen is the width of an X25519 public or secret key.
 const keyLen = 32
 
@@ -152,7 +166,7 @@ func decodeKey(encoded string) (*[keyLen]byte, error) {
 		return nil, fmt.Errorf("keepassxc: decoding a key: %w", err)
 	}
 	if len(raw) != keyLen {
-		return nil, fmt.Errorf("keepassxc: a key must be %d bytes, got %d", keyLen, len(raw))
+		return nil, keyLengthError{want: keyLen, got: len(raw)}
 	}
 	var key [keyLen]byte
 	copy(key[:], raw)
@@ -179,7 +193,7 @@ func open(encoded string, nonce [nonceLen]byte, peer, secret *[keyLen]byte, out 
 	}
 	plain, ok := box.Open(nil, raw, &nonce, peer, secret)
 	if !ok {
-		return errors.New("keepassxc: a reply did not decrypt — wrong key or tampered message")
+		return errReplyDidNotDecrypt
 	}
 	if err := json.Unmarshal(plain, out); err != nil {
 		return fmt.Errorf("keepassxc: decoding a reply: %w", err)

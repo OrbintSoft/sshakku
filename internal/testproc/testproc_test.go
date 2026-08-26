@@ -13,6 +13,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// errThisInputIsBroken is the failure this test hands its seam, standing for a real one the
+// code under test cannot be made to produce on demand.
+var errThisInputIsBroken = errors.New("this input is broken")
+
 func TestMain(m *testing.M) {
 	Serve()
 	os.Exit(m.Run())
@@ -139,4 +143,4 @@ func TestAChildAskedForNonsenseSaysSoAndFails(t *testing.T) {
 
 type failingReader struct{}
 
-func (failingReader) Read([]byte) (int, error) { return 0, errors.New("this input is broken") }
+func (failingReader) Read([]byte) (int, error) { return 0, errThisInputIsBroken }

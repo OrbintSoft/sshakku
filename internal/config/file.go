@@ -302,6 +302,29 @@ func containsKey(keys []string, keyname string) bool {
 	return slices.Contains(keys, keyname)
 }
 
+// override returns other where other set the key and f's value where it did
+// not. It is the precedence Merge applies to every pointer field: a file read
+// later wins for a key it mentions and leaves the earlier one's value for a key
+// it never names.
+func override[T any](mine, other *T) *T {
+	if other == nil {
+		return mine
+	}
+	return other
+}
+
+// overrideList is override for the keys whose value is a list. It is separate
+// because a slice carries its own nil rather than being a pointer to one, and
+// the distinction it has to preserve is the same: a key explicitly set to []
+// overrides with an empty list, where a key never mentioned does not override
+// at all.
+func overrideList[T any](mine, other []T) []T {
+	if other == nil {
+		return mine
+	}
+	return other
+}
+
 // Merge returns f with every field other sets applied on top, so other takes
 // precedence for any key it sets while f's value survives for a key other
 // leaves unset. A pointer field counts as set when non-nil; a slice field
@@ -312,88 +335,36 @@ func containsKey(keys []string, keyname string) bool {
 func (f File) Merge(other File) File {
 	merged := f
 
-	if other.KeyLifetime != nil {
-		merged.KeyLifetime = other.KeyLifetime
-	}
-	if other.MaxAttempts != nil {
-		merged.MaxAttempts = other.MaxAttempts
-	}
-	if other.GiveupTTL != nil {
-		merged.GiveupTTL = other.GiveupTTL
-	}
-	if other.NoGiveup != nil {
-		merged.NoGiveup = other.NoGiveup
-	}
-	if other.Quiet != nil {
-		merged.Quiet = other.Quiet
-	}
+	merged.KeyLifetime = override(f.KeyLifetime, other.KeyLifetime)
+	merged.MaxAttempts = override(f.MaxAttempts, other.MaxAttempts)
+	merged.GiveupTTL = override(f.GiveupTTL, other.GiveupTTL)
+	merged.NoGiveup = override(f.NoGiveup, other.NoGiveup)
+	merged.Quiet = override(f.Quiet, other.Quiet)
 
-	if other.WalletStoreMode != nil {
-		merged.WalletStoreMode = other.WalletStoreMode
-	}
-	if other.WalletStoreInclude != nil {
-		merged.WalletStoreInclude = other.WalletStoreInclude
-	}
-	if other.WalletStoreExclude != nil {
-		merged.WalletStoreExclude = other.WalletStoreExclude
-	}
+	merged.WalletStoreMode = override(f.WalletStoreMode, other.WalletStoreMode)
+	merged.WalletStoreInclude = overrideList(f.WalletStoreInclude, other.WalletStoreInclude)
+	merged.WalletStoreExclude = overrideList(f.WalletStoreExclude, other.WalletStoreExclude)
 
-	if other.AutoLoadMode != nil {
-		merged.AutoLoadMode = other.AutoLoadMode
-	}
-	if other.AutoLoadInclude != nil {
-		merged.AutoLoadInclude = other.AutoLoadInclude
-	}
-	if other.AutoLoadExclude != nil {
-		merged.AutoLoadExclude = other.AutoLoadExclude
-	}
+	merged.AutoLoadMode = override(f.AutoLoadMode, other.AutoLoadMode)
+	merged.AutoLoadInclude = overrideList(f.AutoLoadInclude, other.AutoLoadInclude)
+	merged.AutoLoadExclude = overrideList(f.AutoLoadExclude, other.AutoLoadExclude)
 
-	if other.CommandTimeout != nil {
-		merged.CommandTimeout = other.CommandTimeout
-	}
-	if other.InteractiveTimeout != nil {
-		merged.InteractiveTimeout = other.InteractiveTimeout
-	}
+	merged.CommandTimeout = override(f.CommandTimeout, other.CommandTimeout)
+	merged.InteractiveTimeout = override(f.InteractiveTimeout, other.InteractiveTimeout)
 
-	if other.ServicePrefix != nil {
-		merged.ServicePrefix = other.ServicePrefix
-	}
-	if other.SecretContainer != nil {
-		merged.SecretContainer = other.SecretContainer
-	}
-	if other.KeyDir != nil {
-		merged.KeyDir = other.KeyDir
-	}
-	if other.KeyPatterns != nil {
-		merged.KeyPatterns = other.KeyPatterns
-	}
-	if other.GUIPrompter != nil {
-		merged.GUIPrompter = other.GUIPrompter
-	}
-	if other.OnDismiss != nil {
-		merged.OnDismiss = other.OnDismiss
-	}
-	if other.SecretBackend != nil {
-		merged.SecretBackend = other.SecretBackend
-	}
-	if other.OnePasswordVault != nil {
-		merged.OnePasswordVault = other.OnePasswordVault
-	}
-	if other.BitwardenEmail != nil {
-		merged.BitwardenEmail = other.BitwardenEmail
-	}
-	if other.BitwardenServer != nil {
-		merged.BitwardenServer = other.BitwardenServer
-	}
-	if other.KeePassXCRoute != nil {
-		merged.KeePassXCRoute = other.KeePassXCRoute
-	}
-	if other.KeePassXCDatabase != nil {
-		merged.KeePassXCDatabase = other.KeePassXCDatabase
-	}
-	if other.KeePassXCKeyFile != nil {
-		merged.KeePassXCKeyFile = other.KeePassXCKeyFile
-	}
+	merged.ServicePrefix = override(f.ServicePrefix, other.ServicePrefix)
+	merged.SecretContainer = override(f.SecretContainer, other.SecretContainer)
+	merged.KeyDir = override(f.KeyDir, other.KeyDir)
+	merged.KeyPatterns = overrideList(f.KeyPatterns, other.KeyPatterns)
+	merged.GUIPrompter = override(f.GUIPrompter, other.GUIPrompter)
+	merged.OnDismiss = override(f.OnDismiss, other.OnDismiss)
+	merged.SecretBackend = override(f.SecretBackend, other.SecretBackend)
+	merged.OnePasswordVault = override(f.OnePasswordVault, other.OnePasswordVault)
+	merged.BitwardenEmail = override(f.BitwardenEmail, other.BitwardenEmail)
+	merged.BitwardenServer = override(f.BitwardenServer, other.BitwardenServer)
+	merged.KeePassXCRoute = override(f.KeePassXCRoute, other.KeePassXCRoute)
+	merged.KeePassXCDatabase = override(f.KeePassXCDatabase, other.KeePassXCDatabase)
+	merged.KeePassXCKeyFile = override(f.KeePassXCKeyFile, other.KeePassXCKeyFile)
 
 	return merged
 }
@@ -413,10 +384,36 @@ func Load(path string) (File, error) {
 		return File{}, err
 	}
 	if undecoded := md.Undecoded(); len(undecoded) > 0 {
-		return f, fmt.Errorf("unrecognised config keys: %s", joinKeys(undecoded))
+		return f, fmt.Errorf("%w: %s", errUnrecognisedKeys, joinKeys(undecoded))
 	}
 	return f, nil
 }
+
+// The refusals the resolvers below answer with. Each is a literal fragment of
+// the sentence the user reads, so a caller that only logs the error sees what
+// it always saw, while one that has to act on the refusal can tell which kind
+// it was without reading English: a value SSHakku will not take is a mistake in
+// the file, and a value naming something this operating system does not have is
+// not the same mistake and does not have the same remedy.
+var (
+	// errInvalidValue heads a value SSHakku will not take — malformed, or not
+	// one of the words the setting is written in. The rest of the sentence
+	// names the setting, what was written, and what applies instead.
+	errInvalidValue = errors.New("invalid")
+
+	// errNoSuchWallet ends the refusal of a wallet name that is spelled
+	// correctly and means something somewhere, but not on this system: macOS's
+	// keychain asked for on Linux. Nothing the user installs makes it true,
+	// which is what separates it from a wallet whose helper is merely absent.
+	errNoSuchWallet = errors.New("is not a wallet this system has")
+
+	// errNoSuchPrompter is errNoSuchWallet for the dialog to ask in.
+	errNoSuchPrompter = errors.New("is not a dialog this system has")
+
+	// errUnrecognisedKeys heads the report of config-file keys SSHakku does not
+	// know. The File returned beside it still carries every key that decoded.
+	errUnrecognisedKeys = errors.New("unrecognised config keys")
+)
 
 // SettingError is a value SSHakku would not use, tied to the setting it was
 // written for. The message is the underlying one unchanged, so a caller that
@@ -537,7 +534,7 @@ func resolveServicePrefix(fileVal *string) (string, error) {
 	case prefix == "":
 		return wallet.DefaultServicePrefix, nil
 	case unusableName(prefix):
-		return wallet.DefaultServicePrefix, fmt.Errorf("invalid service_prefix %q: whitespace and %q are not allowed, using %q", prefix, "/", wallet.DefaultServicePrefix)
+		return wallet.DefaultServicePrefix, fmt.Errorf("%w service_prefix %q: whitespace and %q are not allowed, using %q", errInvalidValue, prefix, "/", wallet.DefaultServicePrefix)
 	}
 	return prefix, nil
 }
@@ -574,9 +571,9 @@ func resolveSecretContainer(fileVal *string) (string, error) {
 	case container == "":
 		return "", nil
 	case unusableName(container):
-		return "", fmt.Errorf("invalid secret_container %q: whitespace and %q are not allowed, using SSHakku's own", container, "/")
+		return "", fmt.Errorf("%w secret_container %q: whitespace and %q are not allowed, using SSHakku's own", errInvalidValue, container, "/")
 	case slices.Contains(desktopOwnWallets, strings.ToLower(container)):
-		return "", fmt.Errorf("invalid secret_container %q: that name belongs to your desktop's own wallet, whose contents are not SSHakku's to delete; using SSHakku's own", container)
+		return "", fmt.Errorf("%w secret_container %q: that name belongs to your desktop's own wallet, whose contents are not SSHakku's to delete; using SSHakku's own", errInvalidValue, container)
 	}
 	return container, nil
 }
@@ -593,14 +590,14 @@ func resolveKeyPatterns(fileVal []string) ([]string, error) {
 		return nil, nil
 	}
 	if len(fileVal) == 0 {
-		return nil, errors.New("invalid key_patterns: the list is empty, using SSHakku's own naming rule")
+		return nil, fmt.Errorf("%w key_patterns: the list is empty, using SSHakku's own naming rule", errInvalidValue)
 	}
 	for _, pattern := range fileVal {
 		switch _, err := filepath.Match(pattern, "name"); {
 		case pattern == "" || strings.Contains(pattern, "/"):
-			return nil, fmt.Errorf("invalid key_patterns entry %q: a pattern matches a file name, not a path, using SSHakku's own naming rule", pattern)
+			return nil, fmt.Errorf("%w key_patterns entry %q: a pattern matches a file name, not a path, using SSHakku's own naming rule", errInvalidValue, pattern)
 		case err != nil:
-			return nil, fmt.Errorf("invalid key_patterns entry %q: %w, using SSHakku's own naming rule", pattern, err)
+			return nil, fmt.Errorf("%w key_patterns entry %q: %w, using SSHakku's own naming rule", errInvalidValue, pattern, err)
 		}
 	}
 	return slices.Clone(fileVal), nil
@@ -617,7 +614,7 @@ func resolveWalletStoreMode(fileVal *string) (string, error) {
 	case WalletStoreModeAll, WalletStoreModeInclude, WalletStoreModeExclude:
 		return *fileVal, nil
 	default:
-		return WalletStoreModeAll, fmt.Errorf("invalid wallet_store_mode %q, using %q", *fileVal, WalletStoreModeAll)
+		return WalletStoreModeAll, fmt.Errorf("%w wallet_store_mode %q, using %q", errInvalidValue, *fileVal, WalletStoreModeAll)
 	}
 }
 
@@ -632,7 +629,7 @@ func resolveAutoLoadMode(fileVal *string) (string, error) {
 	case AutoLoadModeAll, AutoLoadModeInclude, AutoLoadModeExclude:
 		return *fileVal, nil
 	default:
-		return AutoLoadModeAll, fmt.Errorf("invalid auto_load_mode %q, using %q", *fileVal, AutoLoadModeAll)
+		return AutoLoadModeAll, fmt.Errorf("%w auto_load_mode %q, using %q", errInvalidValue, *fileVal, AutoLoadModeAll)
 	}
 }
 
@@ -678,7 +675,7 @@ func resolveSecretBackendFrom(fileVal *string, available []string, fallback stri
 	if slices.Contains(available, *fileVal) {
 		return *fileVal, nil
 	}
-	return fallback, fmt.Errorf("secret_backend %q is not a wallet this system has, using %q", *fileVal, fallback)
+	return fallback, fmt.Errorf("secret_backend %q %w, using %q", *fileVal, errNoSuchWallet, fallback)
 }
 
 // resolveGUIPrompter picks the dialog to ask in.
@@ -701,7 +698,7 @@ func resolveGUIPrompterFrom(fileVal *string, available []string) (string, error)
 	if slices.Contains(available, *fileVal) {
 		return *fileVal, nil
 	}
-	return GUIPrompterAuto, fmt.Errorf("gui_prompter %q is not a dialog this system has, using %q", *fileVal, GUIPrompterAuto)
+	return GUIPrompterAuto, fmt.Errorf("gui_prompter %q %w, using %q", *fileVal, errNoSuchPrompter, GUIPrompterAuto)
 }
 
 // resolveOnDismiss picks what closing a passphrase prompt without answering
@@ -718,7 +715,7 @@ func resolveOnDismiss(fileVal *string) (string, error) {
 	case keys.OnDismissStop, keys.OnDismissSkip, keys.OnDismissRetry:
 		return *fileVal, nil
 	default:
-		return keys.OnDismissStop, fmt.Errorf("invalid on_dismiss %q, using %q", *fileVal, keys.OnDismissStop)
+		return keys.OnDismissStop, fmt.Errorf("%w on_dismiss %q, using %q", errInvalidValue, *fileVal, keys.OnDismissStop)
 	}
 }
 
@@ -734,7 +731,7 @@ func resolveKeePassXCRoute(fileVal *string) (string, error) {
 	case KeePassXCRouteAuto, KeePassXCRouteSecretService, KeePassXCRouteNative, KeePassXCRouteCLI:
 		return *fileVal, nil
 	default:
-		return KeePassXCRouteAuto, fmt.Errorf("invalid keepassxc_route %q, using %q", *fileVal, KeePassXCRouteAuto)
+		return KeePassXCRouteAuto, fmt.Errorf("%w keepassxc_route %q, using %q", errInvalidValue, *fileVal, KeePassXCRouteAuto)
 	}
 }
 

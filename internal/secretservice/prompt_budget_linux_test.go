@@ -8,6 +8,7 @@ import (
 
 	"github.com/godbus/dbus/v5"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestAPromptIsGivenTheBudgetForAWaitOnAPerson verifies F21 on the wallet Linux
@@ -30,7 +31,12 @@ func TestAPromptIsGivenTheBudgetForAWaitOnAPerson(t *testing.T) {
 
 		start := time.Now()
 		err := client.Unlock(t.Context(), col)
-		assert.Error(t, err, "a prompt that never completes must not be reported as an unlock")
+		require.Error(t, err, "a prompt that never completes must not be reported as an unlock")
+		// The budget is in the sentence because whether it was too short is a
+		// question about the configuration, and the reader cannot ask it
+		// without being told what the budget was.
+		assert.ErrorContains(t, err, "timed out after 200ms",
+			"the refusal must name the budget the wait ran out of")
 		assert.Less(t, time.Since(start), 5*time.Second,
 			"the configured 200ms prompt budget is not the one in force")
 	})
