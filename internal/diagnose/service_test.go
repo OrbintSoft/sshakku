@@ -185,3 +185,44 @@ func TestASystemWithNoServiceHasNoSectionForOne(t *testing.T) {
 	assert.NotContains(t, out, "agent service:",
 		"there is no service here, so there is nothing to head a section with")
 }
+
+// F41: a report that names a disabled service says so through a value, not
+// through the sentence it printed. The repair reads the same report the user
+// was shown rather than taking a second reading that could disagree with it,
+// so this is the reading it acts on.
+func TestAReportSaysWhetherTheServiceIsOneNothingMayStart(t *testing.T) {
+	disabled := Report{AgentService: agent.ServiceReading{
+		Name:  "ssh-agent",
+		Start: agent.ServiceStartDisabled,
+	}}
+	assert.True(t, disabled.AgentServiceDisabled(),
+		"a service nothing may start is the one thing here a repair reaches outside this account for")
+
+	running := Report{AgentService: agent.ServiceReading{
+		Name:    "ssh-agent",
+		Running: true,
+		Start:   agent.ServiceStartAutomatic,
+	}}
+	assert.False(t, running.AgentServiceDisabled(),
+		"a service that starts on its own is not one to enable")
+
+	assert.False(t, Report{}.AgentServiceDisabled(),
+		"a system whose agent is a process has no service to call disabled")
+}
+
+// F41: where this system keeps no list of agent processes, the report says
+// where the answer actually is instead of leaving an empty heading. A machine
+// whose agent is served by a service is pointed at that service, because the
+// section above it is the answer the reader came for.
+func TestAReportWithNoProcessListPointsAtWhatAnsweredInstead(t *testing.T) {
+	served := Report{AgentService: agent.ServiceReading{
+		Name:    "ssh-agent",
+		Running: true,
+		Start:   agent.ServiceStartAutomatic,
+	}}
+	assert.Contains(t, processListNote(served), "served by the service above",
+		"a reader told there is no list must be told where to look instead")
+
+	assert.Equal(t, "not listed on this system", processListNote(Report{}),
+		"and where no service answered either, there is nothing to point at")
+}
