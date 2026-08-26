@@ -217,6 +217,25 @@ func TestKeePassXCPinnedCLIRouteIsBuiltWhenItHasADatabase(t *testing.T) {
 	assert.NotNil(t, cli.Prompter, "this route has to ask for the database password, so it needs something to ask with")
 }
 
+// TestKeePassXCCLIRouteCarriesHowTheDatabaseIsLocked wires the one setting the
+// route cannot work out for itself. Without it the backend asks for a password
+// the database has not got, on a login where there may be nobody to ask — and
+// the wait is what a user would meet, not an error.
+func TestKeePassXCCLIRouteCarriesHowTheDatabaseIsLocked(t *testing.T) {
+	settings := keepassxcSettings(config.KeePassXCRouteCLI)
+	settings.KeePassXCDatabase = "/somewhere/secrets.kdbx"
+	settings.KeePassXCKeyFile = "/somewhere/secrets.keyx"
+	settings.KeePassXCNoPassword = true
+
+	backend, closeFn := Open(t.Context(), "alice", fakeLogger{}, settings)
+	defer closeFn()
+
+	cli, ok := backend.(*keepassxc.CLI)
+	require.Truef(t, ok, "the route pinned must be the one built, got %T", backend)
+	assert.True(t, cli.NoPassword,
+		"a database that opens on its key file alone must not be asked about")
+}
+
 func TestKeePassXCPinnedCLIRouteWithNoDatabaseReportsItself(t *testing.T) {
 	backend, closeFn := Open(t.Context(), "alice", fakeLogger{}, keepassxcSettings(config.KeePassXCRouteCLI))
 	defer closeFn()

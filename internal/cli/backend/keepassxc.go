@@ -137,12 +137,13 @@ func keepassxcRouteUnavailable(route, goos, database string) error {
 // the shorter budget for a command expected to answer on its own.
 func newKeePassXCCLIRoute(ctx context.Context, settings config.Settings, log keys.Logger) wallet.Backend {
 	return &keepassxc.CLI{
-		Runner:   run.ExecRunner{Timeout: settings.CommandTimeout},
-		Prompter: newWalletPasswordPrompter(ctx, settings, log),
-		Database: settings.KeePassXCDatabase,
-		KeyFile:  settings.KeePassXCKeyFile,
-		Group:    settings.SecretContainer,
-		Timeout:  settings.InteractiveTimeout,
+		Runner:     run.ExecRunner{Timeout: settings.CommandTimeout},
+		Prompter:   newWalletPasswordPrompter(ctx, settings, log),
+		Database:   settings.KeePassXCDatabase,
+		KeyFile:    settings.KeePassXCKeyFile,
+		NoPassword: settings.KeePassXCNoPassword,
+		Group:      settings.SecretContainer,
+		Timeout:    settings.InteractiveTimeout,
 	}
 }
 

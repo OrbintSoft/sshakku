@@ -67,6 +67,15 @@ type CLI struct {
 	Database string
 	// KeyFile is an optional key file the database also requires.
 	KeyFile string
+	// NoPassword says the database opens on its key file alone. There is then
+	// nothing to ask the user for, and keepassxc-cli has to be told so: left to
+	// itself it waits for a password on standard input, and reads whatever
+	// arrives next as one.
+	//
+	// It is stated rather than worked out. A database can carry a key file and
+	// a password together, so a key file being configured says nothing on its
+	// own about whether there is also a password.
+	NoPassword bool
 	// Group is the group in the database to keep entries in. Empty selects the
 	// group SSHakku makes for itself. Every entry in it is treated as
 	// SSHakku's, so it must not name a group holding anything else.
@@ -94,13 +103,19 @@ func (b *CLI) entryPath(service string) string {
 	return b.group() + "/" + service
 }
 
-// unlock returns the database password, asking for it the first time.
+// unlock returns the database password, asking for it the first time. A
+// database that opens on its key file alone has none, and nobody is asked —
+// which is what makes that arrangement usable at a login where there may be
+// nobody to ask.
 func (b *CLI) unlock(ctx context.Context) (string, error) {
-	if b.password != "" {
-		return b.password, nil
-	}
 	if b.Database == "" {
 		return "", ErrNoDatabase
+	}
+	if b.NoPassword {
+		return "", nil
+	}
+	if b.password != "" {
+		return b.password, nil
 	}
 	password, err := b.Prompter.Prompt(ctx, "your KeePassXC database password")
 	if err != nil {
@@ -122,8 +137,16 @@ func (b *CLI) run(ctx context.Context, args []string, extraInput ...string) (run
 		full = append(full, "--key-file", b.KeyFile)
 	}
 	var input strings.Builder
-	input.WriteString(password)
-	input.WriteString("\n")
+	if b.NoPassword {
+		// Both halves are needed and neither does the other's job: without the
+		// flag keepassxc-cli waits for a password on standard input, and with
+		// the flag a password line left in front would be read as the answer to
+		// whatever it asks next — the entry's own password, on a store.
+		full = append(full, "--no-password")
+	} else {
+		input.WriteString(password)
+		input.WriteString("\n")
+	}
 	for _, extra := range extraInput {
 		input.WriteString(extra)
 		input.WriteString("\n")

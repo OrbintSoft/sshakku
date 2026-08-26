@@ -301,6 +301,11 @@ var settingTable = []settingDesc{
 		value: func(s Settings) string { return orElse(s.KeePassXCKeyFile, "(unset)") },
 	},
 	{
+		key:   "keepassxc_no_password",
+		set:   func(f File) bool { return f.KeePassXCNoPassword != nil },
+		value: func(s Settings) string { return strconv.FormatBool(s.KeePassXCNoPassword) },
+	},
+	{
 		key:   "gui_prompter",
 		set:   func(f File) bool { return f.GUIPrompter != nil },
 		value: func(s Settings) string { return s.GUIPrompter },

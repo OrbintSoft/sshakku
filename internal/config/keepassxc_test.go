@@ -48,29 +48,50 @@ func TestResolveReportsAnInvalidKeePassXCRoute(t *testing.T) {
 
 func TestMergeOverridesTheKeePassXCSettings(t *testing.T) {
 	base := File{
-		KeePassXCRoute:    new(KeePassXCRouteNative),
-		KeePassXCDatabase: new("/base.kdbx"),
-		KeePassXCKeyFile:  new("/base.key"),
+		KeePassXCRoute:      new(KeePassXCRouteNative),
+		KeePassXCDatabase:   new("/base.kdbx"),
+		KeePassXCKeyFile:    new("/base.key"),
+		KeePassXCNoPassword: new(false),
 	}
 	other := File{
-		KeePassXCRoute:    new(KeePassXCRouteCLI),
-		KeePassXCDatabase: new("/other.kdbx"),
-		KeePassXCKeyFile:  new("/other.key"),
+		KeePassXCRoute:      new(KeePassXCRouteCLI),
+		KeePassXCDatabase:   new("/other.kdbx"),
+		KeePassXCKeyFile:    new("/other.key"),
+		KeePassXCNoPassword: new(true),
 	}
 	got := base.Merge(other)
 	assert.Equal(t, new(KeePassXCRouteCLI), got.KeePassXCRoute, "route must be other's")
 	assert.Equal(t, new("/other.kdbx"), got.KeePassXCDatabase, "database must be other's")
 	assert.Equal(t, new("/other.key"), got.KeePassXCKeyFile, "key file must be other's")
+	assert.Equal(t, new(true), got.KeePassXCNoPassword, "how the database is locked must be other's")
 }
 
 func TestMergeKeepsTheBaseKeePassXCSettingsWhenOtherIsSilent(t *testing.T) {
 	base := File{
-		KeePassXCRoute:    new(KeePassXCRouteNative),
-		KeePassXCDatabase: new("/base.kdbx"),
-		KeePassXCKeyFile:  new("/base.key"),
+		KeePassXCRoute:      new(KeePassXCRouteNative),
+		KeePassXCDatabase:   new("/base.kdbx"),
+		KeePassXCKeyFile:    new("/base.key"),
+		KeePassXCNoPassword: new(true),
 	}
 	got := base.Merge(File{})
 	assert.Equal(t, new(KeePassXCRouteNative), got.KeePassXCRoute, "route must be the base's")
 	assert.Equal(t, new("/base.kdbx"), got.KeePassXCDatabase, "database must be the base's")
 	assert.Equal(t, new("/base.key"), got.KeePassXCKeyFile, "key file must be the base's")
+	assert.Equal(t, new(true), got.KeePassXCNoPassword, "how the database is locked must be the base's")
+}
+
+// TestResolveKeePassXCNoPasswordIsSomethingYouSay covers the one setting here
+// that describes the database rather than SSHakku: whether it opens on its key
+// file alone. It is never inferred — a database can carry a key file and a
+// password together — so silence means there is a password, which is the answer
+// that asks rather than the answer that fails.
+func TestResolveKeePassXCNoPasswordIsSomethingYouSay(t *testing.T) {
+	silent, errs := Resolve(File{}, lookupFrom(nil))
+	assert.Empty(t, errs, "saying nothing about it is not a mistake")
+	assert.False(t, silent.KeePassXCNoPassword,
+		"a database nobody described has a password, since assuming otherwise locks the user out")
+
+	said, errs := Resolve(File{KeePassXCNoPassword: new(true)}, lookupFrom(nil))
+	assert.Empty(t, errs, "saying so is not a mistake either")
+	assert.True(t, said.KeePassXCNoPassword, "and it must be what reaches the wallet")
 }

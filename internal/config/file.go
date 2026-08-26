@@ -78,6 +78,12 @@ type File struct {
 	KeePassXCDatabase *string `toml:"keepassxc_database"`
 	KeePassXCKeyFile  *string `toml:"keepassxc_key_file"`
 
+	// KeePassXCNoPassword says the database opens on its key file alone, so
+	// there is no password to be asked for. It is stated and never worked out:
+	// a database can carry a key file and a password together, so the key file
+	// being set says nothing about whether there is also a password.
+	KeePassXCNoPassword *bool `toml:"keepassxc_no_password"`
+
 	// GUIPrompter names the dialog a passphrase is asked for in. It is
 	// config-file only for the reason the wallet choice is: it decides how the
 	// user is spoken to, and a variable exported in one shell and not the next
@@ -156,6 +162,10 @@ type Settings struct {
 	// already opened it.
 	KeePassXCDatabase string
 	KeePassXCKeyFile  string
+	// KeePassXCNoPassword says the database has no password on it, only the key
+	// file above. Nobody is then asked for one, which is what lets the CLI route
+	// load keys at a login where there may be nobody to ask.
+	KeePassXCNoPassword bool
 
 	// GUIPrompter is the dialog to ask in; one of the GUIPrompter* constants.
 	// "auto" lets SSHakku use whichever the session has, "none" refuses a
@@ -365,6 +375,7 @@ func (f File) Merge(other File) File {
 	merged.KeePassXCRoute = override(f.KeePassXCRoute, other.KeePassXCRoute)
 	merged.KeePassXCDatabase = override(f.KeePassXCDatabase, other.KeePassXCDatabase)
 	merged.KeePassXCKeyFile = override(f.KeePassXCKeyFile, other.KeePassXCKeyFile)
+	merged.KeePassXCNoPassword = override(f.KeePassXCNoPassword, other.KeePassXCNoPassword)
 
 	return merged
 }
@@ -506,6 +517,11 @@ func Resolve(file File, lookup func(string) (string, bool)) (Settings, []error) 
 	s.KeePassXCRoute = route
 	s.KeePassXCDatabase = derefString(file.KeePassXCDatabase)
 	s.KeePassXCKeyFile = derefString(file.KeePassXCKeyFile)
+	// Config-file only, like the route and the database it describes, and
+	// absent means false: a database nobody has described is one with a
+	// password, since assuming the opposite refuses every operation on a
+	// database that has one.
+	s.KeePassXCNoPassword = file.KeePassXCNoPassword != nil && *file.KeePassXCNoPassword
 
 	prompter, err := resolveGUIPrompter(file.GUIPrompter)
 	errs = refused(errs, "gui_prompter", err)

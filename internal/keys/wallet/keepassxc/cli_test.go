@@ -229,6 +229,81 @@ func TestKeePassXCCLIPassesTheKeyFileWhenConfigured(t *testing.T) {
 		"a database that also needs a key file cannot be opened without one")
 }
 
+// TestKeePassXCCLIKeyFileOnlyDatabaseAsksNothing covers a database whose key is
+// a key file and nothing else. There is no password on it, so there is nothing
+// to ask anybody — at this login or at any later one — and the route becomes as
+// silent as one talking to a KeePassXC that is already open.
+//
+// Which way the database is locked is the configuration's to state and never
+// SSHakku's to work out: a database can carry both a key file and a password,
+// so a build that read keepassxc_key_file as meaning "no password" would shut
+// those users out of their own wallet with a refusal they never asked for.
+func TestKeePassXCCLIKeyFileOnlyDatabaseAsksNothing(t *testing.T) {
+	runner := &runtest.Recorder{Results: []run.Result{{Code: 0, Stdout: []byte("passphrase\n")}}}
+	prompter := &countingPrompter{password: "never-needed"}
+	b := cliBackend(runner, prompter)
+	b.KeyFile = "/db.keyx"
+	b.NoPassword = true
+
+	got, found, err := b.Lookup(t.Context(), wallet.DefaultServicePrefix+"-id_ed25519")
+
+	require.NoError(t, err, "a database that opens on its key file must open")
+	assert.True(t, found, "the entry is there and must be reported as found")
+	assert.Equal(t, "passphrase", got, "and the passphrase must come back whole")
+	assert.Zero(t, prompter.asked,
+		"there is no password on this database, so nobody may be asked for one")
+	require.Len(t, runner.Calls, 1, "one lookup is one command")
+	assert.Contains(t, runner.Calls[0].Args, "--no-password",
+		"keepassxc-cli waits for a password unless it is told the database has none")
+	assert.Empty(t, runner.Calls[0].Stdin,
+		"a password line where there is no password is read as an answer to the next question")
+}
+
+// TestKeePassXCCLIKeyFileOnlyStoreSendsOnlyTheEntryPassword is the same rule
+// where there is a second secret in the exchange. The entry's own password is
+// still fed on standard input; what goes away is the database password line in
+// front of it, which keepassxc-cli would otherwise read as the entry's.
+func TestKeePassXCCLIKeyFileOnlyStoreSendsOnlyTheEntryPassword(t *testing.T) {
+	const passphrase = "the-key-passphrase"
+	runner := &runtest.Recorder{Results: []run.Result{
+		{Code: 1}, // the lookup that decides between add and edit: not there yet
+		{Code: 0}, // mkdir
+		{Code: 0}, // add
+	}}
+	prompter := &countingPrompter{password: "never-needed"}
+	b := cliBackend(runner, prompter)
+	b.KeyFile = "/db.keyx"
+	b.NoPassword = true
+
+	require.NoError(t, b.Store(t.Context(), wallet.DefaultServicePrefix+"-id_ed25519", "id_ed25519", passphrase))
+
+	assert.Zero(t, prompter.asked, "storing must not ask for a password the database has not got")
+	last := runner.Calls[len(runner.Calls)-1]
+	assert.Equal(t, passphrase+"\n", last.Stdin,
+		"the entry's password is the whole of what this command has to read")
+}
+
+// TestKeePassXCCLIAPasswordProtectedDatabaseIsStillAskedAbout guards the
+// default from the case above: --no-password on a database that has one turns
+// every operation into a refusal, so it must appear nowhere unless it was asked
+// for by name.
+func TestKeePassXCCLIAPasswordProtectedDatabaseIsStillAskedAbout(t *testing.T) {
+	runner := &runtest.Recorder{Results: []run.Result{{Code: 0, Stdout: []byte("x\n")}}}
+	prompter := &countingPrompter{password: "the-database-password"}
+	b := cliBackend(runner, prompter)
+	b.KeyFile = "/db.keyx"
+
+	_, _, err := b.Lookup(t.Context(), wallet.DefaultServicePrefix+"-id_ed25519")
+
+	require.NoError(t, err, "reading an entry out of a password-protected database must succeed")
+	assert.Equal(t, 1, prompter.asked, "a database with a password on it has to be asked about")
+	require.Len(t, runner.Calls, 1, "one lookup is one command")
+	assert.NotContains(t, runner.Calls[0].Args, "--no-password",
+		"a key file beside a password does not mean the password is gone")
+	assert.Contains(t, runner.Calls[0].Stdin, "the-database-password",
+		"and the password still has to reach the command that needs it")
+}
+
 func TestKeePassXCCLIReportsARefusedPrompt(t *testing.T) {
 	refused := errTheUserDismissedTheDialog
 	b := cliBackend(&runtest.Recorder{}, &countingPrompter{err: refused})

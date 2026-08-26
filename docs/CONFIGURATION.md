@@ -197,6 +197,7 @@ secret_backend = "keepassxc"
 keepassxc_route = "native"   # "auto" (default), "secret-service", "native", or "cli"
 keepassxc_database = "~/secrets.kdbx"  # only the "cli" route needs to be told where the database is
 keepassxc_key_file = "~/secrets.key"   # optional, for a database that also uses a key file
+keepassxc_no_password = true           # only if the key file above is the database's *only* key
 ```
 
 - `"auto"` (the default) is the only value that chooses, and the only one that
@@ -212,7 +213,18 @@ keepassxc_key_file = "~/secrets.key"   # optional, for a database that also uses
   unlocked, it never asks you for anything again.
 - `"cli"` runs `keepassxc-cli` against the database file, so it works with no
   KeePassXC running — but the database has to be opened each time, so it asks
-  for its password rather than being silent.
+  for its password rather than being silent. It asks once per session, not once
+  per key.
+
+  Unless there is no password to ask for. A database whose **only** key is a key
+  file is opened with that alone, and `keepassxc_no_password = true` says so:
+  nothing is asked, at that login or any other, and keys load in a session with
+  nobody at a screen to answer. SSHakku never works this out from
+  `keepassxc_key_file` being set, because a database can carry a key file *and* a
+  password — saying nothing means there is one. Set it wrongly and every
+  operation on the database is refused; set it rightly and remember that the
+  wallet's lock is then worth exactly what the key file's own permissions are
+  worth.
 
 Routes are not tied to an operating system; only the default is. On Linux you
 can pin `"native"` or `"cli"` and bypass the Secret Service entirely.
