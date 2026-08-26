@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"strings"
 	"time"
 
@@ -168,7 +167,7 @@ func (b *Bitwarden) Unlock(ctx context.Context) error {
 				return err
 			}
 			if res.Code != 0 {
-				return fmt.Errorf("bw config server exited %d: %s", res.Code, strings.TrimSpace(string(res.Stderr)))
+				return exitError{command: "bw config server", code: res.Code, stderr: strings.TrimSpace(string(res.Stderr))}
 			}
 		}
 
@@ -181,7 +180,7 @@ func (b *Bitwarden) Unlock(ctx context.Context) error {
 			return err
 		}
 		if res.Code != 0 {
-			return fmt.Errorf("bw login exited %d: %s", res.Code, strings.TrimSpace(string(res.Stderr)))
+			return exitError{command: "bw login", code: res.Code, stderr: strings.TrimSpace(string(res.Stderr))}
 		}
 	}
 
@@ -194,7 +193,7 @@ func (b *Bitwarden) Unlock(ctx context.Context) error {
 		return err
 	}
 	if res.Code != 0 {
-		return fmt.Errorf("bw unlock exited %d: %s", res.Code, strings.TrimSpace(string(res.Stderr)))
+		return exitError{command: "bw unlock", code: res.Code, stderr: strings.TrimSpace(string(res.Stderr))}
 	}
 
 	b.Session = strings.TrimSpace(string(res.Stdout))
@@ -212,7 +211,7 @@ func (b *Bitwarden) Lock(ctx context.Context) error {
 		return err
 	}
 	if res.Code != 0 {
-		return fmt.Errorf("bw lock exited %d: %s", res.Code, strings.TrimSpace(string(res.Stderr)))
+		return exitError{command: "bw lock", code: res.Code, stderr: strings.TrimSpace(string(res.Stderr))}
 	}
 	return nil
 }
@@ -297,7 +296,7 @@ func (b *Bitwarden) Store(ctx context.Context, service, label, passphrase string
 		return err
 	}
 	if res.Code != 0 {
-		return fmt.Errorf("bw %s item exited %d: %s", verb, res.Code, strings.TrimSpace(string(res.Stderr)))
+		return exitError{command: "bw " + verb + " item", code: res.Code, stderr: strings.TrimSpace(string(res.Stderr))}
 	}
 	return nil
 }
@@ -328,7 +327,7 @@ func (b *Bitwarden) Delete(ctx context.Context, service string) error {
 		return err
 	}
 	if res.Code != 0 {
-		return fmt.Errorf("bw delete item exited %d: %s", res.Code, strings.TrimSpace(string(res.Stderr)))
+		return exitError{command: "bw delete item", code: res.Code, stderr: strings.TrimSpace(string(res.Stderr))}
 	}
 	return nil
 }
@@ -351,7 +350,7 @@ func (b *Bitwarden) List(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 	if res.Code != 0 {
-		return nil, fmt.Errorf("bw list items exited %d: %s", res.Code, strings.TrimSpace(string(res.Stderr)))
+		return nil, exitError{command: "bw list items", code: res.Code, stderr: strings.TrimSpace(string(res.Stderr))}
 	}
 
 	var items []struct {

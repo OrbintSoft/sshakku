@@ -84,6 +84,14 @@ type credential struct {
 	Secret string
 }
 
+// The two refusals this store answers with before it is ever asked. Neither is
+// a failure of the store: the first is a passphrase larger than a credential
+// can hold, and the second is a question that must not be asked at all.
+var (
+	errPassphraseTooLong = errors.New("passphrase is too long for the credential store")
+	errEmptyListPrefix   = errors.New("refusing to list credentials under an empty prefix")
+)
+
 // blobFromSecret spells a secret the way this system spells a credential blob:
 // UTF-16, little end first, with no terminator — the size is carried beside it,
 // so a trailing NUL would be part of the secret rather than the end of it.
@@ -101,8 +109,8 @@ func blobFromSecret(secret string) ([]byte, error) {
 		blob[2*i+1] = byte(u >> 8)
 	}
 	if len(blob) > maxCredentialBlobSize {
-		return nil, fmt.Errorf("passphrase is too long for the credential store: %d bytes, and it holds %d",
-			len(blob), maxCredentialBlobSize)
+		return nil, fmt.Errorf("%w: %d bytes, and it holds %d",
+			errPassphraseTooLong, len(blob), maxCredentialBlobSize)
 	}
 	return blob, nil
 }
@@ -223,7 +231,7 @@ func credDelete(target string) (bool, error) {
 // machine, which is the one question this program must never ask.
 func credList(prefix string) ([]string, error) {
 	if prefix == "" {
-		return nil, errors.New("refusing to list credentials under an empty prefix")
+		return nil, errEmptyListPrefix
 	}
 	filter, err := windows.UTF16PtrFromString(prefix + "*")
 	if err != nil {
