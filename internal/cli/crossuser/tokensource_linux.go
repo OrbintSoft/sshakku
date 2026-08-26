@@ -11,6 +11,15 @@ import (
 	"syscall"
 )
 
+// needsRootError is a cross-user token read attempted without the privilege it
+// requires. It carries the uid asked about, because that is what makes the
+// message tell one refusal from another in a log.
+type needsRootError struct{ uid int }
+
+func (e needsRootError) Error() string {
+	return fmt.Sprintf("reading uid %d's socket token requires root privileges (e.g. run via sudo)", e.uid)
+}
+
 // Exec reads a target uid's socket token by re-executing this binary
 // as a child running with that uid's credentials: a kernel-mediated
 // fork+setuid+exec via SysProcAttr.Credential. It never changes this process's
@@ -24,7 +33,7 @@ var _ Source = Exec{}
 // process under another uid's credentials.
 func (Exec) ReadToken(ctx context.Context, uid, gid int) (string, error) {
 	if os.Geteuid() != 0 {
-		return "", fmt.Errorf("reading uid %d's socket token requires root privileges (e.g. run via sudo)", uid)
+		return "", needsRootError{uid: uid}
 	}
 	// Everything below performs the privileged fork+setuid+exec, runnable only
 	// as real root with a second uid to assume, so it cannot run in a unit test;

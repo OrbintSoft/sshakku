@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -97,6 +98,15 @@ func (d deps) wire(ctx context.Context, stdout, stderr io.Writer, command wiring
 	return 0
 }
 
+// The three ways an install's arguments can be wrong. The flag keeps the front
+// of the sentence in the last two, because what the reader has to correct is
+// the flag they typed, not the rule it broke.
+var (
+	errUnknownArgument = errors.New("unknown argument")
+	errTakesNoValue    = errors.New("takes no value")
+	errRequiresValue   = errors.New("requires a value")
+)
+
 // parseWiringArgs reads the selectors both commands share.
 //
 // The defaults are the ordinary case: work the shell out from the session this
@@ -109,11 +119,11 @@ func parseWiringArgs(args []string) (install.Request, error) {
 		name, inline, joined := strings.Cut(args[i], "=")
 		takesValue, known := installFlags[name]
 		if !known {
-			return install.Request{}, fmt.Errorf("unknown argument %q", args[i])
+			return install.Request{}, fmt.Errorf("%w %q", errUnknownArgument, args[i])
 		}
 		if !takesValue {
 			if joined {
-				return install.Request{}, fmt.Errorf("%s takes no value", name)
+				return install.Request{}, fmt.Errorf("%s %w", name, errTakesNoValue)
 			}
 			// The only one of them, which is why there is nothing to switch on.
 			request.NoPath = true
@@ -124,7 +134,7 @@ func parseWiringArgs(args []string) (install.Request, error) {
 		if !joined {
 			i++
 			if i >= len(args) {
-				return install.Request{}, fmt.Errorf("%s requires a value", name)
+				return install.Request{}, fmt.Errorf("%s %w", name, errRequiresValue)
 			}
 			value = args[i]
 		}

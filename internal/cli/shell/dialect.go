@@ -68,6 +68,15 @@ func Named(name string) (Dialect, error) {
 	return named(name)
 }
 
+// The three ways a --shell argument can be wrong. The name typed keeps the
+// front of the first sentence, since it is what has to be compared against the
+// list of shells that follows it.
+var (
+	errNotAPrintableShell = errors.New("is not a shell this program prints for")
+	errShellRequiresValue = errors.New("--shell requires a value")
+	errUnknownArgument    = errors.New("unknown argument")
+)
+
 // named returns the dialect called name, or an error naming what
 // was asked for and what there is instead. A name this program cannot print is
 // never quietly answered in some other language: lines a shell cannot read are
@@ -82,8 +91,8 @@ func named(name string) (Dialect, error) {
 	for _, d := range dialects {
 		names = append(names, d.name)
 	}
-	return Dialect{}, fmt.Errorf("%q is not a shell this program prints for (want %s)",
-		name, strings.Join(names, ", "))
+	return Dialect{}, fmt.Errorf("%q %w (want %s)",
+		name, errNotAPrintableShell, strings.Join(names, ", "))
 }
 
 // FromArgs reads `--shell <name>` or `--shell=<name>` out of a command's
@@ -99,11 +108,11 @@ func FromArgs(args []string) (Dialect, error) {
 		case args[i] == "--shell":
 			i++
 			if i >= len(args) {
-				return Dialect{}, errors.New("--shell requires a value")
+				return Dialect{}, errShellRequiresValue
 			}
 			name = args[i]
 		default:
-			return Dialect{}, fmt.Errorf("unknown argument %q", args[i])
+			return Dialect{}, fmt.Errorf("%w %q", errUnknownArgument, args[i])
 		}
 	}
 	return named(name)

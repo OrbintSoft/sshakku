@@ -61,6 +61,21 @@ func KeePassXCRouteFor(goos string) string {
 	return config.KeePassXCRouteNative
 }
 
+// noSecretServiceHereError is the secret-service route asked for on a system
+// with no freedesktop Secret Service to answer it. It carries the operating
+// system, since that is the whole of the reason and nothing about it can be
+// installed away.
+type noSecretServiceHereError struct{ goos string }
+
+func (e noSecretServiceHereError) Error() string {
+	return fmt.Sprintf("the secret-service route needs the freedesktop Secret Service, which %s does not provide", e.goos)
+}
+
+// errCLIRouteNeedsDatabase is the cli route asked for with no database named.
+// A file on disk does not announce itself the way a running KeePassXC knows
+// what it has open, so there is nothing to discover and the user must say.
+var errCLIRouteNeedsDatabase = errors.New("the cli route works on a database file, so keepassxc_database has to name one")
+
 // keepassxcRouteUnavailable reports why a route cannot work here, or nil if it
 // can. Routes are not tied to a platform — only the defaults are — so the only
 // platform-bound one is the Secret Service, a freedesktop API no macOS system
@@ -71,12 +86,12 @@ func keepassxcRouteUnavailable(route, goos, database string) error {
 	switch route {
 	case config.KeePassXCRouteSecretService:
 		if goos != "linux" {
-			return fmt.Errorf("the secret-service route needs the freedesktop Secret Service, which %s does not provide", goos)
+			return noSecretServiceHereError{goos: goos}
 		}
 		return nil
 	case config.KeePassXCRouteCLI:
 		if database == "" {
-			return errors.New("the cli route works on a database file, so keepassxc_database has to name one")
+			return errCLIRouteNeedsDatabase
 		}
 		return nil
 	default:
