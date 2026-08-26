@@ -21,6 +21,12 @@ linters:
     # strangers should not rely on a reviewer noticing.
     - bidichk
 
+    # An HTTP response body that is never closed holds its connection open, and
+    # the leak stays invisible until the pool it exhausts is the one something
+    # is waiting on. Nothing here speaks HTTP yet, which is the moment to put
+    # the check in rather than after the first call that does.
+    - bodyclose
+
     # A context kept in a struct field is scoped to the object rather than to
     # the call, and nothing then says which call it belonged to. It travels as
     # the first argument or it does not travel.
@@ -44,6 +50,14 @@ linters:
     # `timeout * time.Second` is seconds squared. Key lifetimes, agent timeouts
     # and prompt budgets are most of this program's arithmetic.
     - durationcheck
+
+    # An embedded type brings somebody else's whole method set in with it; a
+    # plain field brings a value. Written flush against each other the two read
+    # the same, and the wrappers here are built on the difference — a backend
+    # that forwards every call it does not intercept, a net.Conn that fails one
+    # operation, a reply that carries a shared status. The blank line is what
+    # says which of the two a name is.
+    - embeddedstructfieldcheck
 
     # json.Marshal fails only for what cannot be encoded — a chan, a func, a
     # map with keys that are neither — so the check on a plain struct is dead
@@ -78,6 +92,12 @@ linters:
     # in three places out of four: a backend's name, an env var, a subcommand
     # the dispatcher and the command itself must agree on.
     - goconst
+
+    # An import alias renames somebody else's package inside one file, so the
+    # same package answers to a different name depending on which file is open.
+    # No alias is allowed that is not listed below, and none is listed: a
+    # package is called what it calls itself.
+    - importas
 
     # A loop that searches a slice, copies one into another, or picks the
     # larger of two numbers is a loop whose edge cases have to be read to be
@@ -130,6 +150,13 @@ linters:
       # lifting it into a constant hides what the case is about behind a name
       # the reader has to go and resolve.
       ignore-tests: true
+
+    importas:
+      # There is no `alias:` list here, and its absence is the rule: an alias
+      # has to be argued for and written down before it may appear in a file.
+      # Note that turning on no-unaliased as well makes this one report every
+      # unaliased import in the tree, so it stands alone.
+      no-extra-aliases: true
 
     nolintlint:
       require-explanation: true

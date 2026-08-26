@@ -143,6 +143,7 @@ type associateRequest struct {
 // associateReply is what associate and test-associate answer with.
 type associateReply struct {
 	replyStatus
+
 	ID    string `json:"id"`
 	Hash  string `json:"hash"`
 	Nonce string `json:"nonce"`
@@ -222,6 +223,7 @@ type getLoginsRequest struct {
 // getLoginsReply is what get-logins answers with.
 type getLoginsReply struct {
 	replyStatus
+
 	Count   int     `json:"count"`
 	Entries []Entry `json:"entries"`
 	Nonce   string  `json:"nonce"`
@@ -267,6 +269,7 @@ type setLoginRequest struct {
 // setLoginReply is what set-login answers with.
 type setLoginReply struct {
 	replyStatus
+
 	Nonce string `json:"nonce"`
 	Error string `json:"error"`
 }

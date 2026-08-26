@@ -19,6 +19,7 @@ import (
 // to close — the close-error branch a real *os.File almost never reaches.
 type badCloser struct {
 	io.Reader
+
 	closeErr error
 }
 

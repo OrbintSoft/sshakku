@@ -220,6 +220,7 @@ func TestUnnamedFailureStillReportsTheAction(t *testing.T) {
 // not stub any behaviour under test.
 type brokenConn struct {
 	net.Conn
+
 	failDeadline bool
 	failWrite    bool
 }
