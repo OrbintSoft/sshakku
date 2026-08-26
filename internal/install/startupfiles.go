@@ -55,6 +55,11 @@ func BourneRCFile(home string) (string, error) {
 	return under(home, ".bashrc")
 }
 
+// errShellNamedNoHomeForStartup is a home directory that is not there when a
+// startup file has to be named under it. Joining onto an empty home would name
+// a path relative to wherever the install was run.
+var errShellNamedNoHomeForStartup = errors.New("the shell named no home directory, so there is no startup file to name")
+
 // under joins a name to a home directory in the shell's spelling.
 //
 // path.Join, never filepath.Join. These paths belong to the shell, not to the
@@ -64,7 +69,7 @@ func BourneRCFile(home string) (string, error) {
 // gets created under the name it was asked for and simply never read.
 func under(home, name string) (string, error) {
 	if home == "" {
-		return "", errors.New("the shell named no home directory, so there is no startup file to name")
+		return "", errShellNamedNoHomeForStartup
 	}
 	return path.Join(home, name), nil
 }

@@ -2,8 +2,20 @@ package install
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 )
+
+// noMachineWiringError is a shell this system keeps no machine-wide startup
+// file for that an install may assume. It lives here rather than beside any
+// one platform's table because all three give the same answer, and the answer
+// is about the request rather than about the system that refused it.
+type noMachineWiringError struct{ kind ShellKind }
+
+func (e noMachineWiringError) Error() string {
+	return fmt.Sprintf("this system has no machine-wide startup file for a %s that an"+
+		" install may assume; name the file with --profile, or install for your account with --scope=user", e.kind)
+}
 
 // machineWiring is where a machine-wide wiring goes for one Bourne shell: a
 // directory every login shell of the system reads one file at a time, or a

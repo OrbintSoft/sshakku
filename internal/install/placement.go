@@ -36,6 +36,15 @@ func PowerShellDropInDir(profile string) string {
 	return filepath.Join(filepath.Dir(profile), "Profile.d")
 }
 
+// The three refusals a placement can meet. The first two are whole sentences:
+// there is nothing to name, so there is nothing to interpolate. The third holds
+// the invariant half, and the path keeps the front of the line.
+var (
+	errNoStartupFileNamed = errors.New("no startup file was named, so there is nowhere to put the hook")
+	errNoProfileNamed     = errors.New("no profile was named, so there is nowhere to put the hook")
+	errNotADirectory      = errors.New("is there but is not a directory")
+)
+
 // PlaceBourne decides where a Bourne shell's hook goes.
 //
 // A drop-in directory beside the startup file is used when it is there. Its
@@ -45,7 +54,7 @@ func PowerShellDropInDir(profile string) string {
 // directory nothing reads.
 func PlaceBourne(startupFile, dropInName string) (Placement, error) {
 	if startupFile == "" {
-		return Placement{}, errors.New("no startup file was named, so there is nowhere to put the hook")
+		return Placement{}, errNoStartupFileNamed
 	}
 
 	dir := BourneDropInDir(startupFile)
@@ -75,7 +84,7 @@ func PlaceBourne(startupFile, dropInName string) (Placement, error) {
 // a drop-in on the strength of something it wrote.
 func PlacePowerShell(profile, dropInName string) (Placement, error) {
 	if profile == "" {
-		return Placement{}, errors.New("no profile was named, so there is nowhere to put the hook")
+		return Placement{}, errNoProfileNamed
 	}
 
 	dir := PowerShellDropInDir(profile)
@@ -129,7 +138,7 @@ func isDir(path string) (bool, error) {
 		return false, fmt.Errorf("looking for the drop-in directory %s: %w", path, err)
 	}
 	if !info.IsDir() {
-		return false, fmt.Errorf("%s is there but is not a directory", path)
+		return false, fmt.Errorf("%s %w", path, errNotADirectory)
 	}
 	return true, nil
 }

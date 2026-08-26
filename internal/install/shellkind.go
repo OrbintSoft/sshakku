@@ -2,6 +2,7 @@ package install
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -42,6 +43,11 @@ type shellPattern struct {
 	confirm func(imagePath string) bool
 }
 
+// errUnwirableShellName heads the refusal of a `--shell` value this system has
+// no wiring for. The name written keeps the front of the sentence, since it is
+// what the reader has to compare against the list that follows.
+var errUnwirableShellName = errors.New("this system cannot wire a shell called")
+
 // ParseShellKind reads a `--shell` value, refusing one this system cannot wire
 // rather than falling back to something it can.
 //
@@ -57,8 +63,8 @@ func ParseShellKind(name string) (ShellKind, error) {
 			return kind, nil
 		}
 	}
-	return "", fmt.Errorf("this system cannot wire a shell called %q; it can wire %s, or %s to work it out",
-		name, list(offeredShellKinds()), Auto)
+	return "", fmt.Errorf("%w %q; it can wire %s, or %s to work it out",
+		errUnwirableShellName, name, list(offeredShellKinds()), Auto)
 }
 
 // offeredShellKinds is the distinct kinds this system's table can recognise, in
@@ -110,6 +116,25 @@ func recognise(imagePath string, patterns []shellPattern) (ShellKind, bool) {
 // apart only by where they are.
 type ImageSource func(pid int) (string, bool)
 
+// noAncestryError is a process tree this system would not report at all, so
+// there is nothing to read a shell out of. It carries the process asked about,
+// which is the one fact that distinguishes it from a tree that simply held no
+// shell.
+type noAncestryError struct{ pid int }
+
+func (e noAncestryError) Error() string {
+	return fmt.Sprintf("this system did not say what started process %d, so the shell has to be named with --shell", e.pid)
+}
+
+// noShellInChainError is an ancestry that was read and held no shell this
+// system can wire. It carries the chain as it was rendered, so the report shows
+// what was walked rather than only that the walk failed.
+type noShellInChainError struct{ chain string }
+
+func (e noShellInChainError) Error() string {
+	return fmt.Sprintf("none of %s is a shell this system can wire, so the shell has to be named with --shell", e.chain)
+}
+
 // ResolveShell works out which shell to wire by reading the ancestry of the
 // process that ran this command, stopping at the first ancestor it recognises.
 //
@@ -120,7 +145,7 @@ type ImageSource func(pid int) (string, bool)
 func ResolveShell(ctx context.Context, pid int, ancestry launcher.AncestrySource, image ImageSource) (ShellKind, string, error) {
 	chain := launcher.Ancestry(ctx, pid, ancestry)
 	if len(chain) == 0 {
-		return "", "", fmt.Errorf("this system did not say what started process %d, so the shell has to be named with --shell", pid)
+		return "", "", noAncestryError{pid: pid}
 	}
 
 	for _, process := range chain {
@@ -139,8 +164,7 @@ func ResolveShell(ctx context.Context, pid int, ancestry launcher.AncestrySource
 		}
 	}
 
-	return "", "", fmt.Errorf("none of %s is a shell this system can wire, so the shell has to be named with --shell",
-		launcher.Chain(chain))
+	return "", "", noShellInChainError{chain: launcher.Chain(chain)}
 }
 
 func contains(kinds []ShellKind, kind ShellKind) bool {

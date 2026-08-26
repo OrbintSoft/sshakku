@@ -78,6 +78,42 @@ var (
 	removeFromPath   = RemoveFromPath
 )
 
+var (
+	// errShellNotWorkedOut is the refusal to wire a shell that was never
+	// settled. Nothing should be able to reach it: whichShell turns Auto into
+	// a real kind or fails, so arriving here with Auto still in hand means this
+	// program has contradicted itself, and the one thing it must not then do is
+	// write a file anyway.
+	errShellNotWorkedOut = errors.New("the shell was not worked out, so there is nothing to wire")
+
+	// errNotAShellHere ends the refusal of a program named with --shell-exe
+	// that this system does not recognise as a shell it can wire. The sentence
+	// opens with the program, so the reader sees which one was refused first.
+	errNotAShellHere = errors.New("is not a shell this system can wire")
+)
+
+// unwiredKindError is a shell kind this system's table names but has no wiring
+// for. Like errShellNotWorkedOut it means the program has contradicted itself,
+// and it carries the kind so a report says which one went unhandled.
+type unwiredKindError struct{ kind ShellKind }
+
+func (e unwiredKindError) Error() string {
+	return fmt.Sprintf("there is no wiring defined for a %s shell", e.kind)
+}
+
+// shellKindMismatchError is a program named with --shell-exe that is a shell
+// this system can wire, but not the one --shell asked for. Both halves are
+// carried so the message can name what was found as well as what was asked.
+type shellKindMismatchError struct {
+	exe   string
+	found ShellKind
+	asked ShellKind
+}
+
+func (e shellKindMismatchError) Error() string {
+	return fmt.Sprintf("%s is a %s, but --shell says %s", e.exe, e.found, e.asked)
+}
+
 // Install wires the hook for one shell and returns what it did.
 //
 // The order is the promise's own: everything that could refuse is asked before
@@ -244,9 +280,9 @@ func (p *plan) forKind(ctx context.Context, req Request) error {
 	case Bash, Zsh:
 		return p.forBourne(ctx, req)
 	case Auto:
-		return errors.New("the shell was not worked out, so there is nothing to wire")
+		return errShellNotWorkedOut
 	default:
-		return fmt.Errorf("there is no wiring defined for a %s shell", p.kind)
+		return unwiredKindError{kind: p.kind}
 	}
 }
 
@@ -260,10 +296,10 @@ func whichShell(ctx context.Context, req Request, tree Ancestry) (ShellKind, str
 	if req.ShellExe != "" {
 		kind, ok := RecogniseShell(req.ShellExe)
 		if !ok {
-			return "", "", fmt.Errorf("%s is not a shell this system can wire", req.ShellExe)
+			return "", "", fmt.Errorf("%s %w", req.ShellExe, errNotAShellHere)
 		}
 		if req.Shell != Auto && req.Shell != kind {
-			return "", "", fmt.Errorf("%s is a %s, but --shell says %s", req.ShellExe, kind, req.Shell)
+			return "", "", shellKindMismatchError{exe: req.ShellExe, found: kind, asked: req.Shell}
 		}
 		return kind, req.ShellExe, nil
 	}
@@ -299,8 +335,8 @@ func (p *plan) forHost(ctx context.Context, host Host, req Request) error {
 	// Asked before anything is written. A profile that will not be run is not
 	// a wiring that half worked; it is one that would never have run at all,
 	// and the person has to hear that now rather than at their next login.
-	if note, willNot := willNotRunItsProfile(host); willNot {
-		return fmt.Errorf("%s", note)
+	if err := willNotRunItsProfile(host); err != nil {
+		return err
 	}
 
 	var err error
@@ -503,18 +539,35 @@ func (p *plan) note(text string) {
 
 // willNotRunItsProfile reports a host that cannot run the file an install would
 // write into, and what it would take to change that.
-func willNotRunItsProfile(host Host) (string, bool) {
+func willNotRunItsProfile(host Host) error {
 	switch host.EffectiveExecutionPolicy {
 	case "Restricted", "AllSigned":
-		return fmt.Sprintf("this PowerShell will not run its profile: its execution policy is %s,"+
-			" so nothing written there would ever run. %s",
-			host.EffectiveExecutionPolicy, changeThePolicy), true
+		return executionPolicyError{policy: host.EffectiveExecutionPolicy}
 	}
 	if host.LanguageMode != "" && host.LanguageMode != "FullLanguage" {
-		return fmt.Sprintf("this PowerShell is running in %s, in which a profile of this kind cannot run,"+
-			" so nothing written there would take effect", host.LanguageMode), true
+		return languageModeError{mode: host.LanguageMode}
 	}
-	return "", false
+	return nil
+}
+
+// executionPolicyError is a PowerShell whose execution policy forbids running
+// any profile, so a hook written into one would never start. It carries the
+// policy because the remedy is to change that particular setting.
+type executionPolicyError struct{ policy string }
+
+func (e executionPolicyError) Error() string {
+	return fmt.Sprintf("this PowerShell will not run its profile: its execution policy is %s,"+
+		" so nothing written there would ever run. %s", e.policy, changeThePolicy)
+}
+
+// languageModeError is a PowerShell restricted to a language a profile of this
+// kind cannot be written in. Unlike an execution policy there is no flag to
+// hand the person, so the message says what is true and stops there.
+type languageModeError struct{ mode string }
+
+func (e languageModeError) Error() string {
+	return fmt.Sprintf("this PowerShell is running in %s, in which a profile of this kind cannot run,"+
+		" so nothing written there would take effect", e.mode)
 }
 
 // dialectName is the language one kind of shell reads.

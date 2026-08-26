@@ -1,9 +1,18 @@
 package install
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+)
+
+// The two refusals a location can meet. Each is the invariant half of its
+// sentence, so the variable half — the variable's name, the scope asked for —
+// keeps the place in the line where a reader looks for it.
+var (
+	errNotSetInEnvironment = errors.New("is not set in this environment, so there is no directory to install into")
+	errNoLocationsForScope = errors.New("no install locations are defined for scope")
 )
 
 // Locations are the directories one scope's install writes to, in this
@@ -34,7 +43,7 @@ func LocationsFor(scope Scope) (Locations, error) {
 func directory(lookup func(string) (string, bool), variable string, elements ...string) (string, error) {
 	base, ok := lookup(variable)
 	if !ok || base == "" {
-		return "", fmt.Errorf("%s is not set in this environment, so there is no directory to install into", variable)
+		return "", fmt.Errorf("%s %w", variable, errNotSetInEnvironment)
 	}
 	return filepath.Join(append([]string{base}, elements...)...), nil
 }
@@ -42,5 +51,5 @@ func directory(lookup func(string) (string, bool), variable string, elements ...
 // unknownScope is the answer for a scope nobody serves, shared by both
 // platforms' tables so that the refusal reads the same wherever it comes from.
 func unknownScope(scope Scope) error {
-	return fmt.Errorf("no install locations are defined for scope %q; scope is %q or %q", scope, User, Machine)
+	return fmt.Errorf("%w %q; scope is %q or %q", errNoLocationsForScope, scope, User, Machine)
 }

@@ -1,9 +1,29 @@
 package install
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 )
+
+// The refusals a profile choice can meet, each holding the invariant head of
+// its sentence so the value that was asked for keeps its place in the line.
+var (
+	errNoProfileForHosts       = errors.New("no profile is selected by hosts")
+	errNoProfileForCombination = errors.New("no profile is wired for scope")
+)
+
+// noProfileNamedError is a host that answered the query but left the profile
+// for the scope and hosts asked empty. Writing to the empty path would create
+// a file called "" wherever the install ran, and report it as the wiring.
+type noProfileNamedError struct {
+	hosts Hosts
+	scope Scope
+}
+
+func (e noProfileNamedError) Error() string {
+	return fmt.Sprintf("this host named no %s profile for %s sessions, so there is nothing to wire", e.hosts, e.scope)
+}
 
 // Scope says whose sessions a wiring is for.
 type Scope string
@@ -48,7 +68,7 @@ func ParseHosts(name string) (Hosts, error) {
 			return hosts, nil
 		}
 	}
-	return "", fmt.Errorf("no profile is selected by hosts %q; hosts is %q or %q", name, AllHosts, CurrentHost)
+	return "", fmt.Errorf("%w %q; hosts is %q or %q", errNoProfileForHosts, name, AllHosts, CurrentHost)
 }
 
 // ProfileFor names the one file a PowerShell install writes into, out of the
@@ -70,9 +90,9 @@ func ProfileFor(host Host, scope Scope, hosts Hosts) (string, error) {
 	case scope == Machine && hosts == CurrentHost:
 		profile = host.Profiles.AllUsersCurrentHost
 	default:
-		return "", fmt.Errorf("no profile is wired for scope %q and hosts %q;"+
+		return "", fmt.Errorf("%w %q and hosts %q;"+
 			" scope is %q or %q, and hosts is %q or %q",
-			scope, hosts, User, Machine, AllHosts, CurrentHost)
+			errNoProfileForCombination, scope, hosts, User, Machine, AllHosts, CurrentHost)
 	}
 
 	// An interpreter that named no profile for the combination asked has not
@@ -80,8 +100,7 @@ func ProfileFor(host Host, scope Scope, hosts Hosts) (string, error) {
 	// whatever directory the install happened to be run from, and report it as
 	// the wiring.
 	if profile == "" {
-		return "", fmt.Errorf("this host named no %s profile for %s sessions, so there is nothing to wire",
-			hosts, scope)
+		return "", noProfileNamedError{hosts: hosts, scope: scope}
 	}
 	return profile, nil
 }
