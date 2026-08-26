@@ -302,6 +302,29 @@ func containsKey(keys []string, keyname string) bool {
 	return slices.Contains(keys, keyname)
 }
 
+// override returns other where other set the key and f's value where it did
+// not. It is the precedence Merge applies to every pointer field: a file read
+// later wins for a key it mentions and leaves the earlier one's value for a key
+// it never names.
+func override[T any](mine, other *T) *T {
+	if other == nil {
+		return mine
+	}
+	return other
+}
+
+// overrideList is override for the keys whose value is a list. It is separate
+// because a slice carries its own nil rather than being a pointer to one, and
+// the distinction it has to preserve is the same: a key explicitly set to []
+// overrides with an empty list, where a key never mentioned does not override
+// at all.
+func overrideList[T any](mine, other []T) []T {
+	if other == nil {
+		return mine
+	}
+	return other
+}
+
 // Merge returns f with every field other sets applied on top, so other takes
 // precedence for any key it sets while f's value survives for a key other
 // leaves unset. A pointer field counts as set when non-nil; a slice field
@@ -312,88 +335,36 @@ func containsKey(keys []string, keyname string) bool {
 func (f File) Merge(other File) File {
 	merged := f
 
-	if other.KeyLifetime != nil {
-		merged.KeyLifetime = other.KeyLifetime
-	}
-	if other.MaxAttempts != nil {
-		merged.MaxAttempts = other.MaxAttempts
-	}
-	if other.GiveupTTL != nil {
-		merged.GiveupTTL = other.GiveupTTL
-	}
-	if other.NoGiveup != nil {
-		merged.NoGiveup = other.NoGiveup
-	}
-	if other.Quiet != nil {
-		merged.Quiet = other.Quiet
-	}
+	merged.KeyLifetime = override(f.KeyLifetime, other.KeyLifetime)
+	merged.MaxAttempts = override(f.MaxAttempts, other.MaxAttempts)
+	merged.GiveupTTL = override(f.GiveupTTL, other.GiveupTTL)
+	merged.NoGiveup = override(f.NoGiveup, other.NoGiveup)
+	merged.Quiet = override(f.Quiet, other.Quiet)
 
-	if other.WalletStoreMode != nil {
-		merged.WalletStoreMode = other.WalletStoreMode
-	}
-	if other.WalletStoreInclude != nil {
-		merged.WalletStoreInclude = other.WalletStoreInclude
-	}
-	if other.WalletStoreExclude != nil {
-		merged.WalletStoreExclude = other.WalletStoreExclude
-	}
+	merged.WalletStoreMode = override(f.WalletStoreMode, other.WalletStoreMode)
+	merged.WalletStoreInclude = overrideList(f.WalletStoreInclude, other.WalletStoreInclude)
+	merged.WalletStoreExclude = overrideList(f.WalletStoreExclude, other.WalletStoreExclude)
 
-	if other.AutoLoadMode != nil {
-		merged.AutoLoadMode = other.AutoLoadMode
-	}
-	if other.AutoLoadInclude != nil {
-		merged.AutoLoadInclude = other.AutoLoadInclude
-	}
-	if other.AutoLoadExclude != nil {
-		merged.AutoLoadExclude = other.AutoLoadExclude
-	}
+	merged.AutoLoadMode = override(f.AutoLoadMode, other.AutoLoadMode)
+	merged.AutoLoadInclude = overrideList(f.AutoLoadInclude, other.AutoLoadInclude)
+	merged.AutoLoadExclude = overrideList(f.AutoLoadExclude, other.AutoLoadExclude)
 
-	if other.CommandTimeout != nil {
-		merged.CommandTimeout = other.CommandTimeout
-	}
-	if other.InteractiveTimeout != nil {
-		merged.InteractiveTimeout = other.InteractiveTimeout
-	}
+	merged.CommandTimeout = override(f.CommandTimeout, other.CommandTimeout)
+	merged.InteractiveTimeout = override(f.InteractiveTimeout, other.InteractiveTimeout)
 
-	if other.ServicePrefix != nil {
-		merged.ServicePrefix = other.ServicePrefix
-	}
-	if other.SecretContainer != nil {
-		merged.SecretContainer = other.SecretContainer
-	}
-	if other.KeyDir != nil {
-		merged.KeyDir = other.KeyDir
-	}
-	if other.KeyPatterns != nil {
-		merged.KeyPatterns = other.KeyPatterns
-	}
-	if other.GUIPrompter != nil {
-		merged.GUIPrompter = other.GUIPrompter
-	}
-	if other.OnDismiss != nil {
-		merged.OnDismiss = other.OnDismiss
-	}
-	if other.SecretBackend != nil {
-		merged.SecretBackend = other.SecretBackend
-	}
-	if other.OnePasswordVault != nil {
-		merged.OnePasswordVault = other.OnePasswordVault
-	}
-	if other.BitwardenEmail != nil {
-		merged.BitwardenEmail = other.BitwardenEmail
-	}
-	if other.BitwardenServer != nil {
-		merged.BitwardenServer = other.BitwardenServer
-	}
-	if other.KeePassXCRoute != nil {
-		merged.KeePassXCRoute = other.KeePassXCRoute
-	}
-	if other.KeePassXCDatabase != nil {
-		merged.KeePassXCDatabase = other.KeePassXCDatabase
-	}
-	if other.KeePassXCKeyFile != nil {
-		merged.KeePassXCKeyFile = other.KeePassXCKeyFile
-	}
+	merged.ServicePrefix = override(f.ServicePrefix, other.ServicePrefix)
+	merged.SecretContainer = override(f.SecretContainer, other.SecretContainer)
+	merged.KeyDir = override(f.KeyDir, other.KeyDir)
+	merged.KeyPatterns = overrideList(f.KeyPatterns, other.KeyPatterns)
+	merged.GUIPrompter = override(f.GUIPrompter, other.GUIPrompter)
+	merged.OnDismiss = override(f.OnDismiss, other.OnDismiss)
+	merged.SecretBackend = override(f.SecretBackend, other.SecretBackend)
+	merged.OnePasswordVault = override(f.OnePasswordVault, other.OnePasswordVault)
+	merged.BitwardenEmail = override(f.BitwardenEmail, other.BitwardenEmail)
+	merged.BitwardenServer = override(f.BitwardenServer, other.BitwardenServer)
+	merged.KeePassXCRoute = override(f.KeePassXCRoute, other.KeePassXCRoute)
+	merged.KeePassXCDatabase = override(f.KeePassXCDatabase, other.KeePassXCDatabase)
+	merged.KeePassXCKeyFile = override(f.KeePassXCKeyFile, other.KeePassXCKeyFile)
 
 	return merged
 }
