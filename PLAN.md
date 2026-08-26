@@ -435,7 +435,7 @@ Per-file-type lint decisions (rule 12), current as of the last file type added:
 | YAML / GitHub workflows | `actionlint`; other YAML/INI/JSON has no dedicated linter — `editorconfig-checker` covers charset/EOL/indent/final-newline |
 | All committed files | `editorconfig-checker` (config excludes `LICENSE` verbatim, `*.zsh`, and `*.go` — gofumpt owns Go formatting) |
 | Shell — bats tests (`*.bats`) | Deferred until test files enter the repo |
-| Go (`*.go`) | `golangci-lint fmt --diff` (**gofumpt**) + `go vet` + `golangci-lint run` (config `.golangci.yml`), each run once per build — Linux, macOS, and the two failure-injection tags — see Phase 34 for why one run is not enough; `golang.org/x/sys` (BSD-3-Clause) recorded in `COPYRIGHT.md` |
+| Go (`*.go`) | `golangci-lint fmt --diff` (**gofumpt**) + `go vet` + `golangci-lint run` (config `.golangci.yml`), each run once per build — Linux, macOS, Windows and the two failure-injection tags — see Phase 34 for why one run is not enough; `golang.org/x/sys` (BSD-3-Clause) recorded in `COPYRIGHT.md` |
 | Go tests (`*_test.go`) | `testifylint`, with **`require-error` disabled** — see Phase 33 for why that one checker cannot decide `require` vs `assert` for us. Assertions go through `github.com/stretchr/testify` (MIT, recorded in `COPYRIGHT.md`) |
 | TOML (`*.toml`) | `taplo lint` + `taplo format --check`; runtime parser `github.com/BurntSushi/toml` (MIT) recorded in `COPYRIGHT.md` |
 | Dockerfile (`test/containers/*.Dockerfile`) | `hadolint` (config ignores DL3008 — no viable apt-pin story against a rolling suite; the base image tag is the point-in-time anchor) |
@@ -3141,3 +3141,110 @@ disabled one.
 
 → features F55, F13, F14, F41, F42, F51; PLAN Phase 35 W5; rules 18, 19, 21, 22,
 23, 25, 26.
+
+### Phase 43 — The errors nobody could match on ✅ Done
+
+Five more analysers, and the 326 refusals that had to be answered for before one
+of them could be turned on.
+
+**Rule 12 decision.** `.golangci.yml` gains `bodyclose`,
+`embeddedstructfieldcheck`, `importas` (with `no-extra-aliases`), `err113`, and
+`cyclop` (with `max-complexity: 20`). `durationcheck`, asked for alongside them,
+was already there from Phase 34. No new module dependency: all five ship inside
+the golangci-lint the lint workflow pins, so `go.mod` is untouched and there is
+no new licence to record.
+
+**The numbers were wrong the first time, and the reason is worth keeping.** The
+opening survey reported 53 `err113` findings and 22 `cyclop`. Both were
+truncated: golangci-lint caps output at 50 issues per linter and 3 per identical
+issue by default, and the survey ran two of the five builds `lint-go` covers.
+With `--max-issues-per-linter=0 --max-same-issues=0` over all five, `err113` is
+**326** — 112 in the program, 214 in its tests. A survey that decides how large a
+job is has to defeat the tool's own politeness first.
+
+**`bodyclose` reports nothing, which is why it goes in now.** Nothing in the
+tree imports `net/http`. Put in before the first HTTP call rather than after it,
+so that call arrives with its body closed instead of leaking a connection
+nobody sees until the pool it exhausts is one a login is waiting on. Made to
+fire in a throwaway package, like the rest.
+
+**`importas` carries no alias list, and the absence is the rule**: a package is
+called what it calls itself, and an alias has to be argued for here before it
+may appear in a file. One trap recorded for whoever changes it — turning on
+`no-unaliased` beside `no-extra-aliases` makes importas read the empty alias as
+an alias not in the config, and report every import in the tree.
+
+**`err113`: 326 sites, and the shape of the answer.** Three recipes, all of
+which leave every message byte-identical. Where a sentence has an invariant
+half, a sentinel holds it and `%w` sits in its place. Where the variable is in
+the middle, a small typed error carries the data and its `Error()` does the
+`Sprintf` — err113 does not flag a type, the message is unchanged, and the
+caller gets the value rather than a substring. Where there is no variable at
+all, the string moves to a package-level sentinel unchanged.
+
+What that bought, beyond satisfying a linter: `config` now tells a misspelled
+wallet from one this operating system does not have, which are not the same
+mistake and have not the same remedy. `agent`'s five Windows service refusals
+are five types, because `doctor --fix` has to know whether the service is absent
+or merely disabled without reading English. `wallet.exitError` replaces thirteen
+hand-written `fmt.Errorf("<cmd> exited %d: %s", …)` and keeps the exit status as
+a field. And `willNotRunItsProfile` returns an `error` rather than a string that
+`fmt.Errorf("%s", note)` then had to launder into one.
+
+**That no message changed was verified, not asserted.** A script resolved each
+`%w` back to its sentinel's text and compared the result against the original
+format string: 96 of the 112 production messages matched exactly. The other 16
+are ones it cannot reassemble — the thirteen `exitError` sites now carry the
+command as data — so those were rendered through a throwaway test and read.
+
+**The build-tag trap in the 214 test fixtures.** A sentinel declared in an
+untagged test file but used only from a `_linux_test.go` is unused on macOS, and
+`staticcheck` says so — the defect Phase 34 found in `withLook`, met again at
+scale. Each sentinel goes to the join of its users' constraints: untagged where
+any user is untagged, the shared tag where they all carry one, and `unix` for
+the two in `keys/prompt` used from macOS and Linux files and nowhere else. The
+first pass got `names_linux_test.go` wrong by looking only for a `//go:build`
+line — the `_linux` filename suffix is the constraint — and the macOS and
+Windows passes caught it, not the reasoning.
+
+**`cyclop`'s bar is 20, and the number is the decision.** 96% of the functions
+here are at 7 or below, so the threshold is not what keeps them there. The
+default of 10 catches something else: the measure charges +1 per `case` arm, so
+a flat lookup table scores like nested branching — the command dispatcher is 14
+with no nesting at all, and the launcher-label table is 11. Splitting either to
+satisfy a number would make finding a command harder. 15 was argued for as the
+first value above the largest honest table; 20 was chosen. Four functions were
+over it and each was doing several jobs: `diagnose.findings` (34),
+`config.Merge` (27), `diagnose.Format` (27), `cli.doctor` (21). `EnsureAgent` at
+19 is now the highest in the tree.
+
+**Two suppressions.** `errInappropriateIoctlForDevice` in `cli/dialog` carries a
+`//nolint:staticcheck`: lifting it to a package-level var brought it under
+ST1005, which wants error strings uncapitalised, and the capital is the
+kernel's — the fixture exists to stand for the string the system really
+produces. The other is the `importas` note above, which is a comment rather than
+a suppression but belongs in the same list.
+
+**Coverage, and a refactor that moved it without changing behaviour.** A message
+built by `fmt.Errorf` at the return site is formatted whether or not anyone
+reads it; the same message inside an `Error()` method is formatted only when
+something renders it. Four `Error()` methods went to 0% on a change that altered
+nothing a user could see. Closed at the seam rather than with a test against the
+type: the four tests that already reached those failures now assert the
+sentence, which is what reaches the session log. Three further gaps predate this
+branch — master's own baseline, measured in a throwaway worktree, is 99.9% —
+and are closed too, since all three take the reading as data and Linux can check
+what a Windows service report means. The tree is at 100.0%.
+
+**Deliberate "no"s stand as Phase 34 left them**, with `gosec` still owed its own
+activity. New to the list: **`gocognit`**, worth proposing precisely because
+cognitive complexity charges a `switch` +1 in total and penalises nesting
+instead — the distinction `cyclop` cannot make, and the reason its bar has to sit
+where it does. The two together would allow a tight one.
+
+**Verified**: `make lint-go` clean on all five builds, `make test` green across
+all 34 packages, `make test-json` at 100.0% coverage, `make build-cross`. No
+end-to-end run belongs to this phase: no user-visible behaviour changed, and
+that every message is unchanged is what the verification above is about.
+
+→ rules 12, 15, 20, 22, 23, 26, 27.
