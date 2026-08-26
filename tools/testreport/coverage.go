@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"sort"
@@ -14,6 +15,12 @@ type PackageCoverage struct {
 	Package string  `json:"package"`
 	Percent float64 `json:"percent"`
 }
+
+// errMalformedCoverageLine heads every refusal of a line in a coverage
+// profile. What follows says which part of the line was wrong and quotes the
+// line, because the file is machine-written and the useful question is which
+// tool wrote it that way.
+var errMalformedCoverageLine = errors.New("testreport: malformed coverage line")
 
 // parseCoverageProfile reads a Go coverage profile (as written by `go test
 // -coverprofile`) and returns the overall statement coverage percentage and
@@ -43,11 +50,11 @@ func parseCoverageProfile(r io.Reader) (total float64, perPackage []PackageCover
 
 		file, rest, ok := strings.Cut(line, ":")
 		if !ok {
-			return 0, nil, fmt.Errorf("testreport: malformed coverage line (no ':'): %q", line)
+			return 0, nil, fmt.Errorf("%w (no ':'): %q", errMalformedCoverageLine, line)
 		}
 		fields := strings.Fields(rest)
 		if len(fields) != 3 {
-			return 0, nil, fmt.Errorf("testreport: malformed coverage line (want 3 fields after position, got %d): %q", len(fields), line)
+			return 0, nil, fmt.Errorf("%w (want 3 fields after position, got %d): %q", errMalformedCoverageLine, len(fields), line)
 		}
 		numStmt, err := strconv.Atoi(fields[1])
 		if err != nil {

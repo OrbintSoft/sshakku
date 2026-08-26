@@ -46,6 +46,20 @@ func socketHandoffDir(base string) (string, error) {
 	return dir, nil
 }
 
+// socketPathTooLongError is a socket address this system will not accept. The
+// kernel refuses one with "invalid argument", which says nothing about length
+// and sends whoever reads it looking for a permission or a missing directory,
+// so the length is spelled out here instead.
+type socketPathTooLongError struct {
+	path    string
+	allowed int
+}
+
+func (e socketPathTooLongError) Error() string {
+	return fmt.Sprintf("the passphrase needs a socket at %s, which is %d bytes where this system allows at most %d for a socket address",
+		e.path, len(e.path), e.allowed)
+}
+
 // socketHandoffStash listens on a private, randomly-named Unix socket and
 // serves passphrase to the first connection, then always closes and removes
 // the socket — whether that connection arrived, or ttl elapsed first (e.g.
@@ -69,7 +83,7 @@ func socketHandoffStash(passphrase string, ttl time.Duration, base func() (strin
 	// says nothing about length and leaves whoever reads it looking for a
 	// permission or a missing directory instead.
 	if len(sockPath) > maxAddr {
-		return "", fmt.Errorf("the passphrase needs a socket at %s, which is %d bytes where this system allows at most %d for a socket address", sockPath, len(sockPath), maxAddr)
+		return "", socketPathTooLongError{path: sockPath, allowed: maxAddr}
 	}
 
 	ln, err := netListen("unix", sockPath)

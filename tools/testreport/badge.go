@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 )
 
@@ -29,10 +30,15 @@ func badgeColor(percent float64) string {
 	}
 }
 
+// errNoCoverageData is a report that carries no per-package coverage, so there
+// is no percentage to put on a badge. The OS it came from leads the sentence,
+// since a run is identified by the machine it happened on.
+var errNoCoverageData = errors.New("has no coverage data")
+
 // renderBadgeJSON builds the shields.io endpoint badge JSON for r's coverage.
 func renderBadgeJSON(r Report) ([]byte, error) {
 	if len(r.PackageCoverage) == 0 {
-		return nil, fmt.Errorf("report for %s has no coverage data", r.OS)
+		return nil, fmt.Errorf("report for %s %w", r.OS, errNoCoverageData)
 	}
 	badge := shieldsBadge{
 		SchemaVersion: 1,
