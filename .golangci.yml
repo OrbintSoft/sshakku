@@ -46,6 +46,14 @@ linters:
     # leave the copy out and look wrong.
     - copyloopvar
 
+    # A function that has to be read from the top to be trusted, because what it
+    # does depends on which of a dozen paths was taken to get there. The bar is
+    # loose because the measure charges +1 per `case`, and a flat lookup table —
+    # the command dispatcher, a comm name to a human label — scores like nested
+    # branching while being the easiest code here to read; splitting one to
+    # satisfy a number would make finding a command harder, not easier.
+    - cyclop
+
     # Multiplying two durations gives a number in units nobody meant —
     # `timeout * time.Second` is seconds squared. Key lifetimes, agent timeouts
     # and prompt budgets are most of this program's arithmetic.
@@ -152,6 +160,13 @@ linters:
     - usetesting
 
   settings:
+    cyclop:
+      # 96% of the functions here are at 7 or below, so this is not what keeps
+      # them that way; what it catches is the handful doing several jobs at
+      # once. The default of 10 would refuse the flat tables instead — the
+      # command dispatcher alone scores 14 with no nesting at all.
+      max-complexity: 20
+
     goconst:
       # In a table-driven test the repeated literal is the case's own data —
       # the OS a fixture describes, the flag an argument list passes — and
