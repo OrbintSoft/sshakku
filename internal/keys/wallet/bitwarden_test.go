@@ -153,8 +153,13 @@ func TestBitwardenStore(t *testing.T) {
 			},
 		}))
 		b := &Bitwarden{Runner: r, Session: "sess-token", held: true}
-		assert.Error(t, b.Store(t.Context(), "x", "y", passphrase),
-			"a passphrase the vault refused to write must not be reported as saved")
+		err := b.Store(t.Context(), "x", "y", passphrase)
+		require.Error(t, err, "a passphrase the vault refused to write must not be reported as saved")
+		// What bw was asked to do, how it exited, and what it said: a refusal
+		// naming none of the three leaves the reader with nothing to act on,
+		// and this is the sentence that reaches the session log.
+		assert.EqualError(t, err, "bw create item exited 1: vault is locked",
+			"the refusal must name the call, its status, and what bw said")
 	})
 }
 
