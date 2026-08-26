@@ -230,6 +230,11 @@ func (d deps) doctor(ctx context.Context, stdout, stderr io.Writer, args []strin
 		return 1
 	}
 	paths.CleanupLegacyAgentDir(env.Home)
+	// Before driving the agent, since a service nothing may start is a state
+	// the lifecycle meets as a refusal and can do nothing about. A failure here
+	// is reported and not fatal: what it could not do it says, and the run goes
+	// on to whatever else it can put right.
+	d.repairAgentService(ctx, stdout, report)
 	live, code := d.runEnsure(ctx, stderr, env, layout)
 	if code != 0 {
 		return code
@@ -266,6 +271,30 @@ func (d deps) reportWithWallet(ctx context.Context, env paths.Env, layout paths.
 	report.Wallet = d.wallet(ctx, settings)
 	report.Findings = append(report.Findings, diagnose.WalletFindings(report.Wallet)...)
 	return report
+}
+
+// repairAgentService enables the agent's service where the report said nothing
+// on the machine may start it, and says what happened either way.
+//
+// It acts only on that one state. A service that is merely stopped is started
+// by the lifecycle a moment later, exactly as a login shell starts it, and
+// changing a service's configuration to do what starting it would have done is
+// a far larger act than the report offered.
+//
+// Whether this session may is settled by asking the service manager rather than
+// by working out what kind of session this is. The two can disagree — an
+// account can be an administrator and still be refused by the service's own
+// security descriptor — and only one of them is the answer that matters.
+func (d deps) repairAgentService(ctx context.Context, stdout io.Writer, report diagnose.Report) {
+	if d.enableAgentService == nil || !report.AgentServiceDisabled() {
+		return
+	}
+	name := report.AgentService.Name
+	if err := d.enableAgentService(ctx); err != nil {
+		_, _ = fmt.Fprintf(stdout, "agent service: the %s service was not enabled: %v\n", name, err)
+		return
+	}
+	_, _ = fmt.Fprintf(stdout, "agent service: enabled the %s service, which was disabled\n", name)
 }
 
 // repairWallet provides what the wallet report named as something this session

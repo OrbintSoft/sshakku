@@ -226,6 +226,41 @@ A running program cannot change the environment of the shell that started it, so
 points somewhere other than the healed socket, the command prints an
 `export SSH_AUTH_SOCK=…` line to run — or you can simply open a new shell.
 
+### Enabling the agent's service
+
+Where the system serves its agent from a service rather than from a process
+sshakku starts — Windows — the report names that service and says what it is
+doing. A service that is simply stopped needs nothing said about it: the next
+session starts it, and so does `--fix`.
+
+A **disabled** service is the one thing here that no session can put right. The
+report says so and names `sshakku doctor --fix` as what does, and that it takes
+an administrator's session:
+
+```text
+agent service:
+  ssh-agent:             not running, disabled
+```
+
+`--fix` then sets the service back to starting by itself and starts it, leaving
+every other part of its configuration as it stands. This is the one repair that
+writes outside your own account — a service disabled for everybody is enabled
+for everybody — which is why nothing on the login path ever does it, and why it
+happens only when you ask for it by name.
+
+Whether your session may is settled by asking the service manager, not by
+working out what kind of session you are in. Run without the privileges, `--fix`
+says so and has changed nothing:
+
+```text
+agent service: the ssh-agent service was not enabled: this session may not
+enable the ssh-agent service; run sshakku doctor --fix again from an
+administrator session, which is what it is for
+```
+
+A service that is not installed at all is a missing part of the operating
+system: the report names the command that adds it, and `--fix` never runs one.
+
 ### Making the wallet's compartment
 
 Some wallets keep sshakku's passphrases in a compartment of their own — a

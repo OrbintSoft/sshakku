@@ -75,6 +75,21 @@ func (s systemService) Start(ctx context.Context) error {
 // an administrator, and the refusal would look like the service being out of
 // reach rather than like too much having been asked for.
 func (s systemService) withService(access uint32, do func(windows.Handle) error) error {
+	return s.withServiceHandle(access, do, s.explain)
+}
+
+// withServiceHandle opens the agent's service for the given access and hands it
+// to do, turning a refusal into a sentence through explaining.
+//
+// Which sentence that is belongs to the caller, because a refusal only means
+// something together with what was being attempted: an account that may not
+// change a service's configuration may perfectly well start it, and the two are
+// put right by different things.
+func (s systemService) withServiceHandle(
+	access uint32,
+	do func(windows.Handle) error,
+	explaining func(error) error,
+) error {
 	manager, err := windows.OpenSCManager(nil, nil, windows.SC_MANAGER_CONNECT)
 	if err != nil {
 		return fmt.Errorf("reaching this system's service manager: %w", err)
@@ -87,7 +102,7 @@ func (s systemService) withService(access uint32, do func(windows.Handle) error)
 	}
 	service, err := windows.OpenService(manager, wide, access)
 	if err != nil {
-		return s.explain(err)
+		return explaining(err)
 	}
 	defer func() { _ = windows.CloseServiceHandle(service) }()
 

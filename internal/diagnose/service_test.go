@@ -121,6 +121,53 @@ func TestAnEnumerationThatFailedIsStillAPartialReport(t *testing.T) {
 	assert.Contains(t, f, "/proc: permission denied", "with what actually went wrong")
 }
 
+// F55: a disabled service is not started by the next session, so the report
+// must not send anybody to open one. The line a reader is most likely to act on
+// is the recommendation, and on a machine in this state the one it used to give
+// was the one thing that could not work.
+func TestADisabledServiceIsNotAnsweredByOpeningANewShell(t *testing.T) {
+	disabled := Report{
+		State:        StateClean,
+		AgentService: agent.ServiceReading{Name: "ssh-agent", Start: agent.ServiceStartDisabled},
+	}
+
+	advice := recommend(disabled)
+
+	assert.NotContains(t, advice, "a new login shell starts one",
+		"nobody is sent to open a shell that will start nothing")
+	assert.Contains(t, advice, "no new login shell will change that",
+		"they are told the opposite, since that is what they would otherwise try")
+	assert.Contains(t, advice, "doctor --fix", "what puts it right is named")
+	assert.Contains(t, advice, "administrator", "and what it takes to run it")
+}
+
+// The same state, in the findings, since that is the other place a reader
+// looks. It says what is wrong before it says what to do about it: a reader who
+// disagrees with the advice still needs the fact.
+func TestADisabledServiceIsAFindingOfItsOwn(t *testing.T) {
+	f := strings.Join(findings(Inputs{}, Report{
+		AgentService: agent.ServiceReading{Name: "ssh-agent", Start: agent.ServiceStartDisabled},
+	}), "\n")
+
+	assert.Contains(t, f, "ssh-agent", "the service is named")
+	assert.Contains(t, f, "disabled")
+	assert.Contains(t, f, "doctor --fix")
+}
+
+// A service that is merely stopped is exactly what the next session starts, so
+// the advice that was already there is the right advice and stays. Only the
+// disabled case was ever wrong, and a change that swept up both would take a
+// true sentence away with the false one.
+func TestAStoppedServiceIsStillAnsweredByOpeningANewShell(t *testing.T) {
+	stopped := Report{
+		State:        StateClean,
+		AgentService: agent.ServiceReading{Name: "ssh-agent", Start: agent.ServiceStartOnDemand},
+	}
+
+	assert.Contains(t, recommend(stopped), "login shell",
+		"a session starts this one on its way in, which is the whole of the repair")
+}
+
 // A system whose agent is a process on a socket has no service, and the report
 // says nothing at all about one. An empty section would have every Linux and
 // macOS report carrying a heading for a thing that platform has not got.

@@ -140,6 +140,13 @@ type deps struct {
 	// SSHakku's entries in, and reports what it made. Nil where this system's
 	// wallet has no such thing to make. Only --fix ever calls it.
 	makeCompartment func(ctx context.Context, settings config.Settings) (string, error)
+	// enableAgentService lets the agent's service be started again where
+	// somebody has disabled it. Only --fix ever calls it, and only where the
+	// report said the service is disabled — this writes, and what it writes
+	// belongs to the machine rather than to one account. Injected so both
+	// outcomes run on a machine where the real one would refuse, or where
+	// there is no service at all.
+	enableAgentService func(ctx context.Context) error
 	// agentKeepsLifetimes is whether the agent on this system holds a key for a
 	// stated time and drops it at that deadline itself. It decides two things a
 	// session does: what lifetime a key is added with, and whether taking the
@@ -164,6 +171,7 @@ func realDeps() deps {
 		wallet:              walletcheck.View,
 		runner:              run.ExecRunner{},
 		makeCompartment:     walletcheck.MakeCompartment,
+		enableAgentService:  agent.EnableAgentService,
 		agentKeepsLifetimes: agent.KeepsLifetimes(),
 	}
 }
