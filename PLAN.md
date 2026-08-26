@@ -3300,3 +3300,38 @@ matrix rows.
 
 → features F22, F23, F17, F26, F4, F5, F6, F9; PLAN Phase 35 W5; rules 19, 21,
 22, 23, 25, 26.
+
+### Phase 45 — The passphrase `forget` left in the recycle bin
+
+`sshakku forget` on KeePassXC's `cli` route reports success and leaves the
+passphrase in the database. `keepassxc-cli rm` does not delete an entry: it
+moves it to the database's recycle-bin group, where the password is still
+stored and still readable by anyone who opens the database. Removing it a
+second time, at its new path, is what deletes it — KeePassXC's documented
+behaviour, and not a fault in it.
+
+**F9 names this exact failure**: *"it never reports a passphrase as forgotten
+while it is still stored."* That clause was written for a wallet SSHakku cannot
+delete from, where the answer is to say so and name the entry. Here SSHakku can
+delete, believes it has, and says so.
+
+**It belongs to every platform, not to the one it was found on.** `CLI.Delete`
+carries no build tag, and the route is pinnable on Linux and macOS as well as
+being what Windows would reach KeePassXC by.
+
+**Why the suite is green.** `TestKeePassXCCLIRealDatabase` checks F9 by calling
+`Delete` and then `Lookup`, and `Lookup` searches the group the move has just
+emptied. The test was derived from the promise, but "gone" was asked of the same
+lookup path the deletion works through instead of being asked of the database —
+rule 22 in its quiet form, where the test agrees with the code by sharing its
+blind spot rather than by being written from it.
+
+**What a fix must reckon with.** The recycle bin's group name is the system's
+own word for it, so it can never be a constant in this code. Three candidates,
+none chosen: blank the entry's password before removing it, so what reaches the
+bin holds nothing; ask the database where its bin is and remove from there too;
+or find whether keepassxc-cli can be told not to recycle at all. The test that
+comes first, whichever wins, asks the **database** what it still holds — because
+that is the question F9 is a promise about, and the one nothing currently asks.
+
+→ features F9, F27; rules 19, 22, 23, 25.
