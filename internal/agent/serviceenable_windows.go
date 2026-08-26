@@ -42,6 +42,25 @@ func (s systemService) enable(ctx context.Context) error {
 	}, s.explainEnabling)
 }
 
+// The two ways enabling can be refused. They are not the same sentences as a
+// refusal to start: what puts a refused enable right is this same command run
+// again from a session that has the privileges, which is what the second one
+// says rather than sending somebody to a second tool.
+type (
+	noServiceToEnableError   struct{ name string }
+	mayNotEnableServiceError struct{ name string }
+)
+
+func (e noServiceToEnableError) Error() string {
+	return fmt.Sprintf("this system has no %s service to enable; "+
+		"an administrator can add it with: Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0", e.name)
+}
+
+func (e mayNotEnableServiceError) Error() string {
+	return fmt.Sprintf("this session may not enable the %s service; "+
+		"run sshakku doctor --fix again from an administrator session, which is what it is for", e.name)
+}
+
 // explainEnabling turns what the service manager said about an attempt to
 // enable the service into a sentence somebody can act on.
 //
@@ -55,11 +74,9 @@ func (s systemService) explainEnabling(err error) error {
 	name := s.name()
 	switch {
 	case errors.Is(err, windows.ERROR_SERVICE_DOES_NOT_EXIST):
-		return fmt.Errorf("this system has no %s service to enable; "+
-			"an administrator can add it with: Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0", name)
+		return noServiceToEnableError{name: name}
 	case errors.Is(err, windows.ERROR_ACCESS_DENIED):
-		return fmt.Errorf("this session may not enable the %s service; "+
-			"run sshakku doctor --fix again from an administrator session, which is what it is for", name)
+		return mayNotEnableServiceError{name: name}
 	default:
 		return fmt.Errorf("enabling the %s service: %w", name, err)
 	}

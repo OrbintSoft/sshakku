@@ -11,6 +11,11 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+// errServiceManagerKeptAsking is the service manager asking for a larger buffer
+// and then not filling the one it asked for. Retrying again would loop, so the
+// second refusal is the last.
+var errServiceManagerKeptAsking = errors.New("the service manager asked twice for more room than it would then answer in")
+
 // ReadAgentService asks this system's service manager about the service the
 // agent is served from. It starts nothing: both questions it puts are
 // questions, so a report built on this leaves the machine as it found it.
@@ -94,7 +99,7 @@ func serviceStartType(handle windows.Handle) (uint32, error) {
 			return 0, err
 		}
 	}
-	return 0, errors.New("the service manager asked twice for more room than it would then answer in")
+	return 0, errServiceManagerKeptAsking
 }
 
 // startTypeOf reads the service manager's answer as one of the answers a report

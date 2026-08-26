@@ -4,6 +4,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -42,6 +43,12 @@ func ServiceLifecycle(prober Prober) ServiceAgent {
 	return ServiceAgent{Prober: prober, Service: systemService{}, Endpoint: SystemEndpoint()}
 }
 
+// errServiceRunningNothingAnswers is a service the manager reports as running
+// that answers nothing on its endpoint. It is a state nothing here can repair
+// — stopping somebody else's agent is not ours to do — so the endpoint is
+// named and the person is told what is true.
+var errServiceRunningNothingAnswers = errors.New("the agent's service is running and nothing answers on")
+
 // EnsureAgent drives the endpoint to a healthy agent and returns it.
 //
 // The EnsureConfig a socket system needs is not read here: no path of ours is
@@ -66,8 +73,8 @@ func (a ServiceAgent) EnsureAgent(ctx context.Context, _ EnsureConfig, log Logge
 	// that was already running and still says nothing is a state nothing here
 	// can repair — stopping somebody else's agent is not ours to do.
 	if !a.Prober.Reachable(ctx, a.Endpoint.Native()) {
-		return EnsureResult{}, fmt.Errorf(
-			"the agent's service is running and nothing answers on %s", a.Endpoint.Native())
+		return EnsureResult{}, fmt.Errorf("%w %s",
+			errServiceRunningNothingAnswers, a.Endpoint.Native())
 	}
 	if !started {
 		return EnsureResult{Situation: SituationHealthy, Live: a.Endpoint}, nil
