@@ -59,6 +59,14 @@ linters:
     # says which of the two a name is.
     - embeddedstructfieldcheck
 
+    # An error built at the point it is returned exists only as a sentence, so
+    # the only way to ask what went wrong is to read the sentence — and a caller
+    # matching on English is one a reworded message breaks silently. The refusals
+    # here are the ones a login has to act on: a wallet this system does not have
+    # is not a misspelled one, a service that is absent is not a service that is
+    # disabled, and doctor --fix has to tell them apart.
+    - err113
+
     # json.Marshal fails only for what cannot be encoded — a chan, a func, a
     # map with keys that are neither — so the check on a plain struct is dead
     # code, while the type that can actually fail is the one that tends to be
