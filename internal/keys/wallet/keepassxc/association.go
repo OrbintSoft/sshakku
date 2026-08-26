@@ -24,6 +24,20 @@ type FileAssociationStore struct {
 	Path string
 }
 
+// The two ways a stored association can be there and still be unusable. Both
+// mean the same thing to the caller — associate again — but they are told
+// apart so a log says whether the file was old or truncated.
+var errIncompleteAssociation = errors.New("the KeePassXC association is incomplete")
+
+// unknownAssociationVersionError is an association written by a build that
+// versioned it differently. The version is carried because it is the one fact
+// that says which build wrote it.
+type unknownAssociationVersionError struct{ version int }
+
+func (e unknownAssociationVersionError) Error() string {
+	return fmt.Sprintf("the KeePassXC association is version %d, which this build does not understand", e.version)
+}
+
 // storedAssociation is the on-disk form. It is versioned so a later format can
 // be told apart from this one instead of being misread as it.
 type storedAssociation struct {
@@ -50,10 +64,10 @@ func (s FileAssociationStore) Load() (wire.Association, bool, error) {
 		return wire.Association{}, false, fmt.Errorf("reading the KeePassXC association: %w", err)
 	}
 	if stored.Version != associationVersion {
-		return wire.Association{}, false, fmt.Errorf("the KeePassXC association is version %d, which this build does not understand", stored.Version)
+		return wire.Association{}, false, unknownAssociationVersionError{version: stored.Version}
 	}
 	if stored.ID == "" || stored.IDKey == "" {
-		return wire.Association{}, false, errors.New("the KeePassXC association is incomplete")
+		return wire.Association{}, false, errIncompleteAssociation
 	}
 	return wire.Association{ID: stored.ID, IDKey: stored.IDKey}, true, nil
 }
