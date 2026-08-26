@@ -23,10 +23,6 @@ func keepassxcSettings(route string) config.Settings {
 	}
 }
 
-// TestKeePassXCPinnedNativeRouteIsUsedEverywhere states the rule the routes
-// exist under: a route is available wherever it can work, not only on the OS
-// where SSHakku would have picked it. A Linux user who does not want the Secret
-// Service can say so and be taken at their word.
 // tempRuntimeEnv points HOME and the XDG dirs at fresh temp dirs so the runtime
 // layout is built and created entirely off the real state, runtime, and config
 // dirs.
@@ -41,12 +37,40 @@ func tempRuntimeEnv(t *testing.T) string {
 	return home
 }
 
-func TestKeePassXCPinnedNativeRouteIsUsedEverywhere(t *testing.T) {
-	backend, closeFn := Open(t.Context(), "alice", fakeLogger{}, keepassxcSettings(config.KeePassXCRouteNative))
-	defer closeFn()
+// TestKeePassXCPinnedNativeRouteIsUsedWhereItCanBeReached states the rule the
+// routes exist under: a route is available wherever it can work, not only on
+// the OS where SSHakku would have picked it. A Linux user who does not want the
+// Secret Service can say so and be taken at their word.
+//
+// Windows is the one place it cannot be reached, and it is asserted here rather
+// than in a test of its own so the rule and its exception are read together.
+// The platform is named rather than taken from the machine: read from
+// runtime.GOOS this would assert one row and leave every other unexercised,
+// which is how the exception went unnoticed — the assertion passed on Windows
+// by agreeing with a build that would then have dialled a path that is not
+// there.
+func TestKeePassXCPinnedNativeRouteIsUsedWhereItCanBeReached(t *testing.T) {
+	for _, goos := range []string{"linux", "darwin", "freebsd"} {
+		t.Run(goos, func(t *testing.T) {
+			backend, closeFn := newKeePassXCBackend(
+				t.Context(), goos, "alice", fakeLogger{}, keepassxcSettings(config.KeePassXCRouteNative))
+			defer closeFn()
 
-	assert.IsTypef(t, keepassxc.Native{}, backend,
-		"a route pinned by the user must be taken at their word on %s too", runtime.GOOS)
+			assert.IsTypef(t, keepassxc.Native{}, backend,
+				"a route pinned by the user must be taken at their word on %s", goos)
+		})
+	}
+
+	t.Run("windows", func(t *testing.T) {
+		backend, closeFn := newKeePassXCBackend(
+			t.Context(), "windows", "alice", fakeLogger{}, keepassxcSettings(config.KeePassXCRouteNative))
+		defer closeFn()
+
+		unavailable, ok := backend.(wallet.Unavailable)
+		require.Truef(t, ok, "a route this build cannot reach must say so, got %T", backend)
+		assert.ErrorContains(t, unavailable.Reason, "native",
+			"the reason must name the route the user asked for")
+	})
 }
 
 // TestKeePassXCPinnedSecretServiceRouteOffLinuxSaysWhichRouteFailed is the
@@ -104,6 +128,7 @@ func TestKeePassXCAutoRouteFollowsThePlatform(t *testing.T) {
 		{"linux", config.KeePassXCRouteSecretService},
 		{"darwin", config.KeePassXCRouteNative},
 		{"freebsd", config.KeePassXCRouteNative},
+		{"windows", config.KeePassXCRouteCLI},
 	}
 	for _, tc := range tests {
 		t.Run(tc.goos, func(t *testing.T) {
@@ -125,9 +150,26 @@ func TestKeePassXCRouteAvailability(t *testing.T) {
 	assert.ErrorContains(t, err, "darwin", "and the platform it cannot work on")
 
 	assert.NoError(t, keepassxcRouteUnavailable(config.KeePassXCRouteNative, "darwin", ""),
-		"the native route runs anywhere")
+		"the native route runs anywhere it can be found")
 	assert.NoError(t, keepassxcRouteUnavailable(config.KeePassXCRouteNative, "linux", ""),
 		"including where another route would have been chosen for you")
+}
+
+// TestKeePassXCNativeRouteSaysWhatItIsThatWindowsHasNot keeps two refusals
+// apart that would otherwise read alike. macOS has no Secret Service and never
+// will: nothing anybody installs makes that route appear. Windows has the thing
+// the native route wants — KeePassXC serves its local protocol there as well —
+// and what is missing is on this side: it is served over a named pipe, and
+// SSHakku knows how to find a socket. A message blaming the platform for that
+// would send somebody looking for a setting in KeePassXC.
+func TestKeePassXCNativeRouteSaysWhatItIsThatWindowsHasNot(t *testing.T) {
+	err := keepassxcRouteUnavailable(config.KeePassXCRouteNative, "windows", "")
+
+	require.Error(t, err, "a route this build cannot reach must be reported rather than dialled")
+	assert.ErrorContains(t, err, "native", "the reason must name the route")
+	assert.ErrorContains(t, err, "windows", "and the platform it was asked for on")
+	assert.ErrorContains(t, err, "named pipe", "and what KeePassXC is actually serving there")
+	assert.ErrorContains(t, err, "cli", "and the route that does work here, since one does")
 }
 
 // TestKeePassXCCLIRouteNeedsADatabase states what the CLI route is bound to.

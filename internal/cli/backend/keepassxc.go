@@ -52,13 +52,21 @@ func newKeePassXCBackend(ctx context.Context, goos, user string, log keys.Logger
 // rather than only from the one making it.
 //
 // Linux gets the Secret Service because KeePassXC implements that API itself
-// and it is the path Linux users are already on; everywhere else gets the local
+// and it is the path Linux users are already on; most systems get the local
 // protocol, which has the same preconditions and so keeps a refill silent.
+// Windows gets the CLI, because the local protocol there is served over an
+// endpoint SSHakku does not speak — see nativeRouteNotSpokenHereError. That
+// route works on the database file, so it needs keepassxc_database to name one
+// and says so when it has not got it.
 func KeePassXCRouteFor(goos string) string {
-	if goos == "linux" {
+	switch goos {
+	case "linux":
 		return config.KeePassXCRouteSecretService
+	case "windows":
+		return config.KeePassXCRouteCLI
+	default:
+		return config.KeePassXCRouteNative
 	}
-	return config.KeePassXCRouteNative
 }
 
 // noSecretServiceHereError is the secret-service route asked for on a system
@@ -71,22 +79,46 @@ func (e noSecretServiceHereError) Error() string {
 	return fmt.Sprintf("the secret-service route needs the freedesktop Secret Service, which %s does not provide", e.goos)
 }
 
+// nativeRouteNotSpokenHereError is the native route asked for on a system where
+// SSHakku cannot reach a running KeePassXC.
+//
+// It is a different refusal from noSecretServiceHereError above, and the
+// difference is the whole of the message: there, the platform has no such API
+// and no amount of installing makes one. Here KeePassXC serves the local
+// protocol exactly as it does everywhere else, over a named pipe rather than
+// over a socket, and it is SSHakku that has not learnt to knock. Saying "your
+// system does not have it" would send somebody hunting through KeePassXC's
+// settings for a switch that is already on.
+type nativeRouteNotSpokenHereError struct{ goos string }
+
+func (e nativeRouteNotSpokenHereError) Error() string {
+	return fmt.Sprintf("the native route reaches a running KeePassXC over a socket, and on %s "+
+		"KeePassXC serves that protocol over a named pipe, which SSHakku does not speak yet; "+
+		"the cli route reaches the same database here, and needs keepassxc_database to name the file", e.goos)
+}
+
 // errCLIRouteNeedsDatabase is the cli route asked for with no database named.
 // A file on disk does not announce itself the way a running KeePassXC knows
 // what it has open, so there is nothing to discover and the user must say.
 var errCLIRouteNeedsDatabase = errors.New("the cli route works on a database file, so keepassxc_database has to name one")
 
 // keepassxcRouteUnavailable reports why a route cannot work here, or nil if it
-// can. Routes are not tied to a platform — only the defaults are — so the only
-// platform-bound one is the Secret Service, a freedesktop API no macOS system
-// provides. The CLI route is bound to something else: a database file, which it
-// cannot discover, because a file on disk does not announce itself the way a
-// running KeePassXC knows what it has open.
+// can. A route is bound to a platform only where something about the platform
+// binds it: the Secret Service is a freedesktop API no macOS system provides,
+// and the native route is an endpoint Windows serves in a shape this build has
+// no dialler for. The CLI route is bound to something else entirely — a
+// database file, which it cannot discover, because a file on disk does not
+// announce itself the way a running KeePassXC knows what it has open.
 func keepassxcRouteUnavailable(route, goos, database string) error {
 	switch route {
 	case config.KeePassXCRouteSecretService:
 		if goos != "linux" {
 			return noSecretServiceHereError{goos: goos}
+		}
+		return nil
+	case config.KeePassXCRouteNative:
+		if goos == "windows" {
+			return nativeRouteNotSpokenHereError{goos: goos}
 		}
 		return nil
 	case config.KeePassXCRouteCLI:

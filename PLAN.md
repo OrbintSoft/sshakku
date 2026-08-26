@@ -3248,3 +3248,55 @@ end-to-end run belongs to this phase: no user-visible behaviour changed, and
 that every message is unchanged is what the verification above is about.
 
 → rules 12, 15, 20, 22, 23, 26, 27.
+
+### Phase 44 — The wallet a promise had already named
+
+F22 says KeePassXC can be chosen as your wallet by name **on every OS SSHakku
+supports**. Windows is one of those, and `platformSecretBackends` there holds
+`credential-manager` alone: naming KeePassXC in a configuration on Windows is
+answered as a value that cannot mean anything on this system (F26), which is
+the answer reserved for a wallet the platform has not got. KeePassXC is
+installed on Windows machines by the same people who install it anywhere else.
+
+So this phase closes a promise already made rather than making one. The comment
+in `internal/config/backends_windows.go` is the honest record of why the gap
+was left — *"they compile here, which is not the same as having been shown to
+work here, and what is offered is what has been driven on this system"* — and
+that standard is what the phase satisfies: the route is driven against a real
+`keepassxc-cli` and a real database in a container that has never had anything
+installed on it, and the wallet is offered only afterwards.
+
+**The route this platform gets, and the one it must refuse.** `auto` resolved
+to the native route everywhere that is not Linux, so the moment Windows offers
+the wallet it would pick the one route that cannot work there: SSHakku reaches
+a running KeePassXC over a socket, and on Windows KeePassXC serves that same
+protocol over a named pipe. The refusal has to say that and not blame the
+platform — the two are opposite instructions to whoever reads it. macOS having
+no Secret Service is a fact nothing can install away; Windows here has the
+thing, and it is SSHakku that has not learnt to knock, so the message names the
+pipe and points at the route that does work.
+
+**And that route asks for one thing the others do not.** The CLI works on the
+database file, which it cannot discover — a file on disk does not announce
+itself the way a running KeePassXC knows what it has open. On Windows,
+therefore, naming the wallet is not quite the whole of the configuration, and
+F22 says so in its own words instead of leaving a user with a wallet that
+quietly holds nothing. With no database named the backend reports itself
+unavailable under its own name, the shell still opens and the passphrase is
+asked for (F17), and `sshakku doctor` names the missing setting.
+
+**The native route is a phase of its own, and cannot be this one.** Dialling a
+named pipe needs a dialler this build has not got, and driving it needs a
+running KeePassXC with browser integration — a graphical program, in a
+container image that is Server Core. It cannot be exercised in an isolated
+scenario, so by the standard above it cannot be offered yet. What this phase
+owes it is an accurate refusal, which it now has.
+
+Sub-steps, each committable: (1) the promise this platform was left out of —
+F22 and the route Windows picks; (2) the scenario, red, driving the real binary
+against a real database in the container while the configuration still refuses
+the wallet's name; (3) the wallet offered, and the scenario green; (4) the
+matrix rows.
+
+→ features F22, F23, F17, F26, F4, F5, F6, F9; PLAN Phase 35 W5; rules 19, 21,
+22, 23, 25, 26.
