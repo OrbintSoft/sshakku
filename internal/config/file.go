@@ -413,10 +413,36 @@ func Load(path string) (File, error) {
 		return File{}, err
 	}
 	if undecoded := md.Undecoded(); len(undecoded) > 0 {
-		return f, fmt.Errorf("unrecognised config keys: %s", joinKeys(undecoded))
+		return f, fmt.Errorf("%w: %s", errUnrecognisedKeys, joinKeys(undecoded))
 	}
 	return f, nil
 }
+
+// The refusals the resolvers below answer with. Each is a literal fragment of
+// the sentence the user reads, so a caller that only logs the error sees what
+// it always saw, while one that has to act on the refusal can tell which kind
+// it was without reading English: a value SSHakku will not take is a mistake in
+// the file, and a value naming something this operating system does not have is
+// not the same mistake and does not have the same remedy.
+var (
+	// errInvalidValue heads a value SSHakku will not take — malformed, or not
+	// one of the words the setting is written in. The rest of the sentence
+	// names the setting, what was written, and what applies instead.
+	errInvalidValue = errors.New("invalid")
+
+	// errNoSuchWallet ends the refusal of a wallet name that is spelled
+	// correctly and means something somewhere, but not on this system: macOS's
+	// keychain asked for on Linux. Nothing the user installs makes it true,
+	// which is what separates it from a wallet whose helper is merely absent.
+	errNoSuchWallet = errors.New("is not a wallet this system has")
+
+	// errNoSuchPrompter is errNoSuchWallet for the dialog to ask in.
+	errNoSuchPrompter = errors.New("is not a dialog this system has")
+
+	// errUnrecognisedKeys heads the report of config-file keys SSHakku does not
+	// know. The File returned beside it still carries every key that decoded.
+	errUnrecognisedKeys = errors.New("unrecognised config keys")
+)
 
 // SettingError is a value SSHakku would not use, tied to the setting it was
 // written for. The message is the underlying one unchanged, so a caller that
@@ -537,7 +563,7 @@ func resolveServicePrefix(fileVal *string) (string, error) {
 	case prefix == "":
 		return wallet.DefaultServicePrefix, nil
 	case unusableName(prefix):
-		return wallet.DefaultServicePrefix, fmt.Errorf("invalid service_prefix %q: whitespace and %q are not allowed, using %q", prefix, "/", wallet.DefaultServicePrefix)
+		return wallet.DefaultServicePrefix, fmt.Errorf("%w service_prefix %q: whitespace and %q are not allowed, using %q", errInvalidValue, prefix, "/", wallet.DefaultServicePrefix)
 	}
 	return prefix, nil
 }
@@ -574,9 +600,9 @@ func resolveSecretContainer(fileVal *string) (string, error) {
 	case container == "":
 		return "", nil
 	case unusableName(container):
-		return "", fmt.Errorf("invalid secret_container %q: whitespace and %q are not allowed, using SSHakku's own", container, "/")
+		return "", fmt.Errorf("%w secret_container %q: whitespace and %q are not allowed, using SSHakku's own", errInvalidValue, container, "/")
 	case slices.Contains(desktopOwnWallets, strings.ToLower(container)):
-		return "", fmt.Errorf("invalid secret_container %q: that name belongs to your desktop's own wallet, whose contents are not SSHakku's to delete; using SSHakku's own", container)
+		return "", fmt.Errorf("%w secret_container %q: that name belongs to your desktop's own wallet, whose contents are not SSHakku's to delete; using SSHakku's own", errInvalidValue, container)
 	}
 	return container, nil
 }
@@ -593,14 +619,14 @@ func resolveKeyPatterns(fileVal []string) ([]string, error) {
 		return nil, nil
 	}
 	if len(fileVal) == 0 {
-		return nil, errors.New("invalid key_patterns: the list is empty, using SSHakku's own naming rule")
+		return nil, fmt.Errorf("%w key_patterns: the list is empty, using SSHakku's own naming rule", errInvalidValue)
 	}
 	for _, pattern := range fileVal {
 		switch _, err := filepath.Match(pattern, "name"); {
 		case pattern == "" || strings.Contains(pattern, "/"):
-			return nil, fmt.Errorf("invalid key_patterns entry %q: a pattern matches a file name, not a path, using SSHakku's own naming rule", pattern)
+			return nil, fmt.Errorf("%w key_patterns entry %q: a pattern matches a file name, not a path, using SSHakku's own naming rule", errInvalidValue, pattern)
 		case err != nil:
-			return nil, fmt.Errorf("invalid key_patterns entry %q: %w, using SSHakku's own naming rule", pattern, err)
+			return nil, fmt.Errorf("%w key_patterns entry %q: %w, using SSHakku's own naming rule", errInvalidValue, pattern, err)
 		}
 	}
 	return slices.Clone(fileVal), nil
@@ -617,7 +643,7 @@ func resolveWalletStoreMode(fileVal *string) (string, error) {
 	case WalletStoreModeAll, WalletStoreModeInclude, WalletStoreModeExclude:
 		return *fileVal, nil
 	default:
-		return WalletStoreModeAll, fmt.Errorf("invalid wallet_store_mode %q, using %q", *fileVal, WalletStoreModeAll)
+		return WalletStoreModeAll, fmt.Errorf("%w wallet_store_mode %q, using %q", errInvalidValue, *fileVal, WalletStoreModeAll)
 	}
 }
 
@@ -632,7 +658,7 @@ func resolveAutoLoadMode(fileVal *string) (string, error) {
 	case AutoLoadModeAll, AutoLoadModeInclude, AutoLoadModeExclude:
 		return *fileVal, nil
 	default:
-		return AutoLoadModeAll, fmt.Errorf("invalid auto_load_mode %q, using %q", *fileVal, AutoLoadModeAll)
+		return AutoLoadModeAll, fmt.Errorf("%w auto_load_mode %q, using %q", errInvalidValue, *fileVal, AutoLoadModeAll)
 	}
 }
 
@@ -678,7 +704,7 @@ func resolveSecretBackendFrom(fileVal *string, available []string, fallback stri
 	if slices.Contains(available, *fileVal) {
 		return *fileVal, nil
 	}
-	return fallback, fmt.Errorf("secret_backend %q is not a wallet this system has, using %q", *fileVal, fallback)
+	return fallback, fmt.Errorf("secret_backend %q %w, using %q", *fileVal, errNoSuchWallet, fallback)
 }
 
 // resolveGUIPrompter picks the dialog to ask in.
@@ -701,7 +727,7 @@ func resolveGUIPrompterFrom(fileVal *string, available []string) (string, error)
 	if slices.Contains(available, *fileVal) {
 		return *fileVal, nil
 	}
-	return GUIPrompterAuto, fmt.Errorf("gui_prompter %q is not a dialog this system has, using %q", *fileVal, GUIPrompterAuto)
+	return GUIPrompterAuto, fmt.Errorf("gui_prompter %q %w, using %q", *fileVal, errNoSuchPrompter, GUIPrompterAuto)
 }
 
 // resolveOnDismiss picks what closing a passphrase prompt without answering
@@ -718,7 +744,7 @@ func resolveOnDismiss(fileVal *string) (string, error) {
 	case keys.OnDismissStop, keys.OnDismissSkip, keys.OnDismissRetry:
 		return *fileVal, nil
 	default:
-		return keys.OnDismissStop, fmt.Errorf("invalid on_dismiss %q, using %q", *fileVal, keys.OnDismissStop)
+		return keys.OnDismissStop, fmt.Errorf("%w on_dismiss %q, using %q", errInvalidValue, *fileVal, keys.OnDismissStop)
 	}
 }
 
@@ -734,7 +760,7 @@ func resolveKeePassXCRoute(fileVal *string) (string, error) {
 	case KeePassXCRouteAuto, KeePassXCRouteSecretService, KeePassXCRouteNative, KeePassXCRouteCLI:
 		return *fileVal, nil
 	default:
-		return KeePassXCRouteAuto, fmt.Errorf("invalid keepassxc_route %q, using %q", *fileVal, KeePassXCRouteAuto)
+		return KeePassXCRouteAuto, fmt.Errorf("%w keepassxc_route %q, using %q", errInvalidValue, *fileVal, KeePassXCRouteAuto)
 	}
 }
 
