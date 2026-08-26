@@ -324,9 +324,9 @@ What has no cells here yet, and why:
   `gui_prompter` accepts only `auto` and `none`, and a passphrase is asked for
   on the console however good a screen is in front of you. It is what F48's
   illustration now points at.
-- **Coverage and test-health reporting**, which the other two platforms get and
-  this one does not yet: a report artifact, a column in `tools/testreport`, and
-  a badge.
+- **Nothing else.** Coverage and test-health reporting stood here until this
+  platform got it: `test.yml` builds a report artifact, an HTML report and a
+  badge for it alongside the other two.
 
 ### The agent, the environment and the keys on this platform
 
