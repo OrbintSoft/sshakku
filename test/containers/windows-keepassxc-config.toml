@@ -1,0 +1,22 @@
+# The configuration windows-keepassxc-scenario.ps1 puts in front of SSHakku.
+#
+# It is a file of its own rather than lines a script writes, so it is read,
+# diffed and linted as the TOML it is — and so that what the scenario arranges
+# is legible without reading the code that arranges it.
+#
+# The @TOKEN@ values are replaced by the scenario with paths only it knows: the
+# database and key file it makes in a directory of its own.
+
+secret_backend = "keepassxc"
+
+# Pinned rather than left to "auto", so the scenario drives the route it names
+# even if the platform's default were to change under it.
+keepassxc_route = "cli"
+
+keepassxc_database = "@DATABASE@"
+keepassxc_key_file = "@KEY_FILE@"
+
+# The database this scenario makes has no password on it, only the key file
+# above. That is what lets a login load keys where there is nobody at a console
+# to answer, which is the arrangement under test.
+keepassxc_no_password = true

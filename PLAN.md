@@ -3285,6 +3285,30 @@ quietly holds nothing. With no database named the backend reports itself
 unavailable under its own name, the shell still opens and the passphrase is
 asked for (F17), and `sshakku doctor` names the missing setting.
 
+**It also asks for something a login cannot give it.** The CLI opens the
+database every time, so it needs the database's password — once per process,
+which is once per login shell. Where it is the only route, F24's "being asked
+is the exception" becomes the rule, F5's silent later login is not kept, and
+on Windows the question cannot even be answered by anything but a person:
+the prompt reads the console directly, so no harness can type into it.
+
+The way out is one KeePassXC already offers and SSHakku did not use: a database
+whose only key is a **key file** has no password to ask for.
+`keepassxc_no_password` says so and `keepassxc-cli --no-password` acts on it —
+and both halves are needed, since without the flag the tool waits for a password
+on standard input, and with it a password line left in front is read as the
+answer to whatever it asks next. It is stated and never inferred: a database can
+carry a key file *and* a password, so silence means there is one. This is
+platform-neutral and Linux and macOS gain the same silent CLI route; what is
+specific to Windows is only that it is the route in force there.
+
+The trade belongs in the open, not under the promise: a key file on disk makes
+the wallet's lock worth what that file's permissions are worth, which is nearer
+to what F54 says about the Credential Manager than to a password-protected
+database. It is the user's explicit choice and never a default. The route that
+would give real parity — a KeePassXC already open, asked nothing — is the native
+one, and that is the phase after this.
+
 **The native route is a phase of its own, and cannot be this one.** Dialling a
 named pipe needs a dialler this build has not got, and driving it needs a
 running KeePassXC with browser integration — a graphical program, in a
