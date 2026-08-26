@@ -58,6 +58,10 @@ func findings(in Inputs, r Report) []string {
 	case answersWithNoProcessToShowForIt(r):
 	case reachable == 0 && r.NoAgentMechanism:
 		f = append(f, "no ssh-agent is answering, and this build has no way to keep one on this system yet")
+	case reachable == 0 && serviceIsDisabled(r):
+		// Said below in its own words, which name what will actually help. A
+		// new login shell will not start this one, and saying both would leave
+		// the reader to work out which of the two sentences to believe.
 	case reachable == 0:
 		f = append(f, "no ssh-agent is answering; a new login shell will start one")
 	case reachable > 1:
@@ -95,7 +99,17 @@ func findings(in Inputs, r Report) []string {
 			"a key past its lifetime is taken out of the agent as the next session opens, "+
 			"rather than at the moment it runs out")
 	}
-	if r.InspectErr != nil {
+	// A service nothing may start is worth saying whether or not something is
+	// answering right now: an agent still running on a machine whose service
+	// has been disabled is one restart away from being gone.
+	if serviceIsDisabled(r) {
+		f = append(f, disabledServiceAdvice(r))
+	}
+	// A report is partial when something it meant to read could not be read. A
+	// list this system was never going to keep is not a piece missing from the
+	// report, and reported as one it would be there on every run of every
+	// session, saying nothing anybody can act on.
+	if r.InspectErr != nil && !keepsNoAgentProcessList(r) {
 		f = append(f, fmt.Sprintf("could not enumerate processes: %v (report is partial)", r.InspectErr))
 	}
 	if !in.EnvUnreadable && (in.EnvAskpass == "" || in.EnvAskpassRequire == "") {

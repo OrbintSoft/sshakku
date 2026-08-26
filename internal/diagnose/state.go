@@ -114,6 +114,12 @@ func recommend(r Report) string {
 		return "no agent is answering, and SSHakku cannot start one on this system yet;" +
 			" ssh will ask for each passphrase itself"
 	}
+	// A service nothing may start is not a state a login shell resolves. Every
+	// answer below assumes a session opening can put things right, and here the
+	// one thing that can is this command run with what it needs.
+	if serviceIsDisabled(r) {
+		return disabledServiceAdvice(r)
+	}
 	switch r.State {
 	case StateClean:
 		return "no agent is running; a new login shell starts one and loads your keys"

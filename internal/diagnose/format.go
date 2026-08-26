@@ -22,9 +22,22 @@ func Format(w io.Writer, r Report) {
 		p("recorded pid:  %d (agent.state)\n", r.RecordedPID)
 	}
 
-	p("\nssh-agent processes (%d):\n", len(r.Agents))
-	if len(r.Agents) == 0 {
-		p("  (none)\n")
+	// What serves the endpoint, where that is a service rather than a process
+	// somebody started. A system whose agent is a process on a socket names no
+	// service and gets no heading for one.
+	if r.AgentService.ServedByAService() {
+		p("\nagent service:\n")
+		p("  %-22s %s\n", r.AgentService.Name+":", serviceLine(r.AgentService))
+	}
+
+	if keepsNoAgentProcessList(r) {
+		p("\nssh-agent processes:\n")
+		p("  %s\n", processListNote(r))
+	} else {
+		p("\nssh-agent processes (%d):\n", len(r.Agents))
+		if len(r.Agents) == 0 {
+			p("  (none)\n")
+		}
 	}
 	for _, a := range r.Agents {
 		state := "dead"

@@ -3072,3 +3072,72 @@ prompt that is a dialog rather than a console read, which this build still draws
 nowhere on this platform (F48's illustration); and the three wallets reached by
 running a program of their own, each of which owes a matrix row before it is
 offered here.
+
+### Phase 42 — The service the report never asked about
+
+Windows reaches its agent through a service on a named pipe, and `sshakku
+doctor` there has never asked the service manager anything: every occurrence of
+the word in `internal/diagnose` is a comment explaining why the process list is
+empty. What the report prints in place of an answer is that empty list, and,
+among the findings, a sentence saying the enumeration is not implemented here
+and the report is therefore partial. That sentence is true on every run and
+always will be — an agent on this system is not a process to enumerate — so it
+describes the shape of the report rather than the state of the machine, and it
+stands exactly where the platform's central fact belongs.
+
+**The fact it stands in place of** is what the service is doing, and what to do
+where it is not doing it. Without that, a machine whose service is disabled is
+reported as a machine with no agent running, which routes through the state the
+socket lifecycle calls clean and produces the advice that belongs to it: open a
+new login shell and one will be started for you. A new login shell starts
+nothing there. It meets the same refusal, reports it, and opens anyway — so the
+one line of the report a user is most likely to act on is the one line that
+cannot work. It is the failure the no-mechanism branch was written to prevent,
+arriving through a state that branch does not cover.
+
+**The report asks, and starts nothing.** `QueryServiceStatus` answers running,
+stopped or start-pending and never disabled: today disabled is discovered only
+by trying to start the service and reading the refusal, which is precisely what
+a report that is a look and not an action may not do. So the start type is read
+beside the status. That an ordinary account may read it was measured rather than
+assumed, from the service's own security descriptor: an interactive account is
+granted `SERVICE_QUERY_CONFIG` and `SERVICE_QUERY_STATUS`, an authenticated one
+`SERVICE_START`, and `SERVICE_CHANGE_CONFIG` is the administrators' alone.
+
+**That last right is what decides what `--fix` may do**, and it splits the
+repair in two. A service that is merely stopped is already started by `--fix`
+today, through the same lifecycle a login shell drives, so what that half owes
+is a test and a matrix row rather than an implementation. A disabled one cannot
+be enabled by an account that was never granted it, and SSHakku does not
+escalate to acquire what it has not got: the session that can enable it is one
+the user started as an administrator, and the session that cannot says what it
+would take and changes nothing. Both halves are the promise rather than a
+footnote under it — a `--fix` that silently did half of a repair would be worse
+than one that did none, and the wallet's compartment already settled the shape
+this borrows.
+
+**A service that is not installed is not this program's to install.** It is a
+missing part of the operating system, and the command that adds it is named for
+somebody to run rather than run on their behalf; `--fix` never reaches for it.
+
+**The data is this platform's, the printing is not.** The service view arrives
+as data from behind the build tag and the sentences and the layout that render
+it are platform-neutral, printing nothing at all where there is no service to
+describe — the shape the wallet's guard already uses, so both answers stay
+checkable from either machine.
+
+**And the sentences already exist.** The three refusals the service manager
+returns are already turned into commands somebody can run, by the code the login
+path calls; the report carries those rather than writing a second set that would
+be free to disagree with them.
+
+Sub-steps, each committable: (1) the promise, in `docs/FEATURES.md` — F55 — and
+this phase; (2) the start type read beside the status, and this platform's
+answer as data; (3) the report gaining the service, printed platform-neutrally;
+(4) the process list and its permanent complaint, on a system whose agent is not
+a process; (5) what `--fix` does with each answer, and what it refuses to do;
+(6) the matrix rows, and the real binary driven through a stopped service and a
+disabled one.
+
+→ features F55, F13, F14, F41, F42, F51; PLAN Phase 35 W5; rules 18, 19, 21, 22,
+23, 25, 26.
