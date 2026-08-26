@@ -74,6 +74,31 @@ type Secret struct {
 	ContentType string
 }
 
+// The refusals this client answers with when the service replies in a shape
+// the interface does not describe, or when a prompt ends without an answer.
+// Each holds the invariant half of its sentence, so the property, the prompt
+// path or the type that arrived keeps the place a reader looks for it.
+var (
+	errMalformedPropertyName    = errors.New("secret service: malformed property name")
+	errUnexpectedPropertyType   = errors.New("unexpected property type")
+	errUnexpectedPromptSignal   = errors.New("secret service: unexpected signal from prompt")
+	errMalformedCompletedSignal = errors.New("secret service: malformed Completed signal from prompt")
+	errPromptDismissed          = errors.New("dismissed")
+)
+
+// promptTimeoutError is a prompt the service raised and nobody answered inside
+// the budget. It carries the budget as well as the prompt, because whether the
+// wait was too short is a question about the configuration rather than about
+// the wallet.
+type promptTimeoutError struct {
+	path  dbus.ObjectPath
+	after time.Duration
+}
+
+func (e promptTimeoutError) Error() string {
+	return fmt.Sprintf("secret service: prompt %s timed out after %s", e.path, e.after)
+}
+
 // Client is a connection to the Secret Service over the D-Bus session bus.
 type Client struct {
 	conn    *dbus.Conn
@@ -126,7 +151,7 @@ func (c *Client) call(ctx context.Context, obj dbus.BusObject, method string, ar
 func (c *Client) property(ctx context.Context, obj dbus.BusObject, name string) (dbus.Variant, error) {
 	dot := strings.LastIndex(name, ".")
 	if dot < 0 {
-		return dbus.Variant{}, fmt.Errorf("secret service: malformed property name %q", name)
+		return dbus.Variant{}, fmt.Errorf("%w %q", errMalformedPropertyName, name)
 	}
 	var v dbus.Variant
 	err := c.call(ctx, obj, "org.freedesktop.DBus.Properties.Get", name[:dot], name[dot+1:]).Store(&v)
@@ -241,7 +266,7 @@ func (c *Client) findCollectionByLabel(ctx context.Context, label string) (dbus.
 	}
 	collections, ok := v.Value().([]dbus.ObjectPath)
 	if !ok {
-		return "", fmt.Errorf("secret service: list collections: unexpected property type %T", v.Value())
+		return "", fmt.Errorf("secret service: list collections: %w %T", errUnexpectedPropertyType, v.Value())
 	}
 	for _, collection := range collections {
 		v, err := c.property(ctx, c.conn.Object(busName, collection), collectionLabelProp)
@@ -340,7 +365,7 @@ func (c *Client) Items(ctx context.Context, collection dbus.ObjectPath) ([]dbus.
 	}
 	items, ok := v.Value().([]dbus.ObjectPath)
 	if !ok {
-		return nil, fmt.Errorf("secret service: collection items: unexpected property type %T", v.Value())
+		return nil, fmt.Errorf("secret service: collection items: %w %T", errUnexpectedPropertyType, v.Value())
 	}
 	return items, nil
 }
@@ -355,7 +380,7 @@ func (c *Client) ItemAttributes(ctx context.Context, item dbus.ObjectPath) (map[
 	}
 	attrs, ok := v.Value().(map[string]string)
 	if !ok {
-		return nil, fmt.Errorf("secret service: item attributes: unexpected property type %T", v.Value())
+		return nil, fmt.Errorf("secret service: item attributes: %w %T", errUnexpectedPropertyType, v.Value())
 	}
 	return attrs, nil
 }
@@ -403,15 +428,15 @@ func (c *Client) completePrompt(ctx context.Context, path dbus.ObjectPath) (dbus
 	select {
 	case sig := <-ch:
 		if sig.Path != path || sig.Name != promptIface+".Completed" || len(sig.Body) != 2 {
-			return dbus.Variant{}, fmt.Errorf("secret service: unexpected signal from prompt %s", path)
+			return dbus.Variant{}, fmt.Errorf("%w %s", errUnexpectedPromptSignal, path)
 		}
 		dismissed, ok := sig.Body[0].(bool)
 		result, ok2 := sig.Body[1].(dbus.Variant)
 		if !ok || !ok2 {
-			return dbus.Variant{}, fmt.Errorf("secret service: malformed Completed signal from prompt %s", path)
+			return dbus.Variant{}, fmt.Errorf("%w %s", errMalformedCompletedSignal, path)
 		}
 		if dismissed {
-			return dbus.Variant{}, fmt.Errorf("secret service: prompt %s dismissed", path)
+			return dbus.Variant{}, fmt.Errorf("secret service: prompt %s %w", path, errPromptDismissed)
 		}
 		return result, nil
 	case <-ctx.Done():
@@ -425,6 +450,6 @@ func (c *Client) completePrompt(ctx context.Context, path dbus.ObjectPath) (dbus
 		return dbus.Variant{}, fmt.Errorf("secret service: prompt %s: %w", path, ctx.Err())
 	case <-time.After(c.promptWait()):
 		_ = c.call(ctx, prompt, promptIface+".Dismiss").Err
-		return dbus.Variant{}, fmt.Errorf("secret service: prompt %s timed out after %s", path, c.promptWait())
+		return dbus.Variant{}, promptTimeoutError{path: path, after: c.promptWait()}
 	}
 }
