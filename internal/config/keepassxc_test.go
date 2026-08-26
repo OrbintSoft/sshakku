@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestResolveKeePassXCRoute(t *testing.T) {
@@ -36,9 +37,32 @@ func TestResolveKeePassXCRoute(t *testing.T) {
 	}
 }
 
-// The two tests that name KeePassXC as the wallet — rather than only pinning
-// the route to it — need this system to have a wallet that can be named at
-// all, so they are in wallet_unix_test.go.
+// TestResolveAcceptsKeePassXCAsABackend is F22 asked of whichever system is
+// running it: the wallet can be chosen by name on every OS SSHakku supports.
+// It carries no build tag for that reason — a test of "every OS" that runs on
+// some of them is a test of those.
+func TestResolveAcceptsKeePassXCAsABackend(t *testing.T) {
+	s, errs := Resolve(File{SecretBackend: new(SecretBackendKeePassXC)}, lookupFrom(nil))
+	require.Empty(t, errs, "unexpected errors")
+	assert.Equal(t, SecretBackendKeePassXC, s.SecretBackend, "the wallet is named, not the mechanism")
+}
+
+// TestResolveCarriesTheKeePassXCSettings checks the three values the wallet's
+// routes are steered by reach the settings whole. The paths are opaque strings
+// to this code and are never opened here, so one spelling serves every
+// platform.
+func TestResolveCarriesTheKeePassXCSettings(t *testing.T) {
+	s, errs := Resolve(File{
+		SecretBackend:     new(SecretBackendKeePassXC),
+		KeePassXCRoute:    new(KeePassXCRouteCLI),
+		KeePassXCDatabase: new("/home/someone/secrets.kdbx"),
+		KeePassXCKeyFile:  new("/home/someone/secrets.key"),
+	}, lookupFrom(nil))
+	require.Empty(t, errs, "unexpected errors")
+	assert.Equal(t, KeePassXCRouteCLI, s.KeePassXCRoute, "route")
+	assert.Equal(t, "/home/someone/secrets.kdbx", s.KeePassXCDatabase, "database")
+	assert.Equal(t, "/home/someone/secrets.key", s.KeePassXCKeyFile, "key file")
+}
 
 func TestResolveReportsAnInvalidKeePassXCRoute(t *testing.T) {
 	s, errs := Resolve(File{KeePassXCRoute: new("browser")}, lookupFrom(nil))
