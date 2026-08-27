@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -17,11 +18,12 @@ import (
 // never handles an account credential.
 const onePasswordBin = "op"
 
-// onePasswordTag marks every item OnePassword creates, mirroring the
-// dedicated-collection assumption of SecretService: Vault is expected
-// to hold nothing but sshakku's own items, so the tag is defense in depth
-// for List rather than the only thing distinguishing sshakku's items from a
-// user's own.
+// onePasswordTag marks every item OnePassword creates, and is the only thing
+// that tells one of those from an item the user put in the same vault. A title
+// cannot: the vault may hold anything its owner keeps there, including a name
+// that looks like one SSHakku generates. So every operation that acts on an
+// item — reading it, removing it, writing over it — asks for the mark first,
+// and an item without it is somebody else's.
 const onePasswordTag = "sshakku"
 
 // onePasswordItemCommand is op's command group for items: the first word of
@@ -58,6 +60,48 @@ type onePasswordItemTemplate struct {
 	Fields   []onePasswordField `json:"fields"`
 }
 
+// onePasswordItem is an item as `op item get` answers with one: what it is
+// called, what marks it carries, and its fields when they were asked for.
+type onePasswordItem struct {
+	Title  string             `json:"title"`
+	Tags   []string           `json:"tags"`
+	Fields []onePasswordField `json:"fields"`
+}
+
+// ours reports whether SSHakku is what put this item in the vault. Everything
+// else in the vault belongs to whoever put it there and is left exactly as it
+// is — not read, not listed, not removed, not written over.
+func (i onePasswordItem) ours() bool {
+	return slices.Contains(i.Tags, onePasswordTag)
+}
+
+// password returns the item's password field, which is where Store puts a
+// passphrase and where a Password-category item keeps one.
+func (i onePasswordItem) password() (string, bool) {
+	for _, f := range i.Fields {
+		if f.ID == onePasswordPasswordField {
+			return f.Value, true
+		}
+	}
+	return "", false
+}
+
+// itemNotOursError is an item in Vault that SSHakku did not create, standing
+// under the name SSHakku would store one of its own under. It is not removed
+// and not written over — the vault may be one its owner keeps other things in,
+// and an item of theirs stays theirs — so the passphrase is not saved and the
+// clash is reported instead.
+type itemNotOursError struct {
+	vault string
+	title string
+}
+
+func (e itemNotOursError) Error() string {
+	return fmt.Sprintf("1Password vault %q already holds an item called %q that SSHakku did not create; "+
+		"it has been left untouched and the passphrase was not saved — rename that item, "+
+		"or point onepassword_vault at a different vault", e.vault, e.title)
+}
+
 // OnePassword stores and retrieves passphrases as items in a
 // dedicated 1Password vault via the op CLI. Like SecretTool it shells
 // out rather than speaking a native protocol.
@@ -68,13 +112,15 @@ type onePasswordItemTemplate struct {
 // both worse than what SecretTool already avoids. Store instead
 // deletes any existing item for service and creates a fresh one from a JSON
 // template on stdin, so the passphrase only ever travels on stdin (Store) or
-// is read back via a secret reference (Lookup), never in argv or a file.
+// comes back in op's own answer (Lookup), never in argv or a file.
 //
-// Vault must be a vault dedicated to sshakku (name or ID) — every item in it
-// is titled with the service string sshakku itself generates
-// (Loader.servicePrefix), so Lookup/Delete/List address and enumerate items
-// by title with no separate attribute search, the same simplification the
-// dedicated Secret Service collection design made.
+// Vault (name or ID) does not have to be a vault kept for nothing else. Items
+// are addressed by the service string sshakku generates (Loader.servicePrefix),
+// which says where to look but never who an item belongs to: a vault its owner
+// keeps other things in can hold that same title. Every item SSHakku creates is
+// therefore marked (onePasswordTag), and every operation that would act on one
+// checks the mark before it acts. What is not marked is not read, not listed,
+// not removed, and not written over.
 type OnePassword struct {
 	Runner run.Runner
 	Vault  string
@@ -96,28 +142,65 @@ func (b *OnePassword) run(ctx context.Context, c run.Cmd) (run.Result, error) {
 	return b.Runner.Run(ctx, c)
 }
 
-// Lookup reads the item's password field via a secret reference
-// (op://<vault>/<service>/password). A non-zero exit is treated as a miss,
-// not an error — op does not distinguish "item not found" from other
-// failures by exit code alone, the same ambiguity SecretTool accepts.
-func (b *OnePassword) Lookup(ctx context.Context, service string) (string, bool, error) {
-	ref := fmt.Sprintf("op://%s/%s/%s", b.Vault, service, onePasswordPasswordField)
-	res, err := b.run(ctx, run.Cmd{Name: onePasswordBin, Args: []string{"read", ref, "--no-newline"}})
+// itemAt asks op for the item titled service in Vault. A non-zero exit is
+// treated as a miss, not an error — op does not distinguish "item not found"
+// from other failures by exit code alone, the same ambiguity SecretTool
+// accepts.
+//
+// reveal fills in concealed field values. It is asked for only where such a
+// value is what the caller came for, so a call that only needs to know whose
+// item this is does not put that item's passphrase on a pipe.
+func (b *OnePassword) itemAt(ctx context.Context, service string, reveal bool) (onePasswordItem, bool, error) {
+	args := []string{onePasswordItemCommand, "get", service, onePasswordVaultFlag, b.Vault, "--format", "json"}
+	if reveal {
+		args = append(args, "--reveal")
+	}
+	res, err := b.run(ctx, run.Cmd{Name: onePasswordBin, Args: args})
 	if err != nil {
-		return "", false, err
+		return onePasswordItem{}, false, err
 	}
 	if res.Code != 0 {
-		return "", false, nil
+		return onePasswordItem{}, false, nil
 	}
-	return string(res.Stdout), true, nil
+	var item onePasswordItem
+	if err := json.Unmarshal(res.Stdout, &item); err != nil {
+		return onePasswordItem{}, false, err
+	}
+	return item, true, nil
 }
 
-// Store deletes any existing item for service (see the type doc for why an
-// in-place edit isn't used) and creates a fresh one holding label and
-// passphrase.
+// Lookup reads the passphrase SSHakku stored under service. An item standing
+// under that name that SSHakku did not create is not one of its own, so it is
+// a miss rather than a passphrase: reading it would hand the caller somebody
+// else's secret because the two happen to share a title.
+func (b *OnePassword) Lookup(ctx context.Context, service string) (string, bool, error) {
+	item, found, err := b.itemAt(ctx, service, true)
+	if err != nil || !found || !item.ours() {
+		return "", false, err
+	}
+	pass, ok := item.password()
+	return pass, ok, nil
+}
+
+// Store replaces what SSHakku has stored under service with label and
+// passphrase (see the type doc for why an in-place edit isn't used).
+//
+// An item there that SSHakku did not create is neither removed nor written
+// over, and there is nowhere else to put this one: two items in a vault
+// sharing a title cannot afterwards be told apart by the name that addresses
+// them. So the clash is reported and the passphrase is not saved.
 func (b *OnePassword) Store(ctx context.Context, service, label, passphrase string) error {
-	if err := b.Delete(ctx, service); err != nil {
+	item, found, err := b.itemAt(ctx, service, false)
+	if err != nil {
 		return err
+	}
+	if found && !item.ours() {
+		return itemNotOursError{vault: b.Vault, title: service}
+	}
+	if found {
+		if err := b.deleteItem(ctx, service); err != nil {
+			return err
+		}
 	}
 
 	payload, err := jsonMarshal(onePasswordItemTemplate{
@@ -147,20 +230,26 @@ func (b *OnePassword) Store(ctx context.Context, service, label, passphrase stri
 	return nil
 }
 
-// Delete removes the item for service. It looks the item up first so a miss
-// — nothing to delete — can be reported as success rather than conflated
-// with a real deletion failure, the same shape SecretService.Delete
+// Delete removes what SSHakku stored under service. It looks the item up first
+// so a miss — nothing to delete — can be reported as success rather than
+// conflated with a real deletion failure, the same shape SecretService.Delete
 // uses (search, then delete only what search found).
+//
+// An item there that SSHakku did not create is the same answer as no item at
+// all: there is nothing of SSHakku's under that name to forget, and what is
+// under it belongs to whoever put it there.
 func (b *OnePassword) Delete(ctx context.Context, service string) error {
-	res, err := b.run(ctx, run.Cmd{Name: onePasswordBin, Args: []string{onePasswordItemCommand, "get", service, onePasswordVaultFlag, b.Vault, "--format", "json"}})
-	if err != nil {
+	item, found, err := b.itemAt(ctx, service, false)
+	if err != nil || !found || !item.ours() {
 		return err
 	}
-	if res.Code != 0 {
-		return nil
-	}
+	return b.deleteItem(ctx, service)
+}
 
-	res, err = b.run(ctx, run.Cmd{Name: onePasswordBin, Args: []string{onePasswordItemCommand, "delete", service, onePasswordVaultFlag, b.Vault}})
+// deleteItem removes the item titled service, whoever it belongs to. Every
+// caller has established that already; this one only runs the command.
+func (b *OnePassword) deleteItem(ctx context.Context, service string) error {
+	res, err := b.run(ctx, run.Cmd{Name: onePasswordBin, Args: []string{onePasswordItemCommand, "delete", service, onePasswordVaultFlag, b.Vault}})
 	if err != nil {
 		return err
 	}
