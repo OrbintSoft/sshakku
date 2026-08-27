@@ -3325,7 +3325,7 @@ matrix rows.
 → features F22, F23, F17, F26, F4, F5, F6, F9; PLAN Phase 35 W5; rules 19, 21,
 22, 23, 25, 26.
 
-### Phase 45 — The passphrase `forget` left in the recycle bin
+### Phase 45 — The passphrase `forget` left in the recycle bin ✅ Done
 
 `sshakku forget` on KeePassXC's `cli` route reports success and leaves the
 passphrase in the database. `keepassxc-cli rm` does not delete an entry: it
@@ -3350,12 +3350,30 @@ lookup path the deletion works through instead of being asked of the database �
 rule 22 in its quiet form, where the test agrees with the code by sharing its
 blind spot rather than by being written from it.
 
-**What a fix must reckon with.** The recycle bin's group name is the system's
-own word for it, so it can never be a constant in this code. Three candidates,
-none chosen: blank the entry's password before removing it, so what reaches the
-bin holds nothing; ask the database where its bin is and remove from there too;
-or find whether keepassxc-cli can be told not to recycle at all. The test that
-comes first, whichever wins, asks the **database** what it still holds — because
-that is the question F9 is a promise about, and the one nothing currently asks.
+**What the fix does.** `Delete` removes twice. It asks the database where that
+name already is, removes the entry, asks again, and removes whatever has
+*appeared* — which is the copy the bin kept. Nothing here knows what a recycle
+bin is called: the name is the database's own language's (Recycle Bin, Cestino,
+Papierkorb, and every other), and a constant would have left every language but
+one holding the secret. Comparing against what was there before is also what
+keeps it to F27: an entry of the same name the user keeps elsewhere was not
+moved by this deletion and is never touched. A database whose owner turned the
+bin off has nothing appear, and nothing more is done.
+
+**The test asks the database, not the code.** The real-database test now exports
+the whole file and requires the passphrase to appear nowhere in it. That is the
+question F9 is a promise about, and it caught more than the bin: an entry's
+**history** keeps the passphrase it replaced, so a database that had been stored
+into twice held both secrets after `forget` said it held none. Deleting the
+entry takes its history with it, so one fix answers both — but only a check that
+reads the file could have shown the second one.
+
+**A second defect, found by running that test on Windows for the first time.**
+`Lookup` trimmed only `"\n"` from what keepassxc-cli printed. Windows ends the
+line with a carriage return as well, so every passphrase read from a KeePassXC
+database there came back one byte longer than the user typed. It reached
+`ssh-add`, whose Windows build tolerates the stray byte — so the wallet appeared
+to work while handing out a passphrase nothing else would have accepted. The
+test is opt-in and had only ever been run where the line ending hid it.
 
 → features F9, F27; rules 19, 22, 23, 25.

@@ -178,15 +178,98 @@ func TestKeePassXCCLIReportsARefusedPassword(t *testing.T) {
 
 // TestKeePassXCCLICanDelete is the difference from the local-protocol route,
 // which has no verb for it: here `sshakku forget` really removes the entry.
+//
+// The removal is the second call, not the first: what precedes it is the
+// database being asked where this name already is, so that what the removal
+// then moves can be told apart from what was somewhere else all along.
 func TestKeePassXCCLICanDelete(t *testing.T) {
-	runner := &runtest.Recorder{Results: []run.Result{{Code: 0}}}
+	runner := &runtest.Recorder{Results: []run.Result{
+		{Code: 0, Stdout: []byte("/SSHakku/" + wallet.DefaultServicePrefix + "-id_ed25519\n")},
+		{Code: 0},
+		{Code: 1}, // nothing found afterwards: this database has no recycle bin
+	}}
 	b := cliBackend(runner, &countingPrompter{password: "p"})
 
 	require.NoError(t, b.Delete(t.Context(), wallet.DefaultServicePrefix+"-id_ed25519"), "forgetting a passphrase must succeed")
-	require.NotEmpty(t, runner.Calls, "the database must actually be asked")
-	assert.Equal(t, "rm", runner.Calls[0].Args[0], "and asked to remove the entry")
-	assert.Contains(t, strings.Join(runner.Calls[0].Args, " "), "SSHakku/"+wallet.DefaultServicePrefix+"-id_ed25519",
+	require.Len(t, runner.Calls, 3, "the database must actually be asked")
+	assert.Equal(t, "rm", runner.Calls[1].Args[0], "and asked to remove the entry")
+	assert.Contains(t, strings.Join(runner.Calls[1].Args, " "), "SSHakku/"+wallet.DefaultServicePrefix+"-id_ed25519",
 		"exactly the entry inside SSHakku's own group, not one of the user's own elsewhere in the database")
+}
+
+// TestKeePassXCCLIDeleteTakesTheCopyTheRecycleBinKept is F9's own sentence:
+// SSHakku "never reports a passphrase as forgotten while it is still stored".
+// keepassxc-cli `rm` does not delete an entry, it moves it to the database's
+// recycle bin, where the password is still there for anyone who opens the file.
+//
+// Where the entry went is asked of the database and never assumed: the bin is
+// named in whatever language the database was made in, so no constant in this
+// code could name it. The move is identified as the path that was not there
+// before, which is also what keeps it to entries SSHakku itself moved.
+func TestKeePassXCCLIDeleteTakesTheCopyTheRecycleBinKept(t *testing.T) {
+	const service = wallet.DefaultServicePrefix + "-id_ed25519"
+	// A German database, to make the point that the name is not ours to know.
+	const moved = "/Papierkorb/" + service
+	runner := &runtest.Recorder{Results: []run.Result{
+		{Code: 0, Stdout: []byte("/SSHakku/" + service + "\n")}, // where it is now
+		{Code: 0},                               // the removal, which moves it
+		{Code: 0, Stdout: []byte(moved + "\n")}, // where it went
+		{Code: 0},                               // and the removal that deletes it
+	}}
+	b := cliBackend(runner, &countingPrompter{password: "p"})
+
+	require.NoError(t, b.Delete(t.Context(), service), "forgetting a passphrase must succeed")
+
+	require.Len(t, runner.Calls, 4, "the entry has to be found again after the move, and removed again")
+	last := runner.Calls[len(runner.Calls)-1]
+	assert.Equal(t, "rm", last.Args[0], "what follows the move is a removal")
+	assert.Contains(t, last.Args, moved,
+		"the second removal must name where the database said the entry went")
+}
+
+// TestKeePassXCCLIDeleteLeavesASameNamedEntryItDidNotMove holds the rule above
+// to F27: SSHakku only ever touches entries it put there itself. A user may
+// perfectly well keep an entry of the same name somewhere else in their own
+// database, and that one was not moved by this deletion — which is exactly what
+// comparing against what was there before can tell, and what a search
+// afterwards on its own could not.
+func TestKeePassXCCLIDeleteLeavesASameNamedEntryItDidNotMove(t *testing.T) {
+	const service = wallet.DefaultServicePrefix + "-id_ed25519"
+	const theirs = "/Work/" + service
+	const moved = "/Kosár/" + service
+	runner := &runtest.Recorder{Results: []run.Result{
+		{Code: 0, Stdout: []byte("/SSHakku/" + service + "\n" + theirs + "\n")},
+		{Code: 0},
+		{Code: 0, Stdout: []byte(theirs + "\n" + moved + "\n")},
+		{Code: 0},
+	}}
+	b := cliBackend(runner, &countingPrompter{password: "p"})
+
+	require.NoError(t, b.Delete(t.Context(), service))
+
+	require.Len(t, runner.Calls, 4, "one entry moved, so one entry is removed again")
+	last := runner.Calls[len(runner.Calls)-1]
+	assert.Contains(t, last.Args, moved, "the copy the bin kept is the one to remove")
+	assert.NotContains(t, last.Args, theirs,
+		"an entry of the same name that this deletion did not move is somebody else's")
+}
+
+// TestKeePassXCCLIDeleteStopsWhereThereIsNoRecycleBin covers the database whose
+// owner turned the bin off, or which never had one: `rm` deletes outright,
+// nothing appears anywhere, and there is nothing more to do. A second removal
+// there would be aimed at nothing.
+func TestKeePassXCCLIDeleteStopsWhereThereIsNoRecycleBin(t *testing.T) {
+	const service = wallet.DefaultServicePrefix + "-id_ed25519"
+	runner := &runtest.Recorder{Results: []run.Result{
+		{Code: 0, Stdout: []byte("/SSHakku/" + service + "\n")},
+		{Code: 0},
+		{Code: 1}, // search finds nothing, which is how it reports a miss
+	}}
+	b := cliBackend(runner, &countingPrompter{password: "p"})
+
+	require.NoError(t, b.Delete(t.Context(), service))
+
+	assert.Len(t, runner.Calls, 3, "with nothing left to find there is nothing left to remove")
 }
 
 func TestKeePassXCCLIDeleteOfAnAbsentEntryIsSuccess(t *testing.T) {
