@@ -46,6 +46,10 @@ const opSetupTimeout = 30 * time.Second
 // Delete / List against only that vault, and deletes the vault when the test
 // ends regardless of outcome — leaving no trace in the account.
 //
+// The vault is also made to hold items the backend did not create, since a
+// vault the user keeps other things in is a vault this backend has to work in
+// (F56), and an empty one cannot show whether it leaves anything alone.
+//
 // op's authentication is live external state that go test's cache has no way
 // to see (it isn't a file or an env var), so a second run with the same
 // allowRealOnePasswordEnv value can replay a stale cached skip/pass from
@@ -102,6 +106,70 @@ func TestOnePasswordBackendRealAccount(t *testing.T) {
 	_, found, err = backend.Lookup(t.Context(), testService)
 	require.NoError(t, err, "looking for a forgotten passphrase must not be an error")
 	assert.False(t, found, "and it must be gone from the vault")
+
+	// F56: the vault does not have to be one kept for nothing else — what
+	// SSHakku did not put there it neither reads, nor lists, nor removes. Both
+	// items below are created with op directly rather than through the backend,
+	// which marks everything it creates as its own: made the other way they
+	// would carry the mark, and there would be nothing to tell apart.
+	const (
+		foreignService = "not-sshakku-integration-test-someone-elses"
+		foreignPass    = "someone-elses-password-not-a-real-secret"
+		// Titled the way SSHakku titles what it stores, which is the case the
+		// mark exists for: a shared vault can hold a name that looks like one
+		// of ours, and a title is then not enough to tell whose item it is.
+		lookalikeService = "sshakku-integration-test-someone-elses"
+		lookalikePass    = "someone-elses-password-under-a-familiar-name"
+	)
+	opCreateItemNotOurs(t, vault.ID, foreignService, foreignPass)
+	lookalikeID := opCreateItemNotOurs(t, vault.ID, lookalikeService, lookalikePass)
+
+	services, err = backend.List(t.Context())
+	require.NoError(t, err, "listing the vault must succeed")
+	assert.NotContains(t, services, foreignService,
+		"an item SSHakku did not store must not be listed: what is listed here is what forget --all goes on to delete")
+	assert.NotContains(t, services, lookalikeService,
+		"and a title that looks like one of SSHakku's must not change that")
+
+	_, found, err = backend.Lookup(t.Context(), lookalikeService)
+	require.NoError(t, err, "looking for a passphrase must not be an error")
+	assert.False(t, found, "a passphrase SSHakku did not store must not be handed back as one of its own")
+
+	// Saving under a name somebody else's item already carries must not be how
+	// that item disappears. What Store answers is not what F56 promises about;
+	// the promise is about the item, which has to be where its owner left it
+	// whatever SSHakku decided to do with the request.
+	storeErr := backend.Store(t.Context(), lookalikeService, testLabel, testPass)
+	survived, err := opRun(t, "read", "op://"+vault.ID+"/"+lookalikeID+"/"+onePasswordPasswordField, "--no-newline")
+	require.NoErrorf(t, err, "an item SSHakku did not create must still be in the vault, but reading it back failed (Store answered %v): %s", storeErr, survived)
+	assert.Equal(t, lookalikePass, strings.TrimSpace(survived), "and it must still hold what its owner put in it")
+}
+
+// opCreateItemNotOurs puts an item in vaultID the way its owner would — with op
+// itself, carrying none of the marking OnePassword applies to what it creates.
+// It answers with the item's ID so that what becomes of it can be checked
+// without going through a title something else may by then also be using.
+//
+// The value travels as an assignment argument, which op warns is visible to
+// other processes on the machine. That is the wrong way to handle a real secret
+// and is why OnePassword itself does not do it; this one is a literal in this
+// file, so there is nothing here to expose.
+func opCreateItemNotOurs(t *testing.T, vaultID, title, password string) string {
+	t.Helper()
+	out, err := opRun(t, onePasswordItemCommand, "create",
+		"--category", "password",
+		"--title", title,
+		onePasswordVaultFlag, vaultID,
+		"--format", "json",
+		onePasswordPasswordField+"="+password,
+	)
+	require.NoErrorf(t, err, "the vault must be made to hold something that is not SSHakku's, or there is nothing to leave alone: %s", out)
+	var item struct {
+		ID string `json:"id"`
+	}
+	require.NoErrorf(t, json.Unmarshal([]byte(out), &item), "op item create answered with: %s", out)
+	require.NotEmptyf(t, item.ID, "op item create named no item: %s", out)
+	return item.ID
 }
 
 // opRun runs the op CLI directly (not through a run.Runner) for test setup and
