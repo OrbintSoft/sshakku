@@ -82,6 +82,32 @@ func TestKeePassXCCLIRealDatabase(t *testing.T) {
 	_, found, err = b.Lookup(t.Context(), service)
 	require.NoError(t, err, "looking for a forgotten passphrase must not be an error")
 	assert.False(t, found, "and it must be gone from the database")
+
+	// F9, asked of the database rather than of the code that deleted it. The
+	// assertion above passes while the passphrase is still in the file:
+	// keepassxc-cli moves an entry to the recycle bin instead of deleting it,
+	// and Lookup searches the group the move empties. "Forgotten" is a claim
+	// about the file, so the file is what gets asked.
+	dump := exportRealDatabase(t, db, dbPassword)
+	assert.NotContains(t, dump, changed,
+		"the passphrase is still somewhere in the database after SSHakku reported forgetting it")
+	assert.NotContains(t, dump, passphrase,
+		"the passphrase it replaced is still in the database too")
+}
+
+// exportRealDatabase dumps everything the database holds, wherever in it it is.
+//
+// It goes straight to keepassxc-cli rather than through the backend: a check
+// that a deletion worked cannot be run through the same code the deletion used,
+// or it inherits whatever that code cannot see — which is exactly how this went
+// unnoticed.
+func exportRealDatabase(t *testing.T, path, password string) string {
+	t.Helper()
+	cmd := exec.CommandContext(t.Context(), keepassxcCLIBin, "export", "-f", "xml", path)
+	cmd.Stdin = strings.NewReader(password + "\n")
+	out, err := cmd.Output()
+	require.NoErrorf(t, err, "exporting the database to check what it still holds failed:\n%s", out)
+	return string(out)
 }
 
 // createRealDatabase makes a throwaway .kdbx with the real keepassxc-cli.

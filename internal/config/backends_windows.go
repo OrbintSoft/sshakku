@@ -15,11 +15,19 @@ const SecretBackendCredentialManager = "credential-manager"
 // A name outside this list is not a wallet with a missing piece, it is a value
 // that cannot mean anything here — see resolveSecretBackendFrom.
 //
-// The wallets reached by running a program of their own are absent on purpose.
-// They compile here, which is not the same as having been shown to work here,
-// and what is offered is what has been driven on this system.
+// KeePassXC is offered because it has been driven here, against a real
+// keepassxc-cli and a real database, and not because it compiles. It is reached
+// by opening the database file: the protocol a running KeePassXC serves is a
+// named pipe on this system, which SSHakku has no dialler for, so that route
+// reports itself unavailable rather than being chosen.
+//
+// The wallets reached by running a program of their own — 1Password, Bitwarden
+// — are still absent, on the same terms: they compile here, which is not the
+// same as having been shown to work here, and what is offered is what has been
+// driven on this system.
 var platformSecretBackends = []string{
 	SecretBackendCredentialManager,
+	SecretBackendKeePassXC,
 }
 
 const platformDefaultSecretBackend = SecretBackendCredentialManager

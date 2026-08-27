@@ -3073,7 +3073,7 @@ nowhere on this platform (F48's illustration); and the three wallets reached by
 running a program of their own, each of which owes a matrix row before it is
 offered here.
 
-### Phase 42 — The service the report never asked about
+### Phase 42 — The service the report never asked about ✅ Done
 
 Windows reaches its agent through a service on a named pipe, and `sshakku
 doctor` there has never asked the service manager anything: every occurrence of
@@ -3248,3 +3248,132 @@ end-to-end run belongs to this phase: no user-visible behaviour changed, and
 that every message is unchanged is what the verification above is about.
 
 → rules 12, 15, 20, 22, 23, 26, 27.
+
+### Phase 44 — The wallet a promise had already named
+
+F22 says KeePassXC can be chosen as your wallet by name **on every OS SSHakku
+supports**. Windows is one of those, and `platformSecretBackends` there holds
+`credential-manager` alone: naming KeePassXC in a configuration on Windows is
+answered as a value that cannot mean anything on this system (F26), which is
+the answer reserved for a wallet the platform has not got. KeePassXC is
+installed on Windows machines by the same people who install it anywhere else.
+
+So this phase closes a promise already made rather than making one. The comment
+in `internal/config/backends_windows.go` is the honest record of why the gap
+was left — *"they compile here, which is not the same as having been shown to
+work here, and what is offered is what has been driven on this system"* — and
+that standard is what the phase satisfies: the route is driven against a real
+`keepassxc-cli` and a real database in a container that has never had anything
+installed on it, and the wallet is offered only afterwards.
+
+**The route this platform gets, and the one it must refuse.** `auto` resolved
+to the native route everywhere that is not Linux, so the moment Windows offers
+the wallet it would pick the one route that cannot work there: SSHakku reaches
+a running KeePassXC over a socket, and on Windows KeePassXC serves that same
+protocol over a named pipe. The refusal has to say that and not blame the
+platform — the two are opposite instructions to whoever reads it. macOS having
+no Secret Service is a fact nothing can install away; Windows here has the
+thing, and it is SSHakku that has not learnt to knock, so the message names the
+pipe and points at the route that does work.
+
+**And that route asks for one thing the others do not.** The CLI works on the
+database file, which it cannot discover — a file on disk does not announce
+itself the way a running KeePassXC knows what it has open. On Windows,
+therefore, naming the wallet is not quite the whole of the configuration, and
+F22 says so in its own words instead of leaving a user with a wallet that
+quietly holds nothing. With no database named the backend reports itself
+unavailable under its own name, the shell still opens and the passphrase is
+asked for (F17), and `sshakku doctor` names the missing setting.
+
+**It also asks for something a login cannot give it.** The CLI opens the
+database every time, so it needs the database's password — once per process,
+which is once per login shell. Where it is the only route, F24's "being asked
+is the exception" becomes the rule, F5's silent later login is not kept, and
+on Windows the question cannot even be answered by anything but a person:
+the prompt reads the console directly, so no harness can type into it.
+
+The way out is one KeePassXC already offers and SSHakku did not use: a database
+whose only key is a **key file** has no password to ask for.
+`keepassxc_no_password` says so and `keepassxc-cli --no-password` acts on it —
+and both halves are needed, since without the flag the tool waits for a password
+on standard input, and with it a password line left in front is read as the
+answer to whatever it asks next. It is stated and never inferred: a database can
+carry a key file *and* a password, so silence means there is one. This is
+platform-neutral and Linux and macOS gain the same silent CLI route; what is
+specific to Windows is only that it is the route in force there.
+
+The trade belongs in the open, not under the promise: a key file on disk makes
+the wallet's lock worth what that file's permissions are worth, which is nearer
+to what F54 says about the Credential Manager than to a password-protected
+database. It is the user's explicit choice and never a default. The route that
+would give real parity — a KeePassXC already open, asked nothing — is the native
+one, and that is the phase after this.
+
+**The native route is a phase of its own, and cannot be this one.** Dialling a
+named pipe needs a dialler this build has not got, and driving it needs a
+running KeePassXC with browser integration — a graphical program, in a
+container image that is Server Core. It cannot be exercised in an isolated
+scenario, so by the standard above it cannot be offered yet. What this phase
+owes it is an accurate refusal, which it now has.
+
+Sub-steps, each committable: (1) the promise this platform was left out of —
+F22 and the route Windows picks; (2) the scenario, red, driving the real binary
+against a real database in the container while the configuration still refuses
+the wallet's name; (3) the wallet offered, and the scenario green; (4) the
+matrix rows.
+
+→ features F22, F23, F17, F26, F4, F5, F6, F9; PLAN Phase 35 W5; rules 19, 21,
+22, 23, 25, 26.
+
+### Phase 45 — The passphrase `forget` left in the recycle bin ✅ Done
+
+`sshakku forget` on KeePassXC's `cli` route reports success and leaves the
+passphrase in the database. `keepassxc-cli rm` does not delete an entry: it
+moves it to the database's recycle-bin group, where the password is still
+stored and still readable by anyone who opens the database. Removing it a
+second time, at its new path, is what deletes it — KeePassXC's documented
+behaviour, and not a fault in it.
+
+**F9 names this exact failure**: *"it never reports a passphrase as forgotten
+while it is still stored."* That clause was written for a wallet SSHakku cannot
+delete from, where the answer is to say so and name the entry. Here SSHakku can
+delete, believes it has, and says so.
+
+**It belongs to every platform, not to the one it was found on.** `CLI.Delete`
+carries no build tag, and the route is pinnable on Linux and macOS as well as
+being what Windows would reach KeePassXC by.
+
+**Why the suite is green.** `TestKeePassXCCLIRealDatabase` checks F9 by calling
+`Delete` and then `Lookup`, and `Lookup` searches the group the move has just
+emptied. The test was derived from the promise, but "gone" was asked of the same
+lookup path the deletion works through instead of being asked of the database —
+rule 22 in its quiet form, where the test agrees with the code by sharing its
+blind spot rather than by being written from it.
+
+**What the fix does.** `Delete` removes twice. It asks the database where that
+name already is, removes the entry, asks again, and removes whatever has
+*appeared* — which is the copy the bin kept. Nothing here knows what a recycle
+bin is called: the name is the database's own language's (Recycle Bin, Cestino,
+Papierkorb, and every other), and a constant would have left every language but
+one holding the secret. Comparing against what was there before is also what
+keeps it to F27: an entry of the same name the user keeps elsewhere was not
+moved by this deletion and is never touched. A database whose owner turned the
+bin off has nothing appear, and nothing more is done.
+
+**The test asks the database, not the code.** The real-database test now exports
+the whole file and requires the passphrase to appear nowhere in it. That is the
+question F9 is a promise about, and it caught more than the bin: an entry's
+**history** keeps the passphrase it replaced, so a database that had been stored
+into twice held both secrets after `forget` said it held none. Deleting the
+entry takes its history with it, so one fix answers both — but only a check that
+reads the file could have shown the second one.
+
+**A second defect, found by running that test on Windows for the first time.**
+`Lookup` trimmed only `"\n"` from what keepassxc-cli printed. Windows ends the
+line with a carriage return as well, so every passphrase read from a KeePassXC
+database there came back one byte longer than the user typed. It reached
+`ssh-add`, whose Windows build tolerates the stray byte — so the wallet appeared
+to work while handing out a passphrase nothing else would have accepted. The
+test is opt-in and had only ever been run where the line ending hid it.
+
+→ features F9, F27; rules 19, 22, 23, 25.

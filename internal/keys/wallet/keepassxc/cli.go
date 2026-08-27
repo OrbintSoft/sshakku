@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -67,6 +68,15 @@ type CLI struct {
 	Database string
 	// KeyFile is an optional key file the database also requires.
 	KeyFile string
+	// NoPassword says the database opens on its key file alone. There is then
+	// nothing to ask the user for, and keepassxc-cli has to be told so: left to
+	// itself it waits for a password on standard input, and reads whatever
+	// arrives next as one.
+	//
+	// It is stated rather than worked out. A database can carry a key file and
+	// a password together, so a key file being configured says nothing on its
+	// own about whether there is also a password.
+	NoPassword bool
 	// Group is the group in the database to keep entries in. Empty selects the
 	// group SSHakku makes for itself. Every entry in it is treated as
 	// SSHakku's, so it must not name a group holding anything else.
@@ -94,13 +104,19 @@ func (b *CLI) entryPath(service string) string {
 	return b.group() + "/" + service
 }
 
-// unlock returns the database password, asking for it the first time.
+// unlock returns the database password, asking for it the first time. A
+// database that opens on its key file alone has none, and nobody is asked —
+// which is what makes that arrangement usable at a login where there may be
+// nobody to ask.
 func (b *CLI) unlock(ctx context.Context) (string, error) {
-	if b.password != "" {
-		return b.password, nil
-	}
 	if b.Database == "" {
 		return "", ErrNoDatabase
+	}
+	if b.NoPassword {
+		return "", nil
+	}
+	if b.password != "" {
+		return b.password, nil
 	}
 	password, err := b.Prompter.Prompt(ctx, "your KeePassXC database password")
 	if err != nil {
@@ -122,8 +138,16 @@ func (b *CLI) run(ctx context.Context, args []string, extraInput ...string) (run
 		full = append(full, "--key-file", b.KeyFile)
 	}
 	var input strings.Builder
-	input.WriteString(password)
-	input.WriteString("\n")
+	if b.NoPassword {
+		// Both halves are needed and neither does the other's job: without the
+		// flag keepassxc-cli waits for a password on standard input, and with
+		// the flag a password line left in front would be read as the answer to
+		// whatever it asks next — the entry's own password, on a store.
+		full = append(full, "--no-password")
+	} else {
+		input.WriteString(password)
+		input.WriteString("\n")
+	}
 	for _, extra := range extraInput {
 		input.WriteString(extra)
 		input.WriteString("\n")
@@ -163,7 +187,13 @@ func (b *CLI) Lookup(ctx context.Context, service string) (string, bool, error) 
 		// asks and stores rather than failing the shell.
 		return "", false, nil
 	}
-	return strings.TrimRight(string(res.Stdout), "\n"), true, nil
+	// Both line endings, because keepassxc-cli ends the line the way the system
+	// it is running on does: trimming only the newline leaves a carriage return
+	// on the end of every passphrase read on Windows, and a passphrase with one
+	// more byte than the user typed is the wrong passphrase. What it cannot cost
+	// is a real one — the answer arrives as a line, so a passphrase ending in a
+	// line ending could not have survived being printed as one.
+	return strings.TrimRight(string(res.Stdout), "\r\n"), true, nil
 }
 
 // Store saves passphrase for service, editing the entry when it already exists
@@ -209,7 +239,23 @@ func (b *CLI) Store(ctx context.Context, service, label, passphrase string) erro
 
 // Delete removes the entry for service. Unlike the local-protocol route, the
 // CLI can delete, so `sshakku forget` works here.
+//
+// It removes twice, because once does not delete. keepassxc-cli moves an entry
+// to the database's recycle bin, where the password is still stored and still
+// readable by anyone who opens the file; removing it again, at the path it was
+// moved to, is what deletes it. Reporting a passphrase forgotten while it is
+// still in the file is the one thing this must not do.
+//
+// Where it went is asked of the database rather than assumed. The bin carries
+// the name the database's own language gives it — Recycle Bin, Cestino,
+// Papierkorb — so no constant here could name it, and looking for one would
+// leave every other language holding the secret.
 func (b *CLI) Delete(ctx context.Context, service string) error {
+	before, err := b.pathsHolding(ctx, service)
+	if err != nil {
+		return err
+	}
+
 	res, err := b.run(ctx, []string{"rm", b.Database, b.entryPath(service)})
 	if err != nil {
 		return err
@@ -219,10 +265,51 @@ func (b *CLI) Delete(ctx context.Context, service string) error {
 			return ErrPasswordNotAccepted
 		}
 		// A missing entry is success: forgetting an already-forgotten key is
-		// not a failure.
+		// not a failure, and there is then nothing that can have been moved.
 		return nil
 	}
+
+	after, err := b.pathsHolding(ctx, service)
+	if err != nil {
+		return err
+	}
+	for _, path := range after {
+		if slices.Contains(before, path) {
+			// Somewhere this entry's name already was, which this deletion did
+			// not put there and has no business removing (F27).
+			continue
+		}
+		if _, err := b.run(ctx, []string{"rm", b.Database, path}); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// pathsHolding asks the database for every entry named service, wherever in it
+// they are. A search that matches nothing exits non-zero, which is an answer
+// rather than a failure.
+func (b *CLI) pathsHolding(ctx context.Context, service string) ([]string, error) {
+	res, err := b.run(ctx, []string{"search", b.Database, service})
+	if err != nil {
+		return nil, err
+	}
+	if res.Code != 0 {
+		// A database that would not open is not a database with nothing in it,
+		// and reading it as one would have the deletion carry on and report
+		// success over a passphrase it never reached.
+		if refusedPassword(res) {
+			return nil, ErrPasswordNotAccepted
+		}
+		return nil, nil
+	}
+	var paths []string
+	for line := range strings.SplitSeq(strings.TrimRight(string(res.Stdout), "\n"), "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			paths = append(paths, line)
+		}
+	}
+	return paths, nil
 }
 
 // List returns every entry SSHakku keeps in the database.

@@ -75,6 +75,11 @@
 # keepassxc_database = "~/Passwords.kdbx"
 # keepassxc_key_file = "~/Passwords.keyx"
 
+# Set this only if the database above has no password on it and opens on the key
+# file alone. There is then nothing to ask you for, so your keys load at every
+# login with nothing typed. Saying nothing means the database has a password.
+# keepassxc_no_password = true
+
 # The dialog a passphrase is asked for in: "auto" uses whichever one this
 # session has, "none" always asks on the terminal, and naming one uses that one
 # and no other. Where there is no screen the terminal asks whatever this says.

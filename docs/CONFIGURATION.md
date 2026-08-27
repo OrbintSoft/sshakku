@@ -114,7 +114,7 @@ system:
 | `"secret-service"` | ✅ the default | ❌ no such API exists there | ❌ no such API exists there |
 | `"keychain"` | ❌ no such API exists there | ✅ the default | ❌ no such API exists there |
 | `"credential-manager"` | ❌ no such API exists there | ❌ no such API exists there | ✅ the default |
-| `"keepassxc"` | ✅ | ✅ | ❌ not yet driven there |
+| `"keepassxc"` | ✅ | ✅ | ✅ by the `cli` route, which needs `keepassxc_database` |
 | `"1password"` | ✅ | ✅ | ❌ not yet driven there |
 | `"bitwarden"` | ✅ | ✅ | ❌ not yet driven there |
 
@@ -123,11 +123,12 @@ wallet waiting for you to install something: SSHakku logs it and carries on with
 your platform's default, so a stale config file cannot take your login shell
 down with it.
 
-Three of those cells say *not yet driven there* rather than *no such thing
+Two of those cells say *not yet driven there* rather than *no such thing
 exists*, and the difference is deliberate. Those wallets are programs that could
 perfectly well be installed on Windows; what is missing is not the program but
 anyone having run SSHakku against it there and a test holding it to that. A
-wallet is offered on a platform once it has been.
+wallet is offered on a platform once it has been — which is how KeePassXC came
+to be offered on Windows, and what the other two are still waiting for.
 
 Like `wallet_store_mode`, these four keys are config-file only — an account
 identity (an email address, a vault name) doesn't fit a single environment
@@ -184,9 +185,13 @@ bitwarden_server = "https://vault.example.com" # optional; a self-hosted Vaultwa
 ## Choosing how KeePassXC is reached
 
 You name the wallet, not the mechanism: `secret_backend = "keepassxc"` works on
-Linux and on macOS. SSHakku then picks a way to reach it — the Secret Service on
-Linux, which KeePassXC implements itself, and its local socket protocol
-elsewhere.
+every OS SSHakku supports. SSHakku then picks a way to reach it — the Secret
+Service on Linux, which KeePassXC implements itself; its local socket protocol
+on macOS; and `keepassxc-cli` against the database file on Windows, where that
+protocol is served over a named pipe SSHakku cannot yet speak. Only that last
+one needs anything more from you, and it is one line: `keepassxc_database`,
+naming the file, since a file on disk cannot be discovered the way a running
+KeePassXC can be asked what it has open.
 
 If you would rather decide, `keepassxc_route` says so, and then that route is
 used **and no other**: an unavailable one is reported by name instead of being
@@ -197,6 +202,7 @@ secret_backend = "keepassxc"
 keepassxc_route = "native"   # "auto" (default), "secret-service", "native", or "cli"
 keepassxc_database = "~/secrets.kdbx"  # only the "cli" route needs to be told where the database is
 keepassxc_key_file = "~/secrets.key"   # optional, for a database that also uses a key file
+keepassxc_no_password = true           # only if the key file above is the database's *only* key
 ```
 
 - `"auto"` (the default) is the only value that chooses, and the only one that
@@ -212,7 +218,18 @@ keepassxc_key_file = "~/secrets.key"   # optional, for a database that also uses
   unlocked, it never asks you for anything again.
 - `"cli"` runs `keepassxc-cli` against the database file, so it works with no
   KeePassXC running — but the database has to be opened each time, so it asks
-  for its password rather than being silent.
+  for its password rather than being silent. It asks once per session, not once
+  per key.
+
+  Unless there is no password to ask for. A database whose **only** key is a key
+  file is opened with that alone, and `keepassxc_no_password = true` says so:
+  nothing is asked, at that login or any other, and keys load in a session with
+  nobody at a screen to answer. SSHakku never works this out from
+  `keepassxc_key_file` being set, because a database can carry a key file *and* a
+  password — saying nothing means there is one. Set it wrongly and every
+  operation on the database is refused; set it rightly and remember that the
+  wallet's lock is then worth exactly what the key file's own permissions are
+  worth.
 
 Routes are not tied to an operating system; only the default is. On Linux you
 can pin `"native"` or `"cli"` and bypass the Secret Service entirely.
