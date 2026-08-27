@@ -38,11 +38,22 @@ func TestSecretBackendChoicesOnWindows(t *testing.T) {
 		assert.Equal(t, "credential-manager", s.SecretBackend, "SecretBackend")
 	})
 
-	// The wallets reached by running someone else's program are not offered
-	// here. They compile on this platform, which is not the same as having been
-	// shown to work on it, and each one offered is a promise the test matrix
-	// owes a row for.
+	// F56: the wallet is named in the configuration and that is the whole of
+	// what naming it takes here — no setting of this platform's own, the way
+	// KeePassXC needs a database named.
+	t.Run("1Password can be named outright", func(t *testing.T) {
+		assert.Contains(t, SecretBackends(), "1password", "the wallet must be one this platform offers")
+
+		s, errs := Resolve(File{SecretBackend: new("1password")}, lookupFrom(nil))
+		require.Empty(t, errs, "unexpected errors")
+		assert.Equal(t, "1password", s.SecretBackend, "SecretBackend")
+	})
+
+	// Bitwarden is reached by running someone else's program, as 1Password is,
+	// and is still not offered here. It compiles on this platform, which is not
+	// the same as having been shown to work on it, and each one offered is a
+	// promise the test matrix owes a row for.
 	t.Run("a wallet nobody has driven here is not offered", func(t *testing.T) {
-		assert.NotContains(t, SecretBackends(), "1password")
+		assert.NotContains(t, SecretBackends(), "bitwarden")
 	})
 }
