@@ -54,6 +54,12 @@ linters:
     # satisfy a number would make finding a command harder, not easier.
     - cyclop
 
+    # A function copied and then edited keeps the original's bugs and gains none
+    # of its fixes, because the copy is the one nobody remembers to change. In a
+    # test the copy claims something as well: two tests with the same body under
+    # different names say two situations are covered where only one is.
+    - dupl
+
     # Multiplying two durations gives a number in units nobody meant —
     # `timeout * time.Second` is seconds squared. Key lifetimes, agent timeouts
     # and prompt budgets are most of this program's arithmetic.
@@ -166,6 +172,15 @@ linters:
       # once. The default of 10 would refuse the flat tables instead — the
       # command dispatcher alone scores 14 with no nesting at all.
       max-complexity: 20
+
+    dupl:
+      # A hundred tokens is about a dozen dense lines of Go, and the bar sits
+      # there because of what lies on either side of it. Below are the few
+      # repeated lines that are a case's own data — the fixture two neighbouring
+      # tests set up the same way — where a name to resolve costs the reader
+      # more than the repetition does. Above is a whole function written twice,
+      # which is where the second copy starts drifting from the first.
+      threshold: 100
 
     goconst:
       # In a table-driven test the repeated literal is the case's own data —

@@ -172,6 +172,32 @@ func startForeignAgent(t *testing.T, sock string) int {
 	return pid
 }
 
+// addKeyToAgent generates a throwaway passphraseless key and loads it into the
+// agent listening on sock, so a test can tell an agent that is holding
+// something apart from one that is merely answering. ssh-add exiting 0 is what
+// says the key arrived: without that check a setup that silently did nothing
+// would leave the test looking at an empty agent and calling it a full one.
+func addKeyToAgent(t *testing.T, sock string) {
+	t.Helper()
+	keygen, err := exec.LookPath("ssh-keygen")
+	if err != nil {
+		t.Skip("ssh-keygen not on PATH")
+	}
+	add, err := exec.LookPath("ssh-add")
+	if err != nil {
+		t.Skip("ssh-add not on PATH")
+	}
+
+	key := filepath.Join(t.TempDir(), "id_ed25519")
+	out, err := exec.CommandContext(t.Context(), keygen, "-q", "-t", "ed25519", "-N", "", "-C", "sshakku-test", "-f", key).CombinedOutput()
+	require.NoErrorf(t, err, "generate a throwaway key: %s", out)
+
+	cmd := exec.CommandContext(t.Context(), add, key)
+	cmd.Env = append(os.Environ(), "SSH_AUTH_SOCK="+sock)
+	out, err = cmd.CombinedOutput()
+	require.NoErrorf(t, err, "load the throwaway key into the agent on %s: %s", sock, out)
+}
+
 func TestEnsureAgentRealClean(t *testing.T) {
 	requireIsolatedAgentEnvironment(t)
 	m := newRealManager()
@@ -186,6 +212,10 @@ func TestEnsureAgentRealClean(t *testing.T) {
 	assert.True(t, m.Prober.Reachable(t.Context(), cfg.FixedSock), "the fixed socket must be reachable after a clean start")
 }
 
+// TestEnsureAgentRealHealthyReuse covers the reuse a session actually depends
+// on: an agent that is already holding a key. Starting a second one in its
+// place would leave that key behind in a process nothing points at any more,
+// and the only sign the user would get is being asked for the passphrase again.
 func TestEnsureAgentRealHealthyReuse(t *testing.T) {
 	requireIsolatedAgentEnvironment(t)
 	m := newRealManager()
@@ -194,11 +224,12 @@ func TestEnsureAgentRealHealthyReuse(t *testing.T) {
 	res1, err := m.EnsureAgent(t.Context(), cfg, nil)
 	require.NoError(t, err, "first EnsureAgent")
 	t.Cleanup(func() { stopAgent(t, res1.Started) })
+	addKeyToAgent(t, cfg.FixedSock)
 
 	res2, err := m.EnsureAgent(t.Context(), cfg, nil)
 	require.NoError(t, err, "second EnsureAgent")
-	assert.Equal(t, SituationHealthy, res2.Situation, "situation")
-	assert.Zero(t, res2.Started, "no new agent must be started on reuse")
+	assert.Equal(t, SituationHealthy, res2.Situation, "an agent holding a key is healthy")
+	assert.Zero(t, res2.Started, "the agent holding the key must be reused, never replaced")
 }
 
 // TestEnsureAgentRealReachableButEmptyIsHealthy covers the D1 case: an

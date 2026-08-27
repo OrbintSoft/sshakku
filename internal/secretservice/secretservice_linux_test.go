@@ -29,6 +29,27 @@ func newTestClient(t *testing.T, behavior string) (*Client, *fakeService) {
 	return client, svc
 }
 
+// oneItemCollection opens a client against a fake service behaving as
+// `behavior` says, and leaves exactly one item in the sshakku collection for
+// the caller to act on. The item's name, attributes and secret are stand-ins:
+// what the tests built on it are about is what happens to the item, not what
+// is in it.
+func oneItemCollection(t *testing.T, behavior string) (client *Client, svc *fakeService, col, item dbus.ObjectPath) {
+	t.Helper()
+	client, svc = newTestClient(t, behavior)
+
+	var err error
+	col, err = client.Collection(t.Context(), "sshakku", "sshakku")
+	require.NoError(t, err, "Collection")
+	require.NoError(t, client.CreateItem(t.Context(), col, "x", map[string]string{"service": "s"}, "p", true), "CreateItem")
+
+	items, err := client.Items(t.Context(), col)
+	require.NoError(t, err, "Items")
+	require.Len(t, items, 1, "exactly one item")
+
+	return client, svc, col, items[0]
+}
+
 func TestClientCollection(t *testing.T) {
 	t.Run("an existing alias is returned without creating", func(t *testing.T) {
 		client, svc := newTestClient(t, "")
@@ -244,50 +265,32 @@ func TestClientItemsAttributesDelete(t *testing.T) {
 	})
 
 	t.Run("DeleteItem removes the item immediately when no prompt is needed", func(t *testing.T) {
-		client, _ := newTestClient(t, "")
-		col, err := client.Collection(t.Context(), "sshakku", "sshakku")
-		require.NoError(t, err, "Collection")
-		require.NoError(t, client.CreateItem(t.Context(), col, "x", map[string]string{"service": "s"}, "p", true), "CreateItem")
-		items, err := client.Items(t.Context(), col)
-		require.NoError(t, err, "Items")
-		require.Len(t, items, 1, "exactly one item")
+		client, _, col, item := oneItemCollection(t, "")
 
-		require.NoError(t, client.DeleteItem(t.Context(), items[0]), "DeleteItem")
-		items, err = client.Items(t.Context(), col)
+		require.NoError(t, client.DeleteItem(t.Context(), item), "DeleteItem")
+		items, err := client.Items(t.Context(), col)
 		require.NoError(t, err, "Items after DeleteItem")
 		assert.Empty(t, items, "the item must be gone")
 	})
 
 	t.Run("DeleteItem completes via a completed prompt", func(t *testing.T) {
-		client, _ := newTestClient(t, "ok")
-		col, err := client.Collection(t.Context(), "sshakku", "sshakku")
-		require.NoError(t, err, "Collection")
-		require.NoError(t, client.CreateItem(t.Context(), col, "x", map[string]string{"service": "s"}, "p", true), "CreateItem")
-		items, err := client.Items(t.Context(), col)
-		require.NoError(t, err, "Items")
-		require.Len(t, items, 1, "exactly one item")
+		client, _, col, item := oneItemCollection(t, "ok")
 
-		require.NoError(t, client.DeleteItem(t.Context(), items[0]), "DeleteItem")
-		items, err = client.Items(t.Context(), col)
+		require.NoError(t, client.DeleteItem(t.Context(), item), "DeleteItem")
+		items, err := client.Items(t.Context(), col)
 		require.NoError(t, err, "Items after DeleteItem")
 		assert.Empty(t, items, "the item must be gone")
 	})
 
 	t.Run("a dismissed prompt leaves the item in place and is an error", func(t *testing.T) {
-		client, svc := newTestClient(t, "")
-		col, err := client.Collection(t.Context(), "sshakku", "sshakku")
-		require.NoError(t, err, "Collection")
-		require.NoError(t, client.CreateItem(t.Context(), col, "x", map[string]string{"service": "s"}, "p", true), "CreateItem")
-		items, err := client.Items(t.Context(), col)
-		require.NoError(t, err, "Items")
-		require.Len(t, items, 1, "exactly one item")
+		client, svc, col, item := oneItemCollection(t, "")
 
 		svc.mu.Lock()
 		svc.behavior = "dismiss"
 		svc.mu.Unlock()
 
-		assert.Error(t, client.DeleteItem(t.Context(), items[0]), "a dismissed prompt must be reported")
-		items, err = client.Items(t.Context(), col)
+		assert.Error(t, client.DeleteItem(t.Context(), item), "a dismissed prompt must be reported")
+		items, err := client.Items(t.Context(), col)
 		require.NoError(t, err, "Items after a dismissed DeleteItem")
 		assert.Len(t, items, 1, "the item must still be there")
 	})

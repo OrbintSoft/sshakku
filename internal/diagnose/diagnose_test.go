@@ -49,6 +49,19 @@ func hasFinding(r Report, sub string) bool {
 	return false
 }
 
+// gatherOneReachableAgent reports on a machine running exactly one agent,
+// answering on `socket` and belonging to uid 1000, as seen by an account whose
+// own uid is ourUID. It is the setup behind every question of the form "whose
+// agent is this": the socket says what kind it looks like, and the two uids
+// say whether it is this account's business at all.
+func gatherOneReachableAgent(t *testing.T, socket string, ourUID int) Report {
+	t.Helper()
+	src := fakeSource{procs: []inspect.AgentProc{{PID: 100, UID: 1000, Socket: socket}}}
+	prober := fakeProber{up: map[string]bool{socket: true}}
+
+	return Gather(t.Context(), Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: ourUID}, src, prober, nil, nil, nil, nil)
+}
+
 func TestGatherHealthy(t *testing.T) {
 	src := fakeSource{procs: []inspect.AgentProc{
 		{PID: 100, UID: 1000, Socket: fixed, Args: []string{"ssh-agent", "-a", fixed}},
@@ -139,12 +152,10 @@ func TestGatherMultipleAndDead(t *testing.T) {
 }
 
 func TestGatherDifferentUserAgent(t *testing.T) {
+	// Healthy, and on a socket of the shape sshakku uses — but uid 1000's, and
+	// this account is uid 0.
 	const other = "/run/user/1000/sshakku/tok/agent.sock"
-	src := fakeSource{procs: []inspect.AgentProc{
-		{PID: 100, UID: 1000, Socket: other}, // healthy, but not uid 0's
-	}}
-	prober := fakeProber{up: map[string]bool{other: true}}
-	r := Gather(t.Context(), Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 0}, src, prober, nil, nil, nil, nil)
+	r := gatherOneReachableAgent(t, other, 0)
 
 	assert.Equal(t, StateClean, r.State, "another user's agent is not serving this account")
 	assert.Falsef(t, hasFinding(r, "foreign ssh-agent"),
@@ -161,9 +172,7 @@ func TestGatherDifferentUserAgent(t *testing.T) {
 // belongs to somebody else. It is named as another user's and nothing more.
 func TestGatherAnotherUsersForeignAgentIsNotThisAccountsProblem(t *testing.T) {
 	const theirs = "/tmp/theirs.sock"
-	src := fakeSource{procs: []inspect.AgentProc{{PID: 200, UID: 1000, Socket: theirs}}}
-	prober := fakeProber{up: map[string]bool{theirs: true}}
-	r := Gather(t.Context(), Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 0}, src, prober, nil, nil, nil, nil)
+	r := gatherOneReachableAgent(t, theirs, 0)
 
 	assert.Falsef(t, hasFinding(r, "foreign ssh-agent"),
 		"an agent belonging to another account is not a foreign agent serving this one: %v", r.Findings)
@@ -176,11 +185,7 @@ func TestGatherOrphanedOursAgent(t *testing.T) {
 	// session's own fixedSock — most likely a previous instance of our own
 	// agent, not a truly external tool.
 	const orphan = "/run/user/1000/sshakku/00112233445566778899aabbccddeeff/agent.sock"
-	src := fakeSource{procs: []inspect.AgentProc{
-		{PID: 100, UID: 1000, Socket: orphan},
-	}}
-	prober := fakeProber{up: map[string]bool{orphan: true}}
-	r := Gather(t.Context(), Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, src, prober, nil, nil, nil, nil)
+	r := gatherOneReachableAgent(t, orphan, 1000)
 
 	assert.Truef(t, hasFinding(r, "looks like a previous sshakku-managed agent"),
 		"an agent on a socket of our own shape is one of ours left behind: %v", r.Findings)

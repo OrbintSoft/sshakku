@@ -29,65 +29,68 @@ func saveJSONMarshal(t *testing.T) {
 	t.Cleanup(func() { jsonMarshal = orig })
 }
 
+// bwUnlock unlocks an account whose bw answers as `calls` says, and returns
+// what Unlock made of it. The account arrives carrying only what the case is
+// about — an email, a self-hosted server — because the runner and the prompter
+// are the same in every one: a CLI that answers to script, and a person who
+// always has the passphrase ready.
+func bwUnlock(t *testing.T, account Bitwarden, calls map[string]func(run.Cmd) (run.Result, error)) error {
+	t.Helper()
+	account.Runner = runtest.NewRunner().On(bitwardenBin, bwCall(calls))
+	account.Prompter = &fakePrompter{pass: "m"}
+
+	return account.Unlock(t.Context())
+}
+
 func TestBitwardenUnlockErrorBranches(t *testing.T) {
 	boom := errBwExecBoom
+	const wouldNotRun = "a bw command that would not run must be reported as it failed, not read as a vault that opened"
 
 	t.Run("login --check fails to run", func(t *testing.T) {
-		r := runtest.NewRunner().On(bitwardenBin, bwCall(map[string]func(run.Cmd) (run.Result, error){
+		err := bwUnlock(t, Bitwarden{}, map[string]func(run.Cmd) (run.Result, error){
 			"login --check": runtest.Fails(boom),
-		}))
-		b := &Bitwarden{Runner: r, Prompter: &fakePrompter{pass: "m"}}
-		assert.ErrorIs(t, b.Unlock(t.Context()), boom,
-			"a bw command that would not run must be reported as it failed, not read as a vault that opened")
+		})
+		assert.ErrorIs(t, err, boom, wouldNotRun)
 	})
 
 	t.Run("config server fails to run", func(t *testing.T) {
-		r := runtest.NewRunner().On(bitwardenBin, bwCall(map[string]func(run.Cmd) (run.Result, error){
+		err := bwUnlock(t, Bitwarden{Server: "https://vault.invalid"}, map[string]func(run.Cmd) (run.Result, error){
 			"login --check": runtest.Stdout("", 1),
 			"config server": runtest.Fails(boom),
-		}))
-		b := &Bitwarden{Runner: r, Prompter: &fakePrompter{pass: "m"}, Server: "https://vault.invalid"}
-		assert.ErrorIs(t, b.Unlock(t.Context()), boom,
-			"a bw command that would not run must be reported as it failed, not read as a vault that opened")
+		})
+		assert.ErrorIs(t, err, boom, wouldNotRun)
 	})
 
 	t.Run("config server exits non-zero", func(t *testing.T) {
-		r := runtest.NewRunner().On(bitwardenBin, bwCall(map[string]func(run.Cmd) (run.Result, error){
+		err := bwUnlock(t, Bitwarden{Server: "https://vault.invalid"}, map[string]func(run.Cmd) (run.Result, error){
 			"login --check": runtest.Stdout("", 1),
 			"config server": func(run.Cmd) (run.Result, error) { return run.Result{Stderr: []byte("nope"), Code: 1}, nil },
-		}))
-		b := &Bitwarden{Runner: r, Prompter: &fakePrompter{pass: "m"}, Server: "https://vault.invalid"}
-		assert.Error(t, b.Unlock(t.Context()),
-			"a server the CLI would not accept must be reported: logging in would reach the wrong vault")
+		})
+		assert.Error(t, err, "a server the CLI would not accept must be reported: logging in would reach the wrong vault")
 	})
 
 	t.Run("login fails to run", func(t *testing.T) {
-		r := runtest.NewRunner().On(bitwardenBin, bwCall(map[string]func(run.Cmd) (run.Result, error){
+		err := bwUnlock(t, Bitwarden{Email: "u@invalid"}, map[string]func(run.Cmd) (run.Result, error){
 			"login --check": runtest.Stdout("", 1),
 			"login":         runtest.Fails(boom),
-		}))
-		b := &Bitwarden{Runner: r, Prompter: &fakePrompter{pass: "m"}, Email: "u@invalid"}
-		assert.ErrorIs(t, b.Unlock(t.Context()), boom,
-			"a bw command that would not run must be reported as it failed, not read as a vault that opened")
+		})
+		assert.ErrorIs(t, err, boom, wouldNotRun)
 	})
 
 	t.Run("login exits non-zero", func(t *testing.T) {
-		r := runtest.NewRunner().On(bitwardenBin, bwCall(map[string]func(run.Cmd) (run.Result, error){
+		err := bwUnlock(t, Bitwarden{Email: "u@invalid"}, map[string]func(run.Cmd) (run.Result, error){
 			"login --check": runtest.Stdout("", 1),
 			"login":         func(run.Cmd) (run.Result, error) { return run.Result{Stderr: []byte("bad creds"), Code: 1}, nil },
-		}))
-		b := &Bitwarden{Runner: r, Prompter: &fakePrompter{pass: "m"}, Email: "u@invalid"}
-		assert.Error(t, b.Unlock(t.Context()), "an account that could not be logged into must be reported, not unlocked past")
+		})
+		assert.Error(t, err, "an account that could not be logged into must be reported, not unlocked past")
 	})
 
 	t.Run("unlock fails to run", func(t *testing.T) {
-		r := runtest.NewRunner().On(bitwardenBin, bwCall(map[string]func(run.Cmd) (run.Result, error){
+		err := bwUnlock(t, Bitwarden{}, map[string]func(run.Cmd) (run.Result, error){
 			"login --check":        runtest.Stdout("", 0),
 			"unlock --passwordenv": runtest.Fails(boom),
-		}))
-		b := &Bitwarden{Runner: r, Prompter: &fakePrompter{pass: "m"}}
-		assert.ErrorIs(t, b.Unlock(t.Context()), boom,
-			"a bw command that would not run must be reported as it failed, not read as a vault that opened")
+		})
+		assert.ErrorIs(t, err, boom, wouldNotRun)
 	})
 }
 
