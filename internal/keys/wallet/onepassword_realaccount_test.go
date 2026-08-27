@@ -65,22 +65,29 @@ func TestOnePasswordBackendRealAccount(t *testing.T) {
 	// op whoami and op signin are both unsupported for service accounts, so
 	// `op user get --me` is the one authentication check that works the same
 	// way for a developer's session and for OP_SERVICE_ACCOUNT_TOKEN in CI.
-	if out, err := opRun(t, "user", "get", "--me"); err != nil {
+	if out, err := opRun(t.Context(), t, "user", "get", "--me"); err != nil {
 		t.Skipf("op is not authenticated — sign in yourself first (op signin, or the desktop app integration), or set OP_SERVICE_ACCOUNT_TOKEN: %s", strings.TrimSpace(out))
 	}
 
 	vaultName := "sshakku-integration-test-" + time.Now().UTC().Format("20060102T150405.000000000")
-	createOut, err := opRun(t, "vault", "create", vaultName, "--format", "json")
+	createOut, err := opRun(t.Context(), t, "vault", "create", vaultName, "--format", "json")
 	require.NoErrorf(t, err, "the throwaway vault this test works in could not be created: %s", createOut)
 	var vault struct {
 		ID string `json:"id"`
 	}
 	require.NoErrorf(t, json.Unmarshal([]byte(createOut), &vault), "op vault create answered with: %s", createOut)
 	require.NotEmptyf(t, vault.ID, "op vault create named no vault: %s", createOut)
+	// The vault outlives the test's own context: Go cancels that one just
+	// before the cleanups run, so a delete deriving from it is dead on arrival.
+	// WithoutCancel keeps the test's values and drops only the cancellation,
+	// and opSetupTimeout still bounds the call.
+	//
+	// A vault that survives the run is a failure and not a note: it stays in
+	// somebody's real account until a person removes it by hand, and there is
+	// no later run that will notice.
 	t.Cleanup(func() {
-		if out, err := opRun(t, "vault", "delete", vault.ID); err != nil {
-			t.Logf("cleanup: op vault delete %s failed, remove it by hand: %v: %s", vault.ID, err, out)
-		}
+		out, err := opRun(context.WithoutCancel(t.Context()), t, "vault", "delete", vault.ID)
+		assert.NoErrorf(t, err, "the throwaway vault %s is still in the account and has to be removed by hand: %s", vault.ID, out)
 	})
 
 	backend := &OnePassword{Runner: run.ExecRunner{}, Vault: vault.ID}
@@ -121,8 +128,8 @@ func TestOnePasswordBackendRealAccount(t *testing.T) {
 		lookalikeService = "sshakku-integration-test-someone-elses"
 		lookalikePass    = "someone-elses-password-under-a-familiar-name"
 	)
-	opCreateItemNotOurs(t, vault.ID, foreignService, foreignPass)
-	lookalikeID := opCreateItemNotOurs(t, vault.ID, lookalikeService, lookalikePass)
+	opCreateItemNotOurs(t.Context(), t, vault.ID, foreignService, foreignPass)
+	lookalikeID := opCreateItemNotOurs(t.Context(), t, vault.ID, lookalikeService, lookalikePass)
 
 	services, err = backend.List(t.Context())
 	require.NoError(t, err, "listing the vault must succeed")
@@ -140,7 +147,7 @@ func TestOnePasswordBackendRealAccount(t *testing.T) {
 	// the promise is about the item, which has to be where its owner left it
 	// whatever SSHakku decided to do with the request.
 	storeErr := backend.Store(t.Context(), lookalikeService, testLabel, testPass)
-	survived, err := opRun(t, "read", "op://"+vault.ID+"/"+lookalikeID+"/"+onePasswordPasswordField, "--no-newline")
+	survived, err := opRun(t.Context(), t, "read", "op://"+vault.ID+"/"+lookalikeID+"/"+onePasswordPasswordField, "--no-newline")
 	require.NoErrorf(t, err, "an item SSHakku did not create must still be in the vault, but reading it back failed (Store answered %v): %s", storeErr, survived)
 	assert.Equal(t, lookalikePass, strings.TrimSpace(survived), "and it must still hold what its owner put in it")
 }
@@ -154,9 +161,9 @@ func TestOnePasswordBackendRealAccount(t *testing.T) {
 // other processes on the machine. That is the wrong way to handle a real secret
 // and is why OnePassword itself does not do it; this one is a literal in this
 // file, so there is nothing here to expose.
-func opCreateItemNotOurs(t *testing.T, vaultID, title, password string) string {
+func opCreateItemNotOurs(ctx context.Context, t *testing.T, vaultID, title, password string) string {
 	t.Helper()
-	out, err := opRun(t, onePasswordItemCommand, "create",
+	out, err := opRun(ctx, t, onePasswordItemCommand, "create",
 		"--category", "password",
 		"--title", title,
 		onePasswordVaultFlag, vaultID,
@@ -173,11 +180,15 @@ func opCreateItemNotOurs(t *testing.T, vaultID, title, password string) string {
 }
 
 // opRun runs the op CLI directly (not through a run.Runner) for test setup and
-// teardown that is outside what OnePassword itself does — creating
-// and deleting the throwaway vault.
-func opRun(t *testing.T, args ...string) (string, error) {
+// teardown that is outside what OnePassword itself does — creating the
+// throwaway vault, putting items in it that the backend did not create, and
+// deleting the vault afterwards.
+//
+// The caller passes the context because the teardown's is not the body's: what
+// runs after the test needs one that outlives it.
+func opRun(ctx context.Context, t *testing.T, args ...string) (string, error) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), opSetupTimeout)
+	ctx, cancel := context.WithTimeout(ctx, opSetupTimeout)
 	defer cancel()
 	out, err := exec.CommandContext(ctx, onePasswordBin, args...).CombinedOutput()
 	return string(out), err
