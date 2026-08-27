@@ -3073,7 +3073,7 @@ nowhere on this platform (F48's illustration); and the three wallets reached by
 running a program of their own, each of which owes a matrix row before it is
 offered here.
 
-### Phase 42 — The service the report never asked about
+### Phase 42 — The service the report never asked about ✅ Done
 
 Windows reaches its agent through a service on a named pipe, and `sshakku
 doctor` there has never asked the service manager anything: every occurrence of
