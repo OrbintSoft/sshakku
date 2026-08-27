@@ -149,6 +149,9 @@ func TestOnePasswordStore(t *testing.T) {
 		require.Error(t, err, "a passphrase that was not saved must not be reported as saved")
 		assert.ErrorAs(t, err, &itemNotOursError{}, "and the clash must be what is reported, since it is what the user has to resolve")
 		assert.Lenf(t, r.Calls, 1, "nothing may be deleted and nothing created: the item was looked at and left: %+v", r.Calls)
+		assert.Contains(t, err.Error(), "sshakku-id_rsa", "the message must name the item, or there is nothing for the user to go and look at")
+		assert.Contains(t, err.Error(), "sshakku", "and the vault holding it, since which vault to use is one of the two ways out")
+		assert.Contains(t, err.Error(), "onepassword_vault", "and the setting that is the other way out")
 	})
 
 	t.Run("a non-zero exit from create is an error", func(t *testing.T) {

@@ -26,6 +26,18 @@ func TestOnePasswordStoreDeleteErrorPropagates(t *testing.T) {
 			"the answer decides between replacing SSHakku's own entry and writing over somebody else's")
 }
 
+func TestOnePasswordStoreDeleteOfOwnItemFails(t *testing.T) {
+	boom := errOpExecBoom
+	r := runtest.NewRunner().On(onePasswordBin, opCall(map[string]func(run.Cmd) (run.Result, error){
+		"item get":    runtest.Stdout(`{"title":"svc","tags":["`+onePasswordTag+`"]}`, 0), // SSHakku's own
+		"item delete": runtest.Fails(boom),
+	}))
+	b := &OnePassword{Runner: r, Vault: "sshakku"}
+	assert.ErrorIs(t, b.Store(t.Context(), "svc", "label", "pass"), boom,
+		"op cannot edit a passphrase in place, so an entry that would not go must stop the write: "+
+			"creating the new one anyway would leave two under the same name")
+}
+
 func TestOnePasswordItemGetUnreadableAnswer(t *testing.T) {
 	r := runtest.NewRunner().On(onePasswordBin, opCall(map[string]func(run.Cmd) (run.Result, error){
 		"item get": runtest.Stdout("not json", 0),
