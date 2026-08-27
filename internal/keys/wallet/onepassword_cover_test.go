@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/OrbintSoft/sshakku/internal/run"
 	"github.com/OrbintSoft/sshakku/internal/run/runtest"
@@ -21,7 +22,40 @@ func TestOnePasswordStoreDeleteErrorPropagates(t *testing.T) {
 	}))
 	b := &OnePassword{Runner: r, Vault: "sshakku"}
 	assert.ErrorIs(t, b.Store(t.Context(), "svc", "label", "pass"), boom,
-		"the old entry has to go before the new one lands, so a removal that failed must stop the write, not be passed over")
+		"a vault that could not be asked what is already under that name must stop the write: "+
+			"the answer decides between replacing SSHakku's own entry and writing over somebody else's")
+}
+
+func TestOnePasswordStoreDeleteOfOwnItemFails(t *testing.T) {
+	boom := errOpExecBoom
+	r := runtest.NewRunner().On(onePasswordBin, opCall(map[string]func(run.Cmd) (run.Result, error){
+		"item get":    runtest.Stdout(`{"title":"svc","tags":["`+onePasswordTag+`"]}`, 0), // SSHakku's own
+		"item delete": runtest.Fails(boom),
+	}))
+	b := &OnePassword{Runner: r, Vault: "sshakku"}
+	assert.ErrorIs(t, b.Store(t.Context(), "svc", "label", "pass"), boom,
+		"op cannot edit a passphrase in place, so an entry that would not go must stop the write: "+
+			"creating the new one anyway would leave two under the same name")
+}
+
+func TestOnePasswordItemGetUnreadableAnswer(t *testing.T) {
+	r := runtest.NewRunner().On(onePasswordBin, opCall(map[string]func(run.Cmd) (run.Result, error){
+		"item get": runtest.Stdout("not json", 0),
+	}))
+	b := &OnePassword{Runner: r, Vault: "sshakku"}
+	_, _, err := b.Lookup(t.Context(), "svc")
+	assert.Error(t, err,
+		"an answer that cannot be read says nothing about whose item it is, and guessing would be the one mistake that matters")
+}
+
+func TestOnePasswordLookupItemWithoutPasswordField(t *testing.T) {
+	r := runtest.NewRunner().On(onePasswordBin, opCall(map[string]func(run.Cmd) (run.Result, error){
+		"item get": runtest.Stdout(`{"title":"svc","tags":["`+onePasswordTag+`"],"fields":[]}`, 0),
+	}))
+	b := &OnePassword{Runner: r, Vault: "sshakku"}
+	_, found, err := b.Lookup(t.Context(), "svc")
+	require.NoError(t, err, "an item holding no passphrase is not an error")
+	assert.False(t, found, "but there is no passphrase to report found")
 }
 
 func TestOnePasswordStoreMarshalError(t *testing.T) {
@@ -49,7 +83,7 @@ func TestOnePasswordStoreCreateRunError(t *testing.T) {
 func TestOnePasswordDeleteItemDeleteRunError(t *testing.T) {
 	boom := errOpExecBoom
 	r := runtest.NewRunner().On(onePasswordBin, opCall(map[string]func(run.Cmd) (run.Result, error){
-		"item get":    runtest.Stdout(`{"id":"abc"}`, 0), // found
+		"item get":    runtest.Stdout(`{"title":"svc","tags":["`+onePasswordTag+`"]}`, 0), // found, and SSHakku's own
 		"item delete": runtest.Fails(boom),
 	}))
 	b := &OnePassword{Runner: r, Vault: "sshakku"}

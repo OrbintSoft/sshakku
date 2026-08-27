@@ -34,18 +34,33 @@ func opCall(handlers map[string]func(run.Cmd) (run.Result, error)) func(run.Cmd)
 	}
 }
 
+// opItemJSON is what `op item get --format json` answers with, as a fixture:
+// the item's title, the marks it carries and its password field. Whether
+// onePasswordTag is among the tags is what says whose item it is, so it is the
+// argument each caller below varies.
+func opItemJSON(t *testing.T, title, password string, tags ...string) string {
+	t.Helper()
+	out, err := json.Marshal(onePasswordItem{
+		Title:  title,
+		Tags:   tags,
+		Fields: []onePasswordField{{ID: onePasswordPasswordField, Type: "CONCEALED", Label: "password", Value: password}},
+	})
+	require.NoError(t, err, "the fixture itself must be an item op could have answered with")
+	return string(out)
+}
+
 func TestOnePasswordLookup(t *testing.T) {
-	t.Run("hit reads the secret reference", func(t *testing.T) {
-		r := runtest.NewRunner().On(onePasswordBin, runtest.Stdout("hunter2", 0))
+	t.Run("hit reads the item SSHakku stored", func(t *testing.T) {
+		r := runtest.NewRunner().On(onePasswordBin, runtest.Stdout(opItemJSON(t, "sshakku-id_rsa", "hunter2", onePasswordTag), 0))
 		b := &OnePassword{Runner: r, Vault: "sshakku"}
 		pass, found, err := b.Lookup(t.Context(), "sshakku-id_rsa")
 		require.NoError(t, err, "a stored passphrase must come back")
 		assert.True(t, found, "the item is in the vault, so it must be reported found")
 		assert.Equal(t, "hunter2", pass, "and the passphrase read out must be the one that was stored")
 		require.NotEmpty(t, r.Calls, "the vault must actually be asked")
-		assert.Equal(t, []string{"read", "op://sshakku/sshakku-id_rsa/password", "--no-newline"}, r.Calls[0].Args,
-			"the reference must name the vault, the entry and its password field, "+
-				"and --no-newline keeps op from appending one to the passphrase")
+		assert.Equal(t, []string{"item", "get", "sshakku-id_rsa", "--vault", "sshakku", "--format", "json", "--reveal"}, r.Calls[0].Args,
+			"the item must be named along with the vault holding it, and asked for in the form that carries "+
+				"both the marks saying whose it is and the passphrase this call came for")
 	})
 
 	t.Run("miss is found=false, no error", func(t *testing.T) {
@@ -54,6 +69,15 @@ func TestOnePasswordLookup(t *testing.T) {
 		_, found, err := b.Lookup(t.Context(), "sshakku-id_rsa")
 		require.NoError(t, err, "a passphrase that was never stored is not an error")
 		assert.False(t, found, "and nothing may be reported found")
+	})
+
+	t.Run("an item SSHakku did not create is a miss", func(t *testing.T) {
+		r := runtest.NewRunner().On(onePasswordBin, runtest.Stdout(opItemJSON(t, "sshakku-id_rsa", "someone-elses"), 0))
+		b := &OnePassword{Runner: r, Vault: "sshakku"}
+		pass, found, err := b.Lookup(t.Context(), "sshakku-id_rsa")
+		require.NoError(t, err, "somebody else's item under that name is not an error")
+		assert.False(t, found, "but it is not a passphrase SSHakku stored, so nothing may be reported found")
+		assert.Empty(t, pass, "and none of it may be handed back")
 	})
 
 	t.Run("a failure to start op is an error", func(t *testing.T) {
@@ -100,7 +124,7 @@ func TestOnePasswordStore(t *testing.T) {
 
 	t.Run("existing item is deleted before recreating", func(t *testing.T) {
 		r := runtest.NewRunner().On(onePasswordBin, opCall(map[string]func(run.Cmd) (run.Result, error){
-			"item get":    runtest.Stdout(`{"id":"abc123"}`, 0), // found
+			"item get":    runtest.Stdout(opItemJSON(t, "sshakku-id_rsa", "old", onePasswordTag), 0), // found, and SSHakku's own
 			"item delete": runtest.Stdout("", 0),
 			"item create": runtest.Stdout("", 0),
 		}))
@@ -114,6 +138,20 @@ func TestOnePasswordStore(t *testing.T) {
 		assert.Equal(t, []string{"item get", "item delete", "item create"}, verbs,
 			"op cannot edit an item's password in place, so the old entry must go before the new one lands: "+
 				"leaving both would put two passphrases in the vault under the same name")
+	})
+
+	t.Run("an item SSHakku did not create is not written over", func(t *testing.T) {
+		r := runtest.NewRunner().On(onePasswordBin, opCall(map[string]func(run.Cmd) (run.Result, error){
+			"item get": runtest.Stdout(opItemJSON(t, "sshakku-id_rsa", "someone-elses"), 0),
+		}))
+		b := &OnePassword{Runner: r, Vault: "sshakku"}
+		err := b.Store(t.Context(), "sshakku-id_rsa", "label", passphrase)
+		require.Error(t, err, "a passphrase that was not saved must not be reported as saved")
+		assert.ErrorAs(t, err, &itemNotOursError{}, "and the clash must be what is reported, since it is what the user has to resolve")
+		assert.Lenf(t, r.Calls, 1, "nothing may be deleted and nothing created: the item was looked at and left: %+v", r.Calls)
+		assert.Contains(t, err.Error(), "sshakku-id_rsa", "the message must name the item, or there is nothing for the user to go and look at")
+		assert.Contains(t, err.Error(), "sshakku", "and the vault holding it, since which vault to use is one of the two ways out")
+		assert.Contains(t, err.Error(), "onepassword_vault", "and the setting that is the other way out")
 	})
 
 	t.Run("a non-zero exit from create is an error", func(t *testing.T) {
@@ -132,7 +170,7 @@ func TestOnePasswordStore(t *testing.T) {
 func TestOnePasswordDelete(t *testing.T) {
 	t.Run("existing item: looks up then deletes", func(t *testing.T) {
 		r := runtest.NewRunner().On(onePasswordBin, opCall(map[string]func(run.Cmd) (run.Result, error){
-			"item get":    runtest.Stdout(`{"id":"abc123"}`, 0),
+			"item get":    runtest.Stdout(opItemJSON(t, "sshakku-id_rsa", "stored", onePasswordTag), 0),
 			"item delete": runtest.Stdout("", 0),
 		}))
 		b := &OnePassword{Runner: r, Vault: "sshakku"}
@@ -151,9 +189,19 @@ func TestOnePasswordDelete(t *testing.T) {
 		assert.Lenf(t, r.Calls, 1, "and nothing may be deleted when nothing matched: %+v", r.Calls)
 	})
 
+	t.Run("an item SSHakku did not create is not removed", func(t *testing.T) {
+		r := runtest.NewRunner().On(onePasswordBin, opCall(map[string]func(run.Cmd) (run.Result, error){
+			"item get": runtest.Stdout(opItemJSON(t, "sshakku-id_rsa", "someone-elses"), 0),
+		}))
+		b := &OnePassword{Runner: r, Vault: "sshakku"}
+		require.NoError(t, b.Delete(t.Context(), "sshakku-id_rsa"),
+			"there is nothing of SSHakku's under that name to forget, which is the outcome that was asked for")
+		assert.Lenf(t, r.Calls, 1, "and somebody else's item may not be what gets deleted instead: %+v", r.Calls)
+	})
+
 	t.Run("a non-zero exit from delete is an error", func(t *testing.T) {
 		r := runtest.NewRunner().On(onePasswordBin, opCall(map[string]func(run.Cmd) (run.Result, error){
-			"item get": runtest.Stdout(`{"id":"abc123"}`, 0),
+			"item get": runtest.Stdout(opItemJSON(t, "x", "stored", onePasswordTag), 0),
 			"item delete": func(run.Cmd) (run.Result, error) {
 				return run.Result{Stderr: []byte("permission denied"), Code: 1}, nil
 			},

@@ -163,7 +163,9 @@ bitwarden_server = "https://vault.example.com" # optional; a self-hosted Vaultwa
 - `"1password"` shells out to the `op` CLI. `onepassword_vault` names the vault
   to keep the entries in; SSHakku tags every item it creates there and only
   ever reads or deletes its own, so the vault does not have to be one you keep
-  for nothing else. `op` must already be signed in (the desktop app's own integration, or, for a Business/
+  for nothing else. Nor will it write over one of yours: if an item you put
+  there already carries the name SSHakku would have used, it says so and saves
+  nothing, leaving the item to you. `op` must already be signed in (the desktop app's own integration, or, for a Business/
   Teams account, `OP_SERVICE_ACCOUNT_TOKEN` in the environment) — SSHakku
   never drives an interactive `op signin` itself.
 - `"bitwarden"` shells out to the `bw` CLI, against bitwarden.com or a
