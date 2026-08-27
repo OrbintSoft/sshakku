@@ -26,7 +26,7 @@ func FakeProc(t *testing.T, root string, pid int, argv []string, uid int) {
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 	cmdline := strings.Join(argv, "\x00")
 	if len(argv) > 0 {
-		cmdline += "\x00" // the kernel NUL-terminates the final arg too
+		cmdline += "\x00" // the kernel NUL-terminates the final arg too.
 	}
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "cmdline"), []byte(cmdline), 0o644))
 	if uid >= 0 {

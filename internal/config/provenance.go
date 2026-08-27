@@ -27,7 +27,7 @@ const (
 // Origin names what put a setting's value in force.
 type Origin struct {
 	Kind OriginKind
-	Name string // the file's path or the variable's name; empty for a default
+	Name string // the file's path or the variable's name; empty for a default.
 }
 
 // Refusal is a value SSHakku would not use, and where it was written. The

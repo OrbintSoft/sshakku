@@ -82,7 +82,7 @@ type KeySource struct {
 // Inputs are the facts Gather reasons over, injected so it stays pure and
 // testable — nothing here is read from the ambient process.
 type Inputs struct {
-	FixedSock string // the endpoint sessions are pointed at, as this system writes it
+	FixedSock string // the endpoint sessions are pointed at, as this system writes it.
 	// FixedSockPosix is that same endpoint in the writing a POSIX-emulating
 	// shell can carry, where a system has two of them — empty where an
 	// endpoint has only one writing, which is every system whose agent
@@ -90,18 +90,18 @@ type Inputs struct {
 	// report that knew only one of them would call the other one somebody
 	// else's agent.
 	FixedSockPosix string
-	LegacyDir      string // ~/.ssh/agent, for spotting a pre-sshakku agent
-	StatePath      string // agent.state, holding the pid of the agent we started
-	EnvSock        string // SSH_AUTH_SOCK as this shell sees it
-	LogFile        string // session log to tail
-	OurUID         int    // the invoking user's uid, to tell same-user agents apart
+	LegacyDir      string // ~/.ssh/agent, for spotting a pre-sshakku agent.
+	StatePath      string // agent.state, holding the pid of the agent we started.
+	EnvSock        string // SSH_AUTH_SOCK as this shell sees it.
+	LogFile        string // session log to tail.
+	OurUID         int    // the invoking user's uid, to tell same-user agents apart.
 
 	// EnvAskpass and EnvAskpassRequire describe whether this shell's ssh
 	// passphrase prompts are routed through sshakku's wallet-aware askpass
 	// broker, which is what refills a key that has expired from the agent
 	// without prompting.
-	EnvAskpass        string // SSH_ASKPASS as this shell sees it
-	EnvAskpassRequire string // SSH_ASKPASS_REQUIRE as this shell sees it
+	EnvAskpass        string // SSH_ASKPASS as this shell sees it.
+	EnvAskpassRequire string // SSH_ASKPASS_REQUIRE as this shell sees it.
 
 	// Env and SecretEnv are the variables SSHakku reads, as the report
 	// presents them; the caller collects them, since which variables those
@@ -144,21 +144,21 @@ type Inputs struct {
 // AgentView is one ssh-agent process as the report presents it.
 type AgentView struct {
 	PID       int
-	UID       int // owning uid, or -1 when it could not be read
+	UID       int // owning uid, or -1 when it could not be read.
 	Kind      inspect.ProcKind
 	Socket    string
 	Reachable bool
-	Ancestry  []launcher.ProcInfo // the process chain that launched it, agent first
-	Cgroup    string              // systemd unit the agent's cgroup names, or "" if none/unknown
+	Ancestry  []launcher.ProcInfo // the process chain that launched it, agent first.
+	Cgroup    string              // systemd unit the agent's cgroup names, or "" if none/unknown.
 }
 
 // KeyView is one key file as the report presents it.
 type KeyView struct {
-	Name        string // base filename, e.g. "id_ed25519"
-	Fingerprint string // "" when ssh-keygen could not read the file
-	Loaded      bool   // whether Fingerprint is currently in the agent
-	Tracked     bool   // whether sshakku recorded adding this key itself
-	NoExpiry    bool   // Tracked, but recorded with no expiry (lifetime 0)
+	Name        string // base filename, e.g. "id_ed25519".
+	Fingerprint string // "" when ssh-keygen could not read the file.
+	Loaded      bool   // whether Fingerprint is currently in the agent.
+	Tracked     bool   // whether sshakku recorded adding this key itself.
+	NoExpiry    bool   // Tracked, but recorded with no expiry (lifetime 0).
 	ExpiresAt   time.Time
 }
 
@@ -194,7 +194,7 @@ type Requirement struct {
 // backend should say.
 type WalletView struct {
 	Backend string
-	Route   string // how the backend is reached, for the ones that offer a choice
+	Route   string // how the backend is reached, for the ones that offer a choice.
 	// Guard says what has to be got past to read what this wallet holds, for a
 	// wallet whose answer is not the one its name would lead a reader to
 	// assume. A wallet that locks, and asks, needs no such line — being asked
@@ -260,20 +260,20 @@ type Report struct {
 	EnvSock        string
 	EnvReachable   bool
 	OurUID         int
-	RecordedPID    int // pid from agent.state, 0 when absent or unreadable
+	RecordedPID    int // pid from agent.state, 0 when absent or unreadable.
 	Agents         []AgentView
 	State          State
 	Findings       []string
 	LogTail        []string
-	InspectErr     error // enumeration failed; the report is partial
+	InspectErr     error // enumeration failed; the report is partial.
 	Keys           []KeyView
-	KeysDir        string // the directory Keys were read from, as the report names it
-	KeysErr        error  // key enumeration failed; Keys is empty
+	KeysDir        string // the directory Keys were read from, as the report names it.
+	KeysErr        error  // key enumeration failed; Keys is empty.
 	Host           hostcheck.Checks
 
 	Env           []EnvVar
 	SecretEnv     []SecretEnvVar
-	EnvUnreadable bool // the environment shown is not this process's own (see Inputs)
+	EnvUnreadable bool // the environment shown is not this process's own (see Inputs).
 
 	// NoAgentMechanism says the build being reported on has no way to keep an
 	// ssh-agent here, which changes what there is to do about every state but

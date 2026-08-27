@@ -96,6 +96,12 @@ linters:
     # match against, and a caller cannot match what was turned into a string.
     - errorlint
 
+    # golang.org/x/exp is where maps.Keys, slices.Sorted, constraints and
+    # errors.Join lived before the standard library grew them, and it carries no
+    # compatibility promise. An import that still points there takes on a
+    # dependency that may change under it, for something the compiler now ships.
+    - exptostd
+
     # A context re-wrapped inside a loop grows one layer per iteration, so what
     # started as a deadline becomes a chain of them nobody can read back.
     - fatcontext
@@ -115,11 +121,21 @@ linters:
     # the dispatcher and the command itself must agree on.
     - goconst
 
+    # A comment that stops without a full stop reads as a line that was cut off,
+    # and leaves the reader deciding whether the rest of the thought is missing
+    # or was never there. This tree explains itself in prose, and the full stop
+    # is what says a thought has finished.
+    - godot
+
     # An import alias renames somebody else's package inside one file, so the
     # same package answers to a different name depending on which file is open.
     # No alias is allowed that is not listed below, and none is listed: a
     # package is called what it calls itself.
     - importas
+
+    # `for i := 0; i < n; i++` states the bound three times and can be wrong in
+    # three places; `for i := range n` states it once and cannot count wrong.
+    - intrange
 
     # A loop that searches a slice, copies one into another, or picks the
     # larger of two numbers is a loop whose edge cases have to be read to be
@@ -188,6 +204,13 @@ linters:
       # lifting it into a constant hides what the case is about behind a name
       # the reader has to go and resolve.
       ignore-tests: true
+
+    godot:
+      # Declarations, the default, would leave most of the prose here
+      # unchecked: as much of it is a note trailing a line of code as is a doc
+      # comment standing above a function, and an unfinished thought reads the
+      # same in either place.
+      scope: all
 
     importas:
       # There is no `alias:` list here, and its absence is the rule: an alias

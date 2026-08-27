@@ -20,7 +20,7 @@ func TestHasGraphicalSession(t *testing.T) {
 		env     GUIEnv
 		runner  *runtest.Runner
 		want    bool
-		noXcall bool // xset must not be consulted
+		noXcall bool // xset must not be consulted.
 	}{
 		{"wayland short-circuits xset", GUIEnv{WaylandDisplay: "wayland-0"}, xsetDead(), true, true},
 		{"x11 live server", GUIEnv{Display: ":0"}, xsetOK(), true, false},

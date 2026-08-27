@@ -21,7 +21,7 @@ func TestConnectRejectsAKeyOfTheWrongWidth(t *testing.T) {
 	s := newFakeServer(t)
 	s.prelude[actionChangePublicKeys] = []envelope{{
 		Action:    actionChangePublicKeys,
-		PublicKey: "c2hvcnQ=", // "short"
+		PublicKey: "c2hvcnQ=", // "short".
 		Success:   "true",
 	}}
 

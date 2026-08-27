@@ -18,7 +18,7 @@ func TestClientCallTimesOutWhenDaemonUnresponsive(t *testing.T) {
 	client.CallTimeout = 150 * time.Millisecond
 
 	release := make(chan struct{})
-	t.Cleanup(func() { close(release) }) // let the blocked handler unwind after we give up
+	t.Cleanup(func() { close(release) }) // let the blocked handler unwind after we give up.
 	svc.hangOn(release)
 
 	start := time.Now()

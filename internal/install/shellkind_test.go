@@ -71,7 +71,7 @@ func TestTheKindsOfferedAreTheOnesThisSystemHas(t *testing.T) {
 func TestAnInterpreterIsRecognisedByItsImage(t *testing.T) {
 	for _, pattern := range shellPatterns() {
 		if pattern.confirm != nil {
-			continue // needs an environment around it; see below
+			continue // needs an environment around it; see below.
 		}
 		kind, ok := RecogniseShell(filepath.Join("somewhere", "else", pattern.base))
 

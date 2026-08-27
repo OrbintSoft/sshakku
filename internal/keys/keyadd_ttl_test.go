@@ -92,7 +92,7 @@ func TestAddWithAskpassAppliesKeyLifetime(t *testing.T) {
 		loaded, err = AgentFingerprints(t.Context(), runner)
 		require.NoError(t, err, "asking the agent what it holds must keep succeeding")
 		if !loaded[fp] {
-			return // expired as expected
+			return // expired as expected.
 		}
 		time.Sleep(200 * time.Millisecond)
 	}

@@ -163,7 +163,7 @@ func TestReadSeam(t *testing.T) {
 				return len(payload), nil
 			}
 			copy(buf, payload)
-			return 100, nil // larger than len(buf): the wrapper must clamp
+			return 100, nil // larger than len(buf): the wrapper must clamp.
 		}
 		got, err := Read(1)
 		assert.NoError(t, err, "Read")

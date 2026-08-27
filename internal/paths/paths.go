@@ -14,11 +14,11 @@ const app = "sshakku"
 // Env holds the environment inputs to the path computation, so Resolve stays a
 // pure function that is easy to test.
 type Env struct {
-	Home       string // $HOME
-	ConfigHome string // $XDG_CONFIG_HOME (may be empty)
-	StateHome  string // $XDG_STATE_HOME (may be empty)
-	RuntimeDir string // $XDG_RUNTIME_DIR (may be empty)
-	CacheHome  string // $XDG_CACHE_HOME (may be empty)
+	Home       string // $HOME.
+	ConfigHome string // $XDG_CONFIG_HOME (may be empty).
+	StateHome  string // $XDG_STATE_HOME (may be empty).
+	RuntimeDir string // $XDG_RUNTIME_DIR (may be empty).
+	CacheHome  string // $XDG_CACHE_HOME (may be empty).
 	// TempDir is the per-user temporary directory this session was given, and
 	// only if it is private to this user — a shared one is left out here
 	// rather than rejected later, so nothing downstream has to know the
@@ -32,7 +32,7 @@ type Layout struct {
 	ConfigDir  string
 	StateDir   string
 	RuntimeDir string
-	SocketDir  string // RuntimeDir; a per-login token component is added later
+	SocketDir  string // RuntimeDir; a per-login token component is added later.
 	AgentSock  string
 	AgentLock  string
 	LogFile    string
@@ -56,7 +56,7 @@ func Resolve(env Env, probe func(path string, requireOwner bool) bool) Layout {
 	stateDir := filepath.Join(stateHome, app)
 
 	runtimeDir := resolveRuntimeDir(env, probe)
-	socketDir := runtimeDir // a per-login token is inserted here in a later step
+	socketDir := runtimeDir // a per-login token is inserted here in a later step.
 
 	return Layout{
 		ConfigDir:  configDir,

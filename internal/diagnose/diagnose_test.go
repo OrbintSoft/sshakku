@@ -106,7 +106,7 @@ func TestGatherEnvUnset(t *testing.T) {
 
 func TestGatherEnvNotAnswering(t *testing.T) {
 	src := fakeSource{}
-	prober := fakeProber{} // nothing up
+	prober := fakeProber{} // nothing up.
 	r := Gather(t.Context(), Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000}, src, prober, nil, nil, nil, nil)
 
 	assert.False(t, r.EnvReachable, "nothing answers on the socket the shell exported")
@@ -131,9 +131,9 @@ func TestGatherEnvMismatch(t *testing.T) {
 func TestGatherMultipleAndDead(t *testing.T) {
 	const foreign = "/tmp/foreign.sock"
 	src := fakeSource{procs: []inspect.AgentProc{
-		{PID: 100, UID: 1000, Socket: fixed},                      // ours, reachable
-		{PID: 200, UID: 1000, Socket: foreign},                    // foreign, reachable
-		{PID: 300, UID: 1000, Socket: legacy + "/ssh-agent.sock"}, // legacy, dead
+		{PID: 100, UID: 1000, Socket: fixed},                      // ours, reachable.
+		{PID: 200, UID: 1000, Socket: foreign},                    // foreign, reachable.
+		{PID: 300, UID: 1000, Socket: legacy + "/ssh-agent.sock"}, // legacy, dead.
 	}}
 	prober := fakeProber{up: map[string]bool{fixed: true, foreign: true}}
 	r := Gather(t.Context(), Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000}, src, prober, nil, nil, nil, nil)
@@ -200,12 +200,12 @@ func TestLooksLikeOrphanedOurs(t *testing.T) {
 	}{
 		{"/run/user/1000/sshakku/00112233445566778899aabbccddeeff/agent.sock", true},
 		{"/home/u/.cache/sshakku/00112233445566778899aabbccddeeff/agent.sock", true},
-		{"/run/user/1000/sshakku/agent.sock", false},                                    // tokenless layout, no hex dir
-		{"/run/user/1000/sshakku/TooShortHex/agent.sock", false},                        // wrong length
-		{"/run/user/1000/sshakku/abc123/agent.sock", false},                             // lower hex, but not a token's worth
-		{"/run/user/1000/sshakku/00112233445566778899aabbccddeeff/other.sock", false},   // right place, not our socket
-		{"/run/user/1000/sshakku/00112233445566778899AABBCCDDEEFF/agent.sock", false},   // uppercase
-		{"/run/user/1000/other-app/00112233445566778899aabbccddeeff/agent.sock", false}, // not sshakku
+		{"/run/user/1000/sshakku/agent.sock", false},                                    // tokenless layout, no hex dir.
+		{"/run/user/1000/sshakku/TooShortHex/agent.sock", false},                        // wrong length.
+		{"/run/user/1000/sshakku/abc123/agent.sock", false},                             // lower hex, but not a token's worth.
+		{"/run/user/1000/sshakku/00112233445566778899aabbccddeeff/other.sock", false},   // right place, not our socket.
+		{"/run/user/1000/sshakku/00112233445566778899AABBCCDDEEFF/agent.sock", false},   // uppercase.
+		{"/run/user/1000/other-app/00112233445566778899aabbccddeeff/agent.sock", false}, // not sshakku.
 		{"/tmp/foreign.sock", false},
 		{"", false},
 	}
@@ -224,10 +224,10 @@ func TestKnownForeignShape(t *testing.T) {
 		{"/home/u/.gnupg/S.gpg-agent.ssh", true},
 		{"/run/user/1000/keyring/ssh", true},
 		{"/run/user/1000/ssh-agent.socket", true},
-		{"/run/user/1000/gnupg/S.gpg-agent", false}, // the main agent socket, not the ssh one
-		{"/run/user/1000/keyring/pkcs11", false},    // a real gnome-keyring socket, wrong one
-		{"/run/user/1000/elsewhere/ssh", false},     // the right name in the wrong place
-		{"/tmp/keyring/ssh-agent.socket", true},     // basename alone identifies the systemd unit
+		{"/run/user/1000/gnupg/S.gpg-agent", false}, // the main agent socket, not the ssh one.
+		{"/run/user/1000/keyring/pkcs11", false},    // a real gnome-keyring socket, wrong one.
+		{"/run/user/1000/elsewhere/ssh", false},     // the right name in the wrong place.
+		{"/tmp/keyring/ssh-agent.socket", true},     // basename alone identifies the systemd unit.
 		{"/tmp/foreign.sock", false},
 		{"", false},
 	}
@@ -433,9 +433,9 @@ func TestFormat(t *testing.T) {
 		"(reachable)",
 		"recorded pid:  4242",
 		"pid 100",
-		"you",      // our own agent
-		"uid 1001", // another user's agent
-		"uid ?",    // unknown owner
+		"you",      // our own agent.
+		"uid 1001", // another user's agent.
+		"uid ?",    // unknown owner.
 		"reachable",
 		"dead",
 		"no problems detected",

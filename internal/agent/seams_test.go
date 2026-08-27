@@ -43,7 +43,7 @@ func TestEnsureAgentForeignSurveyError(t *testing.T) {
 	fixed := filepath.Join(dir, "agent.sock")
 	lister := &nthErrLister{inner: inspect.Inspector{ProcRoot: testtmp.ShortDir(t)}, failOn: 2}
 	m := Manager{
-		Prober:    mapProber{}, // fixed silent
+		Prober:    mapProber{}, // fixed silent.
 		Inspector: lister,
 		Runner:    &recordRunner{},
 		Signaler:  &recordSignaler{},

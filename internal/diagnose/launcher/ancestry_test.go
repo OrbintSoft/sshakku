@@ -48,7 +48,7 @@ func TestAncestryMissingParent(t *testing.T) {
 func TestAncestryCycle(t *testing.T) {
 	tree := fakeAncestry{
 		100: {ppid: 50, name: "a"},
-		50:  {ppid: 100, name: "b"}, // points back → cycle
+		50:  {ppid: 100, name: "b"}, // points back → cycle.
 	}
 	assert.Len(t, Ancestry(t.Context(), 100, tree), 2, "a tree that points back at itself must stop the walk, not loop it")
 }

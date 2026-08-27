@@ -150,7 +150,7 @@ func TestChecksTmpShadowedByLaterMount(t *testing.T) {
 	proc, sys := filepath.Join(root, "proc"), filepath.Join(root, "sys")
 	writeFile(t, filepath.Join(proc, "mounts"),
 		"/dev/sda1 / ext4 rw 0 0\n"+
-			"/dev/sda2 /tmp ext4 rw 0 0\n"+ // stale bind mount info, shadowed below
+			"/dev/sda2 /tmp ext4 rw 0 0\n"+ // stale bind mount info, shadowed below.
 			"tmpfs /tmp tmpfs rw 0 0\n")
 
 	got := Procfs{ProcRoot: proc, SysRoot: sys, DevRoot: filepath.Join(root, "dev"), Target: "/"}.Checks(t.Context())

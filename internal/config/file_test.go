@@ -214,7 +214,7 @@ func TestStoresWalletIncludeModeConsultsOnlyInclude(t *testing.T) {
 	s := Settings{
 		WalletStoreMode:    WalletStoreModeInclude,
 		WalletStoreInclude: []string{"id_rsa"},
-		WalletStoreExclude: []string{"id_rsa"}, // must be ignored: mode is authoritative
+		WalletStoreExclude: []string{"id_rsa"}, // must be ignored: mode is authoritative.
 	}
 	assert.True(t, s.StoresWallet("id_rsa"), "id_rsa is in the include list, must store")
 	assert.False(t, s.StoresWallet("id_ed25519"), "id_ed25519 is not in the include list, must not store")
@@ -223,7 +223,7 @@ func TestStoresWalletIncludeModeConsultsOnlyInclude(t *testing.T) {
 func TestStoresWalletExcludeModeConsultsOnlyExclude(t *testing.T) {
 	s := Settings{
 		WalletStoreMode:    WalletStoreModeExclude,
-		WalletStoreInclude: []string{"id_ed25519"}, // must be ignored: mode is authoritative
+		WalletStoreInclude: []string{"id_ed25519"}, // must be ignored: mode is authoritative.
 		WalletStoreExclude: []string{"id_rsa"},
 	}
 	assert.False(t, s.StoresWallet("id_rsa"), "id_rsa is in the exclude list, must not store")
@@ -270,7 +270,7 @@ func TestAutoLoadsIncludeModeConsultsOnlyInclude(t *testing.T) {
 	s := Settings{
 		AutoLoadMode:    AutoLoadModeInclude,
 		AutoLoadInclude: []string{"id_rsa"},
-		AutoLoadExclude: []string{"id_rsa"}, // must be ignored: mode is authoritative
+		AutoLoadExclude: []string{"id_rsa"}, // must be ignored: mode is authoritative.
 	}
 	assert.True(t, s.AutoLoads("id_rsa"), "id_rsa is in the include list, must load")
 	assert.False(t, s.AutoLoads("id_ed25519"), "id_ed25519 is not in the include list, must not load")
@@ -279,7 +279,7 @@ func TestAutoLoadsIncludeModeConsultsOnlyInclude(t *testing.T) {
 func TestAutoLoadsExcludeModeConsultsOnlyExclude(t *testing.T) {
 	s := Settings{
 		AutoLoadMode:    AutoLoadModeExclude,
-		AutoLoadInclude: []string{"id_ed25519"}, // must be ignored: mode is authoritative
+		AutoLoadInclude: []string{"id_ed25519"}, // must be ignored: mode is authoritative.
 		AutoLoadExclude: []string{"id_rsa"},
 	}
 	assert.False(t, s.AutoLoads("id_rsa"), "id_rsa is in the exclude list, must not load")
@@ -357,7 +357,7 @@ func TestResolveSecretBackendFromEitherPlatformsWallets(t *testing.T) {
 		available []string
 		fallback  string
 		want      string
-		wantErr   string // a fragment the error must contain, "" for no error
+		wantErr   string // a fragment the error must contain, "" for no error.
 	}{
 		{name: "nothing named on linux", available: linux, fallback: secretService, want: secretService},
 		{name: "nothing named elsewhere", available: elsewhere, fallback: keychain, want: keychain},

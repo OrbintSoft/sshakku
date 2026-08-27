@@ -75,12 +75,12 @@ func TestSocketProberReachable(t *testing.T) {
 	t.Run("wrong reply type", func(t *testing.T) {
 		sock := fakeAgent(t, func(c net.Conn) {
 			drainRequest(c)
-			_, _ = c.Write([]byte{0, 0, 0, 1, 99}) // not identities-answer
+			_, _ = c.Write([]byte{0, 0, 0, 1, 99}) // not identities-answer.
 		})
 		assert.False(t, p.Reachable(t.Context(), sock), "an unexpected message type is not an agent")
 	})
 	t.Run("accept then close", func(t *testing.T) {
-		sock := fakeAgent(t, func(net.Conn) {}) // reply nothing; conn is closed
+		sock := fakeAgent(t, func(net.Conn) {}) // reply nothing; conn is closed.
 		assert.False(t, p.Reachable(t.Context(), sock), "a peer that sends nothing is not an agent")
 	})
 	t.Run("empty path", func(t *testing.T) {

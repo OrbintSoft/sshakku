@@ -48,7 +48,7 @@ func (Darwin) Checks(ctx context.Context) Checks {
 	var hc Checks
 	hc.DiskEncrypted = fileVaultStatus(ctx)
 	notTmpfs := false
-	hc.TmpTmpfs = &notTmpfs // macOS has no tmpfs-backed /tmp to detect
+	hc.TmpTmpfs = &notTmpfs // macOS has no tmpfs-backed /tmp to detect.
 	hc.SecureHardwarePresent, hc.SecureHardwareKind = secureEnclaveInfo(ctx)
 	return hc
 }

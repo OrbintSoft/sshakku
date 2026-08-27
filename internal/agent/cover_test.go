@@ -32,7 +32,7 @@ func TestEnsureAgentReapError(t *testing.T) {
 	dir := testtmp.ShortDir(t)
 	fixed := filepath.Join(dir, "agent.sock")
 	m := Manager{
-		Prober:    mapProber{}, // fixed silent → past the fast path
+		Prober:    mapProber{}, // fixed silent → past the fast path.
 		Inspector: inspect.Inspector{ProcRoot: filepath.Join(dir, "nope")},
 		Runner:    &recordRunner{},
 		Signaler:  &recordSignaler{},
@@ -68,7 +68,7 @@ func TestManagerStartRunnerError(t *testing.T) {
 func TestManagerStartStateWriteError(t *testing.T) {
 	dir := testtmp.ShortDir(t)
 	socket := filepath.Join(dir, "agent.sock")
-	state := filepath.Join(dir, "no-such-dir", "agent.state") // parent missing → write fails
+	state := filepath.Join(dir, "no-such-dir", "agent.state") // parent missing → write fails.
 	m := Manager{Prober: mapProber{}, Runner: &recordRunner{pid: 4242}}
 
 	pid, err := m.Start(t.Context(), socket, state)
@@ -90,13 +90,13 @@ func TestWriteStateError(t *testing.T) {
 func TestEnsureAgentClearsStaleFixedSocket(t *testing.T) {
 	dir := testtmp.ShortDir(t)
 	fixed := filepath.Join(dir, "agent.sock")
-	makeSocketFile(t, fixed) // orphan socket, no matching proc
+	makeSocketFile(t, fixed) // orphan socket, no matching proc.
 
 	runner := &recordRunner{pid: 7000}
 	log := &fakeLogger{}
 	m := Manager{
-		Prober:    mapProber{},                                      // fixed is silent
-		Inspector: inspect.Inspector{ProcRoot: testtmp.ShortDir(t)}, // no processes at all
+		Prober:    mapProber{},                                      // fixed is silent.
+		Inspector: inspect.Inspector{ProcRoot: testtmp.ShortDir(t)}, // no processes at all.
 		Runner:    runner,
 		Signaler:  &recordSignaler{},
 	}
@@ -132,12 +132,12 @@ func TestEnsureAgentReplacesStaleFixedOnAdopt(t *testing.T) {
 	proc := testtmp.ShortDir(t)
 	foreignSock := filepath.Join(dir, "foreign.sock")
 
-	makeSocketFile(t, fixed)                                                           // orphan socket at the fixed path
-	inspecttest.FakeProc(t, proc, 300, []string{"ssh-agent", "-a", foreignSock}, 1000) // healthy foreign, unrelated socket
+	makeSocketFile(t, fixed)                                                           // orphan socket at the fixed path.
+	inspecttest.FakeProc(t, proc, 300, []string{"ssh-agent", "-a", foreignSock}, 1000) // healthy foreign, unrelated socket.
 
 	log := &fakeLogger{}
 	m := Manager{
-		Prober:    mapProber{foreignSock: true}, // fixed silent, foreign healthy
+		Prober:    mapProber{foreignSock: true}, // fixed silent, foreign healthy.
 		Inspector: inspect.Inspector{ProcRoot: proc},
 		Runner:    &recordRunner{},
 		Signaler:  &recordSignaler{},
@@ -155,7 +155,7 @@ func TestEnsureAgentReplacesStaleFixedOnAdopt(t *testing.T) {
 // a foreign agent fails because the fixed socket's directory does not exist.
 func TestEnsureAgentAdoptSymlinkError(t *testing.T) {
 	dir := testtmp.ShortDir(t)
-	fixed := filepath.Join(dir, "no-such-dir", "agent.sock") // parent missing → symlink fails
+	fixed := filepath.Join(dir, "no-such-dir", "agent.sock") // parent missing → symlink fails.
 	proc := testtmp.ShortDir(t)
 	foreignSock := filepath.Join(dir, "foreign.sock")
 	inspecttest.FakeProc(t, proc, 300, []string{"ssh-agent", "-a", foreignSock}, 1000)

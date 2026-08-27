@@ -54,21 +54,21 @@ type Logger interface {
 // EnsureConfig parameterises EnsureAgent without coupling the package to the path
 // layout. FixedSock is the socket we pin our agent to and expose to the shell.
 type EnsureConfig struct {
-	FixedSock string // the socket we pin our agent to and expose to the shell
-	LegacyDir string // pre-sshakku agents live under here (~/.ssh/agent)
-	StatePath string // where we record the agent we start
-	LockPath  string // lock file serialising the mutate path across logins
-	OurUID    int    // our real uid; gates same-user reaping
+	FixedSock string // the socket we pin our agent to and expose to the shell.
+	LegacyDir string // pre-sshakku agents live under here (~/.ssh/agent).
+	StatePath string // where we record the agent we start.
+	LockPath  string // lock file serialising the mutate path across logins.
+	OurUID    int    // our real uid; gates same-user reaping.
 }
 
 // EnsureResult reports what EnsureAgent observed and did.
 type EnsureResult struct {
 	Situation Situation
-	Live      Endpoint           // the healthy endpoint to point the shell at
-	Started   int                // pid of the agent we started, or 0
-	Adopted   *inspect.AgentProc // the agent we adopted, or nil
+	Live      Endpoint           // the healthy endpoint to point the shell at.
+	Started   int                // pid of the agent we started, or 0.
+	Adopted   *inspect.AgentProc // the agent we adopted, or nil.
 	Reaped    ReapResult
-	Anomaly   string // human-readable anomaly, set when we adopt a foreign agent
+	Anomaly   string // human-readable anomaly, set when we adopt a foreign agent.
 }
 
 // EnsureAgent drives the fixed socket to a healthy ssh-agent and returns the

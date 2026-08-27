@@ -89,9 +89,9 @@ func TestKeePassXCCLIStoreKeepsThePassphraseOffArgvToo(t *testing.T) {
 	const dbPassword = "db-password"
 	const passphrase = "the-key-passphrase"
 	runner := &runtest.Recorder{Results: []run.Result{
-		{Code: 1}, // the existence check: no such entry yet
-		{Code: 0}, // creating the group
-		{Code: 0}, // the add
+		{Code: 1}, // the existence check: no such entry yet.
+		{Code: 0}, // creating the group.
+		{Code: 0}, // the add.
 	}}
 	b := cliBackend(runner, &countingPrompter{password: dbPassword})
 
@@ -186,7 +186,7 @@ func TestKeePassXCCLICanDelete(t *testing.T) {
 	runner := &runtest.Recorder{Results: []run.Result{
 		{Code: 0, Stdout: []byte("/SSHakku/" + wallet.DefaultServicePrefix + "-id_ed25519\n")},
 		{Code: 0},
-		{Code: 1}, // nothing found afterwards: this database has no recycle bin
+		{Code: 1}, // nothing found afterwards: this database has no recycle bin.
 	}}
 	b := cliBackend(runner, &countingPrompter{password: "p"})
 
@@ -211,10 +211,10 @@ func TestKeePassXCCLIDeleteTakesTheCopyTheRecycleBinKept(t *testing.T) {
 	// A German database, to make the point that the name is not ours to know.
 	const moved = "/Papierkorb/" + service
 	runner := &runtest.Recorder{Results: []run.Result{
-		{Code: 0, Stdout: []byte("/SSHakku/" + service + "\n")}, // where it is now
-		{Code: 0},                               // the removal, which moves it
-		{Code: 0, Stdout: []byte(moved + "\n")}, // where it went
-		{Code: 0},                               // and the removal that deletes it
+		{Code: 0, Stdout: []byte("/SSHakku/" + service + "\n")}, // where it is now.
+		{Code: 0},                               // the removal, which moves it.
+		{Code: 0, Stdout: []byte(moved + "\n")}, // where it went.
+		{Code: 0},                               // and the removal that deletes it.
 	}}
 	b := cliBackend(runner, &countingPrompter{password: "p"})
 
@@ -263,7 +263,7 @@ func TestKeePassXCCLIDeleteStopsWhereThereIsNoRecycleBin(t *testing.T) {
 	runner := &runtest.Recorder{Results: []run.Result{
 		{Code: 0, Stdout: []byte("/SSHakku/" + service + "\n")},
 		{Code: 0},
-		{Code: 1}, // search finds nothing, which is how it reports a miss
+		{Code: 1}, // search finds nothing, which is how it reports a miss.
 	}}
 	b := cliBackend(runner, &countingPrompter{password: "p"})
 
@@ -349,9 +349,9 @@ func TestKeePassXCCLIKeyFileOnlyDatabaseAsksNothing(t *testing.T) {
 func TestKeePassXCCLIKeyFileOnlyStoreSendsOnlyTheEntryPassword(t *testing.T) {
 	const passphrase = "the-key-passphrase"
 	runner := &runtest.Recorder{Results: []run.Result{
-		{Code: 1}, // the lookup that decides between add and edit: not there yet
-		{Code: 0}, // mkdir
-		{Code: 0}, // add
+		{Code: 1}, // the lookup that decides between add and edit: not there yet.
+		{Code: 0}, // mkdir.
+		{Code: 0}, // add.
 	}}
 	prompter := &countingPrompter{password: "never-needed"}
 	b := cliBackend(runner, prompter)

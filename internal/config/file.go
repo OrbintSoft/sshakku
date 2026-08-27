@@ -98,10 +98,10 @@ type File struct {
 
 // Settings is the configuration resolved from environment, file, and defaults.
 type Settings struct {
-	KeyLifetime time.Duration // 0 disables agent key expiry
-	MaxAttempts int           // 0 lets the loader use its own default
-	GiveupTTL   time.Duration // 0 never expires the give-up record
-	NoGiveup    bool          // true disables give-up tracking entirely
+	KeyLifetime time.Duration // 0 disables agent key expiry.
+	MaxAttempts int           // 0 lets the loader use its own default.
+	GiveupTTL   time.Duration // 0 never expires the give-up record.
+	NoGiveup    bool          // true disables give-up tracking entirely.
 
 	// CommandTimeout and InteractiveTimeout bound every external command
 	// SSHakku runs: the first for one that should answer on its own, the second
@@ -109,17 +109,17 @@ type Settings struct {
 	// setting for "wait forever".
 	CommandTimeout     time.Duration
 	InteractiveTimeout time.Duration
-	Quiet              bool // true suppresses the failure notice
+	Quiet              bool // true suppresses the failure notice.
 
 	// WalletStoreMode is one of "all", "include", or "exclude"; see StoresWallet.
 	WalletStoreMode    string
-	WalletStoreInclude []string // key names consulted only when mode is "include"
-	WalletStoreExclude []string // key names consulted only when mode is "exclude"
+	WalletStoreInclude []string // key names consulted only when mode is "include".
+	WalletStoreExclude []string // key names consulted only when mode is "exclude".
 
 	// AutoLoadMode is one of "all", "include", or "exclude"; see AutoLoads.
 	AutoLoadMode    string
-	AutoLoadInclude []string // key names consulted only when mode is "include"
-	AutoLoadExclude []string // key names consulted only when mode is "exclude"
+	AutoLoadInclude []string // key names consulted only when mode is "include".
+	AutoLoadExclude []string // key names consulted only when mode is "exclude".
 
 	// ServicePrefix is the name SSHakku's entries carry in the secret store,
 	// ahead of the key's own name. It is always set: what a store writes, what
@@ -432,7 +432,7 @@ var (
 // by one can put the refusal beside the setting it belongs to instead of
 // leaving the reader to match them up by eye.
 type SettingError struct {
-	Key string // the config-file key the refused value was written for
+	Key string // the config-file key the refused value was written for.
 	Err error
 }
 

@@ -341,7 +341,7 @@ func TestEnsureAgentRealDisasterReapsAndAdoptsLowestPID(t *testing.T) {
 
 	res1, err := m.EnsureAgent(t.Context(), cfg, nil)
 	require.NoError(t, err, "seed EnsureAgent")
-	killAgentLeavingSocket(t, res1.Started) // now dead-ours
+	killAgentLeavingSocket(t, res1.Started) // now dead-ours.
 
 	sockA := filepath.Join(testtmp.ShortDir(t), "foreign-a.sock")
 	sockB := filepath.Join(testtmp.ShortDir(t), "foreign-b.sock")

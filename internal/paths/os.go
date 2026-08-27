@@ -64,7 +64,7 @@ func CleanupLegacyAgentDir(home string) {
 	}
 	_ = os.Remove(filepath.Join(dir, "ssh-agent.sock"))
 	_ = os.Remove(filepath.Join(dir, ".start.lock"))
-	_ = os.Remove(dir) // rmdir; harmless if the dir is not empty
+	_ = os.Remove(dir) // rmdir; harmless if the dir is not empty.
 }
 
 // errNotADirectory is a path that was made but is not a real directory when

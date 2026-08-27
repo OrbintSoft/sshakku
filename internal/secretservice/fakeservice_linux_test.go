@@ -157,7 +157,7 @@ func (s *fakeService) ReadAlias(name string) (dbus.ObjectPath, *dbus.Error) {
 	hang := s.hang
 	s.mu.Unlock()
 	if hang != nil {
-		<-hang // block outside the lock: an unresponsive daemon never replies
+		<-hang // block outside the lock: an unresponsive daemon never replies.
 	}
 
 	s.mu.Lock()
@@ -395,7 +395,7 @@ func (p *fakePrompt) Prompt(string) *dbus.Error {
 		// Two fields, but the first isn't the bool "dismissed" flag — Client
 		// must reject it rather than trust a failed type assertion.
 		_ = p.conn.Emit(p.path, promptIface+".Completed", "not-a-bool", dbus.MakeVariant(""))
-	default: // "ok"
+	default: // "ok".
 		_ = p.conn.Emit(p.path, promptIface+".Completed", false, p.resultFn())
 	}
 	return nil
