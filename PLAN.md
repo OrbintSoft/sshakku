@@ -3433,3 +3433,62 @@ there, and its own drive needs a server a `windows-latest` runner cannot stand
 up — Linux containers are not something that runner has.
 
 → features F56, F26, F17, F4, F5, F6, F9; rules 19, 21, 22, 23, 25.
+
+### Phase 47 — The vault kept for other things too ✅ Done
+
+Phase 46 recorded that F56 promises an item *the user* put in the vault survives
+`sshakku forget --all`, and that no leg of the real-account job verified it: the
+vault each leg works in is created for the run, so there is nothing of anybody's
+in it to leave alone. This phase makes the vault hold two such items and asserts
+what F56 says about them.
+
+**A promise written wider than the code, and the promise is the one that was
+right.** F56 says the vault does not have to be one kept for nothing else:
+what SSHakku did not put there it neither reads, nor lists, nor removes. Only
+the listing half was true. `List` filtered on the tag; `Lookup`, `Delete` and
+`Store` addressed items by title, and a title says where to look, never whose an
+item is. The type doc stated that shortcut as a premise — the vault *must* be
+dedicated — which is what made it look sound and which F56 had already
+contradicted. The catalogue is the contract, so the code came up to it.
+
+**The test is what found this, and it found it by being written from the
+promise.** Two items created with `op` directly rather than through the backend,
+which marks everything it creates: one plainly somebody else's, one titled the
+way SSHakku titles what it stores. That second one is the case the mark exists
+for, and it is the one an implementation-derived test would never have thought
+to write, because the implementation has no notion of it. Both reads came back
+wrong on all three platforms at once, which is what having three legs is for.
+
+**Refusing beats falling back, when there is nowhere to fall.** `Lookup` and
+`Delete` had an obvious right answer for an item that is not SSHakku's — it is a
+miss, and there is nothing of SSHakku's under that name to forget. `Store` did
+not: two items in a vault sharing a title cannot afterwards be told apart by the
+name that addresses them, so writing beside the user's item is no better than
+writing over it. It reports the clash and saves nothing, and which item gets
+renamed or which vault gets named instead is the user's decision, not a
+program's. F56 gained that sentence, since it is a thing a user can see happen.
+
+**`Lookup` still costs one call.** It moved off the secret reference to
+`op item get --format json --reveal`, which carries the marks and the value
+together; the ownership check the other callers make does not ask for `--reveal`,
+so a call that only needs to know whose item this is does not put that item's
+passphrase on a pipe. That `--reveal` answers with the concealed value was the
+one thing here that could not be checked from a developer's machine, and the run
+is what settled it.
+
+**A second defect the run surfaced, older than this phase.** The throwaway vault
+had never been deleted. Go cancels a test's own context just before the cleanups
+it registered, and the delete derived from that one, so it arrived dead on every
+run that has ever reached an account — including Phase 46's green one, which
+logged it on all three legs. The cleanup only logged the failure, so the test
+passed and two phases went by with vaults accumulating in the account. Both
+halves were wrong: `context.WithoutCancel` gives the teardown a context that
+outlives the test, and a leak now fails the run that caused it rather than
+leaving a note nobody reads. The vaults already left behind have to be removed
+by hand.
+
+**Recorded rather than closed**: **Bitwarden on Windows stays ❌**, unchanged
+from Phase 46 and on the same terms — its drive needs a server a
+`windows-latest` runner cannot stand up.
+
+→ features F56, F4, F5, F6, F9, F17; rules 19, 21, 22, 23, 25, 28.
