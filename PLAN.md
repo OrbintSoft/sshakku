@@ -3249,7 +3249,7 @@ that every message is unchanged is what the verification above is about.
 
 → rules 12, 15, 20, 22, 23, 26, 27.
 
-### Phase 44 — The wallet a promise had already named
+### Phase 44 — The wallet a promise had already named ✅ Done
 
 F22 says KeePassXC can be chosen as your wallet by name **on every OS SSHakku
 supports**. Windows is one of those, and `platformSecretBackends` there holds
@@ -3377,3 +3377,59 @@ to work while handing out a passphrase nothing else would have accepted. The
 test is opt-in and had only ever been run where the line ending hid it.
 
 → features F9, F27; rules 19, 22, 23, 25.
+
+### Phase 46 — The wallet that had never been written down ✅ Done
+
+1Password has been a choosable wallet since Phase 4 and had no entry in
+`docs/FEATURES.md`. What it promised lived in `docs/CONFIGURATION.md` prose,
+which is exactly the thing rule 21 exists about: a promise no test can be
+derived from, and so a promise nothing notices the loss of. That gap is
+independent of any platform and is closed first, as **F56**.
+
+**This phase makes a promise rather than keeping one, which is the opposite of
+Phase 44 and sets the order of the work.** F22 already said KeePassXC could be
+named on every OS, so Windows refusing it was a defect. Nothing said that about
+1Password: F26 says only wallets a platform actually has may be named, and the
+refusal on Windows was correct for as long as nobody had driven the wallet
+there. So the drive comes first and the offer second, and the two are separate
+commits with the drive's result between them.
+
+**Where the drive can happen, and where it cannot.** A 1Password account is a
+cloud account, not a local daemon a container can stand up — the real-account
+test has said so in its own comment since it was written. So there is no
+container scenario here of the kind Phase 44 built for KeePassXC, and there
+cannot be one; the only place the round trip can happen on this platform is the
+CI job, against the same dedicated service account the other two legs already
+use. That is the standard those legs were held to, not a weaker one invented
+for a third.
+
+**What held the platform out was three lines and no code.** The real-account
+test carried `//go:build unix`, so the round trip did not exist there; the
+workflow matrix named two systems; and `platformSecretBackends` did not name the
+wallet. The backend, the factory and the doctor's view of it carry no build tag
+and no platform assumption — `op` is found by a lookup that appends the
+extension this system wants, the passphrase travels on stdin, and the vault is
+addressed by a name the user chose. The drive confirmed that reading rather than
+resting on it: `--- PASS: TestOnePasswordBackendRealAccount (21.50s)` on
+`windows-latest`, and nothing had to be fixed to get there.
+
+**The guard is what makes a green job mean something**, and it had to be shown
+to work on the new platform before the leg was added. `go test -run` exits 0
+when a test skips itself, so `test/onepassword-real-account.sh` requires the
+test's own `--- PASS:` line. Run on Windows with the opt-in set and no `op`
+installed, it reports that the suite passed without reaching an account and
+exits 1 — which is also how `mktemp`, `tee` and `grep` were shown to be there.
+The step names `shell: bash` rather than leaving it to the runner: two of the
+three default to it and the third to PowerShell, which would not run the script
+at all.
+
+**Recorded rather than closed**: F56 promises that an item *the user* put in the
+vault survives `sshakku forget --all`, and no leg of this job verifies it — the
+vault each one works in is created for the run, so there is nothing of anybody's
+in it to leave alone. Bitwarden's real-account test does cover that shape. The
+matrix cell says so. **Bitwarden on Windows stays ❌** on the terms this phase
+respected: it compiles there, which is not the same as having been shown to work
+there, and its own drive needs a server a `windows-latest` runner cannot stand
+up — Linux containers are not something that runner has.
+
+→ features F56, F26, F17, F4, F5, F6, F9; rules 19, 21, 22, 23, 25.

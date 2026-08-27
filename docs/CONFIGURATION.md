@@ -115,7 +115,7 @@ system:
 | `"keychain"` | ❌ no such API exists there | ✅ the default | ❌ no such API exists there |
 | `"credential-manager"` | ❌ no such API exists there | ❌ no such API exists there | ✅ the default |
 | `"keepassxc"` | ✅ | ✅ | ✅ by the `cli` route, which needs `keepassxc_database` |
-| `"1password"` | ✅ | ✅ | ❌ not yet driven there |
+| `"1password"` | ✅ | ✅ | ✅ |
 | `"bitwarden"` | ✅ | ✅ | ❌ not yet driven there |
 
 Naming one your system has not got is a mistake in the configuration, not a

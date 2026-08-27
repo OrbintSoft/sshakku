@@ -21,13 +21,18 @@ const SecretBackendCredentialManager = "credential-manager"
 // named pipe on this system, which SSHakku has no dialler for, so that route
 // reports itself unavailable rather than being chosen.
 //
-// The wallets reached by running a program of their own — 1Password, Bitwarden
-// — are still absent, on the same terms: they compile here, which is not the
-// same as having been shown to work here, and what is offered is what has been
-// driven on this system.
+// 1Password is offered on the same terms, having been driven here against a
+// real account. Naming it is the whole of what choosing it takes: op is asked
+// for the vault by name, and nothing of this system's that another spells
+// differently is involved.
+//
+// Bitwarden is still absent, and on those terms too: it compiles here, which is
+// not the same as having been shown to work here, and what is offered is what
+// has been driven on this system.
 var platformSecretBackends = []string{
 	SecretBackendCredentialManager,
 	SecretBackendKeePassXC,
+	SecretBackendOnePassword,
 }
 
 const platformDefaultSecretBackend = SecretBackendCredentialManager
