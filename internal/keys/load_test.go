@@ -248,7 +248,7 @@ func TestLoadKeysStaleStoredThenPromptStores(t *testing.T) {
 	r := runtest.NewRunner().On("ssh-add", agentEmpty()).On("ssh-keygen", keygen("SHA256:NEW"))
 	secret := &fakeSecret{lookupPass: "stale", lookupFound: true}
 	prompter := &fakePrompter{pass: "fresh"}
-	adder := &fakeKeyAdder{withCodes: []int{1, 0}} // stored rejected, prompted accepted
+	adder := &fakeKeyAdder{withCodes: []int{1, 0}} // stored rejected, prompted accepted.
 	log := &fakeLogger{}
 	l := Loader{
 		Keys:   fakeLister{paths: []string{"/ssh/id_rsa"}},
@@ -558,7 +558,7 @@ func TestLoadKeysSessionUnlockFailureFallsBackPerKey(t *testing.T) {
 }
 
 func TestLoadKeysNoKeys(t *testing.T) {
-	r := runtest.NewRunner() // ssh-add must not be consulted
+	r := runtest.NewRunner() // ssh-add must not be consulted.
 	log := &fakeLogger{}
 	l := Loader{Keys: fakeLister{paths: nil}, Runner: r, Log: log}
 	require.NoError(t, l.LoadKeys(t.Context()), "loading a login's keys must not fail")

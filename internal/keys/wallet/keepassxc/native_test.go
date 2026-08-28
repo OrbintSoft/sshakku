@@ -82,7 +82,7 @@ func TestKeePassXCLookupOfAnAbsentKeyIsAMiss(t *testing.T) {
 // trying to become so.
 func TestKeePassXCLookupNeverAsksForApproval(t *testing.T) {
 	kp := &fakeKeePassXC{}
-	assoc := &memoryAssociations{} // nothing stored: never approved
+	assoc := &memoryAssociations{} // nothing stored: never approved.
 	b := kp.backendFor(assoc)
 
 	_, _, err := b.Lookup(t.Context(), "id_ed25519")

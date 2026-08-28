@@ -46,7 +46,7 @@ type Manager struct {
 	Inspector ProcLister
 	Runner    Runner
 	Signaler  Signaler
-	Locker    Locker // serialises the mutate path; nil disables locking
+	Locker    Locker // serialises the mutate path; nil disables locking.
 }
 
 // State is what we persist about the agent we started, so a later run can
@@ -61,7 +61,7 @@ type State struct {
 // callers decide to start only when no agent of ours is already serving it.
 func (m Manager) Start(ctx context.Context, socket, statePath string) (int, error) {
 	if !m.Prober.Reachable(ctx, socket) {
-		_ = removeSocket(socket) // clear a stale socket so the bind can succeed
+		_ = removeSocket(socket) // clear a stale socket so the bind can succeed.
 	}
 	pid, err := m.Runner.Start(ctx, socket)
 	if err != nil {
@@ -76,8 +76,8 @@ func (m Manager) Start(ctx context.Context, socket, statePath string) (int, erro
 
 // ReapResult records what a Reap pass cleaned up, for logging and reporting.
 type ReapResult struct {
-	Terminated     []int    // pids we signalled
-	RemovedSockets []string // stale socket files we unlinked
+	Terminated     []int    // pids we signalled.
+	RemovedSockets []string // stale socket files we unlinked.
 }
 
 // Reap terminates dead, same-user ssh-agent processes and unlinks their stale
@@ -92,10 +92,10 @@ func (m Manager) Reap(ctx context.Context, ourUID int) (ReapResult, error) {
 	var res ReapResult
 	for _, p := range procs {
 		if p.Socket == "" || m.Prober.Reachable(ctx, p.Socket) {
-			continue // unknown socket, or healthy — never reap
+			continue // unknown socket, or healthy — never reap.
 		}
 		if p.UID != ourUID {
-			continue // not ours to signal
+			continue // not ours to signal.
 		}
 		if err := m.Signaler.Terminate(p.PID); err == nil {
 			res.Terminated = append(res.Terminated, p.PID)

@@ -93,7 +93,7 @@ func TestOnePasswordStore(t *testing.T) {
 
 	t.Run("no existing item: deletes nothing, creates via stdin", func(t *testing.T) {
 		r := runtest.NewRunner().On(onePasswordBin, opCall(map[string]func(run.Cmd) (run.Result, error){
-			"item get":    runtest.Stdout("", 1), // not found
+			"item get":    runtest.Stdout("", 1), // not found.
 			"item create": runtest.Stdout("", 0),
 		}))
 		b := &OnePassword{Runner: r, Vault: "sshakku"}
@@ -124,7 +124,7 @@ func TestOnePasswordStore(t *testing.T) {
 
 	t.Run("existing item is deleted before recreating", func(t *testing.T) {
 		r := runtest.NewRunner().On(onePasswordBin, opCall(map[string]func(run.Cmd) (run.Result, error){
-			"item get":    runtest.Stdout(opItemJSON(t, "sshakku-id_rsa", "old", onePasswordTag), 0), // found, and SSHakku's own
+			"item get":    runtest.Stdout(opItemJSON(t, "sshakku-id_rsa", "old", onePasswordTag), 0), // found, and SSHakku's own.
 			"item delete": runtest.Stdout("", 0),
 			"item create": runtest.Stdout("", 0),
 		}))

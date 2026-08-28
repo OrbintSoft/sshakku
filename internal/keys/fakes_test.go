@@ -87,7 +87,7 @@ func (s *fakeSecret) Lock(context.Context) error {
 
 // fakeKeyAdder records each add and returns scripted exit codes per call.
 type fakeKeyAdder struct {
-	withCodes []int // exit codes for successive AddWithAskpass calls
+	withCodes []int // exit codes for successive AddWithAskpass calls.
 	err       error
 	calls     []addCall
 }

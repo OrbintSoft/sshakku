@@ -81,7 +81,7 @@ func parseEvents(r io.Reader, osName string, keepSlowest int) (Report, error) {
 		}
 
 		if ev.Test == "" {
-			continue // package-level event, not one test's result
+			continue // package-level event, not one test's result.
 		}
 		key := outputKey{pkg: ev.Package, test: ev.Test}
 

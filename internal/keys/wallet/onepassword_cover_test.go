@@ -29,7 +29,7 @@ func TestOnePasswordStoreDeleteErrorPropagates(t *testing.T) {
 func TestOnePasswordStoreDeleteOfOwnItemFails(t *testing.T) {
 	boom := errOpExecBoom
 	r := runtest.NewRunner().On(onePasswordBin, opCall(map[string]func(run.Cmd) (run.Result, error){
-		"item get":    runtest.Stdout(`{"title":"svc","tags":["`+onePasswordTag+`"]}`, 0), // SSHakku's own
+		"item get":    runtest.Stdout(`{"title":"svc","tags":["`+onePasswordTag+`"]}`, 0), // SSHakku's own.
 		"item delete": runtest.Fails(boom),
 	}))
 	b := &OnePassword{Runner: r, Vault: "sshakku"}
@@ -62,7 +62,7 @@ func TestOnePasswordStoreMarshalError(t *testing.T) {
 	saveJSONMarshal(t)
 	jsonMarshal = func(any) ([]byte, error) { return nil, errMarshalBoom }
 	r := runtest.NewRunner().On(onePasswordBin, opCall(map[string]func(run.Cmd) (run.Result, error){
-		"item get": runtest.Stdout("", 1), // nothing to delete
+		"item get": runtest.Stdout("", 1), // nothing to delete.
 	}))
 	b := &OnePassword{Runner: r, Vault: "sshakku"}
 	assert.Error(t, b.Store(t.Context(), "svc", "label", "pass"),
@@ -72,7 +72,7 @@ func TestOnePasswordStoreMarshalError(t *testing.T) {
 func TestOnePasswordStoreCreateRunError(t *testing.T) {
 	boom := errOpExecBoom
 	r := runtest.NewRunner().On(onePasswordBin, opCall(map[string]func(run.Cmd) (run.Result, error){
-		"item get":    runtest.Stdout("", 1), // nothing to delete
+		"item get":    runtest.Stdout("", 1), // nothing to delete.
 		"item create": runtest.Fails(boom),
 	}))
 	b := &OnePassword{Runner: r, Vault: "sshakku"}
@@ -83,7 +83,7 @@ func TestOnePasswordStoreCreateRunError(t *testing.T) {
 func TestOnePasswordDeleteItemDeleteRunError(t *testing.T) {
 	boom := errOpExecBoom
 	r := runtest.NewRunner().On(onePasswordBin, opCall(map[string]func(run.Cmd) (run.Result, error){
-		"item get":    runtest.Stdout(`{"title":"svc","tags":["`+onePasswordTag+`"]}`, 0), // found, and SSHakku's own
+		"item get":    runtest.Stdout(`{"title":"svc","tags":["`+onePasswordTag+`"]}`, 0), // found, and SSHakku's own.
 		"item delete": runtest.Fails(boom),
 	}))
 	b := &OnePassword{Runner: r, Vault: "sshakku"}

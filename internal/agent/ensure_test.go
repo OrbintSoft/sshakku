@@ -79,7 +79,7 @@ func TestEnsureAgentClean(t *testing.T) {
 	runner := &recordRunner{pid: 4242}
 
 	m := Manager{
-		Prober:    mapProber{}, // nothing reachable
+		Prober:    mapProber{}, // nothing reachable.
 		Inspector: inspect.Inspector{ProcRoot: testtmp.ShortDir(t)},
 		Runner:    runner,
 		Signaler:  &recordSignaler{},
@@ -102,8 +102,8 @@ func TestEnsureAgentZombie(t *testing.T) {
 	state := filepath.Join(dir, "agent.state")
 	proc := testtmp.ShortDir(t)
 
-	makeSocketFile(t, fixed)                                                     // a real stale socket at our path
-	inspecttest.FakeProc(t, proc, 200, []string{"ssh-agent", "-a", fixed}, 1000) // dead agent of ours
+	makeSocketFile(t, fixed)                                                     // a real stale socket at our path.
+	inspecttest.FakeProc(t, proc, 200, []string{"ssh-agent", "-a", fixed}, 1000) // dead agent of ours.
 
 	runner := &recordRunner{pid: 7000}
 	sig := &recordSignaler{}
@@ -128,7 +128,7 @@ func TestEnsureAgentForeign(t *testing.T) {
 
 	runner := &recordRunner{pid: 1}
 	m := Manager{
-		Prober:    mapProber{foreignSock: true}, // fixed silent, foreign healthy
+		Prober:    mapProber{foreignSock: true}, // fixed silent, foreign healthy.
 		Inspector: inspect.Inspector{ProcRoot: proc},
 		Runner:    runner,
 		Signaler:  &recordSignaler{},
@@ -184,9 +184,9 @@ func TestEnsureAgentDisasterReapAndAdopt(t *testing.T) {
 	proc := testtmp.ShortDir(t)
 	foreignSock := filepath.Join(dir, "foreign.sock")
 
-	makeSocketFile(t, fixed)                                                           // stale socket of ours
-	inspecttest.FakeProc(t, proc, 200, []string{"ssh-agent", "-a", fixed}, 1000)       // dead ours
-	inspecttest.FakeProc(t, proc, 300, []string{"ssh-agent", "-a", foreignSock}, 1000) // healthy foreign
+	makeSocketFile(t, fixed)                                                           // stale socket of ours.
+	inspecttest.FakeProc(t, proc, 200, []string{"ssh-agent", "-a", fixed}, 1000)       // dead ours.
+	inspecttest.FakeProc(t, proc, 300, []string{"ssh-agent", "-a", foreignSock}, 1000) // healthy foreign.
 
 	sig := &recordSignaler{}
 	m := Manager{
@@ -250,7 +250,7 @@ func TestEnsureAgentLocksMutatePath(t *testing.T) {
 	lk := &fakeLocker{}
 
 	m := Manager{
-		Prober:    mapProber{}, // silent
+		Prober:    mapProber{}, // silent.
 		Inspector: inspect.Inspector{ProcRoot: testtmp.ShortDir(t)},
 		Runner:    runner,
 		Signaler:  &recordSignaler{},
@@ -269,7 +269,7 @@ func TestEnsureAgentDoubleCheckUnderLock(t *testing.T) {
 	fixed := filepath.Join(dir, "agent.sock")
 	runner := &recordRunner{pid: 1}
 	sig := &recordSignaler{}
-	prober := mapProber{} // silent on the first check
+	prober := mapProber{} // silent on the first check.
 
 	// A concurrent login starts ours while we hold the lock: the under-lock
 	// re-check must then find it healthy and neither reap nor start.

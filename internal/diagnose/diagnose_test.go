@@ -49,6 +49,19 @@ func hasFinding(r Report, sub string) bool {
 	return false
 }
 
+// gatherOneReachableAgent reports on a machine running exactly one agent,
+// answering on `socket` and belonging to uid 1000, as seen by an account whose
+// own uid is ourUID. It is the setup behind every question of the form "whose
+// agent is this": the socket says what kind it looks like, and the two uids
+// say whether it is this account's business at all.
+func gatherOneReachableAgent(t *testing.T, socket string, ourUID int) Report {
+	t.Helper()
+	src := fakeSource{procs: []inspect.AgentProc{{PID: 100, UID: 1000, Socket: socket}}}
+	prober := fakeProber{up: map[string]bool{socket: true}}
+
+	return Gather(t.Context(), Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: ourUID}, src, prober, nil, nil, nil, nil)
+}
+
 func TestGatherHealthy(t *testing.T) {
 	src := fakeSource{procs: []inspect.AgentProc{
 		{PID: 100, UID: 1000, Socket: fixed, Args: []string{"ssh-agent", "-a", fixed}},
@@ -93,7 +106,7 @@ func TestGatherEnvUnset(t *testing.T) {
 
 func TestGatherEnvNotAnswering(t *testing.T) {
 	src := fakeSource{}
-	prober := fakeProber{} // nothing up
+	prober := fakeProber{} // nothing up.
 	r := Gather(t.Context(), Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000}, src, prober, nil, nil, nil, nil)
 
 	assert.False(t, r.EnvReachable, "nothing answers on the socket the shell exported")
@@ -118,9 +131,9 @@ func TestGatherEnvMismatch(t *testing.T) {
 func TestGatherMultipleAndDead(t *testing.T) {
 	const foreign = "/tmp/foreign.sock"
 	src := fakeSource{procs: []inspect.AgentProc{
-		{PID: 100, UID: 1000, Socket: fixed},                      // ours, reachable
-		{PID: 200, UID: 1000, Socket: foreign},                    // foreign, reachable
-		{PID: 300, UID: 1000, Socket: legacy + "/ssh-agent.sock"}, // legacy, dead
+		{PID: 100, UID: 1000, Socket: fixed},                      // ours, reachable.
+		{PID: 200, UID: 1000, Socket: foreign},                    // foreign, reachable.
+		{PID: 300, UID: 1000, Socket: legacy + "/ssh-agent.sock"}, // legacy, dead.
 	}}
 	prober := fakeProber{up: map[string]bool{fixed: true, foreign: true}}
 	r := Gather(t.Context(), Inputs{FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000}, src, prober, nil, nil, nil, nil)
@@ -139,12 +152,10 @@ func TestGatherMultipleAndDead(t *testing.T) {
 }
 
 func TestGatherDifferentUserAgent(t *testing.T) {
+	// Healthy, and on a socket of the shape sshakku uses — but uid 1000's, and
+	// this account is uid 0.
 	const other = "/run/user/1000/sshakku/tok/agent.sock"
-	src := fakeSource{procs: []inspect.AgentProc{
-		{PID: 100, UID: 1000, Socket: other}, // healthy, but not uid 0's
-	}}
-	prober := fakeProber{up: map[string]bool{other: true}}
-	r := Gather(t.Context(), Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 0}, src, prober, nil, nil, nil, nil)
+	r := gatherOneReachableAgent(t, other, 0)
 
 	assert.Equal(t, StateClean, r.State, "another user's agent is not serving this account")
 	assert.Falsef(t, hasFinding(r, "foreign ssh-agent"),
@@ -161,9 +172,7 @@ func TestGatherDifferentUserAgent(t *testing.T) {
 // belongs to somebody else. It is named as another user's and nothing more.
 func TestGatherAnotherUsersForeignAgentIsNotThisAccountsProblem(t *testing.T) {
 	const theirs = "/tmp/theirs.sock"
-	src := fakeSource{procs: []inspect.AgentProc{{PID: 200, UID: 1000, Socket: theirs}}}
-	prober := fakeProber{up: map[string]bool{theirs: true}}
-	r := Gather(t.Context(), Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 0}, src, prober, nil, nil, nil, nil)
+	r := gatherOneReachableAgent(t, theirs, 0)
 
 	assert.Falsef(t, hasFinding(r, "foreign ssh-agent"),
 		"an agent belonging to another account is not a foreign agent serving this one: %v", r.Findings)
@@ -176,11 +185,7 @@ func TestGatherOrphanedOursAgent(t *testing.T) {
 	// session's own fixedSock — most likely a previous instance of our own
 	// agent, not a truly external tool.
 	const orphan = "/run/user/1000/sshakku/00112233445566778899aabbccddeeff/agent.sock"
-	src := fakeSource{procs: []inspect.AgentProc{
-		{PID: 100, UID: 1000, Socket: orphan},
-	}}
-	prober := fakeProber{up: map[string]bool{orphan: true}}
-	r := Gather(t.Context(), Inputs{FixedSock: fixed, LegacyDir: legacy, OurUID: 1000}, src, prober, nil, nil, nil, nil)
+	r := gatherOneReachableAgent(t, orphan, 1000)
 
 	assert.Truef(t, hasFinding(r, "looks like a previous sshakku-managed agent"),
 		"an agent on a socket of our own shape is one of ours left behind: %v", r.Findings)
@@ -195,12 +200,12 @@ func TestLooksLikeOrphanedOurs(t *testing.T) {
 	}{
 		{"/run/user/1000/sshakku/00112233445566778899aabbccddeeff/agent.sock", true},
 		{"/home/u/.cache/sshakku/00112233445566778899aabbccddeeff/agent.sock", true},
-		{"/run/user/1000/sshakku/agent.sock", false},                                    // tokenless layout, no hex dir
-		{"/run/user/1000/sshakku/TooShortHex/agent.sock", false},                        // wrong length
-		{"/run/user/1000/sshakku/abc123/agent.sock", false},                             // lower hex, but not a token's worth
-		{"/run/user/1000/sshakku/00112233445566778899aabbccddeeff/other.sock", false},   // right place, not our socket
-		{"/run/user/1000/sshakku/00112233445566778899AABBCCDDEEFF/agent.sock", false},   // uppercase
-		{"/run/user/1000/other-app/00112233445566778899aabbccddeeff/agent.sock", false}, // not sshakku
+		{"/run/user/1000/sshakku/agent.sock", false},                                    // tokenless layout, no hex dir.
+		{"/run/user/1000/sshakku/TooShortHex/agent.sock", false},                        // wrong length.
+		{"/run/user/1000/sshakku/abc123/agent.sock", false},                             // lower hex, but not a token's worth.
+		{"/run/user/1000/sshakku/00112233445566778899aabbccddeeff/other.sock", false},   // right place, not our socket.
+		{"/run/user/1000/sshakku/00112233445566778899AABBCCDDEEFF/agent.sock", false},   // uppercase.
+		{"/run/user/1000/other-app/00112233445566778899aabbccddeeff/agent.sock", false}, // not sshakku.
 		{"/tmp/foreign.sock", false},
 		{"", false},
 	}
@@ -219,10 +224,10 @@ func TestKnownForeignShape(t *testing.T) {
 		{"/home/u/.gnupg/S.gpg-agent.ssh", true},
 		{"/run/user/1000/keyring/ssh", true},
 		{"/run/user/1000/ssh-agent.socket", true},
-		{"/run/user/1000/gnupg/S.gpg-agent", false}, // the main agent socket, not the ssh one
-		{"/run/user/1000/keyring/pkcs11", false},    // a real gnome-keyring socket, wrong one
-		{"/run/user/1000/elsewhere/ssh", false},     // the right name in the wrong place
-		{"/tmp/keyring/ssh-agent.socket", true},     // basename alone identifies the systemd unit
+		{"/run/user/1000/gnupg/S.gpg-agent", false}, // the main agent socket, not the ssh one.
+		{"/run/user/1000/keyring/pkcs11", false},    // a real gnome-keyring socket, wrong one.
+		{"/run/user/1000/elsewhere/ssh", false},     // the right name in the wrong place.
+		{"/tmp/keyring/ssh-agent.socket", true},     // basename alone identifies the systemd unit.
 		{"/tmp/foreign.sock", false},
 		{"", false},
 	}
@@ -428,9 +433,9 @@ func TestFormat(t *testing.T) {
 		"(reachable)",
 		"recorded pid:  4242",
 		"pid 100",
-		"you",      // our own agent
-		"uid 1001", // another user's agent
-		"uid ?",    // unknown owner
+		"you",      // our own agent.
+		"uid 1001", // another user's agent.
+		"uid ?",    // unknown owner.
 		"reachable",
 		"dead",
 		"no problems detected",

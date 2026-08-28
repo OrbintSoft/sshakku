@@ -25,11 +25,11 @@ func TestInspectorAgents(t *testing.T) {
 	root := t.TempDir()
 	inspecttest.FakeProc(t, root, 100, []string{"ssh-agent", "-a", "/run/user/1000/sshakku/tok/agent.sock"}, 1000)
 	inspecttest.FakeProc(t, root, 200, []string{"/usr/bin/ssh-agent", "-a", "/home/u/.ssh/agent/ssh-agent.sock"}, 1000)
-	inspecttest.FakeProc(t, root, 300, []string{"ssh-agent", "-D"}, 1001)                 // foreign, no -a, other user
-	inspecttest.FakeProc(t, root, 400, []string{"ssh-agent", "-a/tmp/joined.sock"}, 1000) // joined -a form
-	inspecttest.FakeProc(t, root, 500, []string{"/bin/bash", "-l"}, 1000)                 // not an agent
-	inspecttest.FakeProc(t, root, 600, nil, 1000)                                         // kernel thread, empty cmdline
-	inspecttest.FakeProc(t, root, 700, []string{"ssh-agent", "-a", "/tmp/noid.sock"}, -1) // owner unknown
+	inspecttest.FakeProc(t, root, 300, []string{"ssh-agent", "-D"}, 1001)                 // foreign, no -a, other user.
+	inspecttest.FakeProc(t, root, 400, []string{"ssh-agent", "-a/tmp/joined.sock"}, 1000) // joined -a form.
+	inspecttest.FakeProc(t, root, 500, []string{"/bin/bash", "-l"}, 1000)                 // not an agent.
+	inspecttest.FakeProc(t, root, 600, nil, 1000)                                         // kernel thread, empty cmdline.
+	inspecttest.FakeProc(t, root, 700, []string{"ssh-agent", "-a", "/tmp/noid.sock"}, -1) // owner unknown.
 
 	// A real /proc holds more than pid directories, in both shapes: other
 	// directories (net, self, irq) and plain files (uptime, meminfo). Neither
@@ -158,7 +158,7 @@ func TestParseKernProcArgs2(t *testing.T) {
 		// empty string over reading into the environment" tradeoff
 		// well-established parsers of this exact sysctl format make.
 		buf := buildKernProcArgs2("/usr/bin/ssh-agent", 0, []string{"ssh-agent"})
-		binary.LittleEndian.PutUint32(buf[:4], 5) // claim 5 args, only 1 present
+		binary.LittleEndian.PutUint32(buf[:4], 5) // claim 5 args, only 1 present.
 		got := parseKernProcArgs2(buf)
 		require.NotEmpty(t, got, "a truncated buffer must still yield the argument it does hold")
 		assert.Equal(t, "ssh-agent", got[0], "the first argument")

@@ -16,8 +16,8 @@ import (
 
 // ssh-agent wire-protocol message types we use (OpenSSH PROTOCOL.agent).
 const (
-	msgRequestIdentities = 11 // SSH_AGENTC_REQUEST_IDENTITIES
-	msgIdentitiesAnswer  = 12 // SSH_AGENT_IDENTITIES_ANSWER
+	msgRequestIdentities = 11 // SSH_AGENTC_REQUEST_IDENTITIES.
+	msgIdentitiesAnswer  = 12 // SSH_AGENT_IDENTITIES_ANSWER.
 )
 
 // DefaultProbeTimeout bounds a reachability probe, matching the login script's

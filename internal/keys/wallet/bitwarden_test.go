@@ -36,7 +36,7 @@ func bwCall(handlers map[string]func(run.Cmd) (run.Result, error)) func(run.Cmd)
 		case verb == "login" && len(c.Args) > 1 && c.Args[1] == "--check":
 			verb = "login --check"
 		case verb == "login":
-			verb = "login" // Args[1] is the account email, not a fixed verb token
+			verb = "login" // Args[1] is the account email, not a fixed verb token.
 		case len(c.Args) > 1:
 			verb += " " + c.Args[1]
 		}
@@ -245,7 +245,7 @@ func TestBitwardenList(t *testing.T) {
 func TestBitwardenUnlock(t *testing.T) {
 	t.Run("already logged in: skips login, unlocks with the prompted password", func(t *testing.T) {
 		r := runtest.NewRunner().On(bitwardenBin, bwCall(map[string]func(run.Cmd) (run.Result, error){
-			"login --check":        runtest.Stdout("", 0), // already logged in
+			"login --check":        runtest.Stdout("", 0), // already logged in.
 			"unlock --passwordenv": runtest.Stdout("fresh-session-key", 0),
 		}))
 		p := &fakePrompter{pass: "correct horse battery staple"}
@@ -268,7 +268,7 @@ func TestBitwardenUnlock(t *testing.T) {
 
 	t.Run("not logged in: logs in first, then unlocks", func(t *testing.T) {
 		r := runtest.NewRunner().On(bitwardenBin, bwCall(map[string]func(run.Cmd) (run.Result, error){
-			"login --check":        runtest.Stdout("", 1), // not logged in
+			"login --check":        runtest.Stdout("", 1), // not logged in.
 			"login":                runtest.Stdout("", 0),
 			"unlock --passwordenv": runtest.Stdout("fresh-session-key", 0),
 		}))
@@ -287,7 +287,7 @@ func TestBitwardenUnlock(t *testing.T) {
 
 	t.Run("Server set, not yet logged in: configures the server before logging in", func(t *testing.T) {
 		r := runtest.NewRunner().On(bitwardenBin, bwCall(map[string]func(run.Cmd) (run.Result, error){
-			"login --check":        runtest.Stdout("", 1), // not logged in
+			"login --check":        runtest.Stdout("", 1), // not logged in.
 			"config server":        runtest.Stdout("", 0),
 			"login":                runtest.Stdout("", 0),
 			"unlock --passwordenv": runtest.Stdout("fresh-session-key", 0),
@@ -306,7 +306,7 @@ func TestBitwardenUnlock(t *testing.T) {
 		// required before server config update") — a real failure this
 		// fixture would catch if Unlock called config server unconditionally.
 		r := runtest.NewRunner().On(bitwardenBin, bwCall(map[string]func(run.Cmd) (run.Result, error){
-			"login --check":        runtest.Stdout("", 0), // already logged in
+			"login --check":        runtest.Stdout("", 0), // already logged in.
 			"unlock --passwordenv": runtest.Stdout("fresh-session-key", 0),
 		}))
 		p := &fakePrompter{pass: "hunter2"}

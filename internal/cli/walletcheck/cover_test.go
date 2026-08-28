@@ -56,9 +56,9 @@ func TestWalletViewPerBackend(t *testing.T) {
 		probe       walletProbe
 		wantBackend string
 		wantRoute   string
-		wantReq     string // the requirement to inspect, "" for none
+		wantReq     string // the requirement to inspect, "" for none.
 		wantPresent bool
-		wantDetail  string // a fragment the detail must contain
+		wantDetail  string // a fragment the detail must contain.
 	}{
 		{
 			name:        "1password needs its own tool",
@@ -177,12 +177,12 @@ func TestSecretServiceRequirementsFromALook(t *testing.T) {
 		name             string
 		look             SecretServiceLook
 		hasScreen        bool
-		wantService      string // a fragment of the secret service detail
-		wantServiceThere bool   // whether the wallet counts as reachable
-		wantPresent      bool   // whether the compartment is there
-		wantFixable      bool   // whether this session could go and make one
+		wantService      string // a fragment of the secret service detail.
+		wantServiceThere bool   // whether the wallet counts as reachable.
+		wantPresent      bool   // whether the compartment is there.
+		wantFixable      bool   // whether this session could go and make one.
 		wantUndetermined bool
-		wantCompartment  string // a fragment of the compartment detail
+		wantCompartment  string // a fragment of the compartment detail.
 	}{
 		{
 			name:             "a wallet is answering and the compartment is there",

@@ -44,10 +44,10 @@ func (k ProcKind) String() string {
 
 // AgentProc is a running ssh-agent process discovered under procfs.
 type AgentProc struct {
-	PID    int      // process id
-	UID    int      // owning real uid, or -1 if unknown (gates same-user reaping)
-	Socket string   // the `-a <path>` bind address, or "" if started without one
-	Args   []string // full argv, kept for diagnostics and anomaly reporting
+	PID    int      // process id.
+	UID    int      // owning real uid, or -1 if unknown (gates same-user reaping).
+	Socket string   // the `-a <path>` bind address, or "" if started without one.
+	Args   []string // full argv, kept for diagnostics and anomaly reporting.
 }
 
 // Inspector enumerates ssh-agent processes. ProcRoot, when set, points Agents
@@ -90,12 +90,12 @@ func readProcfsTree(root string) ([]AgentProc, error) {
 		}
 		pid, err := strconv.Atoi(e.Name())
 		if err != nil {
-			continue // not a pid directory (e.g. "self", "net")
+			continue // not a pid directory (e.g. "self", "net").
 		}
 		dir := filepath.Join(root, e.Name())
 		argv, err := readCmdline(filepath.Join(dir, "cmdline"))
 		if err != nil || len(argv) == 0 {
-			continue // process gone, or a kernel thread with empty cmdline
+			continue // process gone, or a kernel thread with empty cmdline.
 		}
 		if filepath.Base(argv[0]) != "ssh-agent" {
 			continue

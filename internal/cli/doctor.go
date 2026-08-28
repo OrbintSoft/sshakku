@@ -505,7 +505,7 @@ func (d deps) doctorCrossUser(ctx context.Context, stdout, stderr io.Writer, inv
 		SecretEnv:     secretEnv,
 		EnvUnreadable: true,
 	}, inspect.Inspector{}, reach.UIDGatedProber{UID: target.UID, Prober: reach.SocketProber{}}, newAncestrySource(), newCgroupSource(),
-		nil, // the keys section only covers the invoking user's own keys (see gatherReport)
+		nil, // the keys section only covers the invoking user's own keys (see gatherReport).
 		newHostSource(targetEnv.Home),
 	))
 	return 0

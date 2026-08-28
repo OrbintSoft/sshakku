@@ -81,7 +81,11 @@ func TestChecksDiskEncryptedNoMountsFile(t *testing.T) {
 	assert.Nil(t, got.DiskEncrypted, "with no mount table to read, the question stays open")
 }
 
-func TestChecksDiskEncryptedPicksLongestMount(t *testing.T) {
+// encryptedHomeOnPlainRoot lays out a machine mounted in two places: a plain
+// root partition and a LUKS /home. Which of the two an answer comes from is
+// the whole question, so the caller sets Target and nothing else.
+func encryptedHomeOnPlainRoot(t *testing.T) Procfs {
+	t.Helper()
 	root := t.TempDir()
 	proc, sys, dev := filepath.Join(root, "proc"), filepath.Join(root, "sys"), filepath.Join(root, "dev")
 	writeFile(t, filepath.Join(proc, "mounts"),
@@ -90,7 +94,14 @@ func TestChecksDiskEncryptedPicksLongestMount(t *testing.T) {
 	symlink(t, "../dm-3", filepath.Join(dev, "mapper", "luks-home"))
 	writeFile(t, filepath.Join(sys, "class", "block", "dm-3", "dm", "uuid"), "CRYPT-LUKS2-abcdef-luks-home\n")
 
-	got := Procfs{ProcRoot: proc, SysRoot: sys, DevRoot: dev, Target: "/home/alice"}.Checks(t.Context())
+	return Procfs{ProcRoot: proc, SysRoot: sys, DevRoot: dev}
+}
+
+func TestChecksDiskEncryptedPicksLongestMount(t *testing.T) {
+	h := encryptedHomeOnPlainRoot(t)
+	h.Target = "/home/alice"
+
+	got := h.Checks(t.Context())
 	assert.True(t, settled(t, got.DiskEncrypted, "disk encryption"),
 		"the answer must come from the mount the target is actually on, /home rather than /")
 }
@@ -100,15 +111,10 @@ func TestChecksDiskEncryptedPicksLongestMount(t *testing.T) {
 // and /homework are different places, and answering about the wrong one would
 // report somebody's unencrypted directory as encrypted.
 func TestChecksDiskEncryptedDoesNotMatchAPrefixOfAMountPoint(t *testing.T) {
-	root := t.TempDir()
-	proc, sys, dev := filepath.Join(root, "proc"), filepath.Join(root, "sys"), filepath.Join(root, "dev")
-	writeFile(t, filepath.Join(proc, "mounts"),
-		"/dev/sda1 / ext4 rw 0 0\n"+
-			"/dev/mapper/luks-home /home ext4 rw 0 0\n")
-	symlink(t, "../dm-3", filepath.Join(dev, "mapper", "luks-home"))
-	writeFile(t, filepath.Join(sys, "class", "block", "dm-3", "dm", "uuid"), "CRYPT-LUKS2-abcdef-luks-home\n")
+	h := encryptedHomeOnPlainRoot(t)
+	h.Target = "/homework"
 
-	got := Procfs{ProcRoot: proc, SysRoot: sys, DevRoot: dev, Target: "/homework"}.Checks(t.Context())
+	got := h.Checks(t.Context())
 	assert.False(t, settled(t, got.DiskEncrypted, "disk encryption"),
 		"/homework is not under /home, so the answer must come from the root mount")
 }
@@ -144,7 +150,7 @@ func TestChecksTmpShadowedByLaterMount(t *testing.T) {
 	proc, sys := filepath.Join(root, "proc"), filepath.Join(root, "sys")
 	writeFile(t, filepath.Join(proc, "mounts"),
 		"/dev/sda1 / ext4 rw 0 0\n"+
-			"/dev/sda2 /tmp ext4 rw 0 0\n"+ // stale bind mount info, shadowed below
+			"/dev/sda2 /tmp ext4 rw 0 0\n"+ // stale bind mount info, shadowed below.
 			"tmpfs /tmp tmpfs rw 0 0\n")
 
 	got := Procfs{ProcRoot: proc, SysRoot: sys, DevRoot: filepath.Join(root, "dev"), Target: "/"}.Checks(t.Context())

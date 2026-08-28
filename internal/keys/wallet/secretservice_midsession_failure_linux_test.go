@@ -134,11 +134,11 @@ func killProcessByComm(name string) error {
 	for _, e := range entries {
 		pid, err := strconv.Atoi(e.Name())
 		if err != nil {
-			continue // not a pid directory
+			continue // not a pid directory.
 		}
 		comm, err := os.ReadFile(filepath.Join("/proc", e.Name(), "comm"))
 		if err != nil {
-			continue // process gone or unreadable; keep scanning
+			continue // process gone or unreadable; keep scanning.
 		}
 		if strings.TrimSpace(string(comm)) == name {
 			return syscall.Kill(pid, syscall.SIGKILL)

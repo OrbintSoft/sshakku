@@ -39,7 +39,7 @@ func platformAgents() ([]AgentProc, error) {
 		}
 		argv, err := darwinProcArgs(pid)
 		if err != nil || len(argv) == 0 {
-			continue // process gone, or its args aren't visible to us (another user's)
+			continue // process gone, or its args aren't visible to us (another user's).
 		}
 		if filepath.Base(argv[0]) != "ssh-agent" {
 			continue

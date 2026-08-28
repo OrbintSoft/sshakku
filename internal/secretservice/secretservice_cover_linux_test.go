@@ -65,8 +65,10 @@ func TestClientCollectionErrors(t *testing.T) {
 	t.Run("a label-lookup failure during the alias fallback surfaces", func(t *testing.T) {
 		client, svc := newTestClient(t, "")
 		svc.mu.Lock()
-		svc.restrictAlias = true       // force the errNotSupported fallback,
-		svc.failCollectionsProp = true // then fail the by-label lookup it does
+		// Force the errNotSupported fallback, then fail the by-label lookup it
+		// does.
+		svc.restrictAlias = true
+		svc.failCollectionsProp = true
 		svc.mu.Unlock()
 
 		_, err := client.Collection(t.Context(), "sshakku", "sshakku")
@@ -210,7 +212,7 @@ func TestClientWrongTypeProperties(t *testing.T) {
 func TestCompletePromptErrors(t *testing.T) {
 	t.Run("watching the prompt can fail", func(t *testing.T) {
 		client, _ := newTestClient(t, "")
-		_ = client.conn.Close() // AddMatchSignal now fails on the closed conn
+		_ = client.conn.Close() // AddMatchSignal now fails on the closed conn.
 		_, err := client.completePrompt(t.Context(), "/org/freedesktop/secrets/prompt/x")
 		assert.Error(t, err, "a prompt match that cannot be registered must be reported")
 	})

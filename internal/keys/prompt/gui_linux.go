@@ -12,8 +12,8 @@ import (
 // variables are freedesktop display-server conventions, which is why this
 // lives on the Linux side: no macOS session advertises itself this way.
 type GUIEnv struct {
-	WaylandDisplay string // $WAYLAND_DISPLAY
-	Display        string // $DISPLAY
+	WaylandDisplay string // $WAYLAND_DISPLAY.
+	Display        string // $DISPLAY.
 }
 
 // HasGraphicalSession reports whether a display server is reachable: a Wayland

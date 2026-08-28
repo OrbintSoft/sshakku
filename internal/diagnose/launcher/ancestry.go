@@ -76,7 +76,7 @@ func StartedBy(chain []ProcInfo, cgroupUnit string) (string, bool) {
 	if len(chain) < 2 {
 		return "", false
 	}
-	ancestors := chain[1:] // skip the agent process itself
+	ancestors := chain[1:] // skip the agent process itself.
 	// A daemon double-forks and is reparented to init (pid 1); its real launcher
 	// is then gone from the process tree, so ancestry cannot attribute it. The
 	// process's cgroup membership survives the reparent, though, and often still
