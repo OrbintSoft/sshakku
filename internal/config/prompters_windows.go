@@ -2,12 +2,15 @@
 
 package config
 
-// platformGUIPrompters are the values gui_prompter accepts on this system. Only
-// the two that name no program are here: this build draws no dialog of its own,
-// so there is none for a user to ask for by name. "auto" therefore finds
-// nothing and the passphrase is asked for wherever else it can be — see
-// resolveGUIPrompterFrom.
+// GUIPrompterPowerShell is the passphrase box a PowerShell host draws. It is
+// declared here because it is a Windows mechanism: no other system has one to
+// name.
+const GUIPrompterPowerShell = "powershell"
+
+// platformGUIPrompters are the values gui_prompter accepts on this system. A
+// name outside this list cannot mean anything here — see resolveGUIPrompterFrom.
 var platformGUIPrompters = []string{
 	GUIPrompterAuto,
 	GUIPrompterNone,
+	GUIPrompterPowerShell,
 }

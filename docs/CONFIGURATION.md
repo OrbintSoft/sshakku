@@ -627,6 +627,15 @@ On macOS the choice is between `"auto"` (the system's own dialog, drawn through
 `osascript`), `"osascript"`, and `"none"`. A name belonging to another operating
 system is refused, `sshakku config` reports the refusal, and `"auto"` applies.
 
+On Windows it is between `"auto"`, `"powershell"` — a box drawn by whichever
+PowerShell host is installed — and `"none"`, and the same refusal applies to a
+name from another system. The box matters most where you have no terminal to be
+asked on: a graphical program that runs `ssh` for you gives SSHakku a session
+with a screen and nothing to type into, and that is where a passphrase would
+otherwise go unasked for. Where a PowerShell execution policy will not load
+scripts, that box cannot be drawn: you are asked wherever else you can answer
+and the session log names it, the same as any dialog that will not run.
+
 Where there is no screen at all — logged in over SSH, or booted into single-user
 mode — you are asked on the terminal whatever this setting says, since a dialog
 would have nowhere to appear. A dialog you close without answering is not the
