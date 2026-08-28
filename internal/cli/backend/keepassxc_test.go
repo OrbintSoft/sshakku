@@ -155,6 +155,17 @@ func TestKeePassXCRouteAvailability(t *testing.T) {
 		"including where another route would have been chosen for you")
 }
 
+// TestKeePassXCUnknownRouteIsNotThisFunctionsToRefuse states where a typo is
+// answered. A keepassxc_route the settings do not recognise never gets this
+// far: config resolves it to "auto" and reports it as a refused value, under
+// the name the user wrote. Asked about one anyway, this function has nothing to
+// say — it names platforms a route cannot work on and a database it has not
+// been given, and an unknown route is neither.
+func TestKeePassXCUnknownRouteIsNotThisFunctionsToRefuse(t *testing.T) {
+	assert.NoError(t, keepassxcRouteUnavailable("nonsense", "linux", ""),
+		"a route this function knows no reason against is not one it may invent one for")
+}
+
 // TestKeePassXCNativeRouteSaysWhatItIsThatWindowsHasNot keeps two refusals
 // apart that would otherwise read alike. macOS has no Secret Service and never
 // will: nothing anybody installs makes that route appear. Windows has the thing

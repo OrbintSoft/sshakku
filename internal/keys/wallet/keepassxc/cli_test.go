@@ -272,6 +272,79 @@ func TestKeePassXCCLIDeleteStopsWhereThereIsNoRecycleBin(t *testing.T) {
 	assert.Len(t, runner.Calls, 3, "with nothing left to find there is nothing left to remove")
 }
 
+// TestKeePassXCCLIDeleteReportsEveryWayTheRemovalCanGoWrong walks the failures
+// that can arrive after the entry has been found. They differ in where they
+// happen — the removal, the search that follows the move, the removal of what
+// the bin kept — and in all of them the passphrase is still in the database, so
+// none of them may come back as a deletion that worked.
+func TestKeePassXCCLIDeleteReportsEveryWayTheRemovalCanGoWrong(t *testing.T) {
+	const service = wallet.DefaultServicePrefix + "-id_ed25519"
+	const moved = "/Papierkorb/" + service
+	found := run.Result{Code: 0, Stdout: []byte("/SSHakku/" + service + "\n")}
+	refusal := run.Result{Code: 1, Stderr: []byte("Failed to open the terminal for the password\n")}
+	gone := run.Result{Code: 0, Stdout: []byte(moved + "\n")}
+
+	for _, tc := range []struct {
+		name    string
+		results []run.Result
+		errs    []error
+		want    error
+		because string
+	}{
+		{
+			name:    "the removal will not run",
+			results: []run.Result{found},
+			errs:    []error{nil, errKeepassxcCliVanished},
+			want:    errKeepassxcCliVanished,
+			because: "a keepassxc-cli that could not be started has removed nothing",
+		},
+		{
+			name:    "the removal is refused the password",
+			results: []run.Result{found, refusal},
+			want:    ErrPasswordNotAccepted,
+			because: "a database that would not take the password still holds the entry",
+		},
+		{
+			name:    "the search for what the bin kept will not run",
+			results: []run.Result{found, {Code: 0}},
+			errs:    []error{nil, nil, errKeepassxcCliVanished},
+			want:    errKeepassxcCliVanished,
+			because: "where the entry went is unknown, so the copy the bin kept cannot be said to be gone",
+		},
+		{
+			name:    "the removal of the copy the bin kept will not run",
+			results: []run.Result{found, {Code: 0}, gone},
+			errs:    []error{nil, nil, nil, errKeepassxcCliVanished},
+			want:    errKeepassxcCliVanished,
+			because: "the entry was moved and not deleted, which is the case this second removal exists for",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			runner := &runtest.Recorder{Results: tc.results, Errs: tc.errs}
+			b := cliBackend(runner, &countingPrompter{password: "p"})
+
+			assert.ErrorIs(t, b.Delete(t.Context(), service), tc.want, tc.because)
+		})
+	}
+}
+
+// TestKeePassXCCLIDeleteOfAnEntryRemovedMeanwhileIsSuccess is the entry that
+// was there when the search ran and gone by the time the removal reached it —
+// another session, or the user in the KeePassXC window. What was asked for has
+// happened, and there is then nothing the bin can be holding.
+func TestKeePassXCCLIDeleteOfAnEntryRemovedMeanwhileIsSuccess(t *testing.T) {
+	const service = wallet.DefaultServicePrefix + "-id_ed25519"
+	runner := &runtest.Recorder{Results: []run.Result{
+		{Code: 0, Stdout: []byte("/SSHakku/" + service + "\n")},
+		{Code: 1, Stderr: []byte("Entry /SSHakku/" + service + " not found.\n")},
+	}}
+	b := cliBackend(runner, &countingPrompter{password: "p"})
+
+	require.NoError(t, b.Delete(t.Context(), service),
+		"an entry that is already gone is the outcome forget was asked for")
+	assert.Len(t, runner.Calls, 2, "nothing was moved, so there is nowhere to look and nothing to remove again")
+}
+
 func TestKeePassXCCLIDeleteOfAnAbsentEntryIsSuccess(t *testing.T) {
 	runner := &runtest.Recorder{Results: []run.Result{{Code: 1, Stderr: []byte("Entry not found\n")}}}
 	b := cliBackend(runner, &countingPrompter{password: "p"})
