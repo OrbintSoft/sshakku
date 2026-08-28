@@ -3591,3 +3591,71 @@ user-visible changed, and the one thing that did run is a real ssh-agent under
 the test that now loads a key into it.
 
 → rules 12, 15, 20, 22, 23, 25, 27.
+
+### Phase 49 — The five packages Windows had never asked a question of ✅ Done
+
+Every package at 80% or better on Windows. Five were under it, and none of the
+five was under it for want of a hard case: two compiled no test file there at
+all, one had a cover test for macOS and none for Windows, one had its
+platform-neutral code tested only behind `//go:build unix`, and one had never
+called the half of itself that talks to a console.
+
+**A negation is not the only way to claim a platform you know nothing about.**
+Rule 26 is written about build tags, and this phase is the same defect wearing
+the other hat: `internal/paths/os.go` is written once for every platform, and
+every test of it lived in `os_unix_test.go`. Nothing was tagged wrongly —
+`Ensure`, `CleanupLegacyAgentDir`, `fromEnv` and the two ensure helpers simply
+went unexercised on a system whose tests could have run them, which is why the
+package read 36.6% there while reading 100% on Linux. The tests move to a
+neutral `os_test.go`; what only a system with these bits can be asked — the
+0700/0600 modes, the symlink rejection, the real uid, `PrivateDir` — stays
+unix's. The one statement still uncovered on Windows is the symlink planted in
+place of a directory, which needs a symlink to reach.
+
+**What a platform stub promises is still a promise.** `crossuser` and
+`hostcheck` each report what this build does not do here, in one statement, and
+a statement nobody asserts is a statement nobody would notice changing.
+`hostcheck` is the one that matters: every field of its zero `Checks` means
+"could not determine", and a stub that answered a definite "no" would describe a
+machine with no protection at all rather than one nobody looked at. `keyring`'s
+five stubs had exactly this test on macOS already.
+
+**The console half of the Windows prompter had never been called.** The seams
+above it were well covered; the functions they stand in for — opening `CONIN$`
+and `CONOUT$` by name, reading a line, writing one — were not. They are driven
+now without a console anybody types into, which is the only way to drive them in
+a suite: a test that waited for a keypress would hang a run instead of failing
+it. `openRealConsole` is called for real and asserted either way, because
+whether a session has a console is the session's property and both answers are
+correct. Four statements remain, all needing a session a test cannot arrange —
+the two "there is no console" branches, and the read that succeeds because
+somebody typed. That last is the limit `docs/TEST-MATRIX.md` already records
+here, not a new one.
+
+**No matrix row changed, and that is the answer.** Rule 19 asks for a row when
+an OS, target, integration, environment, configuration or install method
+arrives. None did: this is unit coverage of code already inside the matrix's
+Windows section.
+
+**A linter that could no longer read the standard library.** Found mid-phase,
+and unrelated to the tree: the machine's Go moved to 1.27 and golangci-lint
+refuses to analyse a standard library newer than the Go it was built with, so
+the pinned 2.13.1 answered with a panic rather than a report.
+`linting.yml` moves to 2.13.2, pinned by its own commit as every Go-installed
+tool here is. CI was never affected — it installs the pin with the job's own Go,
+which is the case that file's cache-key comment describes.
+
+**Verified**: the full suite on Windows under `-count=1`, with
+`SSHAKKU_TEST_ALLOW_REAL_CREDENTIAL_MANAGER=1` so `internal/keys/wallet` is
+measured the way the `test-windows` job measures it, then `go-ignore-cov`. Every
+package at or above 80%, the lowest being `internal/keys/handoff` at 82.5%,
+which was already above the line and was not touched; the tree at 97.2%, from
+94.8%. `cmdkey /list` reported zero SSHakku entries before the run and zero
+after, so the round-trip tests took their throwaway entries back out. `go vet`,
+`golangci-lint fmt --diff` and `golangci-lint run` clean for GOOS=linux, darwin
+and windows. Every new test was observed red first, by breaking the production
+line it covers — including the tests that merely moved, to show they bite on a
+platform they had never run on. No end-to-end run belongs to this phase: nothing
+user-visible changed.
+
+→ rules 5, 15, 19, 20, 22, 23, 25, 26, 27.
