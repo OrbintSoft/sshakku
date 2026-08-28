@@ -3492,3 +3492,102 @@ from Phase 46 and on the same terms — its drive needs a server a
 `windows-latest` runner cannot stand up.
 
 → features F56, F4, F5, F6, F9, F17; rules 19, 21, 22, 23, 25, 28.
+
+### Phase 48 — The scenario two tests both claimed ✅ Done
+
+Four more analysers, and the pair of tests that had been covering one thing
+under two names.
+
+**Rule 12 decision.** `.golangci.yml` gains `dupl` (with `threshold: 100`),
+`godot` (with `scope: all`), `exptostd` and `intrange`. `errname`, asked for
+alongside them, was already there from Phase 34, and `intrange` comes off that
+phase's own reserve list. No new module dependency: all four ship inside the
+golangci-lint the lint workflow pins, so `go.mod` is untouched and there is no
+new licence to record.
+
+**`dupl`'s bar is 100 tokens, and what it is measuring is not lines.** A
+hundred tokens is around a dozen dense lines of Go. Below it lies the
+repetition a case is made of — the fixture two neighbouring tests set up the
+same way — where a name the reader has to go and resolve costs more than the
+repetition does. Above it lies a whole function written twice, which is where
+the second copy starts drifting from the first. Two thresholds were considered,
+100 outside tests and 120 inside, and dropped: golangci-lint has one global
+`threshold`, so it would take a second config file and three more `lint-go`
+invocations, and production is clean at either number.
+
+**Four of the five findings were setup, and the fifth was a claim.** The four:
+three `DeleteItem` subtests building the same one-item collection, two statfs
+tests laying out the same two-mount machine, six Bitwarden subtests wiring the
+same runner and prompter, three diagnose tests asking whose agent this is. Each
+is a named helper now.
+
+The fifth was `TestEnsureAgentRealHealthyReuse` and
+`TestEnsureAgentRealReachableButEmptyIsHealthy` running the identical scenario:
+neither ever loaded a key, so what the first one's name promises — reuse of an
+agent that is already holding something — was covered by nobody. It loads a
+throwaway key now, which is the case a session depends on: replacing that agent
+would strand the key in a process nothing points at, and the only sign the user
+would get is being asked for the passphrase again.
+
+**`godot` runs at `scope: all`, and 178 comments across 45 files gained a full
+stop.** Declarations, the default, would leave most of the prose here unchecked:
+as much of it trails a line of code as stands above a function. One of the 178
+was not punctuation — two trailing comments in the Secret Service cover tests
+were a single sentence split across two lines, the first ending in a comma, and
+a full stop each would have made two half-thoughts. Nothing could land inside a
+string literal: godot finds comments with go/parser, a `//` comment runs to end
+of line, and every hit was a single-line group.
+
+**The output cap fooled the survey a second time.** Phase 43 recorded that
+golangci-lint truncates at 50 issues per linter and 3 per identical message, and
+`godot` is the case that hides best: every finding carries the same sentence, so
+`scope: all` reported 3 where it had 172. The decision was taken on the wrong
+number and re-taken on the right one. Every survey run wants
+`--max-issues-per-linter=0 --max-same-issues=0`, and the three other linters
+were re-checked that way: genuinely zero.
+
+**`exptostd` and `intrange` report nothing and are guards.** `golang.org/x/exp`
+is where `maps.Keys`, `slices.Sorted`, `constraints` and `errors.Join` lived
+before the standard library grew them and it carries no compatibility promise;
+a three-clause loop states its bound three times and can be wrong in three
+places. Each was made to fire before being trusted, per Phase 34: `dupl` and
+`intrange` on throwaway packages here — `dupl`'s first attempt, twenty lines,
+reported nothing, which is where a hundred tokens actually sits — and
+`exptostd` in a throwaway module outside this one, because proving it needs
+`golang.org/x/exp` and this module should not gain it. `godot` needed no
+throwaway, having fired on the 178.
+
+**Two coverage gaps, both older than this work.** `Delete` in the KeePassXC CLI
+route was at 68.4%: it removes twice, because `keepassxc-cli rm` moves an entry
+to the recycle bin where the password is still readable, and every failure along
+that path was untested — the removal that will not run, the one refused the
+password, the search for where the entry went, the removal of the copy the bin
+kept. The passphrase is still in the file in all of them, so none may come back
+as a deletion that worked (F9). And `keepassxcRouteUnavailable`'s `default:`
+arm, which nothing reaches: `keepassxc_route` is config-file only and
+`resolveKeePassXCRoute` turns an unrecognised value into `"auto"` and reports it
+under the name the user wrote. Unexported and taking a plain string, it is
+testable, so rule 20 says test it rather than tag it — and what the test states
+is where a typo is answered, which is not there.
+
+**macOS was settled by arithmetic, because it cannot be run here.** Published
+master numbers: `internal/cli/backend` 98.0% on linux, 97.6% on macos. Statement
+counts from the linux profile are keepassxc.go 29, backend.go 10,
+default_linux.go 10, so 48/49 = 97.96%; on darwin default_linux.go drops out and
+default_darwin.go plus keychain_darwin.go add one statement each, so 40/41 =
+97.56%. Both numbers are one uncovered statement and it is the same one, in a
+file carrying no build tag. `internal/keys/wallet/keepassxc` has no
+platform-tagged production file at all and reads 97.1% on both. The same two
+fixes therefore close macOS, and the runner is what says so.
+
+**Verified**: `make lint-go` clean on all five builds, `make test` green across
+the tree, `make test-json` at 100.0% on linux with no package below it. The
+real-agent integration tests skip wherever an agent is already answering, so the
+new key setup was run under `unshare -Urpf --mount-proc`, where both pass — and
+made to fail there on purpose, by pointing `ssh-add` at a path that does not
+exist. Every new coverage test was likewise observed red first, by breaking the
+production line it covers. No end-to-end run belongs to this phase: nothing
+user-visible changed, and the one thing that did run is a real ssh-agent under
+the test that now loads a key into it.
+
+→ rules 12, 15, 20, 22, 23, 25, 27.
