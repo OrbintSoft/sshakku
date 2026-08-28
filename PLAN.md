@@ -384,6 +384,43 @@ done are summarised; see the note at the top of this file for full detail.
     combination, tracking integration-test coverage and a per-case
     last-main-run badge. See Phase 6.
 
+25. **A test that touches a real store belongs in a disposable environment, not
+    in the unit suite (goal 16; open decisions 20, 24). Raised 2026-08-28;
+    open.** A unit test is mocked and leaves nothing behind; a test that reaches
+    the machine's own secret store is an integration test, and integration tests
+    should act inside a container in isolation the way the Linux suites already
+    do (tier 1 of open decision 20). Several here are neither: they live in
+    `_test.go` files beside the unit tests, are gated by an environment variable,
+    and when that variable is set they write to whatever store the person running
+    them signs into.
+
+    The cases, in order of how much they touch:
+    `internal/keys/wallet/credman_windows_test.go`
+    (`SSHAKKU_TEST_ALLOW_REAL_CREDENTIAL_MANAGER`, the account's own Credential
+    Manager), `TestDarwinKeychainClientRealRoundTrip` via `make test-keychain`
+    (`SSHAKKU_TEST_ALLOW_REAL_KEYCHAIN`, the process's default keychain), and the
+    1Password and Bitwarden real-account tests. Each writes only uniquely named
+    entries and removes them again, and CI sets the variables because a runner is
+    thrown away with the run — but on a developer's machine `make test` and the
+    opt-in differ by one exported variable, and what is on the other side of it
+    is not a fixture.
+
+    What this is **not** asking for is a fake in their place: rule 24 says a test
+    must not stub the very thing it exists to judge, and these exist to judge the
+    store. The question is where they run, not what they talk to. macOS shows one
+    answer already — CI repoints the default keychain at a throwaway one
+    (`test/macos-keychain-setup.sh`) before the job runs, so the real API is
+    exercised against a store nobody owns. Windows has the other: a native
+    container is already used for the install scenarios, and it has a credential
+    store of its own.
+
+    To decide: whether these move out of the unit packages into a suite of their
+    own with its own `make` target and matrix rows (so `go test ./...` cannot
+    reach a real store however the environment is set), or stay where they are
+    with the isolation supplied underneath them per platform. Either way the
+    property to hold is that running the plain unit suite on your own machine
+    cannot write to anything of yours.
+
 ---
 
 ## Phases
@@ -3591,3 +3628,71 @@ user-visible changed, and the one thing that did run is a real ssh-agent under
 the test that now loads a key into it.
 
 → rules 12, 15, 20, 22, 23, 25, 27.
+
+### Phase 49 — The five packages Windows had never asked a question of ✅ Done
+
+Every package at 80% or better on Windows. Five were under it, and none of the
+five was under it for want of a hard case: two compiled no test file there at
+all, one had a cover test for macOS and none for Windows, one had its
+platform-neutral code tested only behind `//go:build unix`, and one had never
+called the half of itself that talks to a console.
+
+**A negation is not the only way to claim a platform you know nothing about.**
+Rule 26 is written about build tags, and this phase is the same defect wearing
+the other hat: `internal/paths/os.go` is written once for every platform, and
+every test of it lived in `os_unix_test.go`. Nothing was tagged wrongly —
+`Ensure`, `CleanupLegacyAgentDir`, `fromEnv` and the two ensure helpers simply
+went unexercised on a system whose tests could have run them, which is why the
+package read 36.6% there while reading 100% on Linux. The tests move to a
+neutral `os_test.go`; what only a system with these bits can be asked — the
+0700/0600 modes, the symlink rejection, the real uid, `PrivateDir` — stays
+unix's. The one statement still uncovered on Windows is the symlink planted in
+place of a directory, which needs a symlink to reach.
+
+**What a platform stub promises is still a promise.** `crossuser` and
+`hostcheck` each report what this build does not do here, in one statement, and
+a statement nobody asserts is a statement nobody would notice changing.
+`hostcheck` is the one that matters: every field of its zero `Checks` means
+"could not determine", and a stub that answered a definite "no" would describe a
+machine with no protection at all rather than one nobody looked at. `keyring`'s
+five stubs had exactly this test on macOS already.
+
+**The console half of the Windows prompter had never been called.** The seams
+above it were well covered; the functions they stand in for — opening `CONIN$`
+and `CONOUT$` by name, reading a line, writing one — were not. They are driven
+now without a console anybody types into, which is the only way to drive them in
+a suite: a test that waited for a keypress would hang a run instead of failing
+it. `openRealConsole` is called for real and asserted either way, because
+whether a session has a console is the session's property and both answers are
+correct. Four statements remain, all needing a session a test cannot arrange —
+the two "there is no console" branches, and the read that succeeds because
+somebody typed. That last is the limit `docs/TEST-MATRIX.md` already records
+here, not a new one.
+
+**No matrix row changed, and that is the answer.** Rule 19 asks for a row when
+an OS, target, integration, environment, configuration or install method
+arrives. None did: this is unit coverage of code already inside the matrix's
+Windows section.
+
+**A linter that could no longer read the standard library.** Found mid-phase,
+and unrelated to the tree: the machine's Go moved to 1.27 and golangci-lint
+refuses to analyse a standard library newer than the Go it was built with, so
+the pinned 2.13.1 answered with a panic rather than a report.
+`linting.yml` moves to 2.13.2, pinned by its own commit as every Go-installed
+tool here is. CI was never affected — it installs the pin with the job's own Go,
+which is the case that file's cache-key comment describes.
+
+**Verified**: the full suite on Windows under `-count=1`, with
+`SSHAKKU_TEST_ALLOW_REAL_CREDENTIAL_MANAGER=1` so `internal/keys/wallet` is
+measured the way the `test-windows` job measures it, then `go-ignore-cov`. Every
+package at or above 80%, the lowest being `internal/keys/handoff` at 82.5%,
+which was already above the line and was not touched; the tree at 97.2%, from
+94.8%. `cmdkey /list` reported zero SSHakku entries before the run and zero
+after, so the round-trip tests took their throwaway entries back out. `go vet`,
+`golangci-lint fmt --diff` and `golangci-lint run` clean for GOOS=linux, darwin
+and windows. Every new test was observed red first, by breaking the production
+line it covers — including the tests that merely moved, to show they bite on a
+platform they had never run on. No end-to-end run belongs to this phase: nothing
+user-visible changed.
+
+→ rules 5, 15, 19, 20, 22, 23, 25, 26, 27.

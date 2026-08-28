@@ -81,11 +81,11 @@ func (c *fakeConsole) install(t *testing.T) {
 		return nil
 	}
 	readConsole = func(windows.Handle) (string, error) {
-		if c.readErr != nil {
-			return "", c.readErr
-		}
+		// The line and the failure are independent: a console can hand over
+		// what was typed and still report trouble, and which of the two the
+		// caller acts on is the thing worth asserting.
 		c.written = append(c.written, "<read>")
-		return c.line, nil
+		return c.line, c.readErr
 	}
 	writeConsole = func(_ windows.Handle, s string) error {
 		if c.writeErr != nil {
@@ -191,6 +191,45 @@ func TestAQuestionThatIsNotASecretLeavesTheConsoleAsItIs(t *testing.T) {
 	assert.Empty(t, con.modes, "the console's mode was never touched")
 	assert.Equal(t, []string{"are you sure? ", "<read>"}, con.written,
 		"and no newline of ours, since the console echoed the one that was typed")
+}
+
+// A question that could not be put on the console is not answered from it: the
+// input is never read, so nothing typed before the failure — into a console
+// whose echo is off and which is showing no prompt — can be taken for an answer.
+func TestAQuestionThatCouldNotBeWrittenIsNotRead(t *testing.T) {
+	con := &fakeConsole{mode: windows.ENABLE_ECHO_INPUT, line: "hunter2\r\n", writeErr: errRefused}
+	con.install(t)
+
+	_, err := ReadTTYLine("Enter passphrase for id_ed25519: ", true)
+
+	require.ErrorIs(t, err, errRefused, "the failure to ask is what the caller is told")
+	assert.NotContains(t, con.written, "<read>", "nothing was asked, so nothing is read as an answer")
+	assert.True(t, con.closed, "the console is let go of all the same")
+}
+
+// A console that reported trouble is only trouble when nothing came back with
+// it: the terminator the user pressed is an answer, and an answer that arrived
+// is not thrown away because the read that carried it also complained.
+func TestAFailedReadIsReportedOnlyWhenNothingCameBackWithIt(t *testing.T) {
+	t.Run("nothing came back", func(t *testing.T) {
+		con := &fakeConsole{mode: windows.ENABLE_ECHO_INPUT, readErr: errNotAConsole}
+		con.install(t)
+
+		_, err := ReadTTYLine("passphrase: ", true)
+
+		assert.ErrorIs(t, err, errNotAConsole,
+			"nothing was typed and the console said why, so that is what the caller gets")
+	})
+
+	t.Run("a line came back anyway", func(t *testing.T) {
+		con := &fakeConsole{mode: windows.ENABLE_ECHO_INPUT, line: "hunter2\r\n", readErr: errNotAConsole}
+		con.install(t)
+
+		answer, err := ReadTTYLine("passphrase: ", true)
+
+		require.NoError(t, err, "what the user typed arrived, so there is nothing to report")
+		assert.Equal(t, "hunter2", answer)
+	})
 }
 
 // F29: this prompter is offered wherever it might work, and says so plainly.
