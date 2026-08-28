@@ -384,6 +384,43 @@ done are summarised; see the note at the top of this file for full detail.
     combination, tracking integration-test coverage and a per-case
     last-main-run badge. See Phase 6.
 
+25. **A test that touches a real store belongs in a disposable environment, not
+    in the unit suite (goal 16; open decisions 20, 24). Raised 2026-08-28;
+    open.** A unit test is mocked and leaves nothing behind; a test that reaches
+    the machine's own secret store is an integration test, and integration tests
+    should act inside a container in isolation the way the Linux suites already
+    do (tier 1 of open decision 20). Several here are neither: they live in
+    `_test.go` files beside the unit tests, are gated by an environment variable,
+    and when that variable is set they write to whatever store the person running
+    them signs into.
+
+    The cases, in order of how much they touch:
+    `internal/keys/wallet/credman_windows_test.go`
+    (`SSHAKKU_TEST_ALLOW_REAL_CREDENTIAL_MANAGER`, the account's own Credential
+    Manager), `TestDarwinKeychainClientRealRoundTrip` via `make test-keychain`
+    (`SSHAKKU_TEST_ALLOW_REAL_KEYCHAIN`, the process's default keychain), and the
+    1Password and Bitwarden real-account tests. Each writes only uniquely named
+    entries and removes them again, and CI sets the variables because a runner is
+    thrown away with the run — but on a developer's machine `make test` and the
+    opt-in differ by one exported variable, and what is on the other side of it
+    is not a fixture.
+
+    What this is **not** asking for is a fake in their place: rule 24 says a test
+    must not stub the very thing it exists to judge, and these exist to judge the
+    store. The question is where they run, not what they talk to. macOS shows one
+    answer already — CI repoints the default keychain at a throwaway one
+    (`test/macos-keychain-setup.sh`) before the job runs, so the real API is
+    exercised against a store nobody owns. Windows has the other: a native
+    container is already used for the install scenarios, and it has a credential
+    store of its own.
+
+    To decide: whether these move out of the unit packages into a suite of their
+    own with its own `make` target and matrix rows (so `go test ./...` cannot
+    reach a real store however the environment is set), or stay where they are
+    with the isolation supplied underneath them per platform. Either way the
+    property to hold is that running the plain unit suite on your own machine
+    cannot write to anything of yours.
+
 ---
 
 ## Phases
