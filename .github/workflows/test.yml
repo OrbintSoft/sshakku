@@ -290,6 +290,10 @@ jobs:
           # skipping. They write only uniquely named entries and delete them
           # again, and this runner's store goes when the runner does.
           SSHAKKU_TEST_ALLOW_REAL_CREDENTIAL_MANAGER: "1"
+          # Lets the passphrase box be drawn for real instead of skipping. Each
+          # window is answered and destroyed by the test that raised it, and the
+          # foreground it takes on this runner is nobody's.
+          SSHAKKU_TEST_ALLOW_REAL_WINDOW: "1"
         timeout-minutes: 15
         run: |
           gotestsum --jsonfile test.json -- -race -coverprofile=coverage.out ./...
