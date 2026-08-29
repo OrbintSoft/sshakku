@@ -3696,3 +3696,79 @@ platform they had never run on. No end-to-end run belongs to this phase: nothing
 user-visible changed.
 
 → rules 5, 15, 19, 20, 22, 23, 25, 26, 27.
+
+### Phase 50 — The screen this platform had nowhere to ask on ✅ Done
+
+Windows kept every promise about passphrases except the one about *where* you
+are asked. A session with a screen and no console — a graphical program that
+runs `ssh` for you — had a question put to a console nobody could see, and the
+key went unloaded with nothing said. F29 promised otherwise and F37 named a
+dialog per platform with none named here.
+
+**The box is drawn by SSHakku itself.** The alternative was measured first and
+then dropped: a PowerShell host drawing a WinForms password box from a script
+of its own. It works, and the measurements are in the activity's notes — pwsh
+paints in a third of the time Windows PowerShell takes, both accept `-STA`. What
+ended it is that the box would then be a *script*, and a machine's execution
+policy is a third party with a say over whether its user gets asked for a
+passphrase at all. Measured rather than assumed, because the belief in the room
+was that a profile runs whatever the policy says: under `Restricted` the host
+refuses both profile files by name, and neither the hook nor the box arrives.
+A window is not a script, needs no interpreter, and nothing on the machine can
+withhold it — so `gui_prompter` names `native` here, and there is no host to
+find, no policy to satisfy and nothing to install.
+
+**A dismissal is a decision; a budget that ran out is not.** The distinction
+survives from the mechanism that was dropped, where it had to be carried by an
+exit code a refused script and a closed window shared. The window returns the
+cancellation for Cancel and for the frame's own close button, and a distinct
+error when the time a person was given runs out — read as a dismissal that one
+would end the asking for the rest of the login with nobody having been asked
+anything.
+
+**Two defects the window taught, both of them about what a window is.** A
+pointer written straight into a variadic `Call` argument list is a number as far
+as the compiler is concerned, and nothing keeps the string alive while the
+system reads it; the control strings are held in variables across the call. And
+the window was created visible, so it existed — and could be seen, and found —
+before it had anything in it: it is created hidden and shown once its controls
+are there. The first is invisible until it is not; the second is what made the
+first run of the tests fail, on an empty frame.
+
+**What the unit tests reach, and what only a keyboard does.** They drive the
+real window — no stand-in, no stubbed decision — by handing it the messages a
+click and a keystroke turn into. That reaches the window's handler and its
+answer, and deliberately not its message loop, which is where a real keystroke
+is translated and dispatched. So the loop is covered by the by-hand run instead,
+with input injected into the system's own queue: the matrix says which row rests
+on which, and why a runner cannot take that half over.
+
+**Recorded rather than closed.** Driving the product turned up four things that
+are not about the dialog and are nobody's step yet: `ssh-add`'s stderr is
+discarded at the point of the call, so a user gets the retries and no reason; a
+key whose file permissions the system refuses is reported as a wrong passphrase;
+the askpass helper must sit beside the binary or the failure arrives through
+that same wrong sentence; and `load-keys` alone creates no layout and writes no
+session log, which is exactly the run that most needs one.
+
+**Verified**: the real binary, at a desk, in a throwaway environment — a key and
+a wallet made for the run and a redirected home, with the account's own
+credential store never configured and never touched. First use: the box appears
+in about half a second, the run ends in under two, the key is in the agent, the
+passphrase is in the wallet and neither stream says anything. The session after:
+no box, silence, and the log naming the stored passphrase. Cancel and the
+frame's own close button: exit 0, nothing said, no key given up, nothing stored,
+and the log recording the dismissal. And once with the passphrase **typed as
+real keyboard input** and accepted with Enter, spaces and all, which is the only
+run that exercises the window's message loop. Two rounds of that scenario failed
+before any of this was true and neither was the product: a passphrase handed to
+a driver in its argument list lost everything after the first space, and key
+messages synthesised as a down/up pair are translated twice, so every character
+arrives doubled. Unit tests: every one observed red first, by breaking the line
+it covers, the two dismissals in isolation after a round where they masked each
+other. `go vet` and `golangci-lint run` clean for GOOS=linux, darwin and
+windows, `golangci-lint fmt --diff` and `markdownlint-cli2` clean. What no run
+here can say is whether the window is *legible* — nobody has yet sat in front of
+it and read it.
+
+→ rules 5, 15, 19, 21, 22, 23, 24, 25, 26, 27.
