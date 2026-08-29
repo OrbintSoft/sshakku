@@ -326,7 +326,10 @@ What has no cells here yet, and why:
   window that has the foreground — which a runner does not reliably give and
   nobody is watching in any case. What a person alone can say is whether the
   window is legible: the size of it, where the caret starts, and whether the
-  question names the key they expected.
+  question names the key they expected. That was done by hand once, on a real
+  desktop — the box named the key it was asked about and closed the way it
+  should — and it is the kind of check that has to be repeated by eye whenever
+  the window changes, because nothing here will fail when it stops being true.
 - **Nothing else.** Coverage and test-health reporting stood here until this
   platform got it: `test.yml` builds a report artifact, an HTML report and a
   badge for it alongside the other two.

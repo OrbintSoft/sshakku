@@ -3767,8 +3767,10 @@ messages synthesised as a down/up pair are translated twice, so every character
 arrives doubled. Unit tests: every one observed red first, by breaking the line
 it covers, the two dismissals in isolation after a round where they masked each
 other. `go vet` and `golangci-lint run` clean for GOOS=linux, darwin and
-windows, `golangci-lint fmt --diff` and `markdownlint-cli2` clean. What no run
-here can say is whether the window is *legible* — nobody has yet sat in front of
-it and read it.
+windows, `golangci-lint fmt --diff` and `markdownlint-cli2` clean. And once by somebody
+simply reading it: the window was raised on a real desktop and left there, and
+the question, the field and the way it closes were looked at rather than
+measured. That is the one thing no run can report on its own, and it is why the
+window was put in front of a person before this was merged rather than after.
 
 → rules 5, 15, 19, 21, 22, 23, 24, 25, 26, 27.
