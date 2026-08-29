@@ -627,6 +627,15 @@ On macOS the choice is between `"auto"` (the system's own dialog, drawn through
 `osascript`), `"osascript"`, and `"none"`. A name belonging to another operating
 system is refused, `sshakku config` reports the refusal, and `"auto"` applies.
 
+On Windows it is between `"auto"`, `"native"` — a box SSHakku draws itself —
+and `"none"`, and the same refusal applies to a name from another system. The
+box matters most where you have no terminal to be asked on: a graphical program
+that runs `ssh` for you gives SSHakku a session with a screen and nothing to
+type into, and that is where a passphrase would otherwise go unasked for.
+Nothing has to be installed for this one and no execution policy has a say in
+it: it is a window, not a script, and there is no interpreter between you and
+it.
+
 Where there is no screen at all — logged in over SSH, or booted into single-user
 mode — you are asked on the terminal whatever this setting says, since a dialog
 would have nowhere to appear. A dialog you close without answering is not the

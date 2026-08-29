@@ -2,12 +2,15 @@
 
 package config
 
-// platformGUIPrompters are the values gui_prompter accepts on this system. Only
-// the two that name no program are here: this build draws no dialog of its own,
-// so there is none for a user to ask for by name. "auto" therefore finds
-// nothing and the passphrase is asked for wherever else it can be — see
-// resolveGUIPrompterFrom.
+// GUIPrompterNative is the passphrase box SSHakku draws itself, with this
+// system's own window calls. It is declared here because it is a Windows
+// mechanism: no other system has one to name.
+const GUIPrompterNative = "native"
+
+// platformGUIPrompters are the values gui_prompter accepts on this system. A
+// name outside this list cannot mean anything here — see resolveGUIPrompterFrom.
 var platformGUIPrompters = []string{
 	GUIPrompterAuto,
 	GUIPrompterNone,
+	GUIPrompterNative,
 }
