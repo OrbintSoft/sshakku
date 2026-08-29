@@ -409,7 +409,7 @@ func TestResolveMalformedEnvDurationReportsAndDefaults(t *testing.T) {
 func TestResolveGUIPrompterFrom(t *testing.T) {
 	linux := []string{GUIPrompterAuto, GUIPrompterNone, "pinentry", "kdialog"}
 	darwin := []string{GUIPrompterAuto, GUIPrompterNone, "osascript"}
-	windows := []string{GUIPrompterAuto, GUIPrompterNone, "powershell"}
+	windows := []string{GUIPrompterAuto, GUIPrompterNone, "native"}
 
 	cases := []struct {
 		name      string
@@ -424,8 +424,8 @@ func TestResolveGUIPrompterFrom(t *testing.T) {
 		{"refusing a dialog", new(GUIPrompterNone), linux, GUIPrompterNone, false},
 		{"the other system's dialog", new("osascript"), linux, GUIPrompterAuto, true},
 		{"and the other way round", new("kdialog"), darwin, GUIPrompterAuto, true},
-		{"the box only Windows draws", new("powershell"), windows, "powershell", false},
-		{"asked for where no host draws one", new("powershell"), darwin, GUIPrompterAuto, true},
+		{"The box only Windows draws", new("native"), windows, "native", false},
+		{"asked for where no host draws one", new("native"), darwin, GUIPrompterAuto, true},
 		{"and the dialog of a desktop this system has not got", new("zenity"), windows, GUIPrompterAuto, true},
 		{"a typo", new("pinetry"), linux, GUIPrompterAuto, true},
 	}

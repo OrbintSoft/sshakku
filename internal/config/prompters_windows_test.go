@@ -14,9 +14,9 @@ import (
 // platform can: that the table this build actually carries is the one holding
 // what this platform can draw.
 func TestThisPlatformOffersTheBoxItCanDraw(t *testing.T) {
-	got, err := resolveGUIPrompterFrom(new(GUIPrompterPowerShell), platformGUIPrompters)
+	got, err := resolveGUIPrompterFrom(new(GUIPrompterNative), platformGUIPrompters)
 	require.NoError(t, err, "the box this platform draws must be one the user is allowed to name")
-	assert.Equal(t, GUIPrompterPowerShell, got, "and naming it must leave it in force")
+	assert.Equal(t, GUIPrompterNative, got, "and naming it must leave it in force")
 }
 
 func TestThisPlatformRefusesADialogItCannotDraw(t *testing.T) {

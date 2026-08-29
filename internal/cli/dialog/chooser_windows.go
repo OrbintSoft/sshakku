@@ -8,18 +8,16 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/keys"
 	"github.com/OrbintSoft/sshakku/internal/keys/prompt"
-	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
 // windowsDialogs is what this platform may have to ask in. There is one box and
-// it is drawn by a PowerShell host, which is part of the system rather than
-// something to install — but it is still looked for, since a host that is not
-// there has nothing to draw with either.
+// SSHakku draws it itself, so unlike the other platforms there is nothing to
+// look for: no interpreter to find, nothing to install, and no execution policy
+// with anything to say about it.
 //
 // Nothing here decides anything on its own — see chooseDialog.
 func windowsDialogs(settings config.Settings) []dialog {
-	return []dialog{{config.GUIPrompterPowerShell, prompt.PowerShellPrompter{
-		Runner:  run.ExecRunner{Timeout: settings.InteractiveTimeout},
+	return []dialog{{config.GUIPrompterNative, prompt.NativePrompter{
 		Timeout: settings.InteractiveTimeout,
 	}}}
 }
@@ -34,12 +32,13 @@ var thisSessionHasAScreen = prompt.GraphicalSession
 // with, or nil when none can be shown here — in which case the caller asks on
 // the terminal.
 //
-// Three things have to hold before there is a dialog at all, as on the other
-// platforms. The configuration must allow one: "none" means the terminal
-// wherever it is written. The session must have a screen — a service, or a
-// session opened to run a scheduled job, has a window station with no desktop
-// behind it, and a box raised there is one nobody can answer. And a host must
-// be installed to draw it.
+// Two things have to hold before there is a dialog at all. The configuration
+// must allow one: "none" means the terminal wherever it is written. And the
+// session must have a screen — a service, or a session opened to run a
+// scheduled job, has a window station with no desktop behind it, and a box
+// raised there is one nobody can answer. The third condition the other
+// platforms have does not apply here: there is nothing to install to draw this
+// box, so it is never the missing piece.
 func Graphical(ctx context.Context, settings config.Settings, log keys.Logger) prompt.Prompter {
 	if settings.GUIPrompter == config.GUIPrompterNone {
 		return nil
