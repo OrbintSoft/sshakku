@@ -22,6 +22,7 @@ sshakku_bin="/usr/local/bin/sshakku"
 # them empty rather than unset.
 agent_sock=""
 log_file=""
+ssh_tools_dir=""
 if [ -x "$sshakku_bin" ]; then
 	eval "$("$sshakku_bin" shell-init)"
 fi
@@ -31,6 +32,17 @@ fi
 # Always pin this shell -- and, at login, the whole session -- to the fixed path.
 export SSH_AUTH_SOCK="$agent_sock"
 unset SSH_AGENT_PID
+
+# The endpoint above is only worth having if the ssh this shell runs can open
+# it. Where the first ssh on this PATH cannot, sshakku names a directory holding
+# one that can, already spelled the way this shell reads a path, and it goes in
+# front so that every ssh started here -- typed, or started by git -- reaches
+# the agent the shell was just pointed at. It names nothing where the ssh
+# already first can reach it, which is every system with one OpenSSH on it.
+if [ -n "$ssh_tools_dir" ]; then
+	PATH="$ssh_tools_dir:$PATH"
+	export PATH
+fi
 
 # Wired in every login shell, not just interactive ones: some environments
 # resolve a terminal's inherited environment via a non-interactive login shell,

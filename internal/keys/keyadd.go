@@ -50,6 +50,9 @@ type ExecKeyAdder struct {
 	// after which it must be re-added from the vault. 0 adds the key with no
 	// expiry; the caller resolves the default.
 	KeyLifetime time.Duration
+	// SSHAdd names the ssh-add to hand the key to. Nil names the ordinary one;
+	// see SSHAddNamer for when a system has more than one to choose between.
+	SSHAdd SSHAddNamer
 }
 
 // AddWithAskpass stashes passphrase in the handoff this system provides, then
@@ -57,6 +60,14 @@ type ExecKeyAdder struct {
 // the SSH_ASKPASS helper keyed by the handoff token. The passphrase never
 // enters argv or the inherited environment of any other process.
 func (a ExecKeyAdder) AddWithAskpass(ctx context.Context, keyfile, passphrase string) (int, error) {
+	// Asked before the passphrase is stashed: a session with no ssh-add it can
+	// reach the agent with is not going to load this key, and there is no sense
+	// putting a passphrase where nothing will come to fetch it.
+	sshAdd, err := a.SSHAdd.name()
+	if err != nil {
+		return 0, err
+	}
+
 	ttl := a.KeyTTL
 	if ttl == 0 {
 		ttl = defaultKeyTTL
@@ -72,13 +83,13 @@ func (a ExecKeyAdder) AddWithAskpass(ctx context.Context, keyfile, passphrase st
 		handoff.EnvToken + "=" + token,
 	}
 	env = passThrough(env, childEnvNames(platformChildEnv)...)
-	return a.runSSHAdd(ctx, env, keyfile)
+	return a.runSSHAdd(ctx, sshAdd, env, keyfile)
 }
 
-// runSSHAdd runs `ssh-add <keyfile>` with env, detached from any terminal (see
+// runSSHAdd runs `sshAdd <keyfile>` with env, detached from any terminal (see
 // detachFromTerminal) and with no stdin, so it fetches the passphrase via
 // SSH_ASKPASS and its own chatter is discarded, returning its exit code.
-func (a ExecKeyAdder) runSSHAdd(ctx context.Context, env []string, keyfile string) (int, error) {
+func (a ExecKeyAdder) runSSHAdd(ctx context.Context, sshAdd string, env []string, keyfile string) (int, error) {
 	to := a.AddTimeout
 	if to == 0 {
 		to = defaultAddTimeout
@@ -86,7 +97,7 @@ func (a ExecKeyAdder) runSSHAdd(ctx context.Context, env []string, keyfile strin
 	ctx, cancel := context.WithTimeout(ctx, to)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "ssh-add", sshAddArgs(a.KeyLifetime, keyfile)...)
+	cmd := exec.CommandContext(ctx, sshAdd, sshAddArgs(a.KeyLifetime, keyfile)...)
 	cmd.Env = env
 	detachFromTerminal(cmd)
 	cmd.Stdin = nil

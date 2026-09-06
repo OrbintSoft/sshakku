@@ -9,6 +9,7 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/OrbintSoft/sshakku/internal/cli/shell"
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/keys"
 	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
@@ -26,8 +27,23 @@ func depsReturning(backend wallet.Backend) deps {
 	d.newSecret = func(context.Context, string, keys.Logger, config.Settings) (wallet.Backend, func()) {
 		return backend, func() {}
 	}
+	d.sshAdd = theOrdinarySSHAdd
+	d.sshToolsDir = aSessionThatNeedsNothingInFront
 	return d
 }
+
+// aSessionThatNeedsNothingInFront is what a system with one OpenSSH answers,
+// pinned into a test's deps for the same reason theOrdinarySSHAdd is.
+func aSessionThatNeedsNothingInFront(context.Context, shell.Dialect) (string, error) {
+	return "", nil
+}
+
+// theOrdinarySSHAdd is what a system with one OpenSSH answers, pinned into a
+// test's deps so that what the test asserts does not depend on which builds of
+// OpenSSH the machine running it happens to have — a suite launched from a
+// shell that brings its own would otherwise be answering a different question
+// from one launched from a shell that does not.
+func theOrdinarySSHAdd() (string, error) { return "ssh-add", nil }
 
 // memoryBackend is an in-process wallet.Backend that actually records what
 // is stored, so a store-then-lookup round-trip (testSecretBackend's probe) and

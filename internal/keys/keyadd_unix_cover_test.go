@@ -59,7 +59,7 @@ func TestRunSSHAddExitCode(t *testing.T) {
 	}
 	runCmd = func(*exec.Cmd) error { return realExit }
 
-	rc, err := (ExecKeyAdder{}).runSSHAdd(t.Context(), nil, "/home/u/.ssh/id_rsa")
+	rc, err := (ExecKeyAdder{}).runSSHAdd(t.Context(), "ssh-add", nil, "/home/u/.ssh/id_rsa")
 	require.NoError(t, err,
 		"a wrong passphrase is what ssh-add exiting non-zero means, and the loader retries on it rather than giving up")
 	assert.Equal(t, 3, rc, "so the exit code must be handed back as it was")
@@ -68,7 +68,7 @@ func TestRunSSHAddExitCode(t *testing.T) {
 func TestRunSSHAddStartFailure(t *testing.T) {
 	saveKeyaddSeams(t)
 	runCmd = func(*exec.Cmd) error { return errForkExecPermissionDenied }
-	rc, err := (ExecKeyAdder{}).runSSHAdd(t.Context(), nil, "/home/u/.ssh/id_rsa")
+	rc, err := (ExecKeyAdder{}).runSSHAdd(t.Context(), "ssh-add", nil, "/home/u/.ssh/id_rsa")
 	assert.Error(t, err, "ssh-add not running at all is not a wrong passphrase, and retrying would not help")
 	assert.Zero(t, rc, "so there is no exit code to report")
 }

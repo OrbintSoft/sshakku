@@ -13,11 +13,13 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/OrbintSoft/sshakku/internal/agent"
 	"github.com/OrbintSoft/sshakku/internal/cli/backend"
 	"github.com/OrbintSoft/sshakku/internal/cli/crossuser"
 	"github.com/OrbintSoft/sshakku/internal/cli/dialog"
+	"github.com/OrbintSoft/sshakku/internal/cli/shell"
 	"github.com/OrbintSoft/sshakku/internal/cli/walletcheck"
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/diagnose"
@@ -27,6 +29,7 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
 	"github.com/OrbintSoft/sshakku/internal/paths"
 	"github.com/OrbintSoft/sshakku/internal/run"
+	"github.com/OrbintSoft/sshakku/internal/sshtools"
 )
 
 // askpassProgName is the name this binary answers ssh's passphrase prompts
@@ -147,6 +150,20 @@ type deps struct {
 	// outcomes run on a machine where the real one would refuse, or where
 	// there is no service at all.
 	enableAgentService func(ctx context.Context) error
+	// sshAdd names the ssh-add every command here reaches the agent through.
+	// On a system with one OpenSSH that is the ordinary name; on one where a
+	// shell can bring a build of its own that reaches no agent at all, it is
+	// the path of a build that does. Injected so both answers run from either
+	// machine, and asked at most once per process — but only where there is
+	// something to run it for, since an account with no key to load must not be
+	// told about a program it was never going to start.
+	sshAdd keys.SSHAddNamer
+	// sshToolsDir names the directory a session has to search ahead of its own
+	// PATH so that the ssh *it* runs reaches the agent it was just pointed at,
+	// "" where the one it already runs does, and an error where something has
+	// to change and cannot. Injected so both answers run from either machine,
+	// since which one a system gives is the system's own.
+	sshToolsDir func(ctx context.Context, dialect shell.Dialect) (string, error)
 	// agentKeepsLifetimes is whether the agent on this system holds a key for a
 	// stated time and drops it at that deadline itself. It decides two things a
 	// session does: what lifetime a key is added with, and whether taking the
@@ -172,6 +189,8 @@ func realDeps() deps {
 		runner:              run.ExecRunner{},
 		makeCompartment:     walletcheck.MakeCompartment,
 		enableAgentService:  agent.EnableAgentService,
+		sshAdd:              sync.OnceValues(sshtools.SSHAdd),
+		sshToolsDir:         sessionSSHToolsDir,
 		agentKeepsLifetimes: agent.KeepsLifetimes(),
 	}
 }
