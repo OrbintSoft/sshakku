@@ -207,8 +207,8 @@ func (s *fakeServer) handle(conn net.Conn, req envelope) error {
 		return err
 	}
 	var inner map[string]any
-	if err := open(req.Message, nonce, clientPub, s.keys.secret, &inner); err != nil {
-		return err
+	if openErr := open(req.Message, nonce, clientPub, s.keys.secret, &inner); openErr != nil {
+		return openErr
 	}
 	s.record(inner)
 
@@ -281,8 +281,8 @@ func writeJSON(conn net.Conn, v any) error {
 	if err != nil {
 		return err
 	}
-	if err := conn.SetWriteDeadline(time.Now().Add(5 * time.Second)); err != nil {
-		return err
+	if deadlineErr := conn.SetWriteDeadline(time.Now().Add(5 * time.Second)); deadlineErr != nil {
+		return deadlineErr
 	}
 	_, err = conn.Write(raw)
 	return err

@@ -3788,6 +3788,34 @@ surveyed on all five builds `lint-go` names — linux, darwin, windows,
 `--max-issues-per-linter=0 --max-same-issues=0`, since Phase 43 and Phase 48
 were each fooled once by the caps.
 
+**`govet` was already on, and is now asked for all of it.** `default: standard`
+runs govet with the two analysers golangci-lint leaves off, and `enable-all:
+true` turns them on — and means an analyser a future Go release adds arrives
+with it rather than waiting to be noticed.
+
+`fieldalignment` is declined and the count is why: 150-odd struct rewrites,
+each ordering a struct by what packs tightest against structs that are ordered
+for reading, every field documented where it stands — a report's findings in
+the order the report prints them, a config file's settings in the order the
+file lists them. The saving is bytes per process in a program that runs once
+per login shell.
+
+`shadow` is taken, and it found no bug. All 19 sites are an inner `err`
+declared with `:=` inside an `if` init clause, a block, or a closure, and every
+one of them is handled on the next line. What the analyser is guarding against
+is the case where it would not be — the outer `err` left holding what it held
+before while the code below reads it — and the guard is only worth having if
+the pattern it cannot tell apart from the safe one is absent. Each inner error
+now carries its own name (`unwireErr`, `removeErr`, `unlockErr`, `aliasErr`,
+`openErr`, `deadlineErr`, `acceptErr`, `statErr`, and so on), so what is being
+tested at each site is named at each site. Two Bitwarden results were renamed
+with theirs, `conf` and `login`, because `res` twice in one function said as
+little as `err` did.
+
+Three of the 19 are behind a build tag and were reached by running the linter
+for that platform, not by inference: two on Windows (`handoff_windows_test.go`)
+and one on macOS (`ancestry_darwin_test.go`, an `ok` rather than an `err`).
+
 **`gocritic` runs on its default checks, and the tags left off were measured
 rather than assumed.** Two findings, the same two on every build. A test helper
 wrapped `slices.Contains` in a lambda that only forwarded its two arguments, so

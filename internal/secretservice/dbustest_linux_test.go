@@ -54,8 +54,8 @@ func startBus(t *testing.T, activatable bool) {
 	services := filepath.Join(dir, "services")
 	require.NoError(t, os.Mkdir(services, 0o700), "create service directory")
 	if activatable {
-		service, err := os.ReadFile(secretsServiceFile)
-		require.NoErrorf(t, err, "read %s", secretsServiceFile)
+		service, readErr := os.ReadFile(secretsServiceFile)
+		require.NoErrorf(t, readErr, "read %s", secretsServiceFile)
 		installed := filepath.Join(services, filepath.Base(secretsServiceFile))
 		require.NoError(t, os.WriteFile(installed, service, 0o600), "install service file")
 	}

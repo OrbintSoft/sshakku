@@ -178,8 +178,8 @@ func TestAScopeOrHostsNobodyServesIsRefusedWhereItIsRead(t *testing.T) {
 	assert.Error(t, err, "no scope at all is not the default: the caller that has one passes it")
 
 	for _, name := range []string{"all", "current"} {
-		hosts, err := ParseHosts(name)
-		require.NoError(t, err)
+		hosts, parseErr := ParseHosts(name)
+		require.NoError(t, parseErr)
 		assert.Equal(t, Hosts(name), hosts)
 	}
 	_, err = ParseHosts("every")

@@ -161,6 +161,11 @@ linters:
     # that predates the builtin and reads as what it is.
     - gocritic
 
+    # Already on through `default: standard`, and named here anyway: what is
+    # configured below is the whole of govet rather than the subset the default
+    # runs, and a line in this list is where a reader looks for the reason.
+    - govet
+
     # A comment that stops without a full stop reads as a line that was cut off,
     # and leaves the reader deciding whether the rest of the thought is missing
     # or was never there. This tree explains itself in prose, and the full stop
@@ -267,6 +272,24 @@ linters:
       # comment standing above a function, and an unfinished thought reads the
       # same in either place.
       scope: all
+
+    govet:
+      # Everything, so an analyser added to a future Go release arrives with it
+      # rather than waiting to be noticed. What that turns on beyond the default
+      # is `shadow`, and `shadow` is the reason: an inner `err` declared with :=
+      # inside an `if` or a `for` leaves the outer one holding whatever it held
+      # before, and the code below reads the wrong one while compiling and
+      # passing. This program's error paths are what a login does when something
+      # is wrong, and they are the least-exercised lines in it.
+      enable-all: true
+      disable:
+        # fieldalignment orders a struct's fields by what packs tightest, and
+        # the structs here are ordered for reading, each field documented where
+        # it stands: a report's findings in the order the report prints them, a
+        # config file's settings in the order the file lists them. It is 150-odd
+        # rewrites that would each make a struct harder to read against a saving
+        # nothing here is short of — this program runs once per login shell.
+        - fieldalignment
 
     importas:
       # There is no `alias:` list here, and its absence is the rule: an alias

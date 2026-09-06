@@ -181,8 +181,8 @@ func Uninstall(ctx context.Context, req Request, tree Ancestry) (Outcome, error)
 
 	out := Outcome{Shell: p.kind, Interpreter: p.interpreter, Notes: p.notes}
 	for _, place := range p.sweep {
-		if err := p.unwire(place); err != nil {
-			return out, err
+		if unwireErr := p.unwire(place); unwireErr != nil {
+			return out, unwireErr
 		}
 		if place.Path == p.placement.Path {
 			out.Wired = place.Path
@@ -195,8 +195,8 @@ func Uninstall(ctx context.Context, req Request, tree Ancestry) (Outcome, error)
 		return out, err
 	}
 	out.HookFile = filepath.Join(locations.HookDir, p.hookName())
-	if err := os.Remove(out.HookFile); err != nil && !os.IsNotExist(err) {
-		return out, fmt.Errorf("removing %s: %w", out.HookFile, err)
+	if removeErr := os.Remove(out.HookFile); removeErr != nil && !os.IsNotExist(removeErr) {
+		return out, fmt.Errorf("removing %s: %w", out.HookFile, removeErr)
 	}
 	// And the directory, if the hook was the only thing in it. Something else
 	// may well be — the search list as it stood before the install is kept

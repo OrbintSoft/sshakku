@@ -198,8 +198,8 @@ func (b *OnePassword) Store(ctx context.Context, service, label, passphrase stri
 		return itemNotOursError{vault: b.Vault, title: service}
 	}
 	if found {
-		if err := b.deleteItem(ctx, service); err != nil {
-			return err
+		if deleteErr := b.deleteItem(ctx, service); deleteErr != nil {
+			return deleteErr
 		}
 	}
 

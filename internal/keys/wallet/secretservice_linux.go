@@ -140,8 +140,8 @@ func (b *SecretService) Lookup(ctx context.Context, service string) (string, boo
 		return "", false, err
 	}
 	if !b.held {
-		if err := b.Client.Unlock(ctx, col); err != nil {
-			return "", false, err
+		if unlockErr := b.Client.Unlock(ctx, col); unlockErr != nil {
+			return "", false, unlockErr
 		}
 		defer func() { _ = b.Client.Lock(ctx, col) }()
 	}
@@ -167,8 +167,8 @@ func (b *SecretService) Store(ctx context.Context, service, label, passphrase st
 		return err
 	}
 	if !b.held {
-		if err := b.Client.Unlock(ctx, col); err != nil {
-			return err
+		if unlockErr := b.Client.Unlock(ctx, col); unlockErr != nil {
+			return unlockErr
 		}
 		defer func() { _ = b.Client.Lock(ctx, col) }()
 	}
@@ -188,8 +188,8 @@ func (b *SecretService) Delete(ctx context.Context, service string) error {
 		return err
 	}
 	if !b.held {
-		if err := b.Client.Unlock(ctx, col); err != nil {
-			return err
+		if unlockErr := b.Client.Unlock(ctx, col); unlockErr != nil {
+			return unlockErr
 		}
 		defer func() { _ = b.Client.Lock(ctx, col) }()
 	}
@@ -218,8 +218,8 @@ func (b *SecretService) List(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 	if !b.held {
-		if err := b.Client.Unlock(ctx, col); err != nil {
-			return nil, err
+		if unlockErr := b.Client.Unlock(ctx, col); unlockErr != nil {
+			return nil, unlockErr
 		}
 		defer func() { _ = b.Client.Lock(ctx, col) }()
 	}
