@@ -226,6 +226,95 @@ func TestADirectoryThisSystemNamesButHasNotGotIsPassedOver(t *testing.T) {
 	assert.Equal(t, filepath.Join(native, "ssh-add"), tool)
 }
 
+// TestASessionThatCanAlreadyReachTheAgentIsLeftAlone. Putting a directory
+// ahead of somebody's own PATH is not a small thing to do to a login shell, and
+// it is done only where the shell would otherwise be running tools that cannot
+// reach the agent it has just been pointed at.
+func TestASessionThatCanAlreadyReachTheAgentIsLeftAlone(t *testing.T) {
+	onPath := aDirectoryHolding(t, "ssh")
+	answering(t, map[string]string{"ssh": filepath.Join(onPath, "ssh")})
+
+	tools := System{
+		EmulationRuntimes: []string{"msys-2.0.dll"},
+		NativeDirs:        []string{aDirectoryHolding(t, "ssh")},
+	}.SessionSSHTools("ssh")
+
+	assert.Empty(t, tools.Native, "there is nothing to put in front of what this session already runs")
+	assert.Empty(t, tools.Emulated)
+}
+
+// TestASessionRunningToolsThatReachNoAgentIsToldWhatToPutInFront. The shell was
+// handed an endpoint by the same program: handing it an endpoint its own ssh
+// cannot open is pointing it at nothing, and `git push` from that shell asks
+// for a passphrase every time however full the agent is.
+func TestASessionRunningToolsThatReachNoAgentIsToldWhatToPutInFront(t *testing.T) {
+	emulated := aDirectoryHolding(t, "ssh", "msys-2.0.dll")
+	native := aDirectoryHolding(t, "ssh")
+	answers := itself(filepath.Join(native, "ssh"))
+	answers["ssh"] = filepath.Join(emulated, "ssh")
+	answering(t, answers)
+
+	tools := System{
+		EmulationRuntimes: []string{"msys-2.0.dll"},
+		NativeDirs:        []string{native},
+	}.SessionSSHTools("ssh")
+
+	assert.Equal(t, native, tools.Native, "the directory holding the tools that can reach the agent")
+	assert.Equal(t, filepath.Join(emulated, "ssh"), tools.Emulated,
+		"and the build it has to go in front of, which is what says whose environment this session is in")
+}
+
+// TestASessionWithNothingBetterToRunIsNotSentSomewhereEmpty: naming a directory
+// that has no ssh in it would put a useless entry on somebody's PATH for the
+// rest of their login and change nothing about what they can reach.
+func TestASessionWithNothingBetterToRunIsNotSentSomewhereEmpty(t *testing.T) {
+	emulated := aDirectoryHolding(t, "ssh", "msys-2.0.dll")
+	answering(t, map[string]string{"ssh": filepath.Join(emulated, "ssh")})
+
+	tools := System{
+		EmulationRuntimes: []string{"msys-2.0.dll"},
+		NativeDirs:        []string{filepath.Join(t.TempDir(), "nothing-was-installed-here")},
+	}.SessionSSHTools("ssh")
+
+	assert.Empty(t, tools.Native)
+	assert.Equal(t, filepath.Join(emulated, "ssh"), tools.Emulated,
+		"what the session runs is still worth reporting, since that is what a person would be told about")
+}
+
+// TestASystemWithOneOpenSSHNamesNothingToPutInFront, so nothing is ever put in
+// front of a PATH on a machine where every ssh reaches the same agent.
+func TestASystemWithOneOpenSSHNamesNothingToPutInFront(t *testing.T) {
+	lookups := answering(t, nil)
+
+	tools := System{}.SessionSSHTools("ssh")
+
+	assert.Empty(t, tools.Native)
+	assert.Empty(t, tools.Emulated)
+	assert.Zero(t, *lookups, "nothing had to be looked up to say so")
+}
+
+// TestASessionWithNoSSHAtAllIsLeftAlone. A PATH with no ssh on it is not a
+// session running the wrong one, and it is not this program's to fill in: what
+// the user runs `ssh` from is their arrangement.
+func TestASessionWithNoSSHAtAllIsLeftAlone(t *testing.T) {
+	native := aDirectoryHolding(t, "ssh")
+	answering(t, itself(filepath.Join(native, "ssh")))
+
+	tools := System{
+		EmulationRuntimes: []string{"msys-2.0.dll"},
+		NativeDirs:        []string{native},
+	}.SessionSSHTools("ssh")
+
+	assert.Empty(t, tools.Native)
+	assert.Empty(t, tools.Emulated)
+}
+
+// TestSSHIsTheProgramASessionRunsForItself, kept a constant beside the other
+// for the same reason.
+func TestSSHIsTheProgramASessionRunsForItself(t *testing.T) {
+	assert.Equal(t, "ssh", SSHName)
+}
+
 // TestSSHAddIsTheProgramThisPackageIsAskedAbout keeps the name a constant: it
 // is written into the child environments and the messages the user reads, and a
 // second spelling of it somewhere else is a program nobody has.

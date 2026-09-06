@@ -52,10 +52,14 @@ func ensurerFor(keepsAgents bool) agentEnsurer {
 //	agent_sock='…'
 //	agent_lock='…'
 //	log_file='…'
+//	ssh_tools_dir='…'
 //
 // agent_sock is the live socket EnsureAgent settled on, which may be an adopted
-// agent rather than the fixed path. Only these assignments go to stdout;
-// diagnostics and anomalies go to stderr and the session log.
+// agent rather than the fixed path. ssh_tools_dir is a directory the session
+// has to search ahead of its own PATH for the ssh it runs to reach that agent,
+// empty where the one it already runs does — which is every system with one
+// OpenSSH on it. Only these assignments go to stdout; diagnostics and anomalies
+// go to stderr and the session log.
 //
 // A session is also where a key that has run out of time is taken back out of
 // the agent, on a system whose agent expires nothing itself (see expireKeys).
@@ -87,10 +91,21 @@ func (d deps) shellInit(ctx context.Context, stdout, stderr io.Writer, args []st
 	}
 	d.expireKeys(ctx, layout, live)
 
+	// Pointing a session at an endpoint its own ssh cannot open is pointing it
+	// at nothing, so the tools go with the endpoint. Where something has to
+	// change and cannot, the session opens as it always did and the log says
+	// what is wrong: this runs before a person's first prompt, and a line on
+	// their screen at every login is not how they would want to hear it.
+	toolsDir, toolsErr := d.sshToolsDir(ctx, dialect)
+	if toolsErr != nil {
+		_ = sessionlog.New(layout.LogFile).Log("ERROR", fmt.Sprintf("shell-init: %v", toolsErr))
+	}
+
 	assignments := []struct{ name, value string }{
 		{"agent_sock", endpointFor(dialect, live)},
 		{"agent_lock", layout.AgentLock},
 		{"log_file", layout.LogFile},
+		{"ssh_tools_dir", toolsDir},
 	}
 	for _, a := range assignments {
 		if _, err := io.WriteString(stdout, dialect.SetVar(a.name, a.value)); err != nil {

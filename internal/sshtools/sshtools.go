@@ -24,10 +24,16 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/paths"
 )
 
-// SSHAddName is the program that adds a key to the agent, lists what the agent
-// holds, and takes a key back out. The name is OpenSSH's, not a choice made
-// here.
-const SSHAddName = "ssh-add"
+// The two OpenSSH programs this package is asked about. The names are
+// OpenSSH's, not choices made here.
+const (
+	// SSHAddName adds a key to the agent, lists what the agent holds, and takes
+	// a key back out. It is what SSHakku itself runs.
+	SSHAddName = "ssh-add"
+	// SSHName is what the session runs for itself — every `ssh` the user types,
+	// and every one `git` starts on their behalf.
+	SSHName = "ssh"
+)
 
 // lookPath resolves a program the way the session that started this one would.
 // It is a variable so a test can put a system's answer in front of the
@@ -90,6 +96,50 @@ func (s System) Tool(name string) (string, error) {
 		return native, nil
 	}
 	return "", emulatedOnlyError{name: name, found: found, runtime: runtime}
+}
+
+// SessionTools says what the session that started this process runs for one of
+// OpenSSH's programs, and what it would take for that session to reach this
+// system's agent with it.
+//
+// It is about the session's own tools rather than the ones SSHakku drives.
+// Pointing a shell at an agent its own ssh cannot open is pointing it at
+// nothing: every `ssh` typed there, and every one `git` starts on the user's
+// behalf, asks for a passphrase however full the agent is.
+type SessionTools struct {
+	// Emulated is the build the session finds first, where that build cannot
+	// reach this system's agent. Empty where what the session finds can — and
+	// it is worth having even when nothing can be done about it, since it names
+	// which environment the session belongs to.
+	Emulated string
+	// Native is the directory holding a build that can reach the agent, to be
+	// searched ahead of the session's own. Empty where nothing has to change,
+	// and empty too where this machine has nothing better to offer: a directory
+	// with no ssh in it on somebody's PATH for the rest of their login would
+	// change nothing except their PATH.
+	Native string
+}
+
+// SessionSSHTools reports what the session that started this process would run
+// for name, and what it would take for that session to reach the agent.
+func (s System) SessionSSHTools(name string) SessionTools {
+	if len(s.EmulationRuntimes) == 0 {
+		return SessionTools{}
+	}
+	found, err := lookPath(name)
+	if err != nil {
+		// A PATH with no ssh on it is not a session running the wrong one, and
+		// what the user runs ssh from is their arrangement, not this program's.
+		return SessionTools{}
+	}
+	if s.emulationRuntimeBeside(found) == "" {
+		return SessionTools{}
+	}
+	native, ok := s.nativeBuild(name)
+	if !ok {
+		return SessionTools{Emulated: found}
+	}
+	return SessionTools{Emulated: found, Native: filepath.Dir(native)}
 }
 
 // nativeBuild finds name in the directories this system keeps its own OpenSSH

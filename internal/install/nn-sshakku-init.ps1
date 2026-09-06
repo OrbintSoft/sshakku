@@ -66,6 +66,7 @@ if ([System.Console]::IsInputRedirected) { $sshakku_interactive = $false }
 # empty rather than undefined.
 $agent_sock = ''
 $log_file = ''
+$ssh_tools_dir = ''
 if (Microsoft.PowerShell.Management\Test-Path -LiteralPath $sshakku_bin -PathType Leaf) {
     # Only standard output is evaluated, and never as anything but the
     # assignments it is: what the binary has to say about a failure it says on
@@ -112,6 +113,16 @@ $env:SSH_AUTH_SOCK = $agent_sock
 # wanted: a stale SSH_AGENT_PID inherited from elsewhere names an agent this
 # session is no longer talking to.
 $env:SSH_AGENT_PID = $null
+
+# The endpoint above is only worth having if the ssh this session runs can open
+# it. Where the first ssh on this PATH cannot, sshakku names a directory holding
+# one that can, and it goes in front — so every ssh started from this session,
+# typed or started by git on the user's behalf, reaches the agent the session
+# was just pointed at. It names nothing where the ssh already first can reach
+# it, which is what a session finds on a machine with one OpenSSH on it.
+if ($ssh_tools_dir) {
+    $env:PATH = $ssh_tools_dir + [System.IO.Path]::PathSeparator + $env:PATH
+}
 
 # Point this session's ssh passphrase prompts at sshakku. Every session gets
 # them, since these are two environment assignments and nothing else: what they

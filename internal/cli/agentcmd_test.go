@@ -69,6 +69,7 @@ func depsWithEnsurer(e agentEnsurer) deps {
 	d := realDeps()
 	d.ensurer = e
 	d.sshAdd = theOrdinarySSHAdd
+	d.sshToolsDir = aSessionThatNeedsNothingInFront
 	return d
 }
 
