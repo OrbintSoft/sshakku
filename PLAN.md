@@ -3788,6 +3788,23 @@ surveyed on all five builds `lint-go` names — linux, darwin, windows,
 `--max-issues-per-linter=0 --max-same-issues=0`, since Phase 43 and Phase 48
 were each fooled once by the caps.
 
+**`gocritic` runs on its default checks, and the tags left off were measured
+rather than assumed.** Two findings, the same two on every build. A test helper
+wrapped `slices.Contains` in a lambda that only forwarded its two arguments, so
+the two call sites now say `slices.Contains` and the name in between is gone.
+And `hostSummary` ended in an if / else-if / else over one tri-state pointer,
+three lines below a `switch` over another one written as a switch — the
+inconsistency was the finding, and it now reads like its neighbour and like
+`triStateWord` below it.
+
+The tags declined, with their counts: `hugeParam` 33 and `rangeValCopy` 1 would
+trade readable value receivers for pointers across the tree; `filepathJoin`'s 7
+are all false, an absolute path handed to `filepath.Join` as the root it is;
+`unnamedResult` 3, `paramTypeCombine` 1 and `importShadow` 1 are taste;
+`builtinShadow`'s 2 are `max`, an attempt limit that predates the builtin and
+reads as what it is. `equalFold` 1 is arguably real and is one finding, which is
+not enough to turn on a tag for.
+
 **`gocognit`'s bar is 20, the same number as `cyclop`, and that the two agree
 on a number is the point.** cyclop counts the paths through a function and
 charges +1 per `case`, so a flat lookup table scores like nested branching, and

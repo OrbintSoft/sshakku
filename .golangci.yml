@@ -150,6 +150,17 @@ linters:
     # the dispatcher and the command itself must agree on.
     - goconst
 
+    # A catalogue of small ways Go code says a thing the long way round or the
+    # wrong way round — a lambda that only forwards its arguments, a chain of
+    # else-ifs over one value. Only the default checks are on: the tags left off
+    # were measured, and they are churn or worse here. hugeParam (33) and
+    # rangeValCopy would trade readable value receivers for pointers across the
+    # tree; filepathJoin's 7 are all false, an absolute path handed to
+    # filepath.Join as the root it is; unnamedResult, paramTypeCombine and
+    # importShadow are taste. builtinShadow's two are `max`, an attempt limit
+    # that predates the builtin and reads as what it is.
+    - gocritic
+
     # A comment that stops without a full stop reads as a line that was cut off,
     # and leaves the reader deciding whether the rest of the thought is missing
     # or was never there. This tree explains itself in prose, and the full stop

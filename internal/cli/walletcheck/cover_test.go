@@ -19,18 +19,15 @@ var errNotFound = errors.New("not found")
 // each branch is reached from any platform rather than only from the one the
 // test happens to run on.
 func probeWith(goos string, found []string, present []string, bus string, listening []string) walletProbe {
-	has := func(list []string, want string) bool {
-		return slices.Contains(list, want)
-	}
 	return walletProbe{
 		goos: goos,
 		onPath: func(name string) (string, error) {
-			if has(found, name) {
+			if slices.Contains(found, name) {
 				return "/usr/bin/" + name, nil
 			}
 			return "", errNotFound
 		},
-		exists:     func(path string) bool { return has(present, path) },
+		exists:     func(path string) bool { return slices.Contains(present, path) },
 		busAddress: bus,
 		listening:  listening,
 	}
