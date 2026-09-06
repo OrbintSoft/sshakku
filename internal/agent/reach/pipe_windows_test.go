@@ -23,6 +23,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"golang.org/x/sys/windows"
+
+	"github.com/OrbintSoft/sshakku/internal/agent"
 )
 
 // errNoDeadlineHere is the failure this test hands its seam, standing for a real one the
@@ -84,7 +86,7 @@ func fakeAgentPipeNamed(t *testing.T, name string, reply func(*os.File)) string 
 			// Nobody came, and the wait for a client does not end on its own:
 			// knock once so the goroutine can finish and the suite can end.
 			if knock, err := openPipe(name); err == nil {
-				_ = knock.Close()
+				_ = windows.CloseHandle(knock)
 			}
 			<-served
 		}
@@ -352,6 +354,54 @@ func TestTheAgentsEndpointIsOpenedSoItsServerCannotActAsUs(t *testing.T) {
 		offer.Level)
 	assert.False(t, offer.ActedAsUs,
 		"and it must not be able to open anything as that account, which is what the level decides")
+}
+
+// sidOf is a real account on every Windows machine, named the way this system
+// names accounts.
+func sidOf(t *testing.T, known windows.WELL_KNOWN_SID_TYPE) string {
+	t.Helper()
+
+	sid, err := windows.CreateWellKnownSid(known)
+	require.NoError(t, err, "a well-known account this system must know")
+	return sid.String()
+}
+
+// F58: the pipe namespace is the machine's, and the name an agent is expected
+// on is one any account can hold while no agent has it. Answering the agent's
+// own handshake is something a stranger can do perfectly; being the account
+// whose agent it would be is not.
+func TestAnEndpointHeldBySomebodyElseIsNotYourAgent(t *testing.T) {
+	// A table naming one real account, and not the one this test is running as.
+	held := PipeProber{Timeout: 2 * time.Second, trustedOwners: []string{sidOf(t, windows.WinLocalServiceSid)}}
+
+	assert.False(t, held.Reachable(t.Context(), fakeAgentPipe(t, pipeReplyIdentities(2))),
+		"it answered the agent's own handshake, and it is still not an agent of yours")
+}
+
+// F58: and the refusal must not fall on the machine it is there to protect —
+// the accounts an endpoint may belong to include the one asking, whose own
+// agent it would be.
+func TestAnEndpointThisAccountIsServingIsYourAgent(t *testing.T) {
+	assert.True(t, PipeProber{Timeout: 2 * time.Second}.Reachable(t.Context(), fakeAgentPipe(t, pipeReplyIdentities(0))),
+		"this test made that pipe, so the accounts an endpoint may belong to must include the one that did")
+}
+
+// F58: the endpoint this platform's own agent is served on belongs to the
+// system, not to anybody logged in. A table that failed to name the system
+// would refuse every real agent on this platform while every other test in
+// this file went on passing, since they all serve their own pipes.
+func TestTheEndpointThisSystemsOwnAgentIsServedOnIsOneToSpeakOn(t *testing.T) {
+	served, err := openPipe(agent.SystemEndpoint().Native())
+	if err != nil {
+		t.Skip("nothing is serving this system's own agent endpoint here")
+	}
+	t.Cleanup(func() { _ = windows.CloseHandle(served) })
+
+	owner, err := ownerOf(served)
+
+	require.NoError(t, err, "who owns the endpoint this system's own agent is served on")
+	assert.Contains(t, ownersWhoseAgentThisCouldBe(), owner,
+		"the agent this system serves itself must be one SSHakku will speak to")
 }
 
 // serveAndWriteDownWhatWasOffered is the serving half of the test above,

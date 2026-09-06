@@ -146,7 +146,7 @@ security is a shared responsibility between the software and how it is deployed.
 
 | ID | Threat & vector | Status | Mitigation / residual |
 |---|---|---|---|
-| S1 | A rogue process listens at our **predictable endpoint path** and impersonates the agent. | Presumed | Endpoint lives in a `0700` per-user dir an attacker cannot write; verify reachability before use. |
+| S1 | A rogue process listens at our **predictable endpoint path** and impersonates the agent. | Presumed; present (mitigated) where the endpoint is a name | Endpoint lives in a `0700` per-user dir an attacker cannot write; verify reachability before use. Where the endpoint is a name anything on the machine may claim rather than a file in such a directory, no directory can protect it: the account holding the name is read from the endpoint itself before anything is sent, and only this account's, the system's or an administrator's is spoken to. Answering the agent's handshake correctly is something a stranger can do. |
 | S2 | A **fake askpass / vault prompt** phishes the user for the passphrase. | Presumed | Use only the real session keyring's prompt; never roll our own GUI prompt for A1. |
 
 ### Elevation of privilege

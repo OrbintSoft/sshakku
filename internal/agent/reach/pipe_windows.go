@@ -5,6 +5,7 @@ package reach
 import (
 	"context"
 	"os"
+	"slices"
 	"time"
 
 	"golang.org/x/sys/windows"
@@ -23,6 +24,16 @@ import (
 type PipeProber struct {
 	// Timeout bounds open + request + response; zero means DefaultProbeTimeout.
 	Timeout time.Duration
+
+	// trustedOwners are the accounts an endpoint may belong to for this to
+	// speak on it; empty means the ones this system's own answer names.
+	//
+	// It is not exported, because which accounts those are is this system's
+	// answer and not a caller's to widen. It exists so the refusal can be
+	// exercised against a table this machine is not named in, which is the one
+	// case a test cannot arrange by serving a pipe: a test can only make a pipe
+	// as the account running it.
+	trustedOwners []string
 }
 
 // setPipeDeadline applies a read/write deadline to f. It is a package variable
@@ -39,10 +50,18 @@ func (p PipeProber) Reachable(ctx context.Context, pipe string) bool {
 	if timeout <= 0 {
 		timeout = DefaultProbeTimeout
 	}
-	f, err := openPipe(pipe)
+	handle, err := openPipe(pipe)
 	if err != nil {
 		return false
 	}
+	// Asked of the handle before it becomes a file, and not of the file
+	// afterwards: taking a file's handle back off it hands the runtime's poller
+	// over with it, and the deadline below is what the poller does.
+	if !couldBeYourAgent(handle, p.trustedOwners) {
+		_ = windows.CloseHandle(handle)
+		return false
+	}
+	f := os.NewFile(uintptr(handle), pipe)
 	defer func() { _ = f.Close() }()
 	if err := setPipeDeadline(f, time.Now().Add(timeout)); err != nil {
 		return false
@@ -74,6 +93,64 @@ func stopWaitingWhenCallerGivesUp(ctx context.Context, f *os.File) func() {
 	}
 }
 
+// couldBeYourAgent reports whether the endpoint behind f belongs to somebody
+// whose agent it could be, and is asked before a byte is sent: a name anything
+// on the machine can claim is not one to speak on until it is known who is
+// holding it. An agent's own handshake proves only that whatever is there knows
+// the protocol, which a stranger that wants your authentication would.
+//
+// owners is the table to judge against, empty for this system's own.
+//
+// Anything that cannot be answered is answered no. The refusal costs nothing a
+// real agent needs: reading an object's owner takes READ_CONTROL, which comes
+// with the GENERIC_READ the handle was already opened with — so an endpoint
+// that opened at all is one whose owner can be read.
+func couldBeYourAgent(handle windows.Handle, owners []string) bool {
+	if len(owners) == 0 {
+		owners = ownersWhoseAgentThisCouldBe()
+	}
+	owner, err := ownerOf(handle)
+	if err != nil {
+		return false
+	}
+	return slices.Contains(owners, owner)
+}
+
+// ownersWhoseAgentThisCouldBe names the accounts an endpoint on this machine
+// may belong to: this one, whose own agent it would be — the account is the
+// same whether or not this process was elevated — the system, which is who
+// serves the agent service's endpoint, and the administrators, who could
+// already have anything here. Anybody else holding the name got to it first.
+func ownersWhoseAgentThisCouldBe() []string {
+	owners := make([]string, 0, 3)
+	if whoWeAre, err := windows.GetCurrentProcessToken().GetTokenUser(); err == nil {
+		owners = append(owners, whoWeAre.User.Sid.String())
+	}
+	for _, known := range []windows.WELL_KNOWN_SID_TYPE{
+		windows.WinLocalSystemSid, windows.WinBuiltinAdministratorsSid,
+	} {
+		if sid, err := windows.CreateWellKnownSid(known); err == nil {
+			owners = append(owners, sid.String())
+		}
+	}
+	return owners
+}
+
+// ownerOf reports the account that owns the object behind handle, named the way
+// this system names accounts.
+func ownerOf(handle windows.Handle) (string, error) {
+	descriptor, err := windows.GetSecurityInfo(handle,
+		windows.SE_KERNEL_OBJECT, windows.OWNER_SECURITY_INFORMATION)
+	if err != nil {
+		return "", err
+	}
+	owner, _, err := descriptor.Owner()
+	if err != nil {
+		return "", err
+	}
+	return owner.String(), nil
+}
+
 // openPipe opens an existing named pipe for reading and writing, in the mode
 // that lets the deadline above interrupt a read, and at the only level of
 // identity worth handing whatever is on the other end.
@@ -89,19 +166,15 @@ func stopWaitingWhenCallerGivesUp(ctx context.Context, f *os.File) func() {
 // server ask which account is calling, which agents legitimately do, and stops
 // it there: anything it then tries to open as that account is refused with
 // ERROR_BAD_IMPERSONATION_LEVEL.
-func openPipe(name string) (*os.File, error) {
+func openPipe(name string) (windows.Handle, error) {
 	wide, err := windows.UTF16PtrFromString(name)
 	if err != nil {
-		return nil, err
+		return windows.InvalidHandle, err
 	}
-	handle, err := windows.CreateFile(wide,
+	return windows.CreateFile(wide,
 		windows.GENERIC_READ|windows.GENERIC_WRITE,
 		0, nil, windows.OPEN_EXISTING,
 		windows.FILE_FLAG_OVERLAPPED|windows.SECURITY_SQOS_PRESENT|windows.SECURITY_IDENTIFICATION, 0)
-	if err != nil {
-		return nil, err
-	}
-	return os.NewFile(uintptr(handle), name), nil
 }
 
 var _ Prober = PipeProber{}
