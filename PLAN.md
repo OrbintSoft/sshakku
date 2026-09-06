@@ -3775,7 +3775,7 @@ window was put in front of a person before this was merged rather than after.
 
 → rules 5, 15, 19, 21, 22, 23, 24, 25, 26, 27.
 
-### Phase 49 — The arm nobody wrote
+### Phase 51 — The arm nobody wrote ✅ Done
 
 Five more analysers, one per commit. `exhaustive`, `gochecksumtype`, `gocognit`
 and `gocritic` are new to `.golangci.yml`; `govet` was already on and is asked
@@ -3788,50 +3788,38 @@ surveyed on all five builds `lint-go` names — linux, darwin, windows,
 `--max-issues-per-linter=0 --max-same-issues=0`, since Phase 43 and Phase 48
 were each fooled once by the caps.
 
-**`govet` was already on, and is now asked for all of it.** `default: standard`
-runs govet with the two analysers golangci-lint leaves off, and `enable-all:
-true` turns them on — and means an analyser a future Go release adds arrives
-with it rather than waiting to be noticed.
+**`exhaustive` runs with `default-signifies-exhaustive`, and that setting is
+the decision.** Off, it reports six switches on Linux and seven on macOS, and
+every one of them is a `String()` method whose `default:` arm already holds the
+zero value's text — the linter asking for a case that would say a second time
+what the default says. On, it reports exactly one thing on every build, which
+is the one worth reporting: a switch with **no** default, where a member the
+switch does not name falls out of the bottom and the code carries on as though
+an answer had been given.
 
-`fieldalignment` is declined and the count is why: 150-odd struct rewrites,
-each ordering a struct by what packs tightest against structs that are ordered
-for reading, every field documented where it stands — a report's findings in
-the order the report prints them, a config file's settings in the order the
-file lists them. The saving is bytes per process in a program that runs once
-per login shell.
+That switch is `addWithRetries`, over what came of trying to load one key. It
+handles `keyLoaded`, `attemptsExhausted` and `askingEnded`, and says nothing
+about `keyAbandoned` — the zero value, returned from five places in
+`loadViaVaultThenPrompt`: no terminal to ask on, a prompt the user dismissed, a
+hard error. Falling through was the right behaviour and it was invisible; the
+arm is written out now, empty, with the reason in it. No message changed and no
+statement was added, so coverage is where it was.
+**`gochecksumtype` reports nothing and is a guard.** It asks `exhaustive`'s
+question of a closed set of types rather than a set of constants: an interface
+marked `//sumtype:decl` has a known list of implementations, and a type switch
+that leaves one out is a case the value can still arrive as. Nothing here is
+written that way — there is no `//sumtype:decl` anywhere, and no type switch
+over an interface outside the tests — so it has no subject today and is in
+place for the first one. Made to fire before being trusted, per Phase 34: a
+throwaway package with a sealed `reply`, two implementations and a switch
+naming one of them reported `missing cases for refused`, and was removed.
 
-`shadow` is taken, and it found no bug. All 19 sites are an inner `err`
-declared with `:=` inside an `if` init clause, a block, or a closure, and every
-one of them is handled on the next line. What the analyser is guarding against
-is the case where it would not be — the outer `err` left holding what it held
-before while the code below reads it — and the guard is only worth having if
-the pattern it cannot tell apart from the safe one is absent. Each inner error
-now carries its own name (`unwireErr`, `removeErr`, `unlockErr`, `aliasErr`,
-`openErr`, `deadlineErr`, `acceptErr`, `statErr`, and so on), so what is being
-tested at each site is named at each site. Two Bitwarden results were renamed
-with theirs, `conf` and `login`, because `res` twice in one function said as
-little as `err` did.
-
-Three of the 19 are behind a build tag and were reached by running the linter
-for that platform, not by inference: two on Windows (`handoff_windows_test.go`)
-and one on macOS (`ancestry_darwin_test.go`, an `ok` rather than an `err`).
-
-**`gocritic` runs on its default checks, and the tags left off were measured
-rather than assumed.** Two findings, the same two on every build. A test helper
-wrapped `slices.Contains` in a lambda that only forwarded its two arguments, so
-the two call sites now say `slices.Contains` and the name in between is gone.
-And `hostSummary` ended in an if / else-if / else over one tri-state pointer,
-three lines below a `switch` over another one written as a switch — the
-inconsistency was the finding, and it now reads like its neighbour and like
-`triStateWord` below it.
-
-The tags declined, with their counts: `hugeParam` 33 and `rangeValCopy` 1 would
-trade readable value receivers for pointers across the tree; `filepathJoin`'s 7
-are all false, an absolute path handed to `filepath.Join` as the root it is;
-`unnamedResult` 3, `paramTypeCombine` 1 and `importShadow` 1 are taste;
-`builtinShadow`'s 2 are `max`, an attempt limit that predates the builtin and
-reads as what it is. `equalFold` 1 is arguably real and is one finding, which is
-not enough to turn on a tag for.
+It keeps the strictness `exhaustive` gives up, and the asymmetry is not an
+oversight. An int enum can hold a number nobody declared — `State(99)` is a
+`State` — so a `default:` there is a branch that can be reached and is a real
+answer. A sealed interface has only the types that implement it, so a
+`default:` over one is unreachable, and all it can do is hide the
+implementation somebody adds next.
 
 **`gocognit`'s bar is 20, the same number as `cyclop`, and that the two agree
 on a number is the point.** cyclop counts the paths through a function and
@@ -3869,38 +3857,59 @@ Nothing here changed behaviour, and coverage says so: 100.0% before and after,
 with `internal/keys` and `internal/cli` at 100.0% of their own statements —
 which is what a refactor that only moved code should look like.
 
-**`gochecksumtype` reports nothing and is a guard.** It asks `exhaustive`'s
-question of a closed set of types rather than a set of constants: an interface
-marked `//sumtype:decl` has a known list of implementations, and a type switch
-that leaves one out is a case the value can still arrive as. Nothing here is
-written that way — there is no `//sumtype:decl` anywhere, and no type switch
-over an interface outside the tests — so it has no subject today and is in
-place for the first one. Made to fire before being trusted, per Phase 34: a
-throwaway package with a sealed `reply`, two implementations and a switch
-naming one of them reported `missing cases for refused`, and was removed.
+**`gocritic` runs on its default checks, and the tags left off were measured
+rather than assumed.** Two findings, the same two on every build. A test helper
+wrapped `slices.Contains` in a lambda that only forwarded its two arguments, so
+the two call sites now say `slices.Contains` and the name in between is gone.
+And `hostSummary` ended in an if / else-if / else over one tri-state pointer,
+three lines below a `switch` over another one written as a switch — the
+inconsistency was the finding, and it now reads like its neighbour and like
+`triStateWord` below it.
 
-It keeps the strictness `exhaustive` gives up, and the asymmetry is not an
-oversight. An int enum can hold a number nobody declared — `State(99)` is a
-`State` — so a `default:` there is a branch that can be reached and is a real
-answer. A sealed interface has only the types that implement it, so a
-`default:` over one is unreachable, and all it can do is hide the
-implementation somebody adds next.
+The tags declined, with their counts: `hugeParam` 33 and `rangeValCopy` 1 would
+trade readable value receivers for pointers across the tree; `filepathJoin`'s 7
+are all false, an absolute path handed to `filepath.Join` as the root it is;
+`unnamedResult` 3, `paramTypeCombine` 1 and `importShadow` 1 are taste;
+`builtinShadow`'s 2 are `max`, an attempt limit that predates the builtin and
+reads as what it is. `equalFold` 1 is arguably real and is one finding, which is
+not enough to turn on a tag for.
 
-**`exhaustive` runs with `default-signifies-exhaustive`, and that setting is
-the decision.** Off, it reports six switches on Linux and seven on macOS, and
-every one of them is a `String()` method whose `default:` arm already holds the
-zero value's text — the linter asking for a case that would say a second time
-what the default says. On, it reports exactly one thing on every build, which
-is the one worth reporting: a switch with **no** default, where a member the
-switch does not name falls out of the bottom and the code carries on as though
-an answer had been given.
+**`govet` was already on, and is now asked for all of it.** `default: standard`
+runs govet with the two analysers golangci-lint leaves off, and `enable-all:
+true` turns them on — and means an analyser a future Go release adds arrives
+with it rather than waiting to be noticed.
 
-That switch is `addWithRetries`, over what came of trying to load one key. It
-handles `keyLoaded`, `attemptsExhausted` and `askingEnded`, and says nothing
-about `keyAbandoned` — the zero value, returned from five places in
-`loadViaVaultThenPrompt`: no terminal to ask on, a prompt the user dismissed, a
-hard error. Falling through was the right behaviour and it was invisible; the
-arm is written out now, empty, with the reason in it. No message changed and no
-statement was added, so coverage is where it was.
+`fieldalignment` is declined and the count is why: 150-odd struct rewrites,
+each ordering a struct by what packs tightest against structs that are ordered
+for reading, every field documented where it stands — a report's findings in
+the order the report prints them, a config file's settings in the order the
+file lists them. The saving is bytes per process in a program that runs once
+per login shell.
 
-→ rule 12.
+`shadow` is taken, and it found no bug. All 19 sites are an inner `err`
+declared with `:=` inside an `if` init clause, a block, or a closure, and every
+one of them is handled on the next line. What the analyser is guarding against
+is the case where it would not be — the outer `err` left holding what it held
+before while the code below reads it — and the guard is only worth having if
+the pattern it cannot tell apart from the safe one is absent. Each inner error
+now carries its own name (`unwireErr`, `removeErr`, `unlockErr`, `aliasErr`,
+`openErr`, `deadlineErr`, `acceptErr`, `statErr`, and so on), so what is being
+tested at each site is named at each site. Two Bitwarden results were renamed
+with theirs, `conf` and `login`, because `res` twice in one function said as
+little as `err` did.
+
+Three of the 19 are behind a build tag and were reached by running the linter
+for that platform, not by inference: two on Windows (`handoff_windows_test.go`)
+and one on macOS (`ancestry_darwin_test.go`, an `ok` rather than an `err`).
+
+**Verified**: `golangci-lint run` clean on all five builds after every one of
+the five commits, and `golangci-lint fmt --diff` clean. `make test-json`
+uncached: 1816 tests, 0 failures, 100.0%. CI puts macOS at 100.0% and Windows
+at 96.3%, both the same figure as the two merges before this branch — and the
+one Windows package that moved, `internal/cli`, moved up, from 94.9% to 95.0%,
+because `forget` became four functions. No end-to-end run belongs here: no
+user-visible behaviour changed, and the whole of the source change is an
+`exhaustive` case arm that was already being taken, six functions split, two
+`gocritic` rewrites, and nineteen renamings inside one scope apiece.
+
+→ rules 1, 12, 15, 26, 27.
