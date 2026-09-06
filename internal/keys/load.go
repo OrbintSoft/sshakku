@@ -269,6 +269,10 @@ func (l Loader) addWithRetries(ctx context.Context, keyfile, keyname string) boo
 		l.recordGiveup(keyname)
 	case askingEnded:
 		return true
+	case keyAbandoned:
+		// Named so the omission is a decision and not an oversight: there is
+		// nothing to clear, because the key never opened, and nothing to record
+		// against it, because the user was never asked to the point of giving up.
 	}
 	return false
 }
@@ -280,47 +284,18 @@ func (l Loader) addWithRetries(ctx context.Context, keyfile, keyname string) boo
 func (l Loader) loadViaVaultThenPrompt(ctx context.Context, keyfile, keyname string, max int) keyOutcome {
 	service := l.servicePrefix() + "-" + keyname
 
-	if pass, ok := l.storedPassphrase(ctx, service, keyname); ok {
-		rc, err := l.Adder.AddWithAskpass(ctx, keyfile, pass)
-		if err != nil {
-			l.failAdd(keyname, err)
-			return keyAbandoned
-		}
-		if rc == 0 {
-			l.logf("INFO", "added %s to agent", keyname)
-			return keyLoaded
-		}
-		l.logf("INFO", "stored passphrase for %s is stale, prompting", keyname)
+	if outcome, settled := l.tryStoredPassphrase(ctx, service, keyfile, keyname); settled {
+		return outcome
 	}
 
 	for attempt := 1; attempt <= max; attempt++ {
 		pass, err := l.Prompt.Prompt(ctx, keyname)
 		if err != nil {
-			switch {
-			case errors.Is(err, prompt.ErrCanceled):
-				// Turning the question down is an answer, not a fault: it is
-				// logged the way the other expected outcomes are, and what it
-				// means for the keys still to come is the user's to configure.
-				switch l.Config.OnDismiss {
-				case OnDismissRetry:
-					l.logf("INFO", "passphrase prompt dismissed for %s (attempt %d/%d)", keyname, attempt, max)
-					continue
-				case OnDismissSkip:
-					l.logf("INFO", "passphrase prompt dismissed for %s", keyname)
-					return keyAbandoned
-				default:
-					l.logf("INFO", "passphrase prompt dismissed for %s, asking about no further key this session", keyname)
-					return askingEnded
-				}
-			case errors.Is(err, prompt.ErrNoTerminal):
-				// No GUI and no controlling terminal are both normal, expected
-				// deployments — not surfaced to the user, and not logged as an
-				// operator problem.
-				l.logf("INFO", "no terminal available to prompt for %s", keyname)
-			default:
-				l.failPrompt(keyname, err)
+			outcome, settled := l.promptFailureOutcome(err, keyname, attempt, max)
+			if settled {
+				return outcome
 			}
-			return keyAbandoned
+			continue
 		}
 		if pass == "" {
 			// An empty answer opens no key — a key that has no passphrase is
@@ -342,6 +317,58 @@ func (l Loader) loadViaVaultThenPrompt(ctx context.Context, keyfile, keyname str
 		l.logf("ERROR", "failed to add %s (attempt %d/%d)", keyname, attempt, max)
 	}
 	return attemptsExhausted
+}
+
+// tryStoredPassphrase spends the passphrase the wallet is holding for this key,
+// if it is holding one. It reports the outcome and whether that settles the key:
+// a stored passphrase ssh-add rejects is stale, and the answer to it is to ask.
+func (l Loader) tryStoredPassphrase(ctx context.Context, service, keyfile, keyname string) (keyOutcome, bool) {
+	pass, ok := l.storedPassphrase(ctx, service, keyname)
+	if !ok {
+		return keyAbandoned, false
+	}
+	rc, err := l.Adder.AddWithAskpass(ctx, keyfile, pass)
+	if err != nil {
+		l.failAdd(keyname, err)
+		return keyAbandoned, true
+	}
+	if rc == 0 {
+		l.logf("INFO", "added %s to agent", keyname)
+		return keyLoaded, true
+	}
+	l.logf("INFO", "stored passphrase for %s is stale, prompting", keyname)
+	return keyAbandoned, false
+}
+
+// promptFailureOutcome says what a prompt that did not yield a passphrase means
+// for this key. It reports the outcome and whether that settles the key: a
+// dismissal under on_dismiss=retry settles nothing and the caller asks again.
+func (l Loader) promptFailureOutcome(err error, keyname string, attempt, max int) (keyOutcome, bool) {
+	switch {
+	case errors.Is(err, prompt.ErrCanceled):
+		// Turning the question down is an answer, not a fault: it is logged the
+		// way the other expected outcomes are, and what it means for the keys
+		// still to come is the user's to configure.
+		switch l.Config.OnDismiss {
+		case OnDismissRetry:
+			l.logf("INFO", "passphrase prompt dismissed for %s (attempt %d/%d)", keyname, attempt, max)
+			return keyAbandoned, false
+		case OnDismissSkip:
+			l.logf("INFO", "passphrase prompt dismissed for %s", keyname)
+			return keyAbandoned, true
+		default:
+			l.logf("INFO", "passphrase prompt dismissed for %s, asking about no further key this session", keyname)
+			return askingEnded, true
+		}
+	case errors.Is(err, prompt.ErrNoTerminal):
+		// No GUI and no controlling terminal are both normal, expected
+		// deployments — not surfaced to the user, and not logged as an
+		// operator problem.
+		l.logf("INFO", "no terminal available to prompt for %s", keyname)
+	default:
+		l.failPrompt(keyname, err)
+	}
+	return keyAbandoned, true
 }
 
 // storedPassphrase returns the stored passphrase for service and whether a

@@ -86,8 +86,8 @@ func TestOnePasswordBackendRealAccount(t *testing.T) {
 	// somebody's real account until a person removes it by hand, and there is
 	// no later run that will notice.
 	t.Cleanup(func() {
-		out, err := opRun(context.WithoutCancel(t.Context()), t, "vault", "delete", vault.ID)
-		assert.NoErrorf(t, err, "the throwaway vault %s is still in the account and has to be removed by hand: %s", vault.ID, out)
+		out, deleteErr := opRun(context.WithoutCancel(t.Context()), t, "vault", "delete", vault.ID)
+		assert.NoErrorf(t, deleteErr, "the throwaway vault %s is still in the account and has to be removed by hand: %s", vault.ID, out)
 	})
 
 	backend := &OnePassword{Runner: run.ExecRunner{}, Vault: vault.ID}

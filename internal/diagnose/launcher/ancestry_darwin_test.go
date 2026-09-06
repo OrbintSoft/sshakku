@@ -91,8 +91,8 @@ func TestLauncherLabel(t *testing.T) {
 	assert.False(t, ok, "a name the table does not carry must not be claimed as known")
 
 	for _, comm := range []string{"/sbin/launchd", "launchd", "/usr/libexec/loginwindow", "sshd", "login", "zsh"} {
-		_, ok := launcherLabel(comm)
-		assert.Truef(t, ok, "%s is a launcher the report must recognise", comm)
+		_, known := launcherLabel(comm)
+		assert.Truef(t, known, "%s is a launcher the report must recognise", comm)
 	}
 
 	shell, _ := launcherLabel("zsh")

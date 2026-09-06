@@ -48,7 +48,7 @@ func TestSocketHandoffOneShot(t *testing.T) {
 
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if _, err := os.Stat(token); os.IsNotExist(err) {
+		if _, statErr := os.Stat(token); os.IsNotExist(statErr) {
 			break
 		}
 		time.Sleep(20 * time.Millisecond)
@@ -76,8 +76,8 @@ func TestSocketHandoffServedNothingIsNotAPassphrase(t *testing.T) {
 	// Serves what a stash whose passphrase has already been taken serves: the
 	// connection is accepted and closed with no byte across it.
 	go func() {
-		conn, err := ln.Accept()
-		if err != nil {
+		conn, acceptErr := ln.Accept()
+		if acceptErr != nil {
 			return
 		}
 		_ = conn.Close()

@@ -56,9 +56,9 @@ func LookForCollection(ctx context.Context, alias, label string, timeout time.Du
 		return look, nil
 	}
 	if !look.Running {
-		activatable, err := listBusNames(ctx, conn.BusObject(), timeout, "org.freedesktop.DBus.ListActivatableNames")
-		if err != nil {
-			return look, fmt.Errorf("secret service: list activatable bus names: %w", err)
+		activatable, listErr := listBusNames(ctx, conn.BusObject(), timeout, "org.freedesktop.DBus.ListActivatableNames")
+		if listErr != nil {
+			return look, fmt.Errorf("secret service: list activatable bus names: %w", listErr)
 		}
 		look.Activatable = slices.Contains(activatable, busName)
 		return look, nil
@@ -71,8 +71,8 @@ func LookForCollection(ctx context.Context, alias, label string, timeout time.Du
 	client := &Client{conn: conn, service: conn.Object(busName, rootPath), CallTimeout: timeout}
 
 	var existing dbus.ObjectPath
-	if err := client.call(ctx, client.service, serviceIface+".ReadAlias", alias).Store(&existing); err != nil {
-		look.AskErr = fmt.Errorf("secret service: read alias %q: %w", alias, err)
+	if aliasErr := client.call(ctx, client.service, serviceIface+".ReadAlias", alias).Store(&existing); aliasErr != nil {
+		look.AskErr = fmt.Errorf("secret service: read alias %q: %w", alias, aliasErr)
 		return look, nil
 	}
 	if existing != noPrompt {

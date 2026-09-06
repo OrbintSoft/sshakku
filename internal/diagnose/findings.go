@@ -207,11 +207,12 @@ func hostChecksLine(h hostcheck.Checks) string {
 	default:
 		parts = append(parts, "/tmp: tmpfs, size undetermined")
 	}
-	if h.SecureHardwarePresent == nil {
+	switch {
+	case h.SecureHardwarePresent == nil:
 		parts = append(parts, "secure hardware: undetermined")
-	} else if *h.SecureHardwarePresent {
+	case *h.SecureHardwarePresent:
 		parts = append(parts, fmt.Sprintf("secure hardware: present (%s)", h.SecureHardwareKind))
-	} else {
+	default:
 		parts = append(parts, "secure hardware: not detected")
 	}
 	return strings.Join(parts, "  |  ")

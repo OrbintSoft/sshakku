@@ -32,7 +32,7 @@ func TestAPassphraseCrossesToTheHelperAndIsGoneAfterwards(t *testing.T) {
 
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if _, err := os.Stat(token); os.IsNotExist(err) {
+		if _, statErr := os.Stat(token); os.IsNotExist(statErr) {
 			break
 		}
 		time.Sleep(20 * time.Millisecond)
@@ -53,7 +53,7 @@ func TestAStashNobodyCollectsExpiresOnItsOwn(t *testing.T) {
 
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
-		if _, err := os.Stat(token); os.IsNotExist(err) {
+		if _, statErr := os.Stat(token); os.IsNotExist(statErr) {
 			break
 		}
 		time.Sleep(20 * time.Millisecond)

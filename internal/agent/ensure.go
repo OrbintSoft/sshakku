@@ -115,36 +115,45 @@ func (m Manager) EnsureAgent(ctx context.Context, cfg EnsureConfig, log Logger) 
 		return EnsureResult{}, err
 	}
 
-	// No other healthy agent: start our own on the fixed socket. A stale
-	// socket file can still be here with no process to show for it — its
-	// owning ssh-agent may already have been reaped by init after dying,
-	// which Reap (process-based) never saw — so this still counts as a
-	// zombie recovery, not a clean one.
 	if len(foreign) == 0 {
-		if clearStalePath(cfg.FixedSock) {
-			reap.RemovedSockets = append(reap.RemovedSockets, cfg.FixedSock)
-			reaped = true
-			logf("INFO", "removed stale socket with no live owner: %s", cfg.FixedSock)
-		}
-		pid, err := m.Start(ctx, cfg.FixedSock, cfg.StatePath)
-		if err != nil {
-			return EnsureResult{}, fmt.Errorf("start agent: %w", err)
-		}
-		sit := SituationClean
-		if reaped {
-			sit = SituationZombie
-		}
-		logf("INFO", "started ssh-agent pid %d on %s (%s)", pid, cfg.FixedSock, sit)
-		return EnsureResult{Situation: sit, Live: SocketEndpoint(cfg.FixedSock), Started: pid, Reaped: reap}, nil
+		return m.startOurOwn(ctx, cfg, logf, reap, reaped)
 	}
+	return m.adoptOne(cfg, logf, foreign, reap, reaped)
+}
 
-	// A healthy agent we did not start exists: adopt the lowest-pid one by
-	// pointing the fixed socket at it, keep the shell on the fixed path, and
-	// report the anomaly. Several candidates, or adoption after a reap, is a
-	// disaster-grade landscape worth the louder report. adoptSymlink's rename
-	// will replace a stale socket at the fixed path regardless, but note it
-	// here too — its owning ssh-agent may already be gone with no process
-	// left for Reap to have found, same as the no-foreign branch above.
+// recordf writes one line to the session log.
+type recordf func(level, format string, a ...any)
+
+// startOurOwn starts an ssh-agent of ours on the fixed socket, no other healthy
+// agent having been found. A stale socket file can still be at that path with no
+// process to show for it — its owning ssh-agent may already have been reaped by
+// init after dying, which Reap (process-based) never saw — so clearing one still
+// counts as a zombie recovery, not a clean start.
+func (m Manager) startOurOwn(ctx context.Context, cfg EnsureConfig, logf recordf, reap ReapResult, reaped bool) (EnsureResult, error) {
+	if clearStalePath(cfg.FixedSock) {
+		reap.RemovedSockets = append(reap.RemovedSockets, cfg.FixedSock)
+		reaped = true
+		logf("INFO", "removed stale socket with no live owner: %s", cfg.FixedSock)
+	}
+	pid, err := m.Start(ctx, cfg.FixedSock, cfg.StatePath)
+	if err != nil {
+		return EnsureResult{}, fmt.Errorf("start agent: %w", err)
+	}
+	sit := SituationClean
+	if reaped {
+		sit = SituationZombie
+	}
+	logf("INFO", "started ssh-agent pid %d on %s (%s)", pid, cfg.FixedSock, sit)
+	return EnsureResult{Situation: sit, Live: SocketEndpoint(cfg.FixedSock), Started: pid, Reaped: reap}, nil
+}
+
+// adoptOne adopts the lowest-pid healthy agent we did not start, by pointing the
+// fixed socket at it: the shell stays on the fixed path and the anomaly is
+// reported. Several candidates, or adoption after a reap, is a disaster-grade
+// landscape worth the louder report. adoptSymlink's rename will replace a stale
+// socket at the fixed path regardless, but it is noted here too — that socket's
+// owning ssh-agent may already be gone with no process left for Reap to find.
+func (m Manager) adoptOne(cfg EnsureConfig, logf recordf, foreign []inspect.AgentProc, reap ReapResult, reaped bool) (EnsureResult, error) {
 	if isStaleSocketOrSymlink(cfg.FixedSock) {
 		reap.RemovedSockets = append(reap.RemovedSockets, cfg.FixedSock)
 		reaped = true

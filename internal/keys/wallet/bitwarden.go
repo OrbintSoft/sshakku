@@ -162,25 +162,25 @@ func (b *Bitwarden) Unlock(ctx context.Context) error {
 		// required before server config update"), so this only ever runs
 		// as part of the first login, not on every Unlock.
 		if b.Server != "" {
-			res, err := b.run(ctx, run.Cmd{Name: bitwardenBin, Args: []string{"config", "server", b.Server}})
-			if err != nil {
-				return err
+			conf, confErr := b.run(ctx, run.Cmd{Name: bitwardenBin, Args: []string{"config", "server", b.Server}})
+			if confErr != nil {
+				return confErr
 			}
-			if res.Code != 0 {
-				return exitError{command: "bw config server", code: res.Code, stderr: strings.TrimSpace(string(res.Stderr))}
+			if conf.Code != 0 {
+				return exitError{command: "bw config server", code: conf.Code, stderr: strings.TrimSpace(string(conf.Stderr))}
 			}
 		}
 
-		res, err := b.run(ctx, run.Cmd{
+		login, loginErr := b.run(ctx, run.Cmd{
 			Name: bitwardenBin,
 			Args: []string{"login", b.Email, "--passwordenv", EnvBitwardenPassword},
 			Env:  passwordEnv,
 		})
-		if err != nil {
-			return err
+		if loginErr != nil {
+			return loginErr
 		}
-		if res.Code != 0 {
-			return exitError{command: "bw login", code: res.Code, stderr: strings.TrimSpace(string(res.Stderr))}
+		if login.Code != 0 {
+			return exitError{command: "bw login", code: login.Code, stderr: strings.TrimSpace(string(login.Stderr))}
 		}
 	}
 

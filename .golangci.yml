@@ -96,6 +96,14 @@ linters:
     # match against, and a caller cannot match what was turned into a string.
     - errorlint
 
+    # A switch over an enum that names some of its members and not the rest,
+    # with no `default:` to catch what it left out: the missing member reaches
+    # the switch, matches nothing, and the code after it runs as though the
+    # answer had been handled. The enums here are outcomes a login acts on —
+    # what came of trying to load a key, what a service manager said — so the
+    # arm nobody wrote is a decision nobody made.
+    - exhaustive
+
     # golang.org/x/exp is where maps.Keys, slices.Sorted, constraints and
     # errors.Join lived before the standard library grew them, and it carries no
     # compatibility promise. An import that still points there takes on a
@@ -116,10 +124,47 @@ linters:
     # one, and nothing says so.
     - gocheckcompilerdirectives
 
+    # `exhaustive`'s question asked of a closed set of types rather than a set
+    # of constants: an interface marked `//sumtype:decl` has a known list of
+    # implementations, and a type switch that leaves one out is a case the
+    # value can still arrive as. Nothing in this tree is written that way yet —
+    # there is no `//sumtype:decl` and no type switch over an interface outside
+    # the tests — so this reports nothing today and is here for the first one.
+    # It keeps the strictness `exhaustive` above gives up, and the difference is
+    # in what the two are looking at: an int enum can hold a number nobody
+    # declared, so a `default:` there is reachable and is an answer; a sealed
+    # interface has only the types that implement it, so a `default:` is a
+    # branch that cannot be taken and hides the implementation added next.
+    - gochecksumtype
+
+    # cyclop counts the paths through a function and charges +1 per `case`, so
+    # a flat lookup table scores like nested branching and its bar has to sit
+    # high enough to let the tables through. Cognitive complexity charges a
+    # whole `switch` +1 and charges nesting instead, so it can be given the
+    # same number and have it mean something: at 20 a table of any length is
+    # free, and a function that is 20 because of what is inside what is not.
+    - gocognit
+
     # The same literal written out at each use is a rename waiting to be done
     # in three places out of four: a backend's name, an env var, a subcommand
     # the dispatcher and the command itself must agree on.
     - goconst
+
+    # A catalogue of small ways Go code says a thing the long way round or the
+    # wrong way round — a lambda that only forwards its arguments, a chain of
+    # else-ifs over one value. Only the default checks are on: the tags left off
+    # were measured, and they are churn or worse here. hugeParam (33) and
+    # rangeValCopy would trade readable value receivers for pointers across the
+    # tree; filepathJoin's 7 are all false, an absolute path handed to
+    # filepath.Join as the root it is; unnamedResult, paramTypeCombine and
+    # importShadow are taste. builtinShadow's two are `max`, an attempt limit
+    # that predates the builtin and reads as what it is.
+    - gocritic
+
+    # Already on through `default: standard`, and named here anyway: what is
+    # configured below is the whole of govet rather than the subset the default
+    # runs, and a line in this list is where a reader looks for the reason.
+    - govet
 
     # A comment that stops without a full stop reads as a line that was cut off,
     # and leaves the reader deciding whether the rest of the thought is missing
@@ -198,6 +243,22 @@ linters:
       # which is where the second copy starts drifting from the first.
       threshold: 100
 
+    exhaustive:
+      # A `default:` arm is an answer to every member the switch did not name,
+      # so a switch that has one is exhaustive whatever the enum grows next —
+      # and the `String()` methods here are written exactly that way, with the
+      # zero value's text sitting in the default. Without this the linter would
+      # report those and nothing else, and the one case worth reporting — a
+      # switch with no default, where an unnamed member falls out of the bottom
+      # and the code carries on — would be lost among them.
+      default-signifies-exhaustive: true
+
+    gocognit:
+      # The same bar as cyclop, measured the other way round — see the note
+      # beside the linter. The default of 30 is above everything in the tree
+      # and would report nothing at all.
+      min-complexity: 20
+
     goconst:
       # In a table-driven test the repeated literal is the case's own data —
       # the OS a fixture describes, the flag an argument list passes — and
@@ -211,6 +272,24 @@ linters:
       # comment standing above a function, and an unfinished thought reads the
       # same in either place.
       scope: all
+
+    govet:
+      # Everything, so an analyser added to a future Go release arrives with it
+      # rather than waiting to be noticed. What that turns on beyond the default
+      # is `shadow`, and `shadow` is the reason: an inner `err` declared with :=
+      # inside an `if` or a `for` leaves the outer one holding whatever it held
+      # before, and the code below reads the wrong one while compiling and
+      # passing. This program's error paths are what a login does when something
+      # is wrong, and they are the least-exercised lines in it.
+      enable-all: true
+      disable:
+        # fieldalignment orders a struct's fields by what packs tightest, and
+        # the structs here are ordered for reading, each field documented where
+        # it stands: a report's findings in the order the report prints them, a
+        # config file's settings in the order the file lists them. It is 150-odd
+        # rewrites that would each make a struct harder to read against a saving
+        # nothing here is short of — this program runs once per login shell.
+        - fieldalignment
 
     importas:
       # There is no `alias:` list here, and its absence is the rule: an alias
