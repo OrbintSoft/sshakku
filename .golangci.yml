@@ -96,6 +96,14 @@ linters:
     # match against, and a caller cannot match what was turned into a string.
     - errorlint
 
+    # A switch over an enum that names some of its members and not the rest,
+    # with no `default:` to catch what it left out: the missing member reaches
+    # the switch, matches nothing, and the code after it runs as though the
+    # answer had been handled. The enums here are outcomes a login acts on —
+    # what came of trying to load a key, what a service manager said — so the
+    # arm nobody wrote is a decision nobody made.
+    - exhaustive
+
     # golang.org/x/exp is where maps.Keys, slices.Sorted, constraints and
     # errors.Join lived before the standard library grew them, and it carries no
     # compatibility promise. An import that still points there takes on a
@@ -197,6 +205,16 @@ linters:
       # more than the repetition does. Above is a whole function written twice,
       # which is where the second copy starts drifting from the first.
       threshold: 100
+
+    exhaustive:
+      # A `default:` arm is an answer to every member the switch did not name,
+      # so a switch that has one is exhaustive whatever the enum grows next —
+      # and the `String()` methods here are written exactly that way, with the
+      # zero value's text sitting in the default. Without this the linter would
+      # report those and nothing else, and the one case worth reporting — a
+      # switch with no default, where an unnamed member falls out of the bottom
+      # and the code carries on — would be lost among them.
+      default-signifies-exhaustive: true
 
     goconst:
       # In a table-driven test the repeated literal is the case's own data —

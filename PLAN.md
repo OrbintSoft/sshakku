@@ -3774,3 +3774,35 @@ measured. That is the one thing no run can report on its own, and it is why the
 window was put in front of a person before this was merged rather than after.
 
 → rules 5, 15, 19, 21, 22, 23, 24, 25, 26, 27.
+
+### Phase 49 — The arm nobody wrote
+
+Five more analysers, one per commit. `exhaustive`, `gochecksumtype`, `gocognit`
+and `gocritic` are new to `.golangci.yml`; `govet` was already on and is asked
+for the two analysers golangci-lint leaves off by default.
+
+**Rule 12 decision.** All five ship inside the golangci-lint the lint workflow
+pins, so `go.mod` is untouched and there is no new licence to record. Each was
+surveyed on all five builds `lint-go` names — linux, darwin, windows,
+`backend_unresponsive`, `midsession_failure` — and with
+`--max-issues-per-linter=0 --max-same-issues=0`, since Phase 43 and Phase 48
+were each fooled once by the caps.
+
+**`exhaustive` runs with `default-signifies-exhaustive`, and that setting is
+the decision.** Off, it reports six switches on Linux and seven on macOS, and
+every one of them is a `String()` method whose `default:` arm already holds the
+zero value's text — the linter asking for a case that would say a second time
+what the default says. On, it reports exactly one thing on every build, which
+is the one worth reporting: a switch with **no** default, where a member the
+switch does not name falls out of the bottom and the code carries on as though
+an answer had been given.
+
+That switch is `addWithRetries`, over what came of trying to load one key. It
+handles `keyLoaded`, `attemptsExhausted` and `askingEnded`, and says nothing
+about `keyAbandoned` — the zero value, returned from five places in
+`loadViaVaultThenPrompt`: no terminal to ask on, a prompt the user dismissed, a
+hard error. Falling through was the right behaviour and it was invisible; the
+arm is written out now, empty, with the reason in it. No message changed and no
+statement was added, so coverage is where it was.
+
+→ rule 12.

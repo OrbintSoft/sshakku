@@ -269,6 +269,10 @@ func (l Loader) addWithRetries(ctx context.Context, keyfile, keyname string) boo
 		l.recordGiveup(keyname)
 	case askingEnded:
 		return true
+	case keyAbandoned:
+		// Named so the omission is a decision and not an oversight: there is
+		// nothing to clear, because the key never opened, and nothing to record
+		// against it, because the user was never asked to the point of giving up.
 	}
 	return false
 }
