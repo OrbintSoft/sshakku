@@ -137,6 +137,14 @@ linters:
     # branch that cannot be taken and hides the implementation added next.
     - gochecksumtype
 
+    # cyclop counts the paths through a function and charges +1 per `case`, so
+    # a flat lookup table scores like nested branching and its bar has to sit
+    # high enough to let the tables through. Cognitive complexity charges a
+    # whole `switch` +1 and charges nesting instead, so it can be given the
+    # same number and have it mean something: at 20 a table of any length is
+    # free, and a function that is 20 because of what is inside what is not.
+    - gocognit
+
     # The same literal written out at each use is a rename waiting to be done
     # in three places out of four: a backend's name, an env var, a subcommand
     # the dispatcher and the command itself must agree on.
@@ -228,6 +236,12 @@ linters:
       # switch with no default, where an unnamed member falls out of the bottom
       # and the code carries on — would be lost among them.
       default-signifies-exhaustive: true
+
+    gocognit:
+      # The same bar as cyclop, measured the other way round — see the note
+      # beside the linter. The default of 30 is above everything in the tree
+      # and would report nothing at all.
+      min-complexity: 20
 
     goconst:
       # In a table-driven test the repeated literal is the case's own data —

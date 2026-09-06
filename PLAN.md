@@ -3788,6 +3788,42 @@ surveyed on all five builds `lint-go` names — linux, darwin, windows,
 `--max-issues-per-linter=0 --max-same-issues=0`, since Phase 43 and Phase 48
 were each fooled once by the caps.
 
+**`gocognit`'s bar is 20, the same number as `cyclop`, and that the two agree
+on a number is the point.** cyclop counts the paths through a function and
+charges +1 per `case`, so a flat lookup table scores like nested branching, and
+Phase 43 had to put its bar at 20 to let the tables through — the command
+dispatcher is 14 with no nesting at all. Cognitive complexity charges a whole
+`switch` +1 and charges nesting instead. At the same 20, a table of any length
+is free and a function that reaches 20 got there by putting things inside other
+things. The default of 30 is above everything in the tree and would have
+reported nothing.
+
+Six functions were over it, and each was several things in sequence rather than
+one thing that was hard:
+
+- `cli.forget` (26) is argument parsing, an unlock to hold for the whole
+  operation, working out which services to delete, and deleting them. The
+  unlock is now a function that returns the relock to defer, which is also what
+  it was: a `defer` inside an `else` inside an `if`.
+- `agent.EnsureAgent` (23) is the survey and then one of two endings — start
+  our own, or adopt somebody's. The two endings are `startOurOwn` and
+  `adoptOne`, and what is left reads as the precedence order its doc comment
+  claims.
+- `keys.loadViaVaultThenPrompt` (21) is "spend what the wallet has" and then
+  "ask, up to max times". The first is `tryStoredPassphrase`; and the
+  classification of a prompt that returned no passphrase — dismissed, no
+  terminal, or broken — is `promptFailureOutcome`, a switch inside a switch
+  inside an `if` inside a `for` before it moved.
+- `testreport.renderMarkdown` (26) is four sections of one document, now four
+  functions named after the sections.
+- `testreport.parseCoverageProfile` (27) is a line parser and a tally.
+- `testreport.parseEvents` (24) is a fold over a stream, so the accumulator is
+  a type with the two methods that were its two halves.
+
+Nothing here changed behaviour, and coverage says so: 100.0% before and after,
+with `internal/keys` and `internal/cli` at 100.0% of their own statements —
+which is what a refactor that only moved code should look like.
+
 **`gochecksumtype` reports nothing and is a guard.** It asks `exhaustive`'s
 question of a closed set of types rather than a set of constants: an interface
 marked `//sumtype:decl` has a known list of implementations, and a type switch

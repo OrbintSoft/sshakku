@@ -29,8 +29,7 @@ var errMalformedCoverageLine = errors.New("testreport: malformed coverage line")
 // `file:startLine.startCol,endLine.endCol numStmt count`; a block counts as
 // covered when count > 0. See `go tool cover -html` / `go help testflag` for
 // the format this mirrors.
-func parseCoverageProfile(r io.Reader) (total float64, perPackage []PackageCoverage, err error) {
-	type counts struct{ covered, total int }
+func parseCoverageProfile(r io.Reader) (float64, []PackageCoverage, error) {
 	byPackage := make(map[string]*counts)
 	var all counts
 
@@ -48,46 +47,78 @@ func parseCoverageProfile(r io.Reader) (total float64, perPackage []PackageCover
 			continue
 		}
 
-		file, rest, ok := strings.Cut(line, ":")
-		if !ok {
-			return 0, nil, fmt.Errorf("%w (no ':'): %q", errMalformedCoverageLine, line)
-		}
-		fields := strings.Fields(rest)
-		if len(fields) != 3 {
-			return 0, nil, fmt.Errorf("%w (want 3 fields after position, got %d): %q", errMalformedCoverageLine, len(fields), line)
-		}
-		numStmt, err := strconv.Atoi(fields[1])
+		block, err := parseCoverageLine(line)
 		if err != nil {
-			return 0, nil, fmt.Errorf("testreport: malformed statement count %q: %w", fields[1], err)
+			return 0, nil, err
 		}
-		count, err := strconv.Atoi(fields[2])
-		if err != nil {
-			return 0, nil, fmt.Errorf("testreport: malformed hit count %q: %w", fields[2], err)
-		}
-
-		pkg := file
-		if slash := strings.LastIndexByte(file, '/'); slash >= 0 {
-			pkg = file[:slash]
-		}
-		c := byPackage[pkg]
+		c := byPackage[block.pkg]
 		if c == nil {
 			c = new(counts)
-			byPackage[pkg] = c
+			byPackage[block.pkg] = c
 		}
-		c.total += numStmt
-		all.total += numStmt
-		if count > 0 {
-			c.covered += numStmt
-			all.covered += numStmt
+		c.total += block.numStmt
+		all.total += block.numStmt
+		if block.count > 0 {
+			c.covered += block.numStmt
+			all.covered += block.numStmt
 		}
 	}
 	if err := sc.Err(); err != nil {
 		return 0, nil, err
 	}
 
+	total, perPackage := coveragePercentages(byPackage, all)
+	return total, perPackage, nil
+}
+
+// counts tallies one package's statements, or the profile's as a whole.
+type counts struct{ covered, total int }
+
+// coverageBlock is one parsed line of a coverage profile: the package the block
+// belongs to, how many statements it holds, and how many times it ran.
+type coverageBlock struct {
+	pkg     string
+	numStmt int
+	count   int
+}
+
+// parseCoverageLine reads one `file:startLine.startCol,endLine.endCol numStmt
+// count` line. Every refusal quotes the line, because the file is
+// machine-written and the useful question is which tool wrote it that way.
+func parseCoverageLine(line string) (coverageBlock, error) {
+	file, rest, ok := strings.Cut(line, ":")
+	if !ok {
+		return coverageBlock{}, fmt.Errorf("%w (no ':'): %q", errMalformedCoverageLine, line)
+	}
+	fields := strings.Fields(rest)
+	if len(fields) != 3 {
+		return coverageBlock{}, fmt.Errorf("%w (want 3 fields after position, got %d): %q", errMalformedCoverageLine, len(fields), line)
+	}
+	numStmt, err := strconv.Atoi(fields[1])
+	if err != nil {
+		return coverageBlock{}, fmt.Errorf("testreport: malformed statement count %q: %w", fields[1], err)
+	}
+	count, err := strconv.Atoi(fields[2])
+	if err != nil {
+		return coverageBlock{}, fmt.Errorf("testreport: malformed hit count %q: %w", fields[2], err)
+	}
+
+	pkg := file
+	if slash := strings.LastIndexByte(file, '/'); slash >= 0 {
+		pkg = file[:slash]
+	}
+	return coverageBlock{pkg: pkg, numStmt: numStmt, count: count}, nil
+}
+
+// coveragePercentages turns the tallies into percentages: the profile's overall
+// figure, and one per package sorted by name so the report reads the same twice.
+// A package with no statements at all is 0%, not a division by zero.
+func coveragePercentages(byPackage map[string]*counts, all counts) (float64, []PackageCoverage) {
+	total := 0.0
 	if all.total > 0 {
 		total = 100 * float64(all.covered) / float64(all.total)
 	}
+	var perPackage []PackageCoverage
 	for pkg, c := range byPackage {
 		pct := 0.0
 		if c.total > 0 {
@@ -98,6 +129,5 @@ func parseCoverageProfile(r io.Reader) (total float64, perPackage []PackageCover
 	sort.Slice(perPackage, func(i, j int) bool {
 		return perPackage[i].Package < perPackage[j].Package
 	})
-
-	return total, perPackage, nil
+	return total, perPackage
 }

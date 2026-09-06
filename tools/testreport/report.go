@@ -60,70 +60,86 @@ type outputKey struct {
 // parseEvents reads a `go test -json` stream from r and summarizes it into a
 // Report for osName, keeping only the slowest keepSlowest tests.
 func parseEvents(r io.Reader, osName string, keepSlowest int) (Report, error) {
-	report := Report{OS: osName}
-
-	var first, last time.Time
-	haveFirst := false
-	outputs := make(map[outputKey]*[]byte)
-
+	fold := eventFold{
+		report:  Report{OS: osName},
+		outputs: make(map[outputKey]*[]byte),
+	}
 	dec := json.NewDecoder(bufio.NewReader(r))
 	for dec.More() {
 		var ev testEvent
 		if err := dec.Decode(&ev); err != nil {
 			return Report{}, err
 		}
+		fold.observe(ev)
+	}
+	return fold.done(keepSlowest), nil
+}
 
-		if !ev.Time.IsZero() {
-			if !haveFirst {
-				first, haveFirst = ev.Time, true
-			}
-			last = ev.Time
+// eventFold is the report being built as the stream is read: the timings and
+// failures gathered so far, the first and last timestamps seen, and each running
+// test's output lines held until that test's own result event arrives.
+type eventFold struct {
+	report    Report
+	outputs   map[outputKey]*[]byte
+	first     time.Time
+	last      time.Time
+	haveFirst bool
+}
+
+// observe folds one event in.
+func (f *eventFold) observe(ev testEvent) {
+	if !ev.Time.IsZero() {
+		if !f.haveFirst {
+			f.first, f.haveFirst = ev.Time, true
 		}
+		f.last = ev.Time
+	}
 
-		if ev.Test == "" {
-			continue // package-level event, not one test's result.
+	if ev.Test == "" {
+		return // package-level event, not one test's result.
+	}
+	key := outputKey{pkg: ev.Package, test: ev.Test}
+
+	switch ev.Action {
+	case "output":
+		buf := f.outputs[key]
+		if buf == nil {
+			buf = new([]byte)
+			f.outputs[key] = buf
 		}
-		key := outputKey{pkg: ev.Package, test: ev.Test}
-
-		switch ev.Action {
-		case "output":
-			buf := outputs[key]
-			if buf == nil {
-				buf = new([]byte)
-				outputs[key] = buf
+		*buf = append(*buf, ev.Output...)
+	case "pass", "fail", "skip":
+		f.report.SlowestTests = append(f.report.SlowestTests, TestTiming{
+			Name:    ev.Test,
+			Package: ev.Package,
+			Seconds: ev.Elapsed,
+		})
+		if ev.Action == "fail" {
+			output := ""
+			if buf := f.outputs[key]; buf != nil {
+				output = string(*buf)
 			}
-			*buf = append(*buf, ev.Output...)
-		case "pass", "fail", "skip":
-			report.SlowestTests = append(report.SlowestTests, TestTiming{
+			f.report.Failures = append(f.report.Failures, TestFailure{
 				Name:    ev.Test,
 				Package: ev.Package,
-				Seconds: ev.Elapsed,
+				Output:  output,
 			})
-			if ev.Action == "fail" {
-				output := ""
-				if buf := outputs[key]; buf != nil {
-					output = string(*buf)
-				}
-				report.Failures = append(report.Failures, TestFailure{
-					Name:    ev.Test,
-					Package: ev.Package,
-					Output:  output,
-				})
-			}
-			delete(outputs, key)
 		}
+		delete(f.outputs, key)
 	}
+}
 
-	if haveFirst {
-		report.WallSeconds = last.Sub(first).Seconds()
+// done closes the report: the wall time between the first and last event, and
+// the slowest keepSlowest tests, slowest first.
+func (f *eventFold) done(keepSlowest int) Report {
+	if f.haveFirst {
+		f.report.WallSeconds = f.last.Sub(f.first).Seconds()
 	}
-
-	sort.SliceStable(report.SlowestTests, func(i, j int) bool {
-		return report.SlowestTests[i].Seconds > report.SlowestTests[j].Seconds
+	sort.SliceStable(f.report.SlowestTests, func(i, j int) bool {
+		return f.report.SlowestTests[i].Seconds > f.report.SlowestTests[j].Seconds
 	})
-	if len(report.SlowestTests) > keepSlowest {
-		report.SlowestTests = report.SlowestTests[:keepSlowest]
+	if len(f.report.SlowestTests) > keepSlowest {
+		f.report.SlowestTests = f.report.SlowestTests[:keepSlowest]
 	}
-
-	return report, nil
+	return f.report
 }

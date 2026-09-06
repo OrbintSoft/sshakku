@@ -44,9 +44,20 @@ func renderMarkdown(reports []Report, reportURLs, coverageURLs map[string]string
 	var b strings.Builder
 	fmt.Fprintln(&b, commentMarker)
 	fmt.Fprintln(&b, "## Test health")
-	fmt.Fprintln(&b)
-	fmt.Fprintln(&b, "| OS | Coverage | Wall time | Slowest test | Test report | Coverage report |")
-	fmt.Fprintln(&b, "| --- | --- | --- | --- | --- | --- |")
+	renderSummaryTable(&b, sorted, reportURLs, coverageURLs)
+	renderCoverageByPackage(&b, sorted)
+	renderSlowestTests(&b, sorted)
+	renderFailures(&b, sorted)
+	return b.String()
+}
+
+// renderSummaryTable writes the one-row-per-OS table at the top: coverage, wall
+// time, the slowest single test, and the two report links. A cell reads "n/a"
+// where the run produced nothing to put in it rather than a misleading zero.
+func renderSummaryTable(b *strings.Builder, sorted []Report, reportURLs, coverageURLs map[string]string) {
+	fmt.Fprintln(b)
+	fmt.Fprintln(b, "| OS | Coverage | Wall time | Slowest test | Test report | Coverage report |")
+	fmt.Fprintln(b, "| --- | --- | --- | --- | --- | --- |")
 	for _, r := range sorted {
 		coverage := "n/a"
 		if len(r.PackageCoverage) > 0 {
@@ -64,9 +75,14 @@ func renderMarkdown(reports []Report, reportURLs, coverageURLs map[string]string
 		if u, ok := coverageURLs[r.OS]; ok {
 			coverageURL = u
 		}
-		fmt.Fprintf(&b, "| %s | %s | %.1fs | %s | [HTML](%s) | [HTML](%s) |\n", r.OS, coverage, r.WallSeconds, slowest, testURL, coverageURL)
+		fmt.Fprintf(b, "| %s | %s | %.1fs | %s | [HTML](%s) | [HTML](%s) |\n", r.OS, coverage, r.WallSeconds, slowest, testURL, coverageURL)
 	}
+}
 
+// renderCoverageByPackage writes one collapsed table per OS, worst-covered
+// package first, so the number that needs attention is the one at the top. An
+// OS whose run reported no coverage gets no section rather than an empty one.
+func renderCoverageByPackage(b *strings.Builder, sorted []Report) {
 	for _, r := range sorted {
 		if len(r.PackageCoverage) == 0 {
 			continue
@@ -75,48 +91,56 @@ func renderMarkdown(reports []Report, reportURLs, coverageURLs map[string]string
 		copy(byCoverage, r.PackageCoverage)
 		sort.Slice(byCoverage, func(i, j int) bool { return byCoverage[i].Percent < byCoverage[j].Percent })
 
-		fmt.Fprintln(&b)
-		fmt.Fprintf(&b, "<details><summary>Coverage by package (%s)</summary>\n\n", r.OS)
-		fmt.Fprintln(&b, "| Package | Coverage |")
-		fmt.Fprintln(&b, "| --- | --- |")
+		fmt.Fprintln(b)
+		fmt.Fprintf(b, "<details><summary>Coverage by package (%s)</summary>\n\n", r.OS)
+		fmt.Fprintln(b, "| Package | Coverage |")
+		fmt.Fprintln(b, "| --- | --- |")
 		for _, p := range byCoverage {
-			fmt.Fprintf(&b, "| %s | %.1f%% |\n", p.Package, p.Percent)
+			fmt.Fprintf(b, "| %s | %.1f%% |\n", p.Package, p.Percent)
 		}
-		fmt.Fprintln(&b, "\n</details>")
+		fmt.Fprintln(b, "\n</details>")
 	}
+}
 
+// renderSlowestTests writes one collapsed table per OS, in the order the report
+// already ranked them.
+func renderSlowestTests(b *strings.Builder, sorted []Report) {
 	for _, r := range sorted {
 		if len(r.SlowestTests) == 0 {
 			continue
 		}
-		fmt.Fprintln(&b)
-		fmt.Fprintf(&b, "<details><summary>Slowest tests (%s)</summary>\n\n", r.OS)
-		fmt.Fprintln(&b, "| Test | Package | Seconds |")
-		fmt.Fprintln(&b, "| --- | --- | --- |")
+		fmt.Fprintln(b)
+		fmt.Fprintf(b, "<details><summary>Slowest tests (%s)</summary>\n\n", r.OS)
+		fmt.Fprintln(b, "| Test | Package | Seconds |")
+		fmt.Fprintln(b, "| --- | --- | --- |")
 		for _, t := range r.SlowestTests {
-			fmt.Fprintf(&b, "| %s | %s | %.2f |\n", t.Name, t.Package, t.Seconds)
+			fmt.Fprintf(b, "| %s | %s | %.2f |\n", t.Name, t.Package, t.Seconds)
 		}
-		fmt.Fprintln(&b, "\n</details>")
+		fmt.Fprintln(b, "\n</details>")
 	}
+}
 
-	var totalFailures int
+// renderFailures writes each failing test's captured output, one collapsed block
+// apiece. The heading appears only when something failed, so a green run does
+// not carry an empty "Failures" section.
+func renderFailures(b *strings.Builder, sorted []Report) {
+	total := 0
 	for _, r := range sorted {
-		totalFailures += len(r.Failures)
+		total += len(r.Failures)
 	}
-	if totalFailures > 0 {
-		fmt.Fprintln(&b)
-		fmt.Fprintln(&b, "### Failures")
-		for _, r := range sorted {
-			for _, f := range r.Failures {
-				fmt.Fprintln(&b)
-				fmt.Fprintf(&b, "<details><summary>%s: %s/%s</summary>\n\n", r.OS, f.Package, f.Name)
-				fmt.Fprintln(&b, "```")
-				fmt.Fprint(&b, f.Output)
-				fmt.Fprintln(&b, "```")
-				fmt.Fprintln(&b, "\n</details>")
-			}
+	if total == 0 {
+		return
+	}
+	fmt.Fprintln(b)
+	fmt.Fprintln(b, "### Failures")
+	for _, r := range sorted {
+		for _, f := range r.Failures {
+			fmt.Fprintln(b)
+			fmt.Fprintf(b, "<details><summary>%s: %s/%s</summary>\n\n", r.OS, f.Package, f.Name)
+			fmt.Fprintln(b, "```")
+			fmt.Fprint(b, f.Output)
+			fmt.Fprintln(b, "```")
+			fmt.Fprintln(b, "\n</details>")
 		}
 	}
-
-	return b.String()
 }
