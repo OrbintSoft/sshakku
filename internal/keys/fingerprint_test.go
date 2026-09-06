@@ -61,7 +61,7 @@ func TestFingerprintLookupsAreBounded(t *testing.T) {
 
 	t.Run("asking the agent", func(t *testing.T) {
 		r := runtest.NewRunner().On("ssh-add", runtest.Stdout("256 SHA256:abc one (ED25519)\n", 0))
-		_, err := AgentFingerprints(t.Context(), r)
+		_, err := AgentFingerprints(t.Context(), r, "")
 		require.NoError(t, err, "asking the agent what it holds must succeed")
 		require.NotEmpty(t, r.Calls, "ssh-add must actually be run")
 		assert.Positive(t, r.Calls[0].Timeout, "and given a deadline to answer within")
@@ -72,7 +72,7 @@ func TestAgentFingerprints(t *testing.T) {
 	t.Run("collects every loaded fingerprint", func(t *testing.T) {
 		out := "256 SHA256:aaa one (ED25519)\n2048 SHA256:bbb two (RSA)\n"
 		r := runtest.NewRunner().On("ssh-add", runtest.Stdout(out, 0))
-		set, err := AgentFingerprints(t.Context(), r)
+		set, err := AgentFingerprints(t.Context(), r, "")
 		require.NoError(t, err, "asking the agent what it holds must succeed")
 		assert.Equal(t, map[string]bool{"SHA256:aaa": true, "SHA256:bbb": true}, set,
 			"every key the agent holds must be there, or one of them is loaded a second time")
@@ -80,7 +80,7 @@ func TestAgentFingerprints(t *testing.T) {
 
 	t.Run("empty agent yields an empty set, no error", func(t *testing.T) {
 		r := runtest.NewRunner().On("ssh-add", runtest.Stdout("The agent has no identities.\n", 1))
-		set, err := AgentFingerprints(t.Context(), r)
+		set, err := AgentFingerprints(t.Context(), r, "")
 		require.NoError(t, err, "an agent holding nothing is the ordinary state at login, not an error")
 		assert.Empty(t, set, "and it holds nothing")
 	})
@@ -88,7 +88,7 @@ func TestAgentFingerprints(t *testing.T) {
 	t.Run("a failure to start ssh-add is an error", func(t *testing.T) {
 		wantErr := errBoom
 		r := runtest.NewRunner().On("ssh-add", runtest.Fails(wantErr))
-		_, err := AgentFingerprints(t.Context(), r)
+		_, err := AgentFingerprints(t.Context(), r, "")
 		assert.ErrorIs(t, err, wantErr,
 			"an agent that could not be asked must be reported: every key would otherwise look unloaded")
 	})

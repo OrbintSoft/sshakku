@@ -128,6 +128,11 @@ type Loader struct {
 	Giveup   GiveupStore
 	KeyState KeyState
 	Config   Config
+	// SSHAdd names the ssh-add the agent is read through; nil names the
+	// ordinary one. It is asked only once there is a key to load, so an
+	// account with none is told nothing about a program it was not going to
+	// run.
+	SSHAdd SSHAddNamer
 }
 
 // LoadKeys enumerates the keys, snapshots the agent's loaded fingerprints once,
@@ -148,7 +153,11 @@ func (l Loader) LoadKeys(ctx context.Context) error {
 		l.logf("INFO", "no keys to load")
 		return nil
 	}
-	loaded, err := AgentFingerprints(ctx, l.Runner)
+	sshAdd, err := l.SSHAdd.name()
+	if err != nil {
+		return fmt.Errorf("no ssh-add to reach the agent with: %w", err)
+	}
+	loaded, err := AgentFingerprints(ctx, l.Runner, sshAdd)
 	if err != nil {
 		return fmt.Errorf("read agent fingerprints: %w", err)
 	}

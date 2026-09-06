@@ -68,6 +68,7 @@ func tempRuntimeEnv(t *testing.T) string {
 func depsWithEnsurer(e agentEnsurer) deps {
 	d := realDeps()
 	d.ensurer = e
+	d.sshAdd = theOrdinarySSHAdd
 	return d
 }
 

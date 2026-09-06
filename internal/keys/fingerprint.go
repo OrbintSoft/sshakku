@@ -34,8 +34,18 @@ func FileFingerprint(ctx context.Context, r run.Runner, path string) (string, er
 // agent, read with `ssh-add -l`. An empty agent (exit 1) or no agent at all
 // (exit 2) yields an empty set, not an error — mirroring the bash snapshot, where
 // a missing or empty agent simply means nothing is loaded yet.
-func AgentFingerprints(ctx context.Context, r run.Runner) (map[string]bool, error) {
-	res, err := r.Run(ctx, run.Cmd{Name: "ssh-add", Args: []string{"-l"}, Timeout: fingerprintTimeout})
+//
+// sshAdd names which ssh-add to read it with, "" meaning the ordinary one. It
+// matters because those two outcomes are also what a build of ssh-add that
+// cannot reach this system's agent answers with, whatever the agent holds: read
+// through such a build the agent looks empty, and every key is then loaded
+// again into an agent that already had it.
+func AgentFingerprints(ctx context.Context, r run.Runner, sshAdd string) (map[string]bool, error) {
+	res, err := r.Run(ctx, run.Cmd{
+		Name:    sshAddOrDefault(sshAdd),
+		Args:    []string{"-l"},
+		Timeout: fingerprintTimeout,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +61,12 @@ func AgentFingerprints(ctx context.Context, r run.Runner) (map[string]bool, erro
 // RunnerFingerprinter adapts a run.Runner to the object-style fingerprint lookups
 // callers outside this package (such as the diagnostic tool) want, without
 // depending on run.Runner or run.Cmd directly.
-type RunnerFingerprinter struct{ Runner run.Runner }
+type RunnerFingerprinter struct {
+	Runner run.Runner
+	// SSHAdd names the ssh-add the agent is read through; nil names the
+	// ordinary one.
+	SSHAdd SSHAddNamer
+}
 
 // FileFingerprint returns path's fingerprint via FileFingerprint(r.Runner, path).
 func (r RunnerFingerprinter) FileFingerprint(ctx context.Context, path string) (string, error) {
@@ -60,7 +75,11 @@ func (r RunnerFingerprinter) FileFingerprint(ctx context.Context, path string) (
 
 // AgentFingerprints returns the agent's loaded set via AgentFingerprints(r.Runner).
 func (r RunnerFingerprinter) AgentFingerprints(ctx context.Context) (map[string]bool, error) {
-	return AgentFingerprints(ctx, r.Runner)
+	sshAdd, err := r.SSHAdd.name()
+	if err != nil {
+		return nil, err
+	}
+	return AgentFingerprints(ctx, r.Runner, sshAdd)
 }
 
 // fingerprintField extracts the hash field of a single `ssh-keygen -lf` /

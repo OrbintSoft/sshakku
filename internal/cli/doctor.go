@@ -22,6 +22,7 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/paths"
 	"github.com/OrbintSoft/sshakku/internal/run"
 	"github.com/OrbintSoft/sshakku/internal/sessionlog"
+	"github.com/OrbintSoft/sshakku/internal/sshtools"
 
 	"github.com/OrbintSoft/sshakku/internal/agent/inspect"
 
@@ -522,7 +523,7 @@ func gatherReport(ctx context.Context, env paths.Env, layout paths.Layout, setti
 	keySource := &diagnose.KeySource{
 		Dir:         enumerator.Dir,
 		Lister:      enumerator,
-		Fingerprint: keys.RunnerFingerprinter{Runner: runner},
+		Fingerprint: keys.RunnerFingerprinter{Runner: runner, SSHAdd: sshtools.SSHAdd},
 		State:       keystate.Store{Dir: keystateDir(layout)},
 	}
 	shownEnv, secretEnv := environmentReport()

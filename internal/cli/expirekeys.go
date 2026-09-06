@@ -34,6 +34,7 @@ func (d deps) expireKeys(ctx context.Context, layout paths.Layout, live agent.En
 		Records:  keyRecords{store: keystate.Store{Dir: keystateDir(layout)}},
 		Runner:   d.runner,
 		Endpoint: live.Native(),
+		SSHAdd:   d.sshAdd,
 		Log:      log,
 	}
 	if err := expirer.ExpireKeys(ctx); err != nil {

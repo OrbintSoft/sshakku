@@ -55,6 +55,12 @@ type Expirer struct {
 	// is the one this session was pointed at rather than whatever the
 	// environment happens to hold. Empty leaves the environment as it is.
 	Endpoint string
+	// SSHAdd names the ssh-add the key is taken out with; nil names the
+	// ordinary one. Pointing the right endpoint at a build that cannot open it
+	// is the same as pointing at nothing: the removal comes back as "the agent
+	// does not have it", and the record is then dropped, so the key stays in
+	// the agent past its lifetime with nothing left to say it should not be.
+	SSHAdd SSHAddNamer
 	// Log receives one line per key taken out, and per key that could not be.
 	Log Logger
 	// Now is the clock, overridable in tests; nil uses time.Now.
@@ -93,8 +99,14 @@ func (e Expirer) remove(ctx context.Context, key AddedKey, now time.Time) {
 	name := filepath.Base(key.KeyFile)
 	overdue := now.Sub(key.ExpiresAt).Round(time.Second)
 	held := now.Sub(key.AddedAt).Round(time.Second)
+	sshAdd, err := e.SSHAdd.name()
+	if err != nil {
+		e.logf("ERROR", "this session has no ssh-add it can reach the agent with, so %s stays in it"+
+			" though its lifetime ran out %s ago: %v", name, overdue, err)
+		return
+	}
 	res, err := e.Runner.Run(ctx, run.Cmd{
-		Name:    "ssh-add",
+		Name:    sshAdd,
 		Args:    []string{"-d", key.KeyFile},
 		Env:     e.env(),
 		Timeout: removeTimeout,

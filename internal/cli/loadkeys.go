@@ -72,15 +72,20 @@ func (d deps) loadKeys(ctx context.Context, stderr io.Writer) int {
 	defer closeSecret()
 
 	loader := keys.Loader{
-		Keys:     settings.KeyEnumerator(env.Home),
-		Runner:   runner,
-		Secret:   secret,
-		Prompt:   prompter,
-		Adder:    keys.ExecKeyAdder{AskpassProg: askpassProg(self), KeyLifetime: lifetime},
+		Keys:   settings.KeyEnumerator(env.Home),
+		Runner: runner,
+		Secret: secret,
+		Prompt: prompter,
+		Adder: keys.ExecKeyAdder{
+			AskpassProg: askpassProg(self),
+			KeyLifetime: lifetime,
+			SSHAdd:      d.sshAdd,
+		},
 		Log:      log,
 		Notify:   notifier,
 		Giveup:   giveupStore,
 		KeyState: keyStateStore,
+		SSHAdd:   d.sshAdd,
 		Config: keys.Config{
 			MaxAttempts:   settings.MaxAttempts,
 			WalletStore:   settings.StoresWallet,

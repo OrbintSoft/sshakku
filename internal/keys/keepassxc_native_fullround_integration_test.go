@@ -268,7 +268,7 @@ func waitForAgentToDropKey(t *testing.T, keyfile string) {
 	require.NoError(t, err, "reading the key's fingerprint must succeed")
 	deadline := time.Now().Add(nativeKeyLifetime + 15*time.Second)
 	for {
-		loaded, err := AgentFingerprints(t.Context(), runner)
+		loaded, err := AgentFingerprints(t.Context(), runner, "")
 		require.NoError(t, err, "asking the agent what it holds must keep succeeding")
 		if !loaded[fp] {
 			return

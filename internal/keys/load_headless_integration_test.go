@@ -69,7 +69,7 @@ func TestLoadKeysHeadlessVaultHit(t *testing.T) {
 	runner := run.ExecRunner{}
 	fp, err := FileFingerprint(t.Context(), runner, keyfile)
 	require.NoError(t, err, "reading the key's fingerprint must succeed")
-	loaded, err := AgentFingerprints(t.Context(), runner)
+	loaded, err := AgentFingerprints(t.Context(), runner, "")
 	require.NoError(t, err, "asking the agent what it holds must succeed")
 	assert.Containsf(t, loaded, fp,
 		"the key must be in the agent, and it got there with no dialog anywhere: a session with no screen "+
@@ -156,7 +156,7 @@ func runLoadKeysNoTerminalHelper() {
 	if err != nil {
 		os.Exit(2)
 	}
-	loaded, err := AgentFingerprints(ctx, runner)
+	loaded, err := AgentFingerprints(ctx, runner, "")
 	if err != nil {
 		os.Exit(3)
 	}

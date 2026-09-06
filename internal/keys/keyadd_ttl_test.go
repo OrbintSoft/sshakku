@@ -83,13 +83,13 @@ func TestAddWithAskpassAppliesKeyLifetime(t *testing.T) {
 	fp, err := FileFingerprint(t.Context(), runner, keyfile)
 	require.NoError(t, err, "reading the key's fingerprint must succeed")
 
-	loaded, err := AgentFingerprints(t.Context(), runner)
+	loaded, err := AgentFingerprints(t.Context(), runner, "")
 	require.NoError(t, err, "asking the agent what it holds must succeed")
 	require.Containsf(t, loaded, fp, "the key must be in the agent before there is any expiry to wait for: %v", loaded)
 
 	deadline := time.Now().Add(lifetime + 5*time.Second)
 	for time.Now().Before(deadline) {
-		loaded, err = AgentFingerprints(t.Context(), runner)
+		loaded, err = AgentFingerprints(t.Context(), runner, "")
 		require.NoError(t, err, "asking the agent what it holds must keep succeeding")
 		if !loaded[fp] {
 			return // expired as expected.
