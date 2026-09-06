@@ -4,6 +4,7 @@ package reach
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"slices"
 	"time"
@@ -43,8 +44,24 @@ var setPipeDeadline = func(f *os.File, t time.Time) error { return f.SetDeadline
 
 // Reachable reports whether an ssh-agent answers on the named pipe.
 func (p PipeProber) Reachable(ctx context.Context, pipe string) bool {
+	answering, _ := p.ReadEndpoint(ctx, pipe)
+	return answering
+}
+
+// ReadEndpoint reports whether an ssh-agent answers on the named pipe and,
+// where one does not because somebody whose agent it could not be is holding
+// the name, who that is — so a refusal is something a person is told rather
+// than an endpoint that has merely gone quiet.
+//
+// Both answers come out of one open, and that is not a convenience. The agent
+// this system serves keeps one pipe instance at a time and creates the next
+// only once the connection before it has been dealt with, so a second open to
+// ask a second question is a caller told "all pipe instances are busy" — which
+// this would read as no agent being there at all. Opening this endpoint is
+// never free, whatever is asked once inside.
+func (p PipeProber) ReadEndpoint(ctx context.Context, pipe string) (answering bool, heldBy string) {
 	if pipe == "" {
-		return false
+		return false, ""
 	}
 	timeout := p.Timeout
 	if timeout <= 0 {
@@ -52,22 +69,23 @@ func (p PipeProber) Reachable(ctx context.Context, pipe string) bool {
 	}
 	handle, err := openPipe(pipe)
 	if err != nil {
-		return false
+		return false, ""
 	}
 	// Asked of the handle before it becomes a file, and not of the file
 	// afterwards: taking a file's handle back off it hands the runtime's poller
 	// over with it, and the deadline below is what the poller does.
 	if !couldBeYourAgent(handle, p.trustedOwners) {
+		held := whoIsHolding(handle)
 		_ = windows.CloseHandle(handle)
-		return false
+		return false, held
 	}
 	f := os.NewFile(uintptr(handle), pipe)
 	defer func() { _ = f.Close() }()
 	if err := setPipeDeadline(f, time.Now().Add(timeout)); err != nil {
-		return false
+		return false, ""
 	}
 	defer stopWaitingWhenCallerGivesUp(ctx, f)()
-	return identitiesAnswered(f)
+	return identitiesAnswered(f), ""
 }
 
 // stopWaitingWhenCallerGivesUp watches ctx and brings the deadline forward to
@@ -93,6 +111,36 @@ func stopWaitingWhenCallerGivesUp(ctx context.Context, f *os.File) func() {
 	}
 }
 
+// whoIsHolding names the account holding an endpoint and the program doing so,
+// so the reader is given something to go and look for rather than a name that
+// is taken by nobody they can find.
+func whoIsHolding(handle windows.Handle) string {
+	held := "an account that could not be read"
+	if owner, err := ownerOf(handle); err == nil {
+		held = accountName(owner)
+	}
+	var holder uint32
+	if err := windows.GetNamedPipeServerProcessId(handle, &holder); err != nil {
+		return held
+	}
+	return fmt.Sprintf("%s (process %d)", held, holder)
+}
+
+// accountName is how this system names the account sid stands for, falling back
+// to the account's own identifier where the machine cannot put a name to it: an
+// account from a domain this machine cannot reach, or one that no longer
+// exists, is still worth naming as precisely as it can be.
+func accountName(sid *windows.SID) string {
+	account, domain, _, err := sid.LookupAccount("")
+	if err != nil {
+		return sid.String()
+	}
+	if domain == "" {
+		return account
+	}
+	return domain + `\` + account
+}
+
 // couldBeYourAgent reports whether the endpoint behind f belongs to somebody
 // whose agent it could be, and is asked before a byte is sent: a name anything
 // on the machine can claim is not one to speak on until it is known who is
@@ -113,7 +161,7 @@ func couldBeYourAgent(handle windows.Handle, owners []string) bool {
 	if err != nil {
 		return false
 	}
-	return slices.Contains(owners, owner)
+	return slices.Contains(owners, owner.String())
 }
 
 // ownersWhoseAgentThisCouldBe names the accounts an endpoint on this machine
@@ -136,19 +184,25 @@ func ownersWhoseAgentThisCouldBe() []string {
 	return owners
 }
 
-// ownerOf reports the account that owns the object behind handle, named the way
-// this system names accounts.
-func ownerOf(handle windows.Handle) (string, error) {
+// ownerOf reports the account that owns the object behind handle.
+//
+// The copy is not defensive tidiness and must stay: an owner read off a
+// descriptor points *into* that descriptor, which is a buffer the collector may
+// take back the moment the descriptor itself is unreachable — as it is from the
+// return statement onwards. Reading such an owner afterwards gives whatever is
+// in that memory by then, which is an account nothing matches, so the endpoint
+// this system's own agent serves gets refused as a stranger's.
+func ownerOf(handle windows.Handle) (*windows.SID, error) {
 	descriptor, err := windows.GetSecurityInfo(handle,
 		windows.SE_KERNEL_OBJECT, windows.OWNER_SECURITY_INFORMATION)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	owner, _, err := descriptor.Owner()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return owner.String(), nil
+	return owner.Copy()
 }
 
 // openPipe opens an existing named pipe for reading and writing, in the mode

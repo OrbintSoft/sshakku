@@ -114,6 +114,13 @@ func recommend(r Report) string {
 		return "no agent is answering, and SSHakku cannot start one on this system yet;" +
 			" ssh will ask for each passphrase itself"
 	}
+	// A name something else is holding is not a state a login shell resolves
+	// either, and it comes first: with the name taken, nothing can be served
+	// there whatever the service is set to do.
+	if r.EndpointHeldByAStranger != "" {
+		return "the endpoint sessions are pointed at is held by " + r.EndpointHeldByAStranger +
+			", whose agent it could not be; nothing of yours can be served there until it lets the name go"
+	}
 	// A service nothing may start is not a state a login shell resolves. Every
 	// answer below assumes a session opening can put things right, and here the
 	// one thing that can is this command run with what it needs.

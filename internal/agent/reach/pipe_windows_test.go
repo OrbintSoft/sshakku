@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -400,8 +401,36 @@ func TestTheEndpointThisSystemsOwnAgentIsServedOnIsOneToSpeakOn(t *testing.T) {
 	owner, err := ownerOf(served)
 
 	require.NoError(t, err, "who owns the endpoint this system's own agent is served on")
-	assert.Contains(t, ownersWhoseAgentThisCouldBe(), owner,
+	assert.Contains(t, ownersWhoseAgentThisCouldBe(), owner.String(),
 		"the agent this system serves itself must be one SSHakku will speak to")
+}
+
+// F58: a refusal nobody is told about is an endpoint that has merely gone
+// quiet, so what is holding one is read from the endpoint itself — the account,
+// and the program, which is what gives the reader something to go and look for.
+// It comes back from the same asking that refused it, since opening this
+// endpoint again to ask a second question is a caller told it is busy.
+func TestAnEndpointHeldBySomebodyElseIsNamedWithWhatIsHoldingIt(t *testing.T) {
+	held := PipeProber{Timeout: 2 * time.Second, trustedOwners: []string{sidOf(t, windows.WinLocalServiceSid)}}
+
+	answering, holder := held.ReadEndpoint(t.Context(), fakeAgentPipe(t, pipeReplyIdentities(2)))
+
+	assert.False(t, answering, "an endpoint held by somebody else is not an agent of yours")
+	assert.Contains(t, holder, "process "+strconv.Itoa(os.Getpid()),
+		"this test is what is holding that pipe, and naming it is what the reader can act on")
+	account, _, _ := strings.Cut(holder, " (process")
+	assert.NotEmpty(t, account, "and the account holding it is named too")
+}
+
+// F58: and there is nothing to say about an endpoint whose holder is somebody
+// whose agent it could be — a sentence that stood on every report would mean
+// nothing on any of them.
+func TestAnEndpointThisAccountIsServingIsHeldByNobodyStrange(t *testing.T) {
+	answering, holder := PipeProber{Timeout: 2 * time.Second}.
+		ReadEndpoint(t.Context(), fakeAgentPipe(t, pipeReplyIdentities(0)))
+
+	assert.True(t, answering, "this test made that pipe and answered on it")
+	assert.Empty(t, holder, "and nobody strange is holding it, so there is nothing to say")
 }
 
 // serveAndWriteDownWhatWasOffered is the serving half of the test above,
