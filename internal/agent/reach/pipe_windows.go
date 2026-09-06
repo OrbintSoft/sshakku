@@ -75,7 +75,20 @@ func stopWaitingWhenCallerGivesUp(ctx context.Context, f *os.File) func() {
 }
 
 // openPipe opens an existing named pipe for reading and writing, in the mode
-// that lets the deadline above interrupt a read.
+// that lets the deadline above interrupt a read, and at the only level of
+// identity worth handing whatever is on the other end.
+//
+// A named pipe's *client* is what decides how far its server may go with the
+// client's own identity, and a client that says nothing has chosen
+// SecurityImpersonation: the server may call ImpersonateNamedPipeClient and
+// then act as the client, with everything the client may do, for as long as the
+// handle is open. The pipe namespace is the machine's and is claimed first
+// come, first served, so the name an agent is expected on is one any account
+// can hold while no agent has it — and this program is opened from a command
+// that asks to be run by an administrator. SECURITY_IDENTIFICATION lets a
+// server ask which account is calling, which agents legitimately do, and stops
+// it there: anything it then tries to open as that account is refused with
+// ERROR_BAD_IMPERSONATION_LEVEL.
 func openPipe(name string) (*os.File, error) {
 	wide, err := windows.UTF16PtrFromString(name)
 	if err != nil {
@@ -84,7 +97,7 @@ func openPipe(name string) (*os.File, error) {
 	handle, err := windows.CreateFile(wide,
 		windows.GENERIC_READ|windows.GENERIC_WRITE,
 		0, nil, windows.OPEN_EXISTING,
-		windows.FILE_FLAG_OVERLAPPED, 0)
+		windows.FILE_FLAG_OVERLAPPED|windows.SECURITY_SQOS_PRESENT|windows.SECURITY_IDENTIFICATION, 0)
 	if err != nil {
 		return nil, err
 	}

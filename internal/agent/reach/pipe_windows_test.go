@@ -3,15 +3,21 @@
 package reach
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -34,12 +40,22 @@ func pipeName(t *testing.T) string {
 // fakeAgentPipe serves one connection on a named pipe of its own, handing it to
 // reply, and returns the pipe's name.
 //
+// reply is given the file rather than a stream, because some of what a pipe's
+// server can do to its client — asking to become them — is asked of the handle
+// and not of the bytes.
+//
 // Like the socket fake above it asserts nothing: it runs on a goroutine of its
 // own, where an assertion would report from outside the test's goroutine. What
 // it serves is the subject's input, not its verdict.
-func fakeAgentPipe(t *testing.T, reply func(io.ReadWriter)) string {
+func fakeAgentPipe(t *testing.T, reply func(*os.File)) string {
 	t.Helper()
-	name := pipeName(t)
+	return fakeAgentPipeNamed(t, pipeName(t), reply)
+}
+
+// fakeAgentPipeNamed is fakeAgentPipe on a name somebody else chose, for the
+// one case where the name has to be agreed on before the server exists.
+func fakeAgentPipeNamed(t *testing.T, name string, reply func(*os.File)) string {
+	t.Helper()
 	wide, err := windows.UTF16PtrFromString(name)
 	require.NoError(t, err, "pipe name")
 	handle, err := windows.CreateNamedPipe(wide,
@@ -79,16 +95,105 @@ func fakeAgentPipe(t *testing.T, reply func(io.ReadWriter)) string {
 
 // pipeReplyIdentities answers a request with an identities-answer listing nkeys
 // keys; the keys themselves are omitted, since the prober reads only the type.
-func pipeReplyIdentities(nkeys uint32) func(io.ReadWriter) {
-	return func(rw io.ReadWriter) {
+func pipeReplyIdentities(nkeys uint32) func(*os.File) {
+	return func(rw *os.File) {
 		drainPipeRequest(rw)
-		payload := []byte{msgIdentitiesAnswer, 0, 0, 0, 0}
-		binary.BigEndian.PutUint32(payload[1:], nkeys)
-		frame := make([]byte, 4+len(payload))
-		binary.BigEndian.PutUint32(frame, uint32(len(payload)))
-		copy(frame[4:], payload)
-		_, _ = rw.Write(frame)
+		writeIdentitiesAnswer(rw, nkeys)
 	}
+}
+
+// writeIdentitiesAnswer is the answer itself, for a server that has already
+// read the request and had something to do in between.
+func writeIdentitiesAnswer(rw io.Writer, nkeys uint32) {
+	payload := []byte{msgIdentitiesAnswer, 0, 0, 0, 0}
+	binary.BigEndian.PutUint32(payload[1:], nkeys)
+	frame := make([]byte, 4+len(payload))
+	binary.BigEndian.PutUint32(frame, uint32(len(payload)))
+	copy(frame[4:], payload)
+	_, _ = rw.Write(frame)
+}
+
+// procImpersonateNamedPipeClient is how a pipe's server asks to become its
+// client. It is what the client's own choice of impersonation level decides the
+// answer to, and there is no wrapper for it in golang.org/x/sys/windows.
+var procImpersonateNamedPipeClient = windows.NewLazySystemDLL("advapi32.dll").
+	NewProc("ImpersonateNamedPipeClient")
+
+// impersonationOffer is what a pipe's server got when it asked to become its
+// client: how far it may go with that client's identity, whether it could then
+// open anything as them, and — where it could not ask at all — what it was
+// told instead. It travels as JSON, because the half that measures it cannot be
+// in this process (see the test that reads it).
+type impersonationOffer struct {
+	Level     uint32 `json:"level"`
+	ActedAsUs bool   `json:"acted_as_us"`
+	Refused   string `json:"refused,omitempty"`
+}
+
+// pipeReportImpersonationLevel answers as an agent does, and on the way asks to
+// become whoever is asking, reporting how far it was allowed to go. The channel
+// wants a buffer: it is read after the probe has finished, and a server blocked
+// here would never send the reply the probe is waiting for.
+func pipeReportImpersonationLevel(offers chan<- impersonationOffer) func(*os.File) {
+	return func(f *os.File) {
+		drainPipeRequest(f)
+		offers <- whatBecomingTheClientWouldAllow(windows.Handle(f.Fd()))
+		writeIdentitiesAnswer(f, 1)
+		// Then stay until the client has gone: closing a pipe with a reply
+		// still unread in it throws the reply away, and this client is in
+		// another process and not held up by anything this one does.
+		var whenTheClientCloses [1]byte
+		_, _ = f.Read(whenTheClientCloses[:])
+	}
+}
+
+// whatBecomingTheClientWouldAllow impersonates the client on the other end of
+// pipe and reports the identity it was handed.
+//
+// Impersonation belongs to the OS thread rather than to the goroutine, so the
+// thread is pinned for as long as it is somebody else: without that, the
+// identity could be put down on one thread while another carries on wearing it.
+func whatBecomingTheClientWouldAllow(pipe windows.Handle) impersonationOffer {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	if ok, _, err := procImpersonateNamedPipeClient.Call(uintptr(pipe)); ok == 0 {
+		return impersonationOffer{Refused: "asking to become the client: " + err.Error()}
+	}
+	defer func() { _ = windows.RevertToSelf() }()
+
+	// Opened as this process rather than as the identity just put on, since
+	// that identity is the very thing being asked about.
+	var borrowed windows.Token
+	if err := windows.OpenThreadToken(windows.CurrentThread(), windows.TOKEN_QUERY, true, &borrowed); err != nil {
+		return impersonationOffer{Refused: "the identity it was handed: " + err.Error()}
+	}
+	defer func() { _ = borrowed.Close() }()
+
+	var level, written uint32
+	if err := windows.GetTokenInformation(borrowed, windows.TokenImpersonationLevel,
+		(*byte)(unsafe.Pointer(&level)), uint32(unsafe.Sizeof(level)), &written); err != nil {
+		return impersonationOffer{Refused: "how far that identity goes: " + err.Error()}
+	}
+	return impersonationOffer{Level: level, ActedAsUs: somethingCanBeOpenedAsTheClient()}
+}
+
+// somethingCanBeOpenedAsTheClient reports whether the identity this thread is
+// wearing can be used to open anything at all, which is the difference the
+// level decides: one can be read, the other can be used. Called while the
+// identity is still on, so the answer is about it rather than about us.
+func somethingCanBeOpenedAsTheClient() bool {
+	self, err := windows.UTF16PtrFromString(os.Args[0])
+	if err != nil {
+		return false
+	}
+	opened, err := windows.CreateFile(self, windows.GENERIC_READ, windows.FILE_SHARE_READ,
+		nil, windows.OPEN_EXISTING, 0, 0)
+	if err != nil {
+		return false
+	}
+	_ = windows.CloseHandle(opened)
+	return true
 }
 
 // drainPipeRequest reads one framed request so the prober's write completes.
@@ -122,7 +227,7 @@ func TestPipeProberRefusesWhatIsNotAnAgent(t *testing.T) {
 	p := PipeProber{Timeout: 2 * time.Second}
 
 	t.Run("a stranger on the line", func(t *testing.T) {
-		wrongType := func(rw io.ReadWriter) {
+		wrongType := func(rw *os.File) {
 			drainPipeRequest(rw)
 			_, _ = rw.Write([]byte{0, 0, 0, 1, 99})
 		}
@@ -142,7 +247,7 @@ func TestPipeProberRefusesWhatIsNotAnAgent(t *testing.T) {
 // took the request and then said nothing is exactly the state a login must come
 // back from, and the deadline is what brings it back.
 func TestPipeProberGivesUpOnAnAgentThatNeverAnswers(t *testing.T) {
-	silent := func(rw io.ReadWriter) {
+	silent := func(rw *os.File) {
 		drainPipeRequest(rw)
 		// and then nothing, until the client gives up and closes.
 		var one [1]byte
@@ -161,7 +266,7 @@ func TestPipeProberGivesUpOnAnAgentThatNeverAnswers(t *testing.T) {
 // Rule 28's half of the same promise: a deadline ends the wait, a cancelled
 // context ends the work. A caller who has given up must not be waited on.
 func TestPipeProberStopsWhenTheCallerHasGoneAway(t *testing.T) {
-	silent := func(rw io.ReadWriter) {
+	silent := func(rw *os.File) {
 		drainPipeRequest(rw)
 		var one [1]byte
 		_, _ = rw.Read(one[:])
@@ -189,4 +294,82 @@ func TestPipeProberRefusesAHandleThatTakesNoDeadline(t *testing.T) {
 	p := PipeProber{Timeout: 2 * time.Second}
 	assert.False(t, p.Reachable(t.Context(), fakeAgentPipe(t, pipeReplyIdentities(1))),
 		"a read that could not be bounded is not one to make")
+}
+
+// pipeServerEnv names the pipe a re-executed copy of this test binary is to
+// serve, and pipeReportEnv the file it writes down what its client offered it.
+const (
+	pipeServerEnv = "SSHAKKU_TEST_PIPE_SERVER"
+	pipeReportEnv = "SSHAKKU_TEST_PIPE_REPORT"
+)
+
+// readyBeside names the file the serving half makes once its pipe exists, so
+// the probe is not made before there is anything there to answer it.
+func readyBeside(report string) string { return report + ".ready" }
+
+// F58: the endpoint is a name anything on this machine could have claimed, and
+// the client of a named pipe is the one that decides how far its server may go
+// with the client's own identity. A client that says nothing has decided that
+// the server may *be* it, with whatever privileges that client was run with —
+// and doctor is the part of this program meant to be run by an administrator.
+//
+// The server has to be another process. Windows refuses to let a process
+// impersonate a client of its own — "the parameter is incorrect", whatever the
+// client offered — so a fake server in this one could not tell the two offers
+// apart, and would report the dangerous case as the safe one.
+func TestTheAgentsEndpointIsOpenedSoItsServerCannotActAsUs(t *testing.T) {
+	if pipe := os.Getenv(pipeServerEnv); pipe != "" {
+		serveAndWriteDownWhatWasOffered(t, pipe, os.Getenv(pipeReportEnv))
+		return
+	}
+
+	pipe, report := pipeName(t), filepath.Join(t.TempDir(), "offer.json")
+	server := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^"+t.Name()+"$")
+	server.Env = append(os.Environ(), pipeServerEnv+"="+pipe, pipeReportEnv+"="+report)
+	var said bytes.Buffer
+	server.Stdout, server.Stderr = &said, &said
+	require.NoError(t, server.Start(), "the serving half of this test")
+	// Waited for here as well as below, so what it said is readable — and so
+	// this is not left running — however the assertions below turn out.
+	t.Cleanup(func() {
+		_ = server.Wait()
+		t.Logf("the serving half said:\n%s", said.String())
+	})
+	require.Eventually(t, func() bool { _, err := os.Stat(readyBeside(report)); return err == nil },
+		10*time.Second, 10*time.Millisecond, "the serving half never got its pipe up")
+
+	reachable := PipeProber{Timeout: 5 * time.Second}.Reachable(t.Context(), pipe)
+
+	require.NoError(t, server.Wait(), "the serving half must have finished saying what it was offered")
+	require.True(t, reachable, "an agent answered on that pipe, so the probe must say so")
+	raw, err := os.ReadFile(report)
+	require.NoError(t, err, "what the serving half was offered")
+	var offer impersonationOffer
+	require.NoError(t, json.Unmarshal(raw, &offer), "what the serving half was offered")
+	require.Empty(t, offer.Refused, "a server may ask which account is asking")
+	assert.Equal(t, uint32(windows.SecurityIdentification), offer.Level,
+		"a server may find out which account is asking and go no further; %d lets it act as that account",
+		offer.Level)
+	assert.False(t, offer.ActedAsUs,
+		"and it must not be able to open anything as that account, which is what the level decides")
+}
+
+// serveAndWriteDownWhatWasOffered is the serving half of the test above,
+// running as a child of it: one connection on the pipe it was named, answered
+// as an agent answers, and on the way an attempt to become whoever connected.
+func serveAndWriteDownWhatWasOffered(t *testing.T, pipe, report string) {
+	t.Helper()
+
+	offers := make(chan impersonationOffer, 1)
+	fakeAgentPipeNamed(t, pipe, pipeReportImpersonationLevel(offers))
+	require.NoError(t, os.WriteFile(readyBeside(report), nil, 0o600), "saying the pipe is up")
+
+	select {
+	case offer := <-offers:
+		raw, err := json.Marshal(offer)
+		require.NoError(t, err, "what this half was offered")
+		require.NoError(t, os.WriteFile(report, raw, 0o600), "what this half was offered")
+	case <-t.Context().Done():
+		require.Fail(t, "nobody connected to the pipe this half was asked to serve")
+	}
 }
