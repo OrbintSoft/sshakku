@@ -3788,6 +3788,23 @@ surveyed on all five builds `lint-go` names — linux, darwin, windows,
 `--max-issues-per-linter=0 --max-same-issues=0`, since Phase 43 and Phase 48
 were each fooled once by the caps.
 
+**`gochecksumtype` reports nothing and is a guard.** It asks `exhaustive`'s
+question of a closed set of types rather than a set of constants: an interface
+marked `//sumtype:decl` has a known list of implementations, and a type switch
+that leaves one out is a case the value can still arrive as. Nothing here is
+written that way — there is no `//sumtype:decl` anywhere, and no type switch
+over an interface outside the tests — so it has no subject today and is in
+place for the first one. Made to fire before being trusted, per Phase 34: a
+throwaway package with a sealed `reply`, two implementations and a switch
+naming one of them reported `missing cases for refused`, and was removed.
+
+It keeps the strictness `exhaustive` gives up, and the asymmetry is not an
+oversight. An int enum can hold a number nobody declared — `State(99)` is a
+`State` — so a `default:` there is a branch that can be reached and is a real
+answer. A sealed interface has only the types that implement it, so a
+`default:` over one is unreachable, and all it can do is hide the
+implementation somebody adds next.
+
 **`exhaustive` runs with `default-signifies-exhaustive`, and that setting is
 the decision.** Off, it reports six switches on Linux and seven on macOS, and
 every one of them is a `String()` method whose `default:` arm already holds the

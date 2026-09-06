@@ -124,6 +124,19 @@ linters:
     # one, and nothing says so.
     - gocheckcompilerdirectives
 
+    # `exhaustive`'s question asked of a closed set of types rather than a set
+    # of constants: an interface marked `//sumtype:decl` has a known list of
+    # implementations, and a type switch that leaves one out is a case the
+    # value can still arrive as. Nothing in this tree is written that way yet —
+    # there is no `//sumtype:decl` and no type switch over an interface outside
+    # the tests — so this reports nothing today and is here for the first one.
+    # It keeps the strictness `exhaustive` above gives up, and the difference is
+    # in what the two are looking at: an int enum can hold a number nobody
+    # declared, so a `default:` there is reachable and is an answer; a sealed
+    # interface has only the types that implement it, so a `default:` is a
+    # branch that cannot be taken and hides the implementation added next.
+    - gochecksumtype
+
     # The same literal written out at each use is a rename waiting to be done
     # in three places out of four: a backend's name, an env var, a subcommand
     # the dispatcher and the command itself must agree on.
