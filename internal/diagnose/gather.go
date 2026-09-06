@@ -28,7 +28,7 @@ func Gather(ctx context.Context, in Inputs, src AgentSource, prober agent.Prober
 		r.EnvReachable = prober.Reachable(ctx, in.EnvSock)
 	}
 	if in.FixedSock != "" {
-		r.FixedReachable = prober.Reachable(ctx, in.FixedSock)
+		r.FixedReachable, r.EndpointHeldByAStranger = readEndpoint(ctx, prober, in.FixedSock)
 	}
 	if st, err := agent.ReadState(in.StatePath); err == nil {
 		r.RecordedPID = st.PID
@@ -66,6 +66,16 @@ func Gather(ctx context.Context, in Inputs, src AgentSource, prober agent.Prober
 		r.Keys, r.KeysErr = gatherKeys(ctx, *keys)
 	}
 	return r
+}
+
+// readEndpoint asks the endpoint sessions are pointed at whether an agent
+// answers there and, where the prober can tell, who is holding it instead. A
+// prober that answers only the first question is asked only the first.
+func readEndpoint(ctx context.Context, prober agent.Prober, endpoint string) (answering bool, heldBy string) {
+	if reader, ok := prober.(EndpointReader); ok {
+		return reader.ReadEndpoint(ctx, endpoint)
+	}
+	return prober.Reachable(ctx, endpoint), ""
 }
 
 // gatherKeys enumerates the user's keys through ks.Lister, cross-references each

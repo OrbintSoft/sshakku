@@ -141,6 +141,23 @@ type Inputs struct {
 	LifetimeKeptBySessions bool
 }
 
+// EndpointReader is a Prober that can also say who was holding an endpoint it
+// would not speak on.
+//
+// A Prober answers yes or no, and where an endpoint is a name anything on the
+// machine may claim, the two nos read the same: nobody is there, and somebody
+// else is. Only the second has anything a reader can act on, and without it a
+// refusal shows as an endpoint that has merely gone quiet — with the reader
+// sent to open a login shell that cannot take a name something else is holding.
+//
+// It answers both at once rather than being asked twice, because on a system
+// with endpoints of that kind, opening one is not free (see the implementation
+// for what it costs). A prober that cannot tell the two nos apart does not
+// implement this, and the report then says only that nothing answered.
+type EndpointReader interface {
+	ReadEndpoint(ctx context.Context, endpoint string) (answering bool, heldBy string)
+}
+
 // AgentView is one ssh-agent process as the report presents it.
 type AgentView struct {
 	PID       int
@@ -292,6 +309,13 @@ type Report struct {
 	// past its time is one the next session takes out, and not a sign that the
 	// record can no longer be trusted.
 	LifetimeKeptBySessions bool
+
+	// EndpointHeldByAStranger names whoever is holding the endpoint sessions
+	// are pointed at, where that is somebody whose agent it could not be (see
+	// Inputs). Its zero value is the ordinary case, and it changes what there
+	// is to do about an endpoint nothing of ours answers on: no login shell
+	// takes a name something else is already holding.
+	EndpointHeldByAStranger string
 }
 
 // Gather inspects the agent situation described by in and returns the report,

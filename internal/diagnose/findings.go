@@ -53,6 +53,11 @@ func answeringFinding(r Report, reachable int) string {
 		return ""
 	case reachable == 0 && r.NoAgentMechanism:
 		return "no ssh-agent is answering, and this build has no way to keep one on this system yet"
+	case reachable == 0 && r.EndpointHeldByAStranger != "":
+		// Said elsewhere in its own words, which name what is actually in the
+		// way. No login shell takes a name something else is holding, and
+		// saying both would leave the reader deciding which to believe.
+		return ""
 	case reachable == 0 && serviceIsDisabled(r):
 		// Said elsewhere in its own words, which name what will actually help.
 		// A new login shell will not start this one, and saying both would leave
@@ -119,6 +124,14 @@ func findings(in Inputs, r Report) []string {
 		f = append(f, line)
 	}
 
+	// Ahead of what is or is not answering, because it is why: an endpoint held
+	// by somebody whose agent it could not be is one nothing was sent to, and
+	// with nothing said it reads as an endpoint that has merely gone quiet.
+	if r.EndpointHeldByAStranger != "" {
+		f = append(f, fmt.Sprintf("%s is being held by %s, whose agent it could not be —"+
+			" nothing was sent to it and no session is pointed at it",
+			r.FixedSock, r.EndpointHeldByAStranger))
+	}
 	if line := answeringFinding(r, reachable); line != "" {
 		f = append(f, line)
 	}

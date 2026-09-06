@@ -146,7 +146,7 @@ security is a shared responsibility between the software and how it is deployed.
 
 | ID | Threat & vector | Status | Mitigation / residual |
 |---|---|---|---|
-| S1 | A rogue process listens at our **predictable endpoint path** and impersonates the agent. | Presumed | Endpoint lives in a `0700` per-user dir an attacker cannot write; verify reachability before use. |
+| S1 | A rogue process listens at our **predictable endpoint path** and impersonates the agent. | Presumed; present (mitigated) where the endpoint is a name | Endpoint lives in a `0700` per-user dir an attacker cannot write; verify reachability before use. Where the endpoint is a name anything on the machine may claim rather than a file in such a directory, no directory can protect it: the account holding the name is read from the endpoint itself before anything is sent, and only this account's, the system's or an administrator's is spoken to. Answering the agent's handshake correctly is something a stranger can do. |
 | S2 | A **fake askpass / vault prompt** phishes the user for the passphrase. | Presumed | Use only the real session keyring's prompt; never roll our own GUI prompt for A1. |
 
 ### Elevation of privilege
@@ -156,6 +156,7 @@ security is a shared responsibility between the software and how it is deployed.
 | E1 | The **diagnostic tool run with `sudo`** writes secrets as root, trusts user-controlled env, or follows attacker symlinks. | Future | Use elevation only for read-only inspection; never write A1; sanitise env; resolve paths safely. |
 | E2 | Our login script runs in an **unexpectedly privileged** context (e.g. a root login shell). | Presumed | Behave safely at any privilege; never assume or require root. |
 | E3 | System-wide install paths **writable by the user** → local privilege escalation. | Present (open) | System files owned by root and not user-writable; correct install modes and perms. |
+| E4 | Where the endpoint is a **named pipe**, its server may *act as* its client: the client picks the impersonation level, and one that picks nothing has picked `SecurityImpersonation`. The pipe namespace is the machine's and is claimed first come, first served, so any account can hold the agent's name while no agent has it — and the diagnostic asks to be run by an administrator. | Present (mitigated) | Open the endpoint with `SECURITY_SQOS_PRESENT\|SECURITY_IDENTIFICATION`: a server may ask which account is calling, which agents legitimately do, and anything it then tries to open as that account is refused with `ERROR_BAD_IMPERSONATION_LEVEL`. |
 
 ### Repudiation
 
@@ -203,4 +204,7 @@ The rewrite must uphold these on every platform; each traces to the threats abov
 7. **Clean environment for child tools.** Absolute `SSH_ASKPASS`,
    `SSH_ASKPASS_REQUIRE=force`, no reliance on an inherited `PATH`. (T3)
 8. **Restrict the agent endpoint to its owner** on every platform — socket
-   permissions or pipe security descriptor. (A3, S1, T1)
+   permissions or pipe security descriptor — and, where the endpoint is a name
+   anything may claim rather than a file in a directory only its owner may
+   write, open it so that whatever answers there cannot act as the caller.
+   (A3, S1, T1, E4)
