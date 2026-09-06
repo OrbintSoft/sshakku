@@ -59,6 +59,30 @@ func fakeAgentPipe(t *testing.T, reply func(*os.File)) string {
 // one case where the name has to be agreed on before the server exists.
 func fakeAgentPipeNamed(t *testing.T, name string, reply func(*os.File)) string {
 	t.Helper()
+	handle, f := aPipeNamed(t, name)
+
+	served := make(chan struct{})
+	go func() {
+		defer close(served)
+		// A client that got in before the wait started is a connection, not a
+		// failure, and this is the shape that says so.
+		if err := windows.ConnectNamedPipe(handle, nil); err != nil &&
+			!errors.Is(err, windows.ERROR_PIPE_CONNECTED) {
+			return
+		}
+		reply(f)
+	}()
+
+	closeOnceServed(t, name, f, served)
+	return name
+}
+
+// aPipeNamed makes a named pipe of one instance and returns the handle and the
+// file over it. One instance is what the agent these fakes stand in for keeps,
+// and it is what makes a second caller busy rather than served.
+func aPipeNamed(t *testing.T, name string) (windows.Handle, *os.File) {
+	t.Helper()
+
 	wide, err := windows.UTF16PtrFromString(name)
 	require.NoError(t, err, "pipe name")
 	handle, err := windows.CreateNamedPipe(wide,
@@ -66,19 +90,12 @@ func fakeAgentPipeNamed(t *testing.T, name string, reply func(*os.File)) string 
 		windows.PIPE_TYPE_BYTE|windows.PIPE_READMODE_BYTE|windows.PIPE_WAIT,
 		1, 4096, 4096, 0, nil)
 	require.NoError(t, err, "create pipe")
-	f := os.NewFile(uintptr(handle), name)
+	return handle, os.NewFile(uintptr(handle), name)
+}
 
-	served := make(chan struct{})
-	go func() {
-		defer close(served)
-		// A client that got in before the wait started is a connection, not a
-		// failure, and this is the shape that says so.
-		if err := windows.ConnectNamedPipe(windows.Handle(f.Fd()), nil); err != nil &&
-			!errors.Is(err, windows.ERROR_PIPE_CONNECTED) {
-			return
-		}
-		reply(f)
-	}()
+// closeOnceServed ends a fake's life when its connection has been served.
+func closeOnceServed(t *testing.T, name string, f *os.File, served <-chan struct{}) {
+	t.Helper()
 
 	t.Cleanup(func() {
 		select {
@@ -86,13 +103,41 @@ func fakeAgentPipeNamed(t *testing.T, name string, reply func(*os.File)) string 
 		case <-time.After(2 * time.Second):
 			// Nobody came, and the wait for a client does not end on its own:
 			// knock once so the goroutine can finish and the suite can end.
-			if knock, err := openPipe(name); err == nil {
+			if knock, err := openPipe(t.Context(), name, time.Now().Add(time.Second)); err == nil {
 				_ = windows.CloseHandle(knock)
 			}
 			<-served
 		}
 		_ = f.Close()
 	})
+}
+
+// fakeAgentPipeTakenAtFirst serves an agent on a pipe whose one instance is
+// already taken and is let go after busyFor. A caller arriving before then is
+// told every instance is busy, which is what a caller arriving while the real
+// agent is between connections is told.
+func fakeAgentPipeTakenAtFirst(t *testing.T, busyFor time.Duration, reply func(*os.File)) string {
+	t.Helper()
+
+	name := pipeName(t)
+	handle, f := aPipeNamed(t, name)
+	taken, err := openPipe(t.Context(), name, time.Now().Add(time.Second))
+	require.NoError(t, err, "taking the pipe's one instance")
+
+	served := make(chan struct{})
+	go func() {
+		defer close(served)
+		time.Sleep(busyFor)
+		_ = windows.CloseHandle(taken)
+		_ = windows.DisconnectNamedPipe(handle)
+		if err := windows.ConnectNamedPipe(handle, nil); err != nil &&
+			!errors.Is(err, windows.ERROR_PIPE_CONNECTED) {
+			return
+		}
+		reply(f)
+	}()
+
+	closeOnceServed(t, name, f, served)
 	return name
 }
 
@@ -310,6 +355,40 @@ const (
 // the probe is not made before there is anything there to answer it.
 func readyBeside(report string) string { return report + ".ready" }
 
+// F50: the shells on a machine share the one agent, and an agent that serves
+// one caller at a time is busy for a moment whenever another shell is mid-
+// question. A moment like that is not an agent that has gone, and reading it as
+// one is how a session comes to set about replacing what was never gone.
+func TestAnEndpointWhoseInstancesAreAllBusyIsWaitedFor(t *testing.T) {
+	p := PipeProber{Timeout: 2 * time.Second}
+
+	assert.True(t, p.Reachable(t.Context(),
+		fakeAgentPipeTakenAtFirst(t, 200*time.Millisecond, pipeReplyIdentities(1))),
+		"an agent busy for a moment is an agent, and this one answered as soon as it was free")
+}
+
+// F21: and the waiting is bounded by the same budget as every other wait here.
+// An endpoint that never frees up is one a login must come back from.
+func TestAnEndpointBusyThroughoutIsGivenUpOnRatherThanWaitedOutForever(t *testing.T) {
+	name := pipeName(t)
+	_, f := aPipeNamed(t, name)
+	t.Cleanup(func() { _ = f.Close() })
+	taken, err := openPipe(t.Context(), name, time.Now().Add(time.Second))
+	require.NoError(t, err, "taking the pipe's one instance and never letting it go")
+	t.Cleanup(func() { _ = windows.CloseHandle(taken) })
+
+	p := PipeProber{Timeout: 200 * time.Millisecond}
+	start := time.Now()
+	reachable := p.Reachable(t.Context(), name)
+	elapsed := time.Since(start)
+
+	assert.False(t, reachable, "nothing ever came free, so nothing answered")
+	assert.GreaterOrEqual(t, elapsed, 150*time.Millisecond,
+		"and it waited for one rather than taking a busy moment for an absent agent")
+	assert.Less(t, elapsed, 2*time.Second,
+		"but only for as long as it was given; a login comes back")
+}
+
 // F58: the endpoint is a name anything on this machine could have claimed, and
 // the client of a named pipe is the one that decides how far its server may go
 // with the client's own identity. A client that says nothing has decided that
@@ -392,7 +471,7 @@ func TestAnEndpointThisAccountIsServingIsYourAgent(t *testing.T) {
 // would refuse every real agent on this platform while every other test in
 // this file went on passing, since they all serve their own pipes.
 func TestTheEndpointThisSystemsOwnAgentIsServedOnIsOneToSpeakOn(t *testing.T) {
-	served, err := openPipe(agent.SystemEndpoint().Native())
+	served, err := openPipe(t.Context(), agent.SystemEndpoint().Native(), time.Now().Add(time.Second))
 	if err != nil {
 		t.Skip("nothing is serving this system's own agent endpoint here")
 	}

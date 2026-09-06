@@ -4,6 +4,7 @@ package reach
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"slices"
@@ -67,7 +68,10 @@ func (p PipeProber) ReadEndpoint(ctx context.Context, pipe string) (answering bo
 	if timeout <= 0 {
 		timeout = DefaultProbeTimeout
 	}
-	handle, err := openPipe(pipe)
+	// One moment to give up at, shared by the opening and the asking, so the
+	// budget bounds the whole of it rather than each half of it.
+	giveUp := time.Now().Add(timeout)
+	handle, err := openPipe(ctx, pipe, giveUp)
 	if err != nil {
 		return false, ""
 	}
@@ -81,7 +85,7 @@ func (p PipeProber) ReadEndpoint(ctx context.Context, pipe string) (answering bo
 	}
 	f := os.NewFile(uintptr(handle), pipe)
 	defer func() { _ = f.Close() }()
-	if err := setPipeDeadline(f, time.Now().Add(timeout)); err != nil {
+	if err := setPipeDeadline(f, giveUp); err != nil {
 		return false, ""
 	}
 	defer stopWaitingWhenCallerGivesUp(ctx, f)()
@@ -220,15 +224,31 @@ func ownerOf(handle windows.Handle) (*windows.SID, error) {
 // server ask which account is calling, which agents legitimately do, and stops
 // it there: anything it then tries to open as that account is refused with
 // ERROR_BAD_IMPERSONATION_LEVEL.
-func openPipe(name string) (windows.Handle, error) {
+// An endpoint whose instances are all busy is tried again after this. What is
+// being waited for is the agent coming round to its next caller, which is not
+// anything slow — and the wait costs a login nothing it was not already
+// prepared to spend, since giveUp bounds the whole of it.
+const busyRetryWait = 20 * time.Millisecond
+
+func openPipe(ctx context.Context, name string, giveUp time.Time) (windows.Handle, error) {
 	wide, err := windows.UTF16PtrFromString(name)
 	if err != nil {
 		return windows.InvalidHandle, err
 	}
-	return windows.CreateFile(wide,
-		windows.GENERIC_READ|windows.GENERIC_WRITE,
-		0, nil, windows.OPEN_EXISTING,
-		windows.FILE_FLAG_OVERLAPPED|windows.SECURITY_SQOS_PRESENT|windows.SECURITY_IDENTIFICATION, 0)
+	for {
+		handle, err := windows.CreateFile(wide,
+			windows.GENERIC_READ|windows.GENERIC_WRITE,
+			0, nil, windows.OPEN_EXISTING,
+			windows.FILE_FLAG_OVERLAPPED|windows.SECURITY_SQOS_PRESENT|windows.SECURITY_IDENTIFICATION, 0)
+		if !errors.Is(err, windows.ERROR_PIPE_BUSY) || !time.Now().Before(giveUp) {
+			return handle, err
+		}
+		select {
+		case <-ctx.Done():
+			return windows.InvalidHandle, err
+		case <-time.After(busyRetryWait):
+		}
+	}
 }
 
 var _ Prober = PipeProber{}
