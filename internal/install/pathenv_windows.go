@@ -179,7 +179,10 @@ func keepPreviousPath(scope Scope, raw string, kind uint32) error {
 	if err != nil {
 		return fmt.Errorf("recording the previous search list: %w", err)
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	// The same directory the hook goes in, made the same way: it is written for
+	// the same scope, and one of the two writers making it the ordinary way
+	// would undo what the other one is for.
+	if err := makeHookDirectory(scope, filepath.Dir(path)); err != nil {
 		return fmt.Errorf("making somewhere to record the previous search list: %w", err)
 	}
 	if err := os.WriteFile(path, append(content, '\n'), 0o644); err != nil {

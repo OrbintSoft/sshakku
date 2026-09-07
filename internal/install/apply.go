@@ -134,7 +134,7 @@ func Install(ctx context.Context, req Request, tree Ancestry) (Outcome, error) {
 		return Outcome{}, err
 	}
 
-	hookFile, err := renderInto(locations.HookDir, p, req.Binary)
+	hookFile, err := renderInto(locations.HookDir, req.Scope, p, req.Binary)
 	if err != nil {
 		return Outcome{}, err
 	}

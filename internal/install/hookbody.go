@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"os"
 	"path/filepath"
 
 	"github.com/OrbintSoft/sshakku/internal/cli/shell"
@@ -93,19 +92,20 @@ func RenderHook(template []byte, placeholder, binary string, dialect shell.Diale
 	return bytes.ReplaceAll(template, []byte(placeholder), []byte(dialect.Quote(binary))), nil
 }
 
-// renderInto writes the rendered hook into hookDir and returns where it put it.
+// renderInto writes the rendered hook into hookDir, made the way that scope's
+// directories are made, and returns where it put it.
 //
 // The directory is created if it is not there, which is the ordinary case on a
 // first install. The file goes down through the same atomic replace every other
 // startup file here does: a session logging in at that moment reads the whole
 // of the old hook or the whole of the new one, never half of each.
-func renderInto(hookDir string, p plan, binary string) (string, error) {
+func renderInto(hookDir string, scope Scope, p plan, binary string) (string, error) {
 	template, placeholder := p.template()
 	rendered, err := RenderHook(template, placeholder, binary, p.dialect)
 	if err != nil {
 		return "", err
 	}
-	if err := os.MkdirAll(hookDir, hookDirMode); err != nil {
+	if err := makeHookDirectory(scope, hookDir); err != nil {
 		return "", fmt.Errorf("making the directory for the hook, %s: %w", hookDir, err)
 	}
 	path := filepath.Join(hookDir, p.hookName())
