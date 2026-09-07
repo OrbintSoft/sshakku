@@ -122,7 +122,7 @@ func TestAHookThatCannotBeRenderedOrPlacedIsNotWritten(t *testing.T) {
 	t.Run("no binary was named", func(t *testing.T) {
 		dir := t.TempDir()
 
-		_, err := renderInto(dir, bournePlan(t), "")
+		_, err := renderInto(dir, User, bournePlan(t), "")
 
 		require.Error(t, err)
 		assert.NoFileExists(t, filepath.Join(dir, "shell-hook.sh"))
@@ -132,7 +132,7 @@ func TestAHookThatCannotBeRenderedOrPlacedIsNotWritten(t *testing.T) {
 		inTheWay := filepath.Join(t.TempDir(), "a-file-not-a-directory")
 		require.NoError(t, os.WriteFile(inTheWay, []byte("mine"), 0o644))
 
-		_, err := renderInto(filepath.Join(inTheWay, "sshakku"), bournePlan(t), "/opt/sshakku/bin/sshakku")
+		_, err := renderInto(filepath.Join(inTheWay, "sshakku"), User, bournePlan(t), "/opt/sshakku/bin/sshakku")
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), inTheWay)
@@ -146,7 +146,7 @@ func TestAHookThatCannotBeRenderedOrPlacedIsNotWritten(t *testing.T) {
 		require.NoError(t, os.Mkdir(hook, 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(hook, "something"), []byte("mine"), 0o644))
 
-		_, err := renderInto(dir, bournePlan(t), "/opt/sshakku/bin/sshakku")
+		_, err := renderInto(dir, User, bournePlan(t), "/opt/sshakku/bin/sshakku")
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), hook)

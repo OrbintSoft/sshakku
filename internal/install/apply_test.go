@@ -32,7 +32,7 @@ func powerShellPlan(t *testing.T) plan {
 func TestTheRenderedHookIsWrittenWhereTheWiringWillPointAtIt(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "not", "there", "yet")
 
-	path, err := renderInto(dir, bournePlan(t), "/opt/sshakku/bin/sshakku")
+	path, err := renderInto(dir, User, bournePlan(t), "/opt/sshakku/bin/sshakku")
 
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(dir, "shell-hook.sh"), path,
@@ -65,7 +65,7 @@ func assertRenderedFrom(t *testing.T, rendered, template []byte, placeholder, qu
 func TestTheRenderedPowerShellHookKeepsItsByteOrderMark(t *testing.T) {
 	dir := t.TempDir()
 
-	path, err := renderInto(dir, powerShellPlan(t), `C:\Users\Ástríður\sshakku.exe`)
+	path, err := renderInto(dir, User, powerShellPlan(t), `C:\Users\Ástríður\sshakku.exe`)
 
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(dir, "shell-hook.ps1"), path)

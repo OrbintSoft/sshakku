@@ -155,7 +155,7 @@ security is a shared responsibility between the software and how it is deployed.
 |---|---|---|---|
 | E1 | The **diagnostic tool run with `sudo`** writes secrets as root, trusts user-controlled env, or follows attacker symlinks. | Future | Use elevation only for read-only inspection; never write A1; sanitise env; resolve paths safely. |
 | E2 | Our login script runs in an **unexpectedly privileged** context (e.g. a root login shell). | Presumed | Behave safely at any privilege; never assume or require root. |
-| E3 | System-wide install paths **writable by the user** → local privilege escalation. | Present (open) | System files owned by root and not user-writable; correct install modes and perms. |
+| E3 | System-wide install paths **writable by the user** → local privilege escalation. Where the system's shared data directory hands every account create-file and create-subdirectory by inheritance — as `%ProgramData%` does — the directory a machine-wide install puts its hook in is one any account may make first and, as its creator, own outright: the file every login on that machine runs, administrators' included. An unprivileged install that gets as far as creating it opens the same hole itself, then fails on the parts that need privilege and leaves the directory behind. | Present (partially mitigated) | System files owned by root and not user-writable; correct install modes and perms. A machine-wide install refuses before creating anything unless it is being run with the authority to finish one. The shared directory, where this creates it, is created with the parent's inheritance broken and write granted to the system and its administrators alone; only the hook and the record of the previous search list go in it, and nothing belonging to a person ever does. Residual: a directory that is already there is taken as found — asserting or repairing one belongs to a packaged installer running as the system, which this does not have yet. |
 | E4 | Where the endpoint is a **named pipe**, its server may *act as* its client: the client picks the impersonation level, and one that picks nothing has picked `SecurityImpersonation`. The pipe namespace is the machine's and is claimed first come, first served, so any account can hold the agent's name while no agent has it — and the diagnostic asks to be run by an administrator. | Present (mitigated) | Open the endpoint with `SECURITY_SQOS_PRESENT\|SECURITY_IDENTIFICATION`: a server may ask which account is calling, which agents legitimately do, and anything it then tries to open as that account is refused with `ERROR_BAD_IMPERSONATION_LEVEL`. |
 
 ### Repudiation
@@ -200,7 +200,10 @@ The rewrite must uphold these on every platform; each traces to the threats abov
    protected path. (D1, D2, S1)
 5. **Bounded, resettable retries with an opt-out.** (D4)
 6. **Least privilege.** Scripts are safe at any privilege and never require root;
-   only the diagnostic may elevate, and only to read. (E1, E2, E3)
+   only the diagnostic may elevate, and only to read. An install that writes what
+   every account on the machine will run is the one thing that requires the
+   authority to do so, and it refuses rather than doing the unprivileged half of
+   the job. (E1, E2, E3)
 7. **Clean environment for child tools.** Absolute `SSH_ASKPASS`,
    `SSH_ASKPASS_REQUIRE=force`, no reliance on an inherited `PATH`. (T3)
 8. **Restrict the agent endpoint to its owner** on every platform — socket

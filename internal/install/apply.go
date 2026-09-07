@@ -120,6 +120,10 @@ func (e shellKindMismatchError) Error() string {
 // anything is written. A shell that will never read the hook is reported
 // instead of wired, rather than discovered at the next login.
 func Install(ctx context.Context, req Request, tree Ancestry) (Outcome, error) {
+	if err := refuseAChangeThisSessionCannotFinish(req.Scope, "install"); err != nil {
+		return Outcome{}, err
+	}
+
 	p, err := resolve(ctx, req, tree)
 	if err != nil {
 		return Outcome{}, err
@@ -130,7 +134,7 @@ func Install(ctx context.Context, req Request, tree Ancestry) (Outcome, error) {
 		return Outcome{}, err
 	}
 
-	hookFile, err := renderInto(locations.HookDir, p, req.Binary)
+	hookFile, err := renderInto(locations.HookDir, req.Scope, p, req.Binary)
 	if err != nil {
 		return Outcome{}, err
 	}
@@ -174,6 +178,10 @@ func Install(ctx context.Context, req Request, tree Ancestry) (Outcome, error) {
 // flags and be uninstalling with another, and a wiring left behind is one that
 // goes on running while nothing mentions it any more.
 func Uninstall(ctx context.Context, req Request, tree Ancestry) (Outcome, error) {
+	if err := refuseAChangeThisSessionCannotFinish(req.Scope, "uninstall"); err != nil {
+		return Outcome{}, err
+	}
+
 	p, err := resolve(ctx, req, tree)
 	if err != nil {
 		return Outcome{}, err
