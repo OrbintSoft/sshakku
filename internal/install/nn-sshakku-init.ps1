@@ -42,24 +42,42 @@ $sshakku_bin = '@SSHAKKU_BIN@'
 # scheduled task, a `git` helper — and neither a question nor a diagnostic
 # belongs in one of those, whose output is something else's input.
 #
-# There is no single flag to read for it, the way a Bourne shell has one, so the
-# two things that can be known are both asked. The first is this session's own
-# invocation: one given a command, a file or an encoded command to run, or told
-# outright it is not interactive, is not one to ask anything of. The names may be
-# abbreviated to any prefix, which is why they are matched as prefixes. The
-# second is where its input comes from: a session reading its commands from a
-# pipe or a file is being driven by something rather than by somebody, and that
-# is true even when nothing on the command line said so.
-$sshakku_interactive = $true
+# There is no single flag to read for it, the way a Bourne shell has one, so
+# what this session was told and where it reads from are put together. Neither
+# half answers on its own.
+#
+# Being handed work does not settle it. A terminal hands the shell it opens a
+# command of its own, to arrange its own integration before the first prompt,
+# and that session is somebody's for the rest of its life. What separates the
+# two is whether the session leaves when the work is done or stays for a prompt
+# — which is what -NoExit says, and what nothing handed work to finish and be
+# done with ever passes, since such a session would never end. -NonInteractive
+# is the caller stating outright that nothing may ask, and is believed on its
+# own. The names may be abbreviated to any prefix, which is why they are matched
+# as prefixes.
+#
+# Nor does the console settle it, and it is worth saying why not: a scheduled
+# task is given one exactly as a terminal window is, reads from it undisturbed,
+# and has nobody in front of it. What it does answer is the other half — a
+# session reading its commands from a pipe or a file is being driven by
+# something rather than by somebody, whatever its command line claims.
+$sshakku_handed_work = $false
+$sshakku_stays = $false
+$sshakku_may_not_ask = $false
 foreach ($sshakku_arg in [System.Environment]::GetCommandLineArgs()) {
     if (-not $sshakku_arg.StartsWith('-')) { continue }
     $sshakku_flag = $sshakku_arg.TrimStart('-').Split(':')[0].ToLowerInvariant()
     if ($sshakku_flag.Length -eq 0) { continue }
-    foreach ($sshakku_batch in @('command', 'file', 'encodedcommand', 'noninteractive')) {
-        if ($sshakku_batch.StartsWith($sshakku_flag)) { $sshakku_interactive = $false }
+    foreach ($sshakku_work in @('command', 'file', 'encodedcommand')) {
+        if ($sshakku_work.StartsWith($sshakku_flag)) { $sshakku_handed_work = $true }
     }
+    if ('noexit'.StartsWith($sshakku_flag)) { $sshakku_stays = $true }
+    if ('noninteractive'.StartsWith($sshakku_flag)) { $sshakku_may_not_ask = $true }
 }
-if ([System.Console]::IsInputRedirected) { $sshakku_interactive = $false }
+# Somebody is here when an answer could come at all.
+$sshakku_interactive = (-not [System.Console]::IsInputRedirected) -and
+    (-not $sshakku_may_not_ask) -and
+    ((-not $sshakku_handed_work) -or $sshakku_stays)
 
 # Resolve the runtime paths, keep the agent healthy, and evaluate the printed
 # assignments. Declare them first so an absent or failing binary leaves them
