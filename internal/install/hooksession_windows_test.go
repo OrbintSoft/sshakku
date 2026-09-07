@@ -142,7 +142,14 @@ func theCallsMadeBy(t *testing.T, shape sessionShape) []string {
 		return nil
 	}
 	require.NoError(t, err)
-	return strings.Split(strings.TrimSpace(string(made)), "\n")
+	// Line endings are not all one shell's: the stand-in writes its own lines,
+	// and the session writes what it read from through this shell's own
+	// Add-Content, which ends a line the way this system does.
+	lines := strings.Split(strings.TrimSpace(string(made)), "\n")
+	for i, line := range lines {
+		lines[i] = strings.TrimRight(line, "\r")
+	}
+	return lines
 }
 
 // aRenderedHook writes the real hook, rendered against the binary standing in
@@ -160,6 +167,17 @@ func aRenderedHook(t *testing.T, dir string) string {
 	hook := filepath.Join(dir, "shell-hook.ps1")
 	require.NoError(t, os.WriteFile(hook, rendered, hookMode))
 	return hook
+}
+
+// whatTheSessionRead is the line the session writes down about where its input
+// came from, in that shell's own spelling of a boolean. A test requires it so
+// that a machine which could not give a session a console says so, instead of
+// having the product reported as failing to load a key.
+func whatTheSessionRead(atAConsole bool) string {
+	if atAConsole {
+		return "input redirected: False"
+	}
+	return "input redirected: True"
 }
 
 // inTestdata names one of the scaffolding scripts in full, since the session
@@ -226,6 +244,8 @@ func TestOnlyASessionThatCouldBeAnsweredLoadsItsKeys(t *testing.T) {
 		t.Run(session.name, func(t *testing.T) {
 			calls := theCallsMadeBy(t, session.shape)
 
+			require.Contains(t, calls, whatTheSessionRead(session.shape.atAConsole),
+				"this session was not opened in the shape this case is about")
 			require.Contains(t, calls, "shell-init --shell=powershell",
 				"this session never reached the binary at all, so what it did about keys says nothing")
 			assert.Equal(t, session.loadsKeys, slices.Contains(calls, "load-keys"),
