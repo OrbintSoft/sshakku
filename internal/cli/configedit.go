@@ -7,14 +7,10 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"unicode"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
 )
-
-// fallbackEditor is the editor to run when neither variable names one. POSIX
-// requires it of every system, which is the only claim that can be made about
-// an editor SSHakku did not ask the user for.
-const fallbackEditor = "vi"
 
 // configEdit opens the user's own config.toml in their editor, creating it
 // from the commented template when they have none, and reports what the file
@@ -25,7 +21,7 @@ func (d deps) configEdit(ctx context.Context, stdout, stderr io.Writer, configDi
 		_, _ = fmt.Fprintf(stderr, "sshakku: %v\n", err)
 		return 1
 	}
-	if err := runEditor(ctx, path); err != nil {
+	if err := runEditor(ctx, editorCommand(configDir), path); err != nil {
 		_, _ = fmt.Fprintf(stderr, "sshakku: %v\n", err)
 		return 1
 	}
@@ -54,8 +50,7 @@ func ensureConfigFile(configDir, path string) error {
 // starts are there so a shell is never left waiting on one; here the shell is
 // waiting on the person at the keyboard, and cutting their editor short would
 // throw away what they had typed.
-func runEditor(ctx context.Context, path string) error {
-	command := editorCommand()
+func runEditor(ctx context.Context, command []string, path string) error {
 	editor := exec.CommandContext(ctx, command[0], append(command[1:], path)...) // #nosec G204 -- the editor is the user's own choice, run on their behalf
 	editor.Stdin, editor.Stdout, editor.Stderr = os.Stdin, os.Stdout, os.Stderr
 	if err := editor.Run(); err != nil {
@@ -64,17 +59,52 @@ func runEditor(ctx context.Context, path string) error {
 	return nil
 }
 
-// editorCommand returns the editor to run and the arguments the user attached
-// to it: $EDITOR holds a command line ("code -w", "emacs -nw") rather than a
-// bare program name, and honouring only the first word would run some editors
-// in a mode their owner never uses.
-func editorCommand() []string {
-	for _, name := range []string{"EDITOR", "VISUAL"} {
-		if fields := strings.Fields(os.Getenv(name)); len(fields) > 0 {
-			return fields
+// editorCommand returns the editor to open the file in and the arguments it
+// was named with, which is never empty: an editor nobody named is this
+// system's own.
+//
+// The configuration is read before the edit rather than after, because the
+// file being edited is also the file that can name the editor: what applies is
+// what its owner wrote the last time they were here. A file that no longer
+// parses names nothing, which leaves the variables and this system's own
+// editor — and that is exactly the moment one has to be opened.
+func editorCommand(configDir string) []string {
+	settings, _ := config.Resolve(config.Merged(config.LoadSources(configDir)), os.LookupEnv)
+	return splitCommandLine(settings.Editor)
+}
+
+// splitCommandLine cuts a command line into the program and the arguments
+// after it, on spaces, except where double quotes hold a run of them together:
+// $EDITOR holds a command line ("code -w", "emacs -nw") rather than a bare
+// program name, and honouring only the first word would run some editors in a
+// mode their owner never uses.
+//
+// Quoting is what makes the setting usable at all on a system whose programs
+// are installed under paths with spaces in them, and it is the quoting those
+// systems already use, so a path can be pasted from where it was found.
+func splitCommandLine(line string) []string {
+	var fields []string
+	var current strings.Builder
+	quoted, started := false, false
+	for _, r := range line {
+		switch {
+		case r == '"':
+			quoted, started = !quoted, true
+		case !quoted && unicode.IsSpace(r):
+			if started {
+				fields = append(fields, current.String())
+				current.Reset()
+				started = false
+			}
+		default:
+			current.WriteRune(r)
+			started = true
 		}
 	}
-	return []string{fallbackEditor}
+	if started {
+		fields = append(fields, current.String())
+	}
+	return fields
 }
 
 // reportEdited says what the file just saved cannot say about itself: that it

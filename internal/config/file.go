@@ -94,6 +94,13 @@ type File struct {
 	// the keys that come after it. Config-file only for the same reason as the
 	// dialog it answers: it decides how the user is spoken to.
 	OnDismiss *string `toml:"on_dismiss"`
+
+	// Editor is the command line `config --edit` opens the file in. It has no
+	// SSHAKKU_ variable of its own because the environment already has two
+	// names for this, $EDITOR and $VISUAL, which are read where this is not
+	// set — and unlike every other setting here, this one is looked at before
+	// them: those two are the system's, this is what was said to SSHakku.
+	Editor *string `toml:"editor"`
 }
 
 // Settings is the configuration resolved from environment, file, and defaults.
@@ -176,6 +183,12 @@ type Settings struct {
 	// OnDismiss is what a dismissed passphrase prompt means for the keys still
 	// to come; one of the keys.OnDismiss* values, and never empty.
 	OnDismiss string
+
+	// Editor is the command line `config --edit` runs, and is never empty: what
+	// the configuration named, else $EDITOR, else $VISUAL, else the editor this
+	// system is certain to have. It is a command line rather than a program
+	// name — arguments the user attached to it are part of it.
+	Editor string
 }
 
 // Wallet-store policy modes for Settings.WalletStoreMode.
@@ -368,6 +381,7 @@ func (f File) Merge(other File) File {
 	merged.KeyPatterns = overrideList(f.KeyPatterns, other.KeyPatterns)
 	merged.GUIPrompter = override(f.GUIPrompter, other.GUIPrompter)
 	merged.OnDismiss = override(f.OnDismiss, other.OnDismiss)
+	merged.Editor = override(f.Editor, other.Editor)
 	merged.SecretBackend = override(f.SecretBackend, other.SecretBackend)
 	merged.OnePasswordVault = override(f.OnePasswordVault, other.OnePasswordVault)
 	merged.BitwardenEmail = override(f.BitwardenEmail, other.BitwardenEmail)
@@ -531,7 +545,34 @@ func Resolve(file File, lookup func(string) (string, bool)) (Settings, []error) 
 	errs = refused(errs, "on_dismiss", err)
 	s.OnDismiss = dismiss
 
+	s.Editor = resolveEditorFrom(file.Editor, lookup, platformEditor)
+
 	return s, errs
+}
+
+// resolveEditorFrom picks the editor to open a file in: the one the
+// configuration names, else $EDITOR, else $VISUAL, else the one this system is
+// certain to have. The last of those is passed in rather than read here, so
+// every answer stays checkable from a machine that is not the one it names.
+//
+// The order is the other way round from every other setting, where a variable
+// overrides the file. These two variables are not SSHakku's: they are the
+// system's idea of an editor, and a user who wrote one into this configuration
+// was answering SSHakku rather than the system.
+//
+// A variable holding nothing but spaces is not a name. Exporting one empty is
+// how a shell leaves a variable it did not set, and taking it for an editor
+// would leave nothing to run where there was an answer further down.
+func resolveEditorFrom(fileVal *string, lookup func(string) (string, bool), fallback string) string {
+	if named := strings.TrimSpace(derefString(fileVal)); named != "" {
+		return named
+	}
+	for _, name := range []string{"EDITOR", "VISUAL"} {
+		if v, ok := lookup(name); ok && strings.TrimSpace(v) != "" {
+			return strings.TrimSpace(v)
+		}
+	}
+	return fallback
 }
 
 // resolveServicePrefix is config-file only (per File's doc comment). An absent

@@ -91,3 +91,11 @@
 # Whichever applies, nothing is stored and no key is given up: the next login
 # shell asks again from the first key.
 # on_dismiss = "skip"
+
+# The editor `sshakku config --edit` opens this file in. Left out, $EDITOR is
+# read, then $VISUAL, then the editor this system is certain to have. Arguments
+# written after the program are passed on to it, and a program whose path has
+# spaces in it goes in quotes — inside single quotes, where a backslash is a
+# backslash.
+# editor = "code -w"
+# editor = '"C:\Program Files\Microsoft VS Code\Code.exe" -w'

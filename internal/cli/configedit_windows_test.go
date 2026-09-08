@@ -24,7 +24,7 @@ func TestTheEditorNobodyNamedIsOneThisSystemHas(t *testing.T) {
 	t.Setenv("EDITOR", "")
 	t.Setenv("VISUAL", "")
 
-	command := editorCommand()
+	command := editorCommand(t.TempDir())
 	require.NotEmpty(t, command, "some editor has to be run")
 
 	_, err := exec.LookPath(command[0])

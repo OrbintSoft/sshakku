@@ -136,19 +136,6 @@ func TestConfigEditFallsBackToVisual(t *testing.T) {
 		"and what that editor saved must be what is on disk")
 }
 
-// TestConfigEditWithNoEditorNamedAtAll covers the last resort: a user who has
-// set neither variable still gets an editor rather than an error about a
-// variable they have never heard of. Asserted on the choice rather than by
-// running it — vi on this machine would open on the test's own terminal and
-// wait for someone to close it.
-func TestConfigEditWithNoEditorNamedAtAll(t *testing.T) {
-	t.Setenv("EDITOR", "")
-	t.Setenv("VISUAL", "")
-
-	assert.Equal(t, []string{fallbackEditor}, editorCommand(),
-		"with neither variable set the fallback editor is used, not an error about a variable")
-}
-
 // TestConfigEditCannotMakeTheDirectoryToEditIn covers what happens when there
 // is nowhere to put the file: the user is told which path could not be made,
 // rather than an editor opening on nothing and their work going somewhere they

@@ -139,6 +139,10 @@ func TestResolveDefaults(t *testing.T) {
 		KeePassXCRoute: KeePassXCRouteAuto,
 		GUIPrompter:    GUIPrompterAuto,
 		OnDismiss:      keys.OnDismissStop,
+		// Resolved with nothing configured for the same reason the entry name
+		// is: `config --edit` has to open something, and an empty value would
+		// leave it with nothing to run.
+		Editor: platformEditor,
 	}
 	assert.Equal(t, want, s, "Resolve(empty)")
 }
@@ -170,6 +174,7 @@ func TestResolveFileWins(t *testing.T) {
 		KeePassXCRoute:     KeePassXCRouteAuto,
 		GUIPrompter:        GUIPrompterAuto,
 		OnDismiss:          keys.OnDismissStop,
+		Editor:             platformEditor,
 	}
 	assert.Equal(t, want, s, "Resolve(file)")
 }
@@ -438,6 +443,43 @@ func TestResolveGUIPrompterFrom(t *testing.T) {
 			} else {
 				assert.NoError(t, err, "unexpected error")
 			}
+		})
+	}
+}
+
+// TestResolveEditorFrom covers the order the editor is chosen in, with each
+// platform's own answer handed in rather than read off the machine running the
+// test: the answers differ, the choosing does not, so both stay checkable from
+// either machine.
+//
+// The order is not the one every other setting is read in. Here the file is
+// looked at first, because $EDITOR and $VISUAL are the system's idea of an
+// editor while the file is what its owner said to SSHakku.
+func TestResolveEditorFrom(t *testing.T) {
+	const windows, unix = "notepad.exe", "vi"
+	both := map[string]string{"EDITOR": "emacs -nw", "VISUAL": "gedit"}
+
+	cases := []struct {
+		name     string
+		val      *string
+		env      map[string]string
+		fallback string
+		want     string
+	}{
+		{"named in the configuration", new("code -w"), both, windows, "code -w"},
+		{"named nowhere at all", nil, nil, windows, windows},
+		{"named nowhere at all, elsewhere", nil, nil, unix, unix},
+		{"named in the environment", nil, both, windows, "emacs -nw"},
+		{"named in the second variable", nil, map[string]string{"VISUAL": "gedit"}, windows, "gedit"},
+		{"the first variable exported empty", nil, map[string]string{"EDITOR": "", "VISUAL": "gedit"}, unix, "gedit"},
+		{"both variables exported empty", nil, map[string]string{"EDITOR": "", "VISUAL": " "}, unix, unix},
+		{"written empty in the configuration", new("  "), both, windows, "emacs -nw"},
+		{"a path with a space in it, quoted", new(`"C:\Program Files\ed\ed.exe" -w`), nil, windows, `"C:\Program Files\ed\ed.exe" -w`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			assert.Equal(t, c.want, resolveEditorFrom(c.val, lookupFrom(c.env), c.fallback),
+				"the editor to open a file in")
 		})
 	}
 }

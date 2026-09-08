@@ -129,10 +129,18 @@ func refusalOf(errs []error, key string) error {
 // catch the setting that arrives without one.
 type settingDesc struct {
 	key string
-	// env is the variable that can override the file, or "" for a setting that
-	// can only be written in a file.
-	env string
-	// envUsed reports whether a value found in env is one Resolve will act on.
+	// envs are the variables that can state this setting, in the order they are
+	// read, or none for a setting that can only be written in a file. All but
+	// one setting has a single variable of SSHakku's own; the editor is stated
+	// by the system's two, $EDITOR and $VISUAL.
+	envs []string
+	// fileFirst says the file is looked at before the environment, which is the
+	// order only the editor is read in: its variables belong to the system,
+	// while a value in the configuration was written to SSHakku. Everywhere
+	// else the variable is SSHakku's own and overrides the file.
+	fileFirst bool
+	// envUsed reports whether a value found in one of envs is one Resolve will
+	// act on.
 	// Nil means any value is; max_attempts is the exception, silently ignoring
 	// what it cannot use, and attributing the value in force to a variable that
 	// was disregarded would send the user to edit the wrong thing.
@@ -148,9 +156,9 @@ type settingDesc struct {
 // statedBy returns where the setting's value was stated: the environment when
 // a variable holds one, else the last file to set it, else nowhere.
 func (d settingDesc) statedBy(sources []Source, lookup func(string) (string, bool)) Origin {
-	if d.env != "" {
-		if v, ok := lookup(d.env); ok && (d.envUsed == nil || d.envUsed(v)) {
-			return Origin{Kind: OriginEnv, Name: d.env}
+	if !d.fileFirst {
+		if o, ok := d.statedInTheEnvironment(lookup); ok {
+			return o
 		}
 	}
 	for _, source := range slices.Backward(sources) {
@@ -158,7 +166,23 @@ func (d settingDesc) statedBy(sources []Source, lookup func(string) (string, boo
 			return Origin{Kind: OriginFile, Name: source.Path}
 		}
 	}
+	if d.fileFirst {
+		if o, ok := d.statedInTheEnvironment(lookup); ok {
+			return o
+		}
+	}
 	return Origin{Kind: OriginDefault}
+}
+
+// statedInTheEnvironment returns the first of the setting's variables holding a
+// value it will be resolved to, and whether there was one.
+func (d settingDesc) statedInTheEnvironment(lookup func(string) (string, bool)) (Origin, bool) {
+	for _, name := range d.envs {
+		if v, ok := lookup(name); ok && (d.envUsed == nil || d.envUsed(v)) {
+			return Origin{Kind: OriginEnv, Name: name}, true
+		}
+	}
+	return Origin{}, false
 }
 
 // settingTable lists every setting a user can write, in the order the report
@@ -166,12 +190,12 @@ func (d settingDesc) statedBy(sources []Source, lookup func(string) (string, boo
 // keys, then the per-backend account details.
 var settingTable = []settingDesc{
 	{
-		key: "key_lifetime", env: "SSHAKKU_KEY_LIFETIME",
+		key: "key_lifetime", envs: []string{"SSHAKKU_KEY_LIFETIME"},
 		set:   func(f File) bool { return f.KeyLifetime != nil },
 		value: func(s Settings) string { return duration(s.KeyLifetime, "no expiry") },
 	},
 	{
-		key: "max_attempts", env: "SSHAKKU_MAX_ATTEMPTS",
+		key: "max_attempts", envs: []string{"SSHAKKU_MAX_ATTEMPTS"},
 		envUsed: func(v string) bool { return EnvInt(v) > 0 },
 		set:     func(f File) bool { return f.MaxAttempts != nil },
 		value: func(s Settings) string {
@@ -182,27 +206,27 @@ var settingTable = []settingDesc{
 		},
 	},
 	{
-		key: "giveup_ttl", env: "SSHAKKU_GIVEUP_TTL",
+		key: "giveup_ttl", envs: []string{"SSHAKKU_GIVEUP_TTL"},
 		set:   func(f File) bool { return f.GiveupTTL != nil },
 		value: func(s Settings) string { return duration(s.GiveupTTL, "never expires") },
 	},
 	{
-		key: "no_giveup", env: "SSHAKKU_NO_GIVEUP",
+		key: "no_giveup", envs: []string{"SSHAKKU_NO_GIVEUP"},
 		set:   func(f File) bool { return f.NoGiveup != nil },
 		value: func(s Settings) string { return strconv.FormatBool(s.NoGiveup) },
 	},
 	{
-		key: "quiet", env: "SSHAKKU_QUIET",
+		key: "quiet", envs: []string{"SSHAKKU_QUIET"},
 		set:   func(f File) bool { return f.Quiet != nil },
 		value: func(s Settings) string { return strconv.FormatBool(s.Quiet) },
 	},
 	{
-		key: "command_timeout", env: "SSHAKKU_COMMAND_TIMEOUT",
+		key: "command_timeout", envs: []string{"SSHAKKU_COMMAND_TIMEOUT"},
 		set:   func(f File) bool { return f.CommandTimeout != nil },
 		value: func(s Settings) string { return s.CommandTimeout.String() },
 	},
 	{
-		key: "interactive_timeout", env: "SSHAKKU_INTERACTIVE_TIMEOUT",
+		key: "interactive_timeout", envs: []string{"SSHAKKU_INTERACTIVE_TIMEOUT"},
 		set:   func(f File) bool { return f.InteractiveTimeout != nil },
 		value: func(s Settings) string { return s.InteractiveTimeout.String() },
 	},
@@ -314,6 +338,16 @@ var settingTable = []settingDesc{
 		key:   "on_dismiss",
 		set:   func(f File) bool { return f.OnDismiss != nil },
 		value: func(s Settings) string { return s.OnDismiss },
+	},
+	{
+		key: "editor", envs: []string{"EDITOR", "VISUAL"}, fileFirst: true,
+		// A variable holding nothing but spaces is not an editor, and Resolve
+		// reads past it: attributing the value in force to a variable that was
+		// stepped over would send the user to correct the wrong thing.
+		envUsed: func(v string) bool { return strings.TrimSpace(v) != "" },
+		// Empty is not a name here either, for the same reason.
+		set:   func(f File) bool { return f.Editor != nil && strings.TrimSpace(*f.Editor) != "" },
+		value: func(s Settings) string { return s.Editor },
 	},
 }
 
