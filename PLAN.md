@@ -1114,8 +1114,10 @@ guessing which `config.toml` key won.
   an environment variable, `config.toml`, or the `config.d` drop-in that
   overruled the rest — plus the files read in the order they were applied, and
   any value SSHakku refused, which until then reached only the session log.
-- **`sshakku config --edit` ✅ Done (F36).** Opens `config.toml` in `$EDITOR`
-  (then `$VISUAL`, then `vi`), creating it from an embedded commented template
+- **`sshakku config --edit` ✅ Done (F36).** Opens `config.toml` in the editor
+  `editor` names, else `$EDITOR`, then `$VISUAL`, then the first of this
+  system's own editors it can find (`notepad++.exe`, `edit.exe`, `notepad.exe`
+  on Windows; `vi` elsewhere), creating it from an embedded commented template
   if absent, and on exit names what would otherwise have surfaced at the next
   login: a file that no longer parses, a value that was refused, a key a
   drop-in or a variable decides instead.
