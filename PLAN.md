@@ -421,6 +421,34 @@ done are summarised; see the note at the top of this file for full detail.
     property to hold is that running the plain unit suite on your own machine
     cannot write to anything of yours.
 
+26. **A key that has no passphrase is asked for one anyway (goal 1). Raised
+    2026-09-07; open.** The loader has no path that hands a key to the agent as
+    it is: `loadViaVaultThenPrompt` in `internal/keys/load.go` looks in the
+    wallet, finds nothing for a key that never had a passphrase, and asks. The
+    same function refuses an empty answer a few lines later — "a key that has no
+    passphrase is never asked about" — so the answer that would be true is the
+    one answer it will not take, and the key spends its attempts and is given up
+    on.
+
+    Observed twice in a native Windows container, on a key made with `-N ""` and
+    an empty store: `sshakku load-keys` did not come back with its streams
+    captured, and a session opened at a console never reached its prompt. What
+    it was waiting on was not established — only that it waited.
+
+    Found while writing `windows-console-session-scenario.ps1`, whose first
+    version used such a key on the reasoning that `ssh-add` takes one without
+    asking anybody anything. `ssh-add` does. That scenario now puts a passphrase
+    in the store, so nothing in the suite rests on this behaviour.
+
+    F4 promises you are asked for a key's passphrase, and a key that has none is
+    not a key that promise is about. To decide: whether the loader offers the
+    key as it is before asking — one `ssh-add` that either works or does not —
+    or recognises such a key from the file and loads it without the wallet at
+    all, or whether this stands, on the ground that a key with no passphrase is
+    not what SSHakku is for. Whichever it is, it belongs in `docs/FEATURES.md`
+    before it is built: today the behaviour is in neither the catalogue nor the
+    matrix.
+
 ---
 
 ## Phases
