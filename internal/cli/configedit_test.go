@@ -190,6 +190,84 @@ func TestConfigEditCannotWriteTheFileToEdit(t *testing.T) {
 	assert.Contains(t, errOut, "config.toml", "and the file it could not create must be named")
 }
 
+// TestTheEditorNamedInTheConfigurationIsTheOneOpened verifies the half of F36
+// that says which editor is opened: the one named in the configuration, which
+// is the first place SSHakku looks and is looked at even where the environment
+// names another.
+//
+// $EDITOR here names a program that is not installed, so an editor named in
+// the configuration being run at all is the whole of the assertion: an
+// implementation that read the environment first would have nothing to run.
+func TestTheEditorNamedInTheConfigurationIsTheOneOpened(t *testing.T) {
+	home := tempRuntimeEnv(t)
+	record := useEditor(t, "")
+	t.Setenv("EDITOR", "sshakku-not-this-editor")
+	writeConfig(t, home, "config.toml", "editor = '"+editorScript(t)+"'\n")
+
+	out, errOut, code := runConfigEdit(t)
+	require.Zerof(t, code, "an editor named in the configuration must be the one run: %s / %s", out, errOut)
+
+	require.FileExistsf(t, record, "the editor named in the configuration is the one that had to be run")
+	assert.Contains(t, readFile(t, record), filepath.Join(home, ".config", "sshakku", "config.toml"),
+		"and it must have been handed the user's own file")
+}
+
+// TestAnEditorWhosePathHasSpacesIsRunAsOneProgram verifies F36 for the way
+// editors are actually installed on the system this was written for: under
+// `C:\Program Files`, whose name has a space in it. A command line cut on
+// spaces names a program that is not there, so the promise that you can name
+// your editor would not survive being taken up.
+//
+// Both places an editor can be named are held to it, since a user meets the
+// same path either way.
+func TestAnEditorWhosePathHasSpacesIsRunAsOneProgram(t *testing.T) {
+	t.Run("named in the configuration", func(t *testing.T) {
+		home := tempRuntimeEnv(t)
+		record := useEditor(t, "")
+		t.Setenv("EDITOR", "sshakku-not-this-editor")
+		writeConfig(t, home, "config.toml",
+			"editor = '\""+anEditorUnderAPathWithASpace(t)+"\" --wait'\n")
+
+		_, errOut, code := runConfigEdit(t)
+		require.Zerof(t, code, "an editor whose path has a space in it must still be run: %s", errOut)
+		assertOpenedTheUsersOwnFile(t, record, home)
+	})
+
+	t.Run("named in the environment", func(t *testing.T) {
+		home := tempRuntimeEnv(t)
+		record := useEditor(t, "")
+		t.Setenv("EDITOR", `"`+anEditorUnderAPathWithASpace(t)+`" --wait`)
+
+		_, errOut, code := runConfigEdit(t)
+		require.Zerof(t, code, "an $EDITOR whose path has a space in it must still be run: %s", errOut)
+		assertOpenedTheUsersOwnFile(t, record, home)
+	})
+}
+
+// assertOpenedTheUsersOwnFile requires the stand-in editor to have been run
+// with the arguments it was named with and the user's own file after them.
+func assertOpenedTheUsersOwnFile(t *testing.T, record, home string) {
+	t.Helper()
+	require.FileExists(t, record, "the editor named had to be run")
+	opened := readFile(t, record)
+	assert.Contains(t, opened, "--wait", "the arguments written after the program must be passed on")
+	assert.Contains(t, opened, filepath.Join(home, ".config", "sshakku", "config.toml"),
+		"and the file to edit must come after them")
+}
+
+// anEditorUnderAPathWithASpace copies the stand-in editor into a directory
+// whose name has a space in it, and returns where it put it.
+func anEditorUnderAPathWithASpace(t *testing.T) string {
+	t.Helper()
+	dir := filepath.Join(t.TempDir(), "Editor Programs")
+	require.NoError(t, os.MkdirAll(dir, 0o700), "make a directory with a space in its name")
+	body, err := os.ReadFile(editorScript(t))
+	require.NoError(t, err, "read the stand-in editor")
+	path := filepath.Join(dir, editorFixtureName)
+	require.NoError(t, os.WriteFile(path, body, 0o700), "put a copy of it there")
+	return path
+}
+
 // useEditor points $EDITOR at the stand-in under testdata: a real program,
 // exec'd by SSHakku like any editor, which records what it was asked to open
 // and saves body over it (empty body leaves the file untouched). It returns the
