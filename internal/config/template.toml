@@ -93,7 +93,7 @@
 # on_dismiss = "skip"
 
 # The editor `sshakku config --edit` opens this file in. Left out, $EDITOR is
-# read, then $VISUAL, then the editor this system is certain to have. Arguments
+# read, then $VISUAL, then the first editor this system has of its own. Arguments
 # written after the program are passed on to it, and a program whose path has
 # spaces in it goes in quotes — inside single quotes, where a backslash is a
 # backslash.
