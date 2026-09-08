@@ -135,10 +135,13 @@ never one of them — but some of them name you or your machine (an account
 email, a database path under your home), so read the output before pasting it
 into a bug report.
 
-- `--edit` — opens `config.toml` in `$EDITOR` (then `$VISUAL`, then `vi`),
-  creating it from a commented template if you have none. `$EDITOR` may carry
-  arguments (`code -w`), and they are passed on. That file only: `config.d/` is
-  never opened for you. When the editor exits, SSHakku re-reads the file and
+- `--edit` — opens `config.toml` in the editor `editor` names, or in `$EDITOR`,
+  then `$VISUAL`, then the one this system is certain to have (`notepad.exe` on
+  Windows, `vi` elsewhere), creating it from a commented template if you have
+  none. The editor may carry arguments of its own (`code -w`), and they are
+  passed on; a program whose path has spaces in it goes in quotes
+  (`editor = '"C:\Program Files\Microsoft VS Code\Code.exe" -w'`). That file
+  only: `config.d/` is never opened for you. When the editor exits, SSHakku re-reads the file and
   tells you what you would otherwise meet at your next login — that it can no
   longer be parsed, that a value in it was refused, or that a key set in it is
   decided by a drop-in or by an exported variable instead.
