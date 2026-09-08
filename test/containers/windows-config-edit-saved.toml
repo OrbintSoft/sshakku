@@ -1,0 +1,4 @@
+# What the stand-in editor saves into the file it was handed. The scenario
+# reads this value back out of `sshakku config` afterwards, which is how it
+# tells an editor that ran and saved from one that never ran at all.
+key_lifetime = "3h"

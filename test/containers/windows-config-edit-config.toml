@@ -1,0 +1,5 @@
+# What windows-config-edit-scenario.ps1 hands the program as an existing
+# configuration: an editor named with arguments of its own, under a path with a
+# space in it — which is where programs are installed on this system, and the
+# case a command line cut on spaces cannot express.
+editor = 'powershell -NoProfile -ExecutionPolicy Bypass -File "C:\Program Files\SSHakku Test\windows-stand-in-editor.ps1"'
