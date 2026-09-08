@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"unicode"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
 )
@@ -70,41 +69,7 @@ func runEditor(ctx context.Context, command []string, path string) error {
 // editor — and that is exactly the moment one has to be opened.
 func editorCommand(configDir string) []string {
 	settings, _ := config.Resolve(config.Merged(config.LoadSources(configDir)), os.LookupEnv)
-	return splitCommandLine(settings.Editor)
-}
-
-// splitCommandLine cuts a command line into the program and the arguments
-// after it, on spaces, except where double quotes hold a run of them together:
-// $EDITOR holds a command line ("code -w", "emacs -nw") rather than a bare
-// program name, and honouring only the first word would run some editors in a
-// mode their owner never uses.
-//
-// Quoting is what makes the setting usable at all on a system whose programs
-// are installed under paths with spaces in them, and it is the quoting those
-// systems already use, so a path can be pasted from where it was found.
-func splitCommandLine(line string) []string {
-	var fields []string
-	var current strings.Builder
-	quoted, started := false, false
-	for _, r := range line {
-		switch {
-		case r == '"':
-			quoted, started = !quoted, true
-		case !quoted && unicode.IsSpace(r):
-			if started {
-				fields = append(fields, current.String())
-				current.Reset()
-				started = false
-			}
-		default:
-			current.WriteRune(r)
-			started = true
-		}
-	}
-	if started {
-		fields = append(fields, current.String())
-	}
-	return fields
+	return config.EditorCommand(settings)
 }
 
 // reportEdited says what the file just saved cannot say about itself: that it

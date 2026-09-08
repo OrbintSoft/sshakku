@@ -184,10 +184,15 @@ type Settings struct {
 	// to come; one of the keys.OnDismiss* values, and never empty.
 	OnDismiss string
 
-	// Editor is the command line `config --edit` runs, and is never empty: what
-	// the configuration named, else $EDITOR, else $VISUAL, else the editor this
-	// system is certain to have. It is a command line rather than a program
-	// name — arguments the user attached to it are part of it.
+	// Editor is the editor stated for `config --edit`: what the configuration
+	// named, else $EDITOR, else $VISUAL, and empty where nobody named one. It
+	// is a command line rather than a program name — arguments its owner
+	// attached to it are part of it.
+	//
+	// What is opened where nothing was stated is EditorCommand's to say, not
+	// this field's: it depends on which editors this machine turns out to have,
+	// and looking that up belongs to the one command that opens an editor
+	// rather than to every login that resolves a configuration.
 	Editor string
 }
 
@@ -545,15 +550,13 @@ func Resolve(file File, lookup func(string) (string, bool)) (Settings, []error) 
 	errs = refused(errs, "on_dismiss", err)
 	s.OnDismiss = dismiss
 
-	s.Editor = resolveEditorFrom(file.Editor, lookup, platformEditor)
+	s.Editor = statedEditor(file.Editor, lookup)
 
 	return s, errs
 }
 
-// resolveEditorFrom picks the editor to open a file in: the one the
-// configuration names, else $EDITOR, else $VISUAL, else the one this system is
-// certain to have. The last of those is passed in rather than read here, so
-// every answer stays checkable from a machine that is not the one it names.
+// statedEditor is the editor somebody stated: the one the configuration names,
+// else $EDITOR, else $VISUAL, and empty where none of them names one.
 //
 // The order is the other way round from every other setting, where a variable
 // overrides the file. These two variables are not SSHakku's: they are the
@@ -563,7 +566,7 @@ func Resolve(file File, lookup func(string) (string, bool)) (Settings, []error) 
 // A variable holding nothing but spaces is not a name. Exporting one empty is
 // how a shell leaves a variable it did not set, and taking it for an editor
 // would leave nothing to run where there was an answer further down.
-func resolveEditorFrom(fileVal *string, lookup func(string) (string, bool), fallback string) string {
+func statedEditor(fileVal *string, lookup func(string) (string, bool)) string {
 	if named := strings.TrimSpace(derefString(fileVal)); named != "" {
 		return named
 	}
@@ -572,7 +575,7 @@ func resolveEditorFrom(fileVal *string, lookup func(string) (string, bool), fall
 			return strings.TrimSpace(v)
 		}
 	}
-	return fallback
+	return ""
 }
 
 // resolveServicePrefix is config-file only (per File's doc comment). An absent

@@ -346,8 +346,11 @@ var settingTable = []settingDesc{
 		// stepped over would send the user to correct the wrong thing.
 		envUsed: func(v string) bool { return strings.TrimSpace(v) != "" },
 		// Empty is not a name here either, for the same reason.
-		set:   func(f File) bool { return f.Editor != nil && strings.TrimSpace(*f.Editor) != "" },
-		value: func(s Settings) string { return s.Editor },
+		set: func(f File) bool { return f.Editor != nil && strings.TrimSpace(*f.Editor) != "" },
+		// What is in force where nobody stated one is whichever of this
+		// system's own editors is here, which is a question about the machine
+		// rather than about the configuration.
+		value: EditorInForce,
 	},
 }
 
