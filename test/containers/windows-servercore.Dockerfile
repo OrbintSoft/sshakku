@@ -31,5 +31,12 @@ COPY sshakku.exe C:/sshakku-under-test/sshakku-askpass.exe
 
 COPY *.ps1 C:/scenario/
 
+# The configurations a scenario hands the program as an existing one, and what
+# a stand-in editor saves into it. They are files rather than lines a scenario
+# writes, so that what SSHakku is given to read is written in TOML and can be
+# read, diffed and linted as TOML.
+COPY windows-config-edit-config.toml C:/scenario/windows-config-edit-config.toml
+COPY windows-config-edit-saved.toml C:/scenario/windows-config-edit-saved.toml
+
 # No CMD: every scenario is named by the caller, so an image run with nothing
 # said does nothing rather than something arbitrary.

@@ -99,6 +99,42 @@ one file — a drop-in is never opened for you.
 
 See [CLI.md](CLI.md#sshakku-config) for both.
 
+## Choosing the editor `config --edit` opens
+
+`editor` names the program `sshakku config --edit` starts, and it is the first
+thing SSHakku looks at:
+
+```toml
+editor = "code -w"
+```
+
+Where it is not set, `$EDITOR` is read, then `$VISUAL`, then the first editor
+this system has of the ones it ships with. On Linux and macOS that is `vi`,
+which POSIX requires of every such system. Windows is not such a system and has
+no `vi`: there SSHakku looks for `edit.exe`, the console editor recent builds
+and the desktop-less Server editions carry, and falls back to `notepad.exe`,
+which every Windows with a desktop has. A stock Windows account has neither
+variable set, which is why there is a default there at all rather than an error
+about a program nobody installed.
+
+The order between the two is not arbitrary: `sshakku config --edit` is run from
+a terminal, and a console editor edits in the terminal you typed it in — over
+SSH, or on a Server installation with no desktop, that is the difference
+between editing the file and waiting on a window nobody can see.
+
+The value is a command line rather than a bare program name: arguments you
+write are passed on, and a program whose path contains spaces goes in quotes.
+
+```toml
+editor = '"C:\Program Files\Microsoft VS Code\Code.exe" -w'
+```
+
+Single quotes make a TOML literal string, which keeps the backslashes as
+written; inside a double-quoted string each one has to be doubled.
+
+`sshakku config` prints the editor in force like any other setting, next to
+what decided it.
+
 ## Choosing the secret backend
 
 Left alone, SSHakku uses the wallet your operating system provides itself, and

@@ -91,6 +91,29 @@ func TestExplainNamesWhereEachValueCameFrom(t *testing.T) {
 		assert.Equal(t, "30m0s", s.Value, "value must be the exported one")
 	})
 
+	// The editor is the one setting a file overrules a variable for, and a
+	// report that named the variable would send its reader to change something
+	// that is not deciding anything.
+	t.Run("the editor named in a file is attributed to the file, not to $EDITOR", func(t *testing.T) {
+		dir := configDir(t, map[string]string{"config.toml": "editor = \"code -w\"\n"})
+		env := map[string]string{"EDITOR": "emacs -nw"}
+		s := explained(t, LoadSources(dir), env, "editor")
+		assert.Equal(t, OriginFile, s.From.Kind, "origin kind")
+		assert.Equal(t, filepath.Join(dir, "config.toml"), s.From.Name, "origin name")
+		assert.Equal(t, "code -w", s.Value, "value must be the file's own")
+	})
+
+	// Either of the system's two variables can be the one that decided, and
+	// only one of them is worth being sent to.
+	t.Run("the editor taken from the environment names the variable it came from", func(t *testing.T) {
+		dir := configDir(t, nil)
+		env := map[string]string{"EDITOR": "", "VISUAL": "gedit"}
+		s := explained(t, LoadSources(dir), env, "editor")
+		assert.Equal(t, OriginEnv, s.From.Kind, "origin kind")
+		assert.Equal(t, "VISUAL", s.From.Name, "the variable that held an editor is the one to name")
+		assert.Equal(t, "gedit", s.Value, "value must be the exported one")
+	})
+
 	// A setting with no environment variable must never be attributed to one,
 	// however the environment is dressed up: a user told the wrong place to
 	// change a value looks for a variable that changes nothing.

@@ -441,3 +441,36 @@ func TestResolveGUIPrompterFrom(t *testing.T) {
 		})
 	}
 }
+
+// TestStatedEditor covers the order an editor somebody named is taken in, and
+// that nothing is invented where nobody named one — what stands in for that is
+// a question about the machine, and TestTheEditorOpenedIsTheFirstThisSystemHas
+// is where it is asked.
+//
+// The order is not the one every other setting is read in. Here the file is
+// looked at first, because $EDITOR and $VISUAL are the system's idea of an
+// editor while the file is what its owner said to SSHakku.
+func TestStatedEditor(t *testing.T) {
+	both := map[string]string{"EDITOR": "emacs -nw", "VISUAL": "gedit"}
+
+	cases := []struct {
+		name string
+		val  *string
+		env  map[string]string
+		want string
+	}{
+		{"named in the configuration", new("code -w"), both, "code -w"},
+		{"named nowhere at all", nil, nil, ""},
+		{"named in the environment", nil, both, "emacs -nw"},
+		{"named in the second variable", nil, map[string]string{"VISUAL": "gedit"}, "gedit"},
+		{"the first variable exported empty", nil, map[string]string{"EDITOR": "", "VISUAL": "gedit"}, "gedit"},
+		{"both variables exported empty", nil, map[string]string{"EDITOR": "", "VISUAL": " "}, ""},
+		{"written empty in the configuration", new("  "), both, "emacs -nw"},
+		{"a path with a space in it, quoted", new(`"C:\Program Files\ed\ed.exe" -w`), nil, `"C:\Program Files\ed\ed.exe" -w`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			assert.Equal(t, c.want, statedEditor(c.val, lookupFrom(c.env)), "the editor somebody stated")
+		})
+	}
+}

@@ -449,6 +449,34 @@ done are summarised; see the note at the top of this file for full detail.
     before it is built: today the behaviour is in neither the catalogue nor the
     matrix.
 
+27. **An editor with a window is opened where there may be no screen to show it
+    (F36). Raised 2026-09-08; open.** Where nobody named an editor, `--edit`
+    opens the first of this system's own that it finds, and on Windows the first
+    two of those draw a window. Over an SSH login to Windows, or in any session
+    without a desktop, such a window opens where nobody can see it and the
+    command waits for it to be closed — a hang with nothing said, which is worse
+    than the error this branch removed.
+
+    SSHakku already knows whether a session has a screen: F37's prompter chooses
+    between a dialog and the terminal on exactly that question. Nothing connects
+    that knowledge to this choice. It was put to the user as one of three
+    orderings while the fallback was being decided, and the one chosen names the
+    editors outright — a program somebody installed first, the console editor
+    next, Notepad last — because the common case is somebody at their own
+    machine, and because the alternative that skips windowed editors where there
+    is no screen costs a link between two parts that have none today.
+
+    What stands between a user and the hang for now: naming an editor in the
+    configuration, and the console editor being found first on any Windows that
+    carries it, which the desktop-less Server editions do.
+
+    To decide: whether the candidates carry what they need — a window or a
+    console — and the looking passes over the ones this session could not show,
+    or whether this stands, on the ground that a session with no screen is one
+    where `$EDITOR` is set anyway. If the first, F36 says so before it is built,
+    and the matrix gains the row: today no test drives `--edit` from a session
+    without a screen on any platform.
+
 ---
 
 ## Phases
@@ -1114,8 +1142,10 @@ guessing which `config.toml` key won.
   an environment variable, `config.toml`, or the `config.d` drop-in that
   overruled the rest — plus the files read in the order they were applied, and
   any value SSHakku refused, which until then reached only the session log.
-- **`sshakku config --edit` ✅ Done (F36).** Opens `config.toml` in `$EDITOR`
-  (then `$VISUAL`, then `vi`), creating it from an embedded commented template
+- **`sshakku config --edit` ✅ Done (F36).** Opens `config.toml` in the editor
+  `editor` names, else `$EDITOR`, then `$VISUAL`, then the first of this
+  system's own editors it can find (`notepad++.exe`, `edit.exe`, `notepad.exe`
+  on Windows; `vi` elsewhere), creating it from an embedded commented template
   if absent, and on exit names what would otherwise have surfaced at the next
   login: a file that no longer parses, a value that was refused, a key a
   drop-in or a variable decides instead.
