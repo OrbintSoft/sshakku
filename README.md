@@ -13,24 +13,30 @@ from an environment variable or a file on disk.
 ## How it works
 
 Every login shell keeps one `ssh-agent` alive on a fixed socket, so
-`SSH_AUTH_SOCK` never goes stale even if the agent is restarted. The first time
-a key is used, SSHakku prompts for its passphrase and stores it in a dedicated
-collection in your desktop's secret store (KDE Wallet, GNOME Keyring, or
-KeePassXC — see [Requirements](#requirements)). Every time after that, the key
-is loaded silently: open a login shell (a fresh login, or any terminal
-configured to start one), and the key is already there. If something goes
-wrong, `sshakku doctor` explains what and, with `--fix`, repairs it.
+`SSH_AUTH_SOCK` never goes stale even if the agent is restarted; on Windows the
+agent is the one the system keeps for itself, on a named pipe, and SSHakku
+starts it if it is not running. The first time a key is used, SSHakku prompts
+for its passphrase and stores it in your system's own secret store (KDE Wallet,
+GNOME Keyring or KeePassXC on Linux, the Keychain on macOS, the Credential
+Manager on Windows — see [Requirements](#requirements)). Every time after that,
+the key is loaded silently: open a login shell (a fresh login, or any terminal
+configured to start one; on Windows, a new PowerShell), and the key is already
+there. If something goes wrong, `sshakku doctor` explains what and, with
+`--fix`, repairs it.
 
 ## Requirements
 
 - **Linux**, with a login shell sourcing `/etc/profile.d` (the default on
   every mainstream distribution), **or macOS**, with a login shell sourcing
   `/etc/zprofile` (the default `zsh` login shell on every current macOS
-  release).
+  release), **or Windows**, where there is no such directory to source and
+  SSHakku writes the hook into the shell's own profile instead: PowerShell
+  (Windows PowerShell 5.x and PowerShell 7 are wired separately) or Git Bash.
 - **A secret store**: on Linux, KDE Wallet, GNOME Keyring, or KeePassXC (any
-  Secret Service implementation); on macOS, the Keychain. Either platform can
-  instead use a password manager you already run, the 1Password or Bitwarden
-  CLI — see
+  Secret Service implementation); on macOS, the Keychain; on Windows, the
+  Credential Manager. Any of the three can instead use a password manager you
+  already run — the 1Password CLI or KeePassXC anywhere, the Bitwarden CLI on
+  Linux and macOS — see
   [Choosing the secret backend](docs/CONFIGURATION.md#choosing-the-secret-backend).
 - **Go 1.26.5+**, only to build from source (see Installation).
 
@@ -112,6 +118,32 @@ This is additive, never a replacement for the login hook above.
 To remove it (both the login hook and, if it was wired, the non-login one):
 `make uninstall-user`.
 
+### Windows
+
+The same two targets, run from Git Bash. There is no `sudo` here: `make
+install` installs for the machine and wants an elevated prompt, `make
+install-user` installs for your account and wants nothing.
+
+```sh
+make install-user                                      # wires the shell you ran it from
+make install-user SHELL_ARG=--shell=windowspowershell  # or name another
+```
+
+The binary and `sshakku-askpass.exe` go where this system keeps programs —
+`%ProgramFiles%\sshakku\` for the machine, `%LOCALAPPDATA%\Programs\sshakku\`
+for your account — and the copy just placed does the wiring itself, since which
+file a shell reads is a question only that shell can answer. That step also
+records the directory on your `PATH`, in the account's environment or the
+machine's, and `make uninstall`/`make uninstall-user` take both the wiring and
+the `PATH` entry back out. `DESTDIR` is refused on a system where a path names
+its own drive; use `BINDIR`/`USER_BINDIR` to install elsewhere.
+
+Windows PowerShell 5.x and PowerShell 7 are separate targets: wiring one does
+not wire the other, and the install tells you the command that would wire the
+edition it found beside the one you asked for.
+[docs/INSTALLATION.md](docs/INSTALLATION.md) has the rest — the profile scopes,
+Git Bash, and what an execution policy that forbids the hook looks like.
+
 ### Gentoo
 
 The maintainer runs SSHakku from a personal ebuild overlay,
@@ -123,7 +155,9 @@ sync with this repository.
 Install, then start a new login shell — log out and back in, or run `bash -l`
 (a plain new terminal tab isn't guaranteed to start one; see
 [docs/DIAGNOSTICS.md](docs/DIAGNOSTICS.md) if a new terminal doesn't pick it
-up). The first `ssh` to a key you haven't used yet prompts for its passphrase
+up). On Windows, open a new window of the shell you wired: a PowerShell reads
+its profile at every start, so there is no login to repeat.
+The first `ssh` to a key you haven't used yet prompts for its passphrase
 once; every use after that — in this shell and every new login shell — is
 silent. If a key ever stops refilling silently, run `sshakku doctor` to see
 why.
