@@ -28,18 +28,44 @@ marker_end="# <<< sshakku <<<"
 # them for upsert_block to reason about) is what makes re-running install
 # byte-for-byte idempotent: without it, each re-run would leave one more
 # blank line than the last.
+#
+# Every other line is printed back exactly as it was read, carriage return
+# included: a startup file mostly belongs to somebody else, and its line
+# endings are not ours to convert. That is why the file is read here in the
+# shell and not handed to awk, which on the systems that have a text mode opens
+# it in one — taking the carriage return off a CRLF file's lines before the
+# program can see it, and writing the file back with the other system's
+# endings.
+#
+# A marker is recognised without that carriage return, so a profile saved with
+# CRLF endings — or normalised to them by an editor after the install — is
+# still unwired by the uninstall rather than reported as having no block.
 strip_block() {
-	local file="$1"
+	local file="$1" line kept=() n=0 skip=0 cr=$'\r'
 	[ -f "$file" ] || return 0
-	awk -v start="$marker_start" -v end="$marker_end" '
-		$0 == start { skip = 1; next }
-		$0 == end   { skip = 0; next }
-		!skip       { lines[++n] = $0 }
-		END {
-			while (n > 0 && lines[n] == "") n--
-			for (i = 1; i <= n; i++) print lines[i]
-		}
-	' "$file"
+	while IFS= read -r line || [ -n "$line" ]; do
+		case "${line%"$cr"}" in
+		"$marker_start")
+			skip=1
+			continue
+			;;
+		"$marker_end")
+			skip=0
+			continue
+			;;
+		esac
+		if [ "$skip" -eq 0 ]; then
+			kept[n]="$line"
+			n=$((n + 1))
+		fi
+	done <"$file"
+	# A blank line of a CRLF file holds the carriage return and nothing else.
+	while [ "$n" -gt 0 ] && [ -z "${kept[$((n - 1))]%"$cr"}" ]; do
+		n=$((n - 1))
+	done
+	if [ "$n" -gt 0 ]; then
+		printf '%s\n' "${kept[@]:0:n}"
+	fi
 }
 
 # file_mode prints file's permission bits as octal digits, or nothing when
