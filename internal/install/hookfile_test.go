@@ -96,6 +96,100 @@ func TestUpsertBlockRepeatedIsByteForByteTheSame(t *testing.T) {
 	assert.Equal(t, string(once), string(thrice))
 }
 
+// A profile whose lines end in CRLF is the ordinary state of one that a
+// Windows editor, or a script rewriting it, has saved. The markers in it are
+// the same markers, and not recognising them is invisible from the outside: an
+// uninstall rewrites the file unchanged and reports success with the hook still
+// running in every session.
+//
+// The endings are the file's own business. Every line that is not a marker
+// comes back with the ending it was found with — an uninstall that handed the
+// profile back with its line endings converted has broken the file it was asked
+// to repair.
+func TestACRLFProfileIsRecognisedAndKeepsItsEndings(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "a file that has no block keeps every line as it was",
+			in:   "export EDITOR=vi\r\nalias ll='ls -l'\r\n",
+			want: "export EDITOR=vi\r\nalias ll='ls -l'\r\n",
+		},
+		{
+			name: "the block goes and the lines around it keep their endings",
+			in:   "before\r\n\r\n# >>> sshakku >>>\r\n. \"/hook.sh\"\r\n# <<< sshakku <<<\r\nafter\r\n",
+			want: "before\r\n\r\nafter\r\n",
+		},
+		{
+			name: "a block at the end takes the blank line that separated it",
+			in:   "before\r\n\r\n# >>> sshakku >>>\r\n. \"/hook.sh\"\r\n# <<< sshakku <<<\r\n",
+			want: "before\r\n",
+		},
+		{
+			name: "a file that is only the block becomes empty",
+			in:   "# >>> sshakku >>>\r\n. \"/hook.sh\"\r\n# <<< sshakku <<<\r\n",
+			want: "",
+		},
+		{
+			name: "trailing blank lines go whichever ending they carry",
+			in:   "before\r\n\r\n\r\n",
+			want: "before\r\n",
+		},
+		{
+			name: "a marker with anything else on the line is still not a marker",
+			in:   "# >>> sshakku >>> maybe\r\nkept\r\n",
+			want: "# >>> sshakku >>> maybe\r\nkept\r\n",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, string(StripBlock([]byte(tc.in))))
+		})
+	}
+}
+
+// The other half of the same defect, and the one a user meets without ever
+// running an uninstall: a block that is not recognised is a block that is not
+// replaced, so every install appends another beside it and the profile runs one
+// more hook than the last time.
+func TestUpsertBlockOnACRLFProfileReplacesRatherThanAppends(t *testing.T) {
+	once := UpsertBlock([]byte("export EDITOR=vi\r\n"), sourceLine)
+	twice := UpsertBlock(asCRLF(once), sourceLine)
+
+	assert.Equal(t, 1, strings.Count(string(twice), MarkerStart), "one block, however many installs ran")
+	assert.Equal(t, string(once), string(twice), "the second install leaves what the first did")
+}
+
+// The scenario end to end, on a real file: a profile of somebody's own, an
+// install writing its block into it, the whole file then saved back as CRLF —
+// which is what an editor or a Set-Content does to a file it has read — and an
+// uninstall afterwards. What the uninstall hands back is what was there before.
+func TestUninstallingACRLFProfileGivesItBackByteForByte(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "Microsoft.PowerShell_profile.ps1")
+	original := "Set-Alias ll Get-ChildItem\r\n$PSStyle.OutputRendering = 'Ansi'\r\n"
+	require.NoError(t, os.WriteFile(path, []byte(original), 0o644))
+	require.NoError(t, UpsertBlockFile(path, ". \"/hook.ps1\""))
+
+	wired, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(path, asCRLF(wired), 0o644))
+
+	require.NoError(t, StripBlockFile(path))
+
+	got, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, original, string(got), "uninstalling gives the file back byte for byte")
+}
+
+// asCRLF rewrites content the way a program that saves a file it has read
+// leaves it: every line ending is CRLF afterwards, including the ones an
+// install had just written as LF.
+func asCRLF(content []byte) []byte {
+	return []byte(strings.ReplaceAll(strings.ReplaceAll(string(content), "\r\n", "\n"), "\n", "\r\n"))
+}
+
 func TestBourneDropInIsAWrapperThatSaysWhereItCameFrom(t *testing.T) {
 	got := string(BourneDropIn(". \"/hook.sh\""))
 	assert.Equal(t, "#!/bin/bash\n# sshakku shell hook. Regenerate by re-running the sshakku install.\n. \"/hook.sh\"\n", got)
@@ -203,6 +297,8 @@ func TestTheShellLibraryAgreesByteForByte(t *testing.T) {
 		{name: "a profile ending in the block", file: "before\n\n# >>> sshakku >>>\nold\n# <<< sshakku <<<\n"},
 		{name: "a profile with no final newline", file: "export EDITOR=vi"},
 		{name: "an empty profile", file: ""},
+		{name: "a profile whose lines end in CRLF", file: "export EDITOR=vi\r\nalias ll='ls -l'\r\n"},
+		{name: "a CRLF profile that already has the block", file: "before\r\n\r\n# >>> sshakku >>>\r\nold\r\n# <<< sshakku <<<\r\nafter\r\n"},
 	}
 
 	for _, in := range inputs {
@@ -231,6 +327,27 @@ func TestTheShellLibraryAgreesByteForByte(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, string(theirs), string(BourneDropIn(sourceLine)))
 	})
+}
+
+// The library's own half of the CRLF case. A machine can be wired by one
+// implementation and unwired by the other, so a block this one fails to
+// recognise is a hook left running by an uninstall that said it was done.
+func TestTheShellLibraryUnwiresACRLFProfileToo(t *testing.T) {
+	lib, err := filepath.Abs(hookLib)
+	require.NoError(t, err)
+	require.FileExists(t, lib)
+	bash := findBash(t, lib)
+
+	path := filepath.Join(t.TempDir(), "profile")
+	original := "export EDITOR=vi\r\n"
+	wired := original + "\r\n" + MarkerStart + "\r\n. \"/hook.sh\"\r\n" + MarkerEnd + "\r\n"
+	require.NoError(t, os.WriteFile(path, []byte(wired), 0o644))
+
+	run(t, bash, lib, "strip-block-file", path)
+
+	got, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, original, string(got))
 }
 
 // findBash returns the first of this system's candidate shells that can read
