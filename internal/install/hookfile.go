@@ -69,7 +69,7 @@ func StripBlock(content []byte) []byte {
 	kept := make([]string, 0, 16)
 	skipping := false
 	for _, line := range lines(content) {
-		switch line {
+		switch bare(line) {
 		case MarkerStart:
 			skipping = true
 		case MarkerEnd:
@@ -80,7 +80,7 @@ func StripBlock(content []byte) []byte {
 			}
 		}
 	}
-	for len(kept) > 0 && kept[len(kept)-1] == "" {
+	for len(kept) > 0 && bare(kept[len(kept)-1]) == "" {
 		kept = kept[:len(kept)-1]
 	}
 	if len(kept) == 0 {
@@ -273,9 +273,24 @@ func replace(path string, content []byte, mode fs.FileMode) error {
 // newlines, with a single trailing newline ending the last line rather than
 // starting an empty one. Nothing at all is no lines, whereas a lone newline is
 // one empty line.
+//
+// A line keeps whatever it ends with, the carriage return of a CRLF file
+// included. The endings of a startup file are not this program's to change:
+// most of the file belongs to somebody else, and an uninstall that handed it
+// back converted would have rewritten every line it was asked to leave alone.
 func lines(content []byte) []string {
 	if len(content) == 0 {
 		return nil
 	}
 	return strings.Split(strings.TrimSuffix(string(content), "\n"), "\n")
+}
+
+// bare returns line without the carriage return a CRLF file leaves at the end
+// of it, which is how a marker and a blank line are recognised. A profile
+// written or saved on a system whose line ending is CRLF — or one any editor
+// has normalised since the install — carries the same markers, and a marker
+// this program failed to see is a block an uninstall reports having removed
+// and leaves in place.
+func bare(line string) string {
+	return strings.TrimSuffix(line, "\r")
 }
