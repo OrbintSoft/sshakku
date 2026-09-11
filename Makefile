@@ -350,9 +350,10 @@ build:
 # without a C compiler or an SDK for any of them. It answers one question — can
 # this be built where it is not run — which is what a release has to be able to
 # do, and it is also the only way one platform's own source gets compiled from
-# another machine. Windows is here as a build, not as a supported target: what
-# it holds is the code that reports what this system does not do, and it is
-# listed so that stops compiling loudly rather than quietly.
+# another machine. Each of the three has source no other one compiles, since a
+# build tag hides a file from every build but its own, so a break in one
+# platform's own code surfaces here rather than on whichever machine reaches it
+# first.
 build-cross:
 	CGO_ENABLED=0 GOOS=darwin $(GO) build ./...
 	CGO_ENABLED=0 GOOS=linux $(GO) build ./...

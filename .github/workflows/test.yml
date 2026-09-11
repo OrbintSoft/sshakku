@@ -232,11 +232,12 @@ jobs:
     # be kept in step by hand.
     #
     # What the suite does not cover here is worth knowing. A promise that needs
-    # a wallet is not asked on this platform, because there is none it can
-    # reach yet: those tests are held to the systems that have one, and the
-    # files say so where they sit. One thing here does leave the process: the
-    # credential store's own round trip, which is opted into below because a
-    # runner's store is thrown away with the runner and a developer's is not.
+    # one of the wallets reached by running a program of its own is not asked
+    # on this runner, which has none of them installed: those tests are held to
+    # the jobs that do, and the files say so where they sit. One thing here does
+    # leave the process: the credential store's own round trip, which is opted
+    # into below because a runner's store is thrown away with the runner and a
+    # developer's is not.
     # Nothing else is — no agent is started, no shell is wired — so the rows
     # docs/TEST-MATRIX.md gains from this job are that round trip and nothing
     # else, since that document tracks integration coverage and counts a unit
