@@ -152,8 +152,9 @@ func (d deps) ensureAgent(ctx context.Context, stdout, stderr io.Writer, args []
 
 // keystateDir is where load-keys records each key's added-at/lifetime state,
 // so doctor can later report it; shared so both sides agree on the path. It
-// sits alongside the giveup dir, under the per-login runtime directory
-// (tmpfs, wiped on logout/reboot — see internal/keystate).
+// sits alongside the giveup dir, under the per-login runtime directory — what
+// that directory is on a given system, and how long a record there lives, is
+// internal/keystate's to say.
 func keystateDir(layout paths.Layout) string {
 	return filepath.Join(filepath.Dir(layout.AgentSock), "keystate")
 }

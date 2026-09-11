@@ -246,18 +246,27 @@ On Windows, the binary builds, its test suite runs, `make install` and
 pointed at the agent the system itself keeps — a service on a named pipe, which
 is a different mechanism from the socket the Unix builds keep healthy, and which
 `sshakku` starts if it is not running — and its ssh passphrase prompts go
-through the same helper as everywhere else, answered on the console.
+through the same helper as everywhere else, asked in a box SSHakku draws itself
+where the session has a screen and on the console where it has not. That box
+needs nothing installed and no execution policy in its favour: it is a window,
+not a script.
 
-The wallet is this system's own: the Credential Manager, holding one generic
-credential per key, in force with nothing configured and the only value
-`secret_backend` takes here. A passphrase is asked for once and read back with
-nothing typed at every session afterwards, exactly as on the other two
-platforms. What differs is what guards it — the account's own sign-in and
-nothing further, so anything running as you can read what is stored there —
-which `sshakku doctor` states beside the wallet's name rather than leaving you
-to assume the guarantees of a wallet that locks.
+The wallet is this system's own unless you name another: the Credential Manager,
+holding one generic credential per key, in force with nothing configured. A
+passphrase is asked for once and read back with nothing typed at every session
+afterwards, exactly as on the other two platforms. What differs is what guards
+it — the account's own sign-in and nothing further, so anything running as you
+can read what is stored there — which `sshakku doctor` states beside the
+wallet's name rather than leaving you to assume the guarantees of a wallet that
+locks.
 
-What stays out deliberately, and is not an oversight, are the wallets reached by
-running a program of their own — 1Password, Bitwarden, KeePassXC. They compile
-here and are not offered here, because being buildable on a system is not the
+KeePassXC and 1Password can be named instead, each of them having been driven
+here against a real database and a real account. Both are programs you install
+yourself, and SSHakku runs them by name: `keepassxc-cli`, which has to be
+reachable on your `PATH`, and `op`. KeePassXC is reached here by opening the
+database file, which `keepassxc_database` names; `docs/CONFIGURATION.md` covers
+both.
+
+What stays out deliberately, and is not an oversight, is Bitwarden: it compiles
+here and is not offered here, because being buildable on a system is not the
 same as having been driven on one.

@@ -85,9 +85,12 @@ environment, not the target's.
 The ssh-agent protocol has no query for a key's remaining lifetime, so sshakku
 tracks it itself: whenever `load-keys` adds a key, it records when and for how
 long (the `-t` lifetime `ssh-add` was given) in a small per-key file under the
-per-login runtime directory — the same tmpfs-backed location as the give-up
-sentinels, wiped on logout or reboot, holding no secret. `doctor` reads those
-records back to show, for each key it finds:
+per-login runtime directory — the same location as the give-up sentinels,
+holding no secret. Where your system keeps that directory on a tmpfs, it is
+wiped at logout or reboot; where it has none, as on Windows, it sits under your
+own profile and survives both, which is what an agent that keeps its keys
+across a reboot needs. `doctor` reads those records back to show, for each key
+it finds:
 
 ```text
 keys in /home/you/.ssh (2):

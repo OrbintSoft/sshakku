@@ -1,9 +1,12 @@
 // Package giveup records, per key, that sshakku abandoned loading it after the
 // bounded retries, so later shells skip the key instead of re-prompting on every
 // terminal. Each record is a small file under the per-login runtime directory
-// (wiped on logout/reboot) holding only a timestamp; it expires after a TTL so
-// fixing the vault mid-session recovers without a relogin. Records never hold any
-// secret — only the key name (as the filename) and the time it was abandoned.
+// — a tmpfs wiped at logout on the systems that have one, a directory under the
+// user's own profile on the systems that have not — holding only a timestamp;
+// the TTL is what bounds a record either way, so fixing the vault mid-session
+// recovers without a relogin, and a record that outlives the login still stops
+// mattering on its own. Records never hold any secret — only the key name (as
+// the filename) and the time it was abandoned.
 package giveup
 
 import (

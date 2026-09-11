@@ -4,9 +4,12 @@
 // ssh-agent to expose it (the ssh-agent protocol has no query for a key's
 // remaining lifetime), and so a system whose agent expires nothing can be told
 // which key to take out of it and where that key is. Each record is a small
-// file under the per-login runtime directory (wiped on logout/reboot on the
-// systems that have one, never written to disk otherwise); it holds no secret,
-// only a timestamp, a duration and a path.
+// file under the per-login runtime directory, which is a tmpfs wiped at logout
+// on the systems that have one and a directory under the user's own profile on
+// the systems that have not. Surviving the session is what a record has to do
+// there: where the agent keeps its keys across a reboot, a record that vanished
+// with the login would leave a key nothing could ever take out. It holds no
+// secret, only a timestamp, a duration and a path.
 package keystate
 
 import (
