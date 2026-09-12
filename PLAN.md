@@ -3971,3 +3971,215 @@ user-visible behaviour changed, and the whole of the source change is an
 `gocritic` rewrites, and nineteen renamings inside one scope apiece.
 
 → rules 1, 12, 15, 26, 27.
+
+### Phase 52 — The rules that only ever see a literal ✅ Done
+
+Five more analysers. `gochecknoinits`, `goprintffuncname`, `gosec`, `iface` and
+`iotamixing` are new to `.golangci.yml`, and `gosec` alone took ten commits:
+one for each of the nine rules that reported while it was being taken through
+the tree, and one for turning the rest of it on — which woke two more.
+
+**Rule 12 decision.** All five ship inside the golangci-lint the lint workflow
+pins, so `go.mod` is untouched and there is no new licence to record. Each was
+surveyed on all five builds `lint-go` names — linux, darwin, windows,
+`backend_unresponsive`, `midsession_failure` — and with
+`--max-issues-per-linter=0 --max-same-issues=0`.
+
+**Two report nothing and are guards**, made to fire once before being trusted,
+per Phase 34. `gochecknoinits` has no subject because nothing here has an
+`init()`: it is the one function that takes nothing and returns nothing, so what
+it decides it decides for the whole program, and what fails inside it can only
+be panicked or left in a package variable — in a program that is a login
+shell's first act and has no context yet to say how long to wait. A throwaway
+package with a single `init()` reported it. `iotamixing` guards the numbering of
+the seven enums `exhaustive` watches: a plain declaration slipped into a block
+that opens with iota moves every member below it, and the members written
+without a value stop following iota at that point and repeat the expression
+above them instead — either way under the same names, and either way still
+compiling. A throwaway enum with a string constant between its second and third
+member reported it.
+
+**`goprintffuncname` cost three renames**, done with `gopls rename` rather than
+by hand: `dialog.logGUI`, `keys.Loader.notify` and `testproc.say` all take a
+format string and none of them said so. Without the f the call reads like one
+that prints what it was handed, and a string carrying a percent sign — a path, a
+wallet's own error text — becomes a format directive nobody wrote.
+
+**`iface` runs on its default check and needed no suppression**, which is the
+part worth recording. Its two reports were `logline.Logger` and the
+`callerOwnLogger` a test declared beside it, and the test was the reason: it
+checks that a package which logs need not import this one, because it declares
+an interface of its own and that is assignable. Declared beside `Logger`, that
+interface could only act the claim out. Moved into `package logline_test` — the
+first external test package in this tree — it is what it says it is: another
+package, with its own one-method interface and its own Logger. Both reports go.
+`unused` and `opaque` were measured and declined, both reporting how this tree
+is built rather than a defect in it: `unused` wants an interface referred to
+inside the package that declares it, and the interfaces here are declared where
+a thing is implemented so a consumer need not import a second package
+(`hostcheck.Source`, `launcher.CgroupSource`, `prompt.TTY`); `opaque` wants a
+function returning an interface to return the concrete type, and the one it
+reports is the seam handing back this system's agent lifecycle, which is an
+interface for the one reason it should be — each platform returns a different
+concrete type through it.
+
+**`gosec` is the phase.** 236 findings on linux, 217 on darwin, 213 on windows.
+It was taken one rule at a time behind an `includes` list that grew per commit,
+because `nolintlint` reports an unused directive and a suppression written
+before its rule is on is a dead one. The list is gone now: gosec runs whole but
+for three rules, and `excludes` carries those with the reason each.
+
+**What the survey taught, and it decided most of the phase: gosec only ever
+reads a literal.** `os.MkdirAll(dir, hookDirMode)` with `hookDirMode` at 0o755
+— exactly what G301 refuses — is never reported, while `os.Mkdir(x, 0o755)` is.
+Every deliberate mode in this tree is a named constant, so G301, G302 and G306
+cannot see a single directory or file this program installs; what they see is a
+test writing a mode out at the call. That is why the permission work landed in
+the tests and why almost none of it is a suppression:
+
+- **G301**, 33 sites. Thirty-two go from 0o755 to 0o750; none needed the access
+  it was granting, since every one runs as a single user inside a directory the
+  testing package makes 0700 and deletes. The thirty-third is the one where the
+  mode is the scene — a directory a test closes so that making a subdirectory
+  inside it fails — and 0o555 was granting group and other the entry it was
+  denying nobody. 0o500 is what the test needs. No suppression.
+- **G306**, 63 sites. Forty-eight fixtures are 0600 now, with the whole suite run
+  uncached after every one of them moved to be sure nothing had been relying on
+  the access. The one site outside a test is the record of an account's previous
+  search list, written 0644 into the hook directory; it is that account's own and
+  is 0600 too. Fifteen remain and are programs a test then runs — a stand-in for
+  zenity or a shell, an askpass helper, a copy of an editor — and a program that
+  cannot be executed is not one. They keep 0755: tightening answers the rule
+  where it can, and decorating a line that needs a suppression anyway is not
+  tightening.
+- **G302**, 6 sites, and the rule has never seen a directory. Read literally it
+  rules out every one there is, because entering a directory is its execute bit
+  and 0o700 is therefore already over the line. Five say that where they stand.
+  The sixth is a file and the rule is right about it: the 0o644 in the test that
+  watches a startup file keep the mode it was found with, where a mode G302
+  would accept would leave nothing to watch. The same run also showed the other
+  half of the literal-only blindness — the loop that chmods a directory 0o777
+  through a variable is invisible to it, while the 0o700 restoring the directory
+  afterwards is not.
+
+**Three rules are declined, and each has a precise counterpart that is on.**
+That symmetry is the shape of the decision rather than a coincidence: the rule
+that notices a variable is off, and the one that follows the variable to where
+it came from is on.
+
+| Declined, and why | Kept, asking the same question properly |
+| --- | --- |
+| G304, a path held in a variable — 62 sites, which is every file this program reads | G703, taint analysis on the path — 10 sites |
+| G204, a subprocess named by a variable — 49 sites, which is every program this program starts | G702, taint analysis on the command — 5 sites, all tests |
+| G103, use of `unsafe` — 37 sites, every one a syscall wrapper with no other spelling available without cgo | `unsafeptr`, a go vet analyser, which `govet: enable-all` already runs |
+
+Fifteen answered sites leave a new one visible in CI; a hundred and forty-eight
+would bury it. And where the blunt rule cannot ever be right here — the next
+`exec.CommandContext` will take a variable too — a suppression every call has to
+carry is one nobody reads.
+
+**Four rules are kept and answered at the line.** G101 (32 sites) matches on the
+name, and in a program whose subject is passphrases, tokens and wallets almost
+everything it finds is the name of a place a secret travels rather than a
+secret: an environment variable a passphrase is handed through, a program called
+`keepassxc-cli`, a backend called `credential-manager`. Each suppression names
+the word that matched. It stays on because the sites it is right about are a
+test's own invented passphrase for a key the test invents, and a real one
+committed by mistake should have nowhere to hide. G602's two sites are guarded
+by the ordinary guards — the left operand of an `&&`, and a bound checked on the
+line above the use — and it reads neither; rewriting the second to check `i+1`
+before using `args[i+1]` was tried and reported the same thing, so the code
+stays as it reads best. G702 and G703 are above.
+
+**G115 found a defect, which is why it is on.** Twenty-two of its 23 sites are a
+value crossing into an interface whose width is not this program's to choose — a
+kernel key serial, a uid, a Windows process id, a window coordinate going back
+to Win32 through the uintptr its call takes — or a truncation that is the
+algorithm, the low byte of a UTF-16 code unit and the byte of a sum whose carry
+shifts out on the next line.
+
+The twenty-third was real. A handoff token is text arriving from the
+environment, read back as a kernel key serial, which is 32 bits wide; it was
+parsed with `strconv.Atoi`, so `"4294967297"` passed the malformed-token check,
+kept its low half and became serial 1 — a key of this user's that no stash of
+ours had put there, which `Fetch` then read out and unlinked.
+`strconv.ParseInt(token, 10, 32)` is one call that reads the number and bounds
+it to the width a serial has, refused through the error that was already there.
+
+**And the fix owed a run, which found a second gap.** `Stash` and `Fetch` each
+had their own tests and every seam between them is injectable, so each half was
+checked alone — and neither check could say that the token one half writes is
+one the other half accepts, which is the whole of what has to be true for a key
+to load with nothing typed. `TestAPassphrasePutAsideIsCollectedByTheTokenItWasGiven`
+runs the pair against the real keyring, gated on `keyring.Available()` the way
+the keyring package's own round trip is. Made to fail from both directions: with
+the range narrowed to `ParseInt(token, 10, 8)` it refused an actual serial from
+the machine it ran on (`value out of range`), which is exactly the regression the
+fix could have introduced and that nothing else would have caught; with `Stash`
+handing back `serial+1` the passphrase never came back. `docs/TEST-MATRIX.md`
+gains the row that section was missing, with each platform's own mechanism
+against the real thing.
+
+**Verified**: `golangci-lint run` clean on all five builds after every commit on
+this branch, `golangci-lint fmt --diff`, `go vet` for the three GOOS,
+`editorconfig-checker` and `markdownlint-cli2` clean. `make test-json` uncached:
+1914 tests, 0 failures. That a run is clean also says every suppression is
+load-bearing — `nolintlint` reports an unused directive, so a kept rule that had
+stopped firing would fail the build, and that is how the 32 G101 suppressions
+were checked: with the rule off the list, 30 were reported unused on linux and
+the other two live behind the darwin and windows tags.
+
+No end-to-end run belongs to the linter work: nothing user-visible changed in
+it. The one behaviour change is the handoff token's range, and that is the one
+thing here driven through the real kernel facility rather than through a seam.
+
+→ rules 1, 5, 12, 15, 19, 21, 22, 23, 24, 25, 27.
+
+### Phase 53 — The unix side of the code Windows arrived with ✅ Done
+
+Six functions were uncovered on Linux and macOS, and they have one cause
+between them: each is the unix half of something added when Windows support
+landed, where the Windows half got its tests and this one did not. Linux is back
+to 100.0% of statements.
+
+Each was watched failing first, and by breaking the function rather than the
+test:
+
+- `sshtools.SSHAdd` asks this system about ssh-add. Pointed at `SSHName`
+  instead it returns `ssh`, which is the mistake a one-line wrapper over a table
+  of two programs can make.
+- `cli.sessionSSHToolsDir` names nothing here, and that is the promise: a
+  directory put ahead of somebody's PATH lasts their whole login. Made to return
+  a directory, both subtests fail, posix and powershell.
+- `install.haveMachineAuthority` is root and nobody else. The suite runs as
+  whoever started it and neither answer can be arranged for — which is why the
+  rest of the package is handed the answer through a seam — so the test pins the
+  one owed to this run, in whichever direction that is. Comparison inverted, it
+  fails.
+- `install.makeDirectoryTheMachineShares` makes the directory the whole machine
+  reads its hook from. Made to create it somewhere else, only the machine
+  subtest of `makeHookDirectory` fails, which is what says the `Machine` scope
+  goes through it. The mode is asserted on `hookDirMode` rather than on what
+  lands, since the umask can only take bits away: at 0o700 and at 0o777 one
+  assertion goes red each.
+- `keys.RunnerFingerprinter.AgentFingerprints` has to report a session whose
+  ssh-add cannot reach the agent. With the refusal dropped it hands back an
+  empty set instead, which reads as an agent holding nothing — a machine to go
+  and fix rather than a question that went unasked.
+
+**What the last of those does not pin**, because a test that covers a line is
+not the same as a test that pins a decision: on unix the two arms of
+`makeHookDirectory` make the same call, so inverting the scope it tests leaves
+the test green. It covers both arms and pins the outcome; the arms themselves
+are told apart on Windows, where the machine's directory is made a different way
+and `hookdir_windows_test.go` is already there.
+
+**Verified**: `go test ./...` clean uncached, 1914 tests, 100.0% of statements on
+linux. macOS cannot be run from here, and every test in this phase is in a
+`_unix_test.go` or in a file with no build tag at all, so darwin builds all of
+them — `go vet` and `golangci-lint run` for `GOOS=darwin` cover the whole tree
+including its tests. The figure itself comes from the macOS job. No end-to-end
+run belongs here: no user-visible behaviour changed, and the whole of the source
+change is five test files.
+
+→ rules 1, 5, 20, 22, 23, 24, 26, 27.
