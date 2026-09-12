@@ -124,6 +124,17 @@ linters:
     # one, and nothing says so.
     - gocheckcompilerdirectives
 
+    # `init()` runs before main does, in an order across files nobody writes
+    # down, and it is the one function that can be given nothing and return
+    # nothing: what it decides it decides for the whole program, and what goes
+    # wrong inside it can only be panicked or left in a package variable for
+    # somebody to find. This program is a login shell's first act and its
+    # slowest moment is another process it is waiting on, so a package that
+    # arranged itself before main was reached would be work nobody asked for at
+    # the moment there is least room for it — and it could not be handed the
+    # context that says how long to wait, because there is none yet.
+    - gochecknoinits
+
     # `exhaustive`'s question asked of a closed set of types rather than a set
     # of constants: an interface marked `//sumtype:decl` has a known list of
     # implementations, and a type switch that leaves one out is a case the
