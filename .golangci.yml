@@ -193,6 +193,16 @@ linters:
     # three places; `for i := range n` states it once and cannot count wrong.
     - intrange
 
+    # A const block that opens with iota numbers its members by where they sit
+    # in it, so a plain declaration slipped in among them moves every member
+    # below it — and the members written without a value stop following iota at
+    # that point, repeating the expression above them instead. Either way the
+    # block still compiles under the same names. The enums here are written that
+    # way and are what the rest of the program switches on: what came of trying
+    # to load a key, what state an agent is in, where a setting's value came
+    # from.
+    - iotamixing
+
     # A loop that searches a slice, copies one into another, or picks the
     # larger of two numbers is a loop whose edge cases have to be read to be
     # trusted; the standard function it replaces has a name that says what the
