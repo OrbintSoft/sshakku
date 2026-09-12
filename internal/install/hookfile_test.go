@@ -409,7 +409,7 @@ func TestAStartupFileWhoseDirectoryIsNotThereIsWrittenAnyway(t *testing.T) {
 // every login, and one left as a fragment is read too.
 func TestAWiringThatCannotBeRenamedIntoPlaceIsReported(t *testing.T) {
 	occupied := filepath.Join(t.TempDir(), "profile")
-	require.NoError(t, os.Mkdir(occupied, 0o755))
+	require.NoError(t, os.Mkdir(occupied, 0o750))
 	require.NoError(t, os.WriteFile(filepath.Join(occupied, "something"), []byte("mine"), 0o644))
 
 	err := replace(occupied, []byte("# >>> sshakku >>>\n"), 0o644)
@@ -426,7 +426,7 @@ func TestAFileThatHeldNothingButTheWiringAndCannotGoIsReported(t *testing.T) {
 	// A directory with something in it, where the wiring's own file would be:
 	// what is there is not ours to take away, and it will not be removed.
 	occupied := filepath.Join(t.TempDir(), "profile")
-	require.NoError(t, os.Mkdir(occupied, 0o755))
+	require.NoError(t, os.Mkdir(occupied, 0o750))
 	require.NoError(t, os.WriteFile(filepath.Join(occupied, "something"), []byte("mine"), 0o644))
 	stripped := filepath.Join(t.TempDir(), "profile")
 	require.NoError(t, os.WriteFile(stripped, UpsertBlock(nil, ". '/hook.sh'"), 0o644))
@@ -447,7 +447,7 @@ func TestAFileThatHeldNothingButTheWiringAndCannotGoIsReported(t *testing.T) {
 // directory in its place is an error rather than something to delete.
 func TestADropInThatCannotBeRemovedIsReported(t *testing.T) {
 	inTheWay := filepath.Join(t.TempDir(), "50-sshakku-init.sh")
-	require.NoError(t, os.Mkdir(inTheWay, 0o755))
+	require.NoError(t, os.Mkdir(inTheWay, 0o750))
 
 	err := RemoveDropIn(inTheWay)
 

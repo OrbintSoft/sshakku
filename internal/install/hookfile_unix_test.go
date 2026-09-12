@@ -114,8 +114,8 @@ func TestAnInstallThatCannotMakeTheDirectoryForTheStartupFileNamesIt(t *testing.
 	// looking for one under a directory that can still be entered is not itself
 	// a failure — leaving the making of the directory as the step that fails.
 	closed := filepath.Join(home, "closed")
-	require.NoError(t, os.Mkdir(closed, 0o555))
-	t.Cleanup(func() { _ = os.Chmod(closed, 0o755) })
+	require.NoError(t, os.Mkdir(closed, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(closed, 0o700) })
 	profile := filepath.Join(closed, "shell", "startup-file")
 
 	_, err := Install(t.Context(), wiringRequest(t, home, profile), Ancestry{})

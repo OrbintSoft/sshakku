@@ -143,7 +143,7 @@ func TestAHookThatCannotBeRenderedOrPlacedIsNotWritten(t *testing.T) {
 		// A directory where the rendered hook belongs, with something in it: it
 		// cannot be replaced by a file, and the install has to say so.
 		hook := filepath.Join(dir, "shell-hook.sh")
-		require.NoError(t, os.Mkdir(hook, 0o755))
+		require.NoError(t, os.Mkdir(hook, 0o750))
 		require.NoError(t, os.WriteFile(filepath.Join(hook, "something"), []byte("mine"), 0o644))
 
 		_, err := renderInto(dir, User, bournePlan(t), "/opt/sshakku/bin/sshakku")

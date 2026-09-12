@@ -358,6 +358,17 @@ linters:
         # and named a key of this user's that no stash had put there.
         - G115
 
+        # A directory made where anyone may enter it. What this catches is
+        # narrower than it looks: gosec reads the mode where it is written, so a
+        # directory made with a named constant is invisible to it however open
+        # that constant is, and the modes this program gives the directories it
+        # installs are all named. What is left is a mode written out at the call
+        # — which in this tree means a test laying out a scene — and those are
+        # tight now, including the one directory a test deliberately closes: it
+        # needs writing into to fail, and the owner alone being unable to write
+        # is enough for that.
+        - G301
+
       excludes:
         # A subprocess whose program is named by a variable. Every subprocess
         # this program starts is: ssh-agent and ssh-add, the wallet's own

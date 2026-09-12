@@ -41,7 +41,7 @@ func TestTheTranslatorIsFoundWhicheverPlaceItIsIn(t *testing.T) {
 
 	for _, place := range places {
 		t.Run(place, func(t *testing.T) {
-			require.NoError(t, os.MkdirAll(filepath.Dir(place), 0o755))
+			require.NoError(t, os.MkdirAll(filepath.Dir(place), 0o750))
 			require.NoError(t, os.WriteFile(place, []byte("stands in for a translator"), 0o755))
 			t.Cleanup(func() { require.NoError(t, os.Remove(place)) })
 
@@ -58,7 +58,7 @@ func TestTheTranslatorIsFoundWhicheverPlaceItIsIn(t *testing.T) {
 func TestADirectoryIsNotATranslator(t *testing.T) {
 	interpreter := filepath.Join(t.TempDir(), "bin", "bash.exe")
 	for _, place := range cygpathCandidates(interpreter) {
-		require.NoError(t, os.MkdirAll(place, 0o755))
+		require.NoError(t, os.MkdirAll(place, 0o750))
 	}
 
 	_, ok := FindCygpath(interpreter)

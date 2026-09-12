@@ -23,7 +23,7 @@ import (
 func FakeProc(t *testing.T, root string, pid int, argv []string, uid int) {
 	t.Helper()
 	dir := filepath.Join(root, strconv.Itoa(pid))
-	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, os.MkdirAll(dir, 0o750))
 	cmdline := strings.Join(argv, "\x00")
 	if len(argv) > 0 {
 		cmdline += "\x00" // the kernel NUL-terminates the final arg too.

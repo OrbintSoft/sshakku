@@ -191,7 +191,7 @@ func TestAnUninstallThatCannotFinishSaysWhichStepStoppedIt(t *testing.T) {
 		// not a file with our block in it, and rewriting it is not something to
 		// attempt quietly.
 		profile := filepath.Join(home, "startup-file")
-		require.NoError(t, os.Mkdir(profile, 0o755))
+		require.NoError(t, os.Mkdir(profile, 0o750))
 
 		_, err := Uninstall(t.Context(), wiringRequest(t, home, profile), Ancestry{})
 
@@ -222,7 +222,7 @@ func TestAnUninstallThatCannotFinishSaysWhichStepStoppedIt(t *testing.T) {
 		// decides which that is: a name written out here would be the other
 		// platform's, and the directory would be one the uninstall never looks at.
 		hook := filepath.Join(locations.HookDir, plan{kind: req.Shell}.hookName())
-		require.NoError(t, os.MkdirAll(hook, 0o755))
+		require.NoError(t, os.MkdirAll(hook, 0o750))
 		require.NoError(t, os.WriteFile(filepath.Join(hook, "something-else"), []byte("mine"), 0o644))
 
 		_, err = Uninstall(t.Context(), req, Ancestry{})

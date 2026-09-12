@@ -23,13 +23,13 @@ func settled(t *testing.T, got *bool, what string) bool {
 
 func writeFile(t *testing.T, path, content string) {
 	t.Helper()
-	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755), "lay out the directory for the fake file")
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o750), "lay out the directory for the fake file")
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o644), "write the fake file")
 }
 
 func symlink(t *testing.T, oldname, newname string) {
 	t.Helper()
-	require.NoError(t, os.MkdirAll(filepath.Dir(newname), 0o755), "lay out the directory for the fake symlink")
+	require.NoError(t, os.MkdirAll(filepath.Dir(newname), 0o750), "lay out the directory for the fake symlink")
 	require.NoError(t, os.Symlink(oldname, newname), "create the fake symlink")
 }
 
@@ -59,7 +59,7 @@ func TestChecksDiskEncryptedLUKSUnderLVM(t *testing.T) {
 	writeFile(t, filepath.Join(proc, "mounts"), "/dev/mapper/vg-root / ext4 rw,relatime 0 0\n")
 	symlink(t, "../dm-2", filepath.Join(dev, "mapper", "vg-root"))
 	writeFile(t, filepath.Join(sys, "class", "block", "dm-2", "dm", "uuid"), "LVM-abcdef-vg-root\n")
-	require.NoError(t, os.MkdirAll(filepath.Join(sys, "class", "block", "dm-2", "slaves", "dm-1"), 0o755), "lay out the fake slave device")
+	require.NoError(t, os.MkdirAll(filepath.Join(sys, "class", "block", "dm-2", "slaves", "dm-1"), 0o750), "lay out the fake slave device")
 	writeFile(t, filepath.Join(sys, "class", "block", "dm-1", "dm", "uuid"), "CRYPT-LUKS2-abcdef-luks-vg-root\n")
 
 	got := Procfs{ProcRoot: proc, SysRoot: sys, DevRoot: dev, Target: "/"}.Checks(t.Context())
@@ -171,7 +171,7 @@ func TestChecksTPMPresent2_0(t *testing.T) {
 func TestChecksTPMPresent1_2(t *testing.T) {
 	root := t.TempDir()
 	sys := filepath.Join(root, "sys")
-	require.NoError(t, os.MkdirAll(filepath.Join(sys, "class", "tpm", "tpm0"), 0o755), "lay out the fake TPM entry")
+	require.NoError(t, os.MkdirAll(filepath.Join(sys, "class", "tpm", "tpm0"), 0o750), "lay out the fake TPM entry")
 
 	got := Procfs{ProcRoot: filepath.Join(root, "proc"), SysRoot: sys, DevRoot: filepath.Join(root, "dev")}.Checks(t.Context())
 	assert.True(t, settled(t, got.SecureHardwarePresent, "secure hardware"), "a TPM device entry is secure hardware")
@@ -188,7 +188,7 @@ func TestChecksTPMAbsent(t *testing.T) {
 func TestChecksTPMIgnoresResourceManagerEntry(t *testing.T) {
 	root := t.TempDir()
 	sys := filepath.Join(root, "sys")
-	require.NoError(t, os.MkdirAll(filepath.Join(sys, "class", "tpm", "tpmrm0"), 0o755), "lay out the fake resource-manager entry")
+	require.NoError(t, os.MkdirAll(filepath.Join(sys, "class", "tpm", "tpmrm0"), 0o750), "lay out the fake resource-manager entry")
 
 	got := Procfs{ProcRoot: filepath.Join(root, "proc"), SysRoot: sys, DevRoot: filepath.Join(root, "dev")}.Checks(t.Context())
 	assert.False(t, settled(t, got.SecureHardwarePresent, "secure hardware"),

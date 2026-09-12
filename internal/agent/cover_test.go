@@ -182,7 +182,7 @@ func TestAdoptSymlinkErrors(t *testing.T) {
 	})
 	t.Run("rename fails", func(t *testing.T) {
 		occupied := filepath.Join(dir, "occupied")
-		require.NoError(t, os.Mkdir(occupied, 0o755))
+		require.NoError(t, os.Mkdir(occupied, 0o750))
 		// Renaming the temp symlink onto an existing directory fails.
 		assert.Error(t, adoptSymlink(occupied, "/some/target"), "a rename onto the fixed path that fails must be reported")
 		_, err := os.Lstat(occupied + ".adopt")

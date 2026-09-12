@@ -178,7 +178,7 @@ func TestLoadSettingsMergesConfigD(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "config.toml"), "key_lifetime = \"1h\"\nquiet = true\n")
 	confD := filepath.Join(dir, "config.d")
-	require.NoError(t, os.MkdirAll(confD, 0o755), "create config.d")
+	require.NoError(t, os.MkdirAll(confD, 0o750), "create config.d")
 	writeFile(t, filepath.Join(confD, "10-override.toml"), "key_lifetime = \"2h\"\n")
 
 	settings := loadSettings(paths.Layout{ConfigDir: dir}, "test", fakeLogger{})
@@ -200,10 +200,10 @@ func (c *countingLogger) Log(string, string) error { c.n++; return nil }
 func TestLoadSettingsLogsErrors(t *testing.T) {
 	dir := t.TempDir()
 	// A directory where config.toml should be a file makes config.Load fail.
-	require.NoError(t, os.Mkdir(filepath.Join(dir, "config.toml"), 0o755), "make config.toml unreadable as a file")
+	require.NoError(t, os.Mkdir(filepath.Join(dir, "config.toml"), 0o750), "make config.toml unreadable as a file")
 	// A malformed drop-in makes config.LoadDir report an error.
 	confD := filepath.Join(dir, "config.d")
-	require.NoError(t, os.MkdirAll(confD, 0o755), "create config.d")
+	require.NoError(t, os.MkdirAll(confD, 0o750), "create config.d")
 	writeFile(t, filepath.Join(confD, "10-bad.toml"), "this is not = valid = toml")
 	// An unparseable env value makes config.Resolve report an error.
 	t.Setenv("SSHAKKU_KEY_LIFETIME", "notaduration")

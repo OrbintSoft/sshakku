@@ -62,7 +62,7 @@ func TestParseCgroupUnit(t *testing.T) {
 func TestProcfsCgroupCgroup(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, "77")
-	require.NoError(t, os.MkdirAll(dir, 0o755), "lay out the fake /proc entry")
+	require.NoError(t, os.MkdirAll(dir, 0o750), "lay out the fake /proc entry")
 	content := "0::/user.slice/user-1000.slice/user@1000.service/app.slice/app-gpg-agent.service\n"
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "cgroup"), []byte(content), 0o644), "write the fake cgroup file")
 
