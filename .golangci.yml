@@ -331,8 +331,10 @@ linters:
       scope: all
 
     gosec:
-      # The rules that have been read against this tree. See the note beside the
-      # linter for what the list means.
+      # `includes` names the rules that have been read against this tree and
+      # kept; `excludes` names the ones that were read and declined, with the
+      # reason each was. Between them they are how far the linter has been
+      # taken — see the note beside it.
       includes:
         # A constant that looks like a credential — matched on its name. In a
         # program whose subject is passphrases, tokens and wallets, almost
@@ -355,6 +357,20 @@ linters:
         # the environment, and read into a 32-bit serial it kept its low half
         # and named a key of this user's that no stash had put there.
         - G115
+
+      excludes:
+        # A subprocess whose program is named by a variable. Every subprocess
+        # this program starts is: ssh-agent and ssh-add, the wallet's own
+        # command, pinentry, the shell a session is running, the editor a
+        # setting names, and this program itself re-entered as another user.
+        # None of them goes through a shell, so there is no command line for
+        # anything to be smuggled into; what the rule sees is that the program's
+        # name came from somewhere, and where it came from is the configuration
+        # and the table that says which build of OpenSSH this system's agent can
+        # be reached with. Unlike the rules above there is no future case here
+        # worth catching — the next call will be a variable too, and a
+        # suppression every one of them has to carry is one nobody reads.
+        - G204
 
     govet:
       # Everything, so an analyser added to a future Go release arrives with it
