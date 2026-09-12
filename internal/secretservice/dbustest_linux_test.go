@@ -57,14 +57,14 @@ func startBus(t *testing.T, activatable bool) {
 		service, readErr := os.ReadFile(secretsServiceFile)
 		require.NoErrorf(t, readErr, "read %s", secretsServiceFile)
 		installed := filepath.Join(services, filepath.Base(secretsServiceFile))
-		require.NoError(t, os.WriteFile(installed, service, 0o600), "install service file")
+		require.NoError(t, os.WriteFile(installed, service, 0o600), "install service file") //nolint:gosec // G703 follows this path back to the environment; the test put it there and it names a file under the directory the test is given
 	}
 
 	template, err := os.ReadFile(busConfig)
 	require.NoErrorf(t, err, "read %s", busConfig)
 	config := filepath.Join(dir, "bus.xml")
 	contents := strings.ReplaceAll(string(template), "@SERVICEDIR@", services)
-	require.NoError(t, os.WriteFile(config, []byte(contents), 0o600), "write bus configuration")
+	require.NoError(t, os.WriteFile(config, []byte(contents), 0o600), "write bus configuration") //nolint:gosec // G703 follows this path back to the environment; the test put it there and it names a file under the directory the test is given
 
 	cmd := exec.CommandContext(t.Context(), bin, "--config-file="+config, "--nofork", "--print-address")
 	stdout, err := cmd.StdoutPipe()

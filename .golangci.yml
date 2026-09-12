@@ -403,6 +403,21 @@ linters:
         # in front of it at all.
         - G602
 
+        # A path reaching a file operation from somewhere a caller controls,
+        # found by following the path back rather than by noticing that it is a
+        # variable. Where it arrives here is the environment, because that is
+        # where this program's paths come from: the log file it appends a
+        # session's lines to belongs to the account the process is running as,
+        # named by that account's own XDG_STATE_HOME or home directory, and
+        # doctor prints which file is in force.
+        #
+        # That is the rule's limit as much as its answer — it cannot tell an
+        # account's own environment from a hostile source, so ten sites say
+        # which one this is. It is on regardless, and the reason is arithmetic:
+        # ten answered sites leave a new one visible, where the sixty-two of
+        # G304 would bury it.
+        - G703
+
       excludes:
         # A subprocess whose program is named by a variable. Every subprocess
         # this program starts is: ssh-agent and ssh-add, the wallet's own

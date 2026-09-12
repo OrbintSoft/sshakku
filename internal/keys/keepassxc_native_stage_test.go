@@ -68,7 +68,7 @@ func stageKeePassXC(t *testing.T, app, root, stateDir string) {
 	settings := filepath.Join(root, "keepassxc.ini")
 	fragment, err := os.ReadFile(browserSettings)
 	require.NoError(t, err, "the settings fragment that turns the local protocol on")
-	require.NoError(t, os.WriteFile(settings, fragment, 0o600), "write the settings for the staged app")
+	require.NoError(t, os.WriteFile(settings, fragment, 0o600), "write the settings for the staged app") //nolint:gosec // G703 follows this path back to the environment; the test put it there and it names a file under the directory the test is given
 
 	database := stageDatabase(t, root, stateDir)
 

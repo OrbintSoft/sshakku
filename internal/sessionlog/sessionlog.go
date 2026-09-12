@@ -59,7 +59,7 @@ func New(path string) *Logger {
 
 // openAppend is the production opener: the log file opened for create/append.
 func openAppend(path string, flag int, perm os.FileMode) (io.WriteCloser, error) {
-	return os.OpenFile(path, flag, perm)
+	return os.OpenFile(path, flag, perm) //nolint:gosec // G703 follows this path back to the environment, which is where it comes from: the log file of the account this process is running as
 }
 
 // Log appends one "TIMESTAMP | [LEVEL] message" line, then trims the file to the
@@ -133,7 +133,7 @@ func (l *Logger) lock() (release func(), held bool, err error) {
 
 // trim rewrites the file keeping only its last maxLines lines.
 func (l *Logger) trim() error {
-	data, err := os.ReadFile(l.path)
+	data, err := os.ReadFile(l.path) //nolint:gosec // G703 follows this path back to the environment, which is where it comes from: the log file of the account this process is running as
 	if err != nil {
 		return err
 	}
@@ -142,5 +142,5 @@ func (l *Logger) trim() error {
 		return nil
 	}
 	kept := lines[len(lines)-l.maxLines:]
-	return os.WriteFile(l.path, []byte(strings.Join(kept, "\n")+"\n"), filePerm)
+	return os.WriteFile(l.path, []byte(strings.Join(kept, "\n")+"\n"), filePerm) //nolint:gosec // G703 follows this path back to the environment, which is where it comes from: the log file of the account this process is running as
 }

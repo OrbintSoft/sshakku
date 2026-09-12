@@ -174,7 +174,7 @@ func TestUninstallingACRLFProfileGivesItBackByteForByte(t *testing.T) {
 
 	wired, err := os.ReadFile(path)
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(path, asCRLF(wired), 0o600))
+	require.NoError(t, os.WriteFile(path, asCRLF(wired), 0o600)) //nolint:gosec // G703 follows this path back to the environment; the test put it there and it names a file under the directory the test is given
 
 	require.NoError(t, StripBlockFile(path))
 

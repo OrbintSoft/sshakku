@@ -520,13 +520,13 @@ func serveAndWriteDownWhatWasOffered(t *testing.T, pipe, report string) {
 
 	offers := make(chan impersonationOffer, 1)
 	fakeAgentPipeNamed(t, pipe, pipeReportImpersonationLevel(offers))
-	require.NoError(t, os.WriteFile(readyBeside(report), nil, 0o600), "saying the pipe is up")
+	require.NoError(t, os.WriteFile(readyBeside(report), nil, 0o600), "saying the pipe is up") //nolint:gosec // G703 follows this path back to the environment; the test put it there and it names a file under the directory the test is given
 
 	select {
 	case offer := <-offers:
 		raw, err := json.Marshal(offer)
 		require.NoError(t, err, "what this half was offered")
-		require.NoError(t, os.WriteFile(report, raw, 0o600), "what this half was offered")
+		require.NoError(t, os.WriteFile(report, raw, 0o600), "what this half was offered") //nolint:gosec // G703 follows this path back to the environment; the test put it there and it names a file under the directory the test is given
 	case <-t.Context().Done():
 		require.Fail(t, "nobody connected to the pipe this half was asked to serve")
 	}
