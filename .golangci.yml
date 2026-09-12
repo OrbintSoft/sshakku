@@ -172,6 +172,13 @@ linters:
     # that predates the builtin and reads as what it is.
     - gocritic
 
+    # The f at the end of a name is what says the first argument is a format
+    # string and everything after it belongs to a verb. Without it the call
+    # reads like one that prints what it was handed, and a string carrying a
+    # percent sign — a path, a wallet's own error text, a passphrase prompt
+    # somebody pasted — becomes a format directive nobody wrote.
+    - goprintffuncname
+
     # Already on through `default: standard`, and named here anyway: what is
     # configured below is the whole of govet rather than the subset the default
     # runs, and a line in this list is where a reader looks for the reason.

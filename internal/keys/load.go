@@ -274,7 +274,7 @@ func (l Loader) addWithRetries(ctx context.Context, keyfile, keyname string) boo
 		l.saveKeyState(keyfile)
 	case attemptsExhausted:
 		l.logf("ERROR", "giving up on %s after %d attempts", keyname, max)
-		l.notify("could not load key %s after %d attempts", keyname, max)
+		l.notifyf("could not load key %s after %d attempts", keyname, max)
 		l.recordGiveup(keyname)
 	case askingEnded:
 		return true
@@ -402,13 +402,13 @@ func (l Loader) storedPassphrase(ctx context.Context, service, keyname string) (
 // failAdd logs and notifies a failure to run ssh-add for a key.
 func (l Loader) failAdd(keyname string, err error) {
 	l.logf("ERROR", "add %s: %v", keyname, err)
-	l.notify("could not load key %s: %v", keyname, err)
+	l.notifyf("could not load key %s: %v", keyname, err)
 }
 
 // failPrompt logs and notifies a non-cancel failure to obtain a passphrase.
 func (l Loader) failPrompt(keyname string, err error) {
 	l.logf("ERROR", "prompt %s: %v", keyname, err)
-	l.notify("could not load key %s: %v", keyname, err)
+	l.notifyf("could not load key %s: %v", keyname, err)
 }
 
 // storePassphrase saves a freshly prompted passphrase after a successful add,
@@ -481,8 +481,8 @@ func (l Loader) logf(level, format string, args ...any) {
 	logline.Recordf(l.Log, level, format, args...)
 }
 
-// notify emits a user-facing notice when a Notifier is configured.
-func (l Loader) notify(format string, args ...any) {
+// notifyf emits a user-facing notice when a Notifier is configured.
+func (l Loader) notifyf(format string, args ...any) {
 	if l.Notify == nil {
 		return
 	}
