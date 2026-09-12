@@ -369,6 +369,16 @@ linters:
         # is enough for that.
         - G301
 
+        # A chmod to something more open than the owner's own read and write.
+        # Read literally, which is what it does, that rules out every directory
+        # there is: entering one is its execute bit, so 0o700 — the tightest a
+        # directory can be and still be used by the account that owns it — is
+        # already over the line. Those say so where they stand. The one file
+        # among them is a test watching a startup file keep the mode it was
+        # found with, where a mode the rule would accept would leave nothing to
+        # watch.
+        - G302
+
       excludes:
         # A subprocess whose program is named by a variable. Every subprocess
         # this program starts is: ssh-agent and ssh-add, the wallet's own
