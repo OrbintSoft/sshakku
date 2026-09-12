@@ -196,3 +196,20 @@ func TestAKeyIsLeftInTheAgentWhenThereIsNoWayToTakeItOut(t *testing.T) {
 	assert.Empty(t, r.Calls, "nothing may be run through a program that cannot reach the agent")
 	assert.Empty(t, records.forgotten, "the record is what makes the next session try again")
 }
+
+// TestTheReportIsToldWhenNoSSHAddCanReadTheAgent. What the agent already holds
+// is how a diagnostic says which keys are loaded, and the report asks for it
+// through the same namer everything else here does. A session whose only
+// ssh-add cannot reach the agent has to be told so, because the other answer it
+// could be given — an empty set — is what an agent holding nothing looks like,
+// and that is a machine to go and fix rather than a question that went
+// unasked.
+func TestTheReportIsToldWhenNoSSHAddCanReadTheAgent(t *testing.T) {
+	r := runtest.NewRunner()
+
+	set, err := RunnerFingerprinter{Runner: r, SSHAdd: refusing()}.AgentFingerprints(t.Context())
+
+	require.ErrorIs(t, err, errNoBuildReachesTheAgent, "the reason has to reach the report, not be turned into an empty agent")
+	assert.Nil(t, set, "and no set comes back at all, since an empty one is a claim about the agent")
+	assert.Empty(t, r.Calls, "nothing may be run through a program that cannot reach the agent")
+}

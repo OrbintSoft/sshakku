@@ -27,3 +27,15 @@ func TestTheNameIsHandedBackUntouchedHere(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, SSHAddName, tool)
 }
+
+// TestSSHAddAsksThisSystemAboutSSHAdd covers the call the rest of the program
+// makes. The one above asks this system and this system's deciding separately;
+// this asks the way a caller does, which is the arrangement that can name the
+// wrong tool without anything else noticing — there are two programs in the
+// package and only one of them is the agent's.
+func TestSSHAddAsksThisSystemAboutSSHAdd(t *testing.T) {
+	tool, err := SSHAdd()
+
+	require.NoError(t, err, "there is nothing on such a system that could fail to be decided")
+	assert.Equal(t, SSHAddName, tool, "the program SSHakku drives the agent with is ssh-add, not ssh")
+}
