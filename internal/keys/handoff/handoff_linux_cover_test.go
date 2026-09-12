@@ -66,6 +66,22 @@ func TestFetchPassphrase(t *testing.T) {
 		assert.Error(t, err, "a handle no stash was made under can redeem nothing")
 	})
 
+	// A serial is 32 bits wide and a token arrives as text, so a number too big
+	// to be one is not a key that has gone missing — it is a key this process
+	// was never handed. Read as a serial anyway it would name a different one:
+	// 4294967297 keeps its low 32 bits and becomes 1, a key of this user's that
+	// no stash of ours put there, which Fetch would read out and then remove.
+	t.Run("a token wider than a serial redeems nothing", func(t *testing.T) {
+		saveKeyringHandoffSeams(t)
+		reached := false
+		keyringRead = func(keyring.Serial) ([]byte, error) { reached = true; return []byte("not ours to read"), nil }
+		keyringUnlink = func(keyring.Serial) error { reached = true; return nil }
+
+		_, err := Fetch(t.Context(), "4294967297")
+		assert.Error(t, err, "a number no serial can hold is not a handle any stash was made under")
+		assert.False(t, reached, "and the keyring is not reached at all, so no key of this user's is read or removed")
+	})
+
 	t.Run("keyring read fails, key still unlinked", func(t *testing.T) {
 		saveKeyringHandoffSeams(t)
 		unlinked := false

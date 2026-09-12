@@ -41,7 +41,9 @@ func Stash(passphrase string, ttl time.Duration) (string, error) {
 // one-shot read, whether or not it succeeds, so a leaked passphrase cannot
 // linger in the keyring.
 func Fetch(_ context.Context, token string) (string, error) {
-	n, err := strconv.Atoi(token)
+	// Parsed to the width a serial actually has, so a number too big to be one
+	// is refused here rather than truncated into a different key's serial.
+	n, err := strconv.ParseInt(token, 10, 32)
 	if err != nil {
 		return "", fmt.Errorf("malformed handoff token %q: %w", token, err)
 	}
