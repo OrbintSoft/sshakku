@@ -64,6 +64,17 @@ func TestRun(t *testing.T) {
 // TestEveryChoosableWalletCanBeDiagnosed needs this system to have a wallet at
 // all, so it is in walletcheck_unix_test.go beside the other wallet tests.
 
+// The two answers a platform can give about diagnosing another account (F61),
+// named here so every test states which one it is driving rather than inheriting
+// whichever this machine happens to be. Both are exercised from both systems,
+// which is the point of the answer being an argument: no machine gives both.
+var (
+	crossUserWorks  = crossUserDiagnosis{implemented: true}
+	crossUserAbsent = crossUserDiagnosis{
+		refusal: `--user is not implemented here; run "sshakku doctor" as that account instead`,
+	}
+)
+
 // The subtests that resolve a real account through the user database are in
 // doctoruser_unix_test.go: they need this system to name a user by a numeric
 // uid, and Windows names one by a SID.
@@ -74,16 +85,53 @@ func TestResolveTargetUser(t *testing.T) {
 	// and names how the other user was arrived at otherwise.
 
 	t.Run("no --user, not root: self, no lookup needed", func(t *testing.T) {
-		t.Setenv("SUDO_UID", "")
-		got, err := resolveTargetUser("", paths.Env{UID: selfUID})
-		require.NoError(t, err, "resolveTargetUser")
-		assert.Equal(t, selfUID, got.UID, "the caller's own uid")
-		assert.Empty(t, got.Source, "nothing cross-user happened")
+		// Whichever answer this build's platform gives, a caller who named
+		// nobody else is asking about themselves: F61 refuses the flag, never
+		// the command.
+		for _, here := range []crossUserDiagnosis{crossUserWorks, crossUserAbsent} {
+			t.Setenv("SUDO_UID", "")
+			got, err := resolveTargetUser("", paths.Env{UID: selfUID}, here)
+			require.NoErrorf(t, err, "resolveTargetUser (implemented=%v)", here.implemented)
+			assert.Equal(t, selfUID, got.UID, "the caller's own uid")
+			assert.Empty(t, got.Source, "nothing cross-user happened")
+		}
 	})
 
 	t.Run("unknown --user value errors", func(t *testing.T) {
-		_, err := resolveTargetUser("sshakku-test-no-such-user", paths.Env{UID: selfUID})
+		_, err := resolveTargetUser("sshakku-test-no-such-user", paths.Env{UID: selfUID}, crossUserWorks)
 		assert.Error(t, err, "a user nobody can resolve must be reported, not silently taken for the caller")
+	})
+
+	t.Run("--user is refused, unlooked-up, where this build does not diagnose another account", func(t *testing.T) {
+		// The seams the lookup would go through, made to record being reached.
+		// F61 promises the account is not looked up: what is absent is the
+		// flag, and an answer about the account would be an answer to a
+		// question that was never asked.
+		origID, origName := userLookupID, userLookup
+		t.Cleanup(func() { userLookupID, userLookup = origID, origName })
+		looked := false
+		userLookupID = func(string) (*user.User, error) { looked = true; return nil, errMustNotRun }
+		userLookup = func(string) (*user.User, error) { looked = true; return nil, errMustNotRun }
+
+		_, err := resolveTargetUser("anybody", paths.Env{UID: selfUID}, crossUserAbsent)
+		require.Error(t, err, "asking for another account's session must not be answered with this one's")
+		assert.Equal(t, crossUserAbsent.refusal, err.Error(),
+			"and the answer is this build's sentence, whole, with nothing wrapped round it")
+		assert.False(t, looked, "nothing went looking for an account the flag was never going to reach")
+	})
+
+	t.Run("the auto-detection is skipped, not refused, where it cannot mean anything", func(t *testing.T) {
+		// Root, which is the one caller the auto-detection looks at, and a
+		// SUDO_UID that resolves to nobody — so entering that branch and
+		// skipping it give different answers: an error from the lookup, or
+		// this session. Where nothing cross-user is implemented the caller
+		// named nobody else, so they get their own session rather than either
+		// a refusal or somebody else's failure.
+		t.Setenv("SUDO_UID", "not-a-uid-xyzzy")
+		got, err := resolveTargetUser("", paths.Env{UID: 0}, crossUserAbsent)
+		require.NoError(t, err, "a caller who asked for nobody else has nothing to be refused")
+		assert.Equal(t, 0, got.UID, "and is reported on themselves")
+		assert.Empty(t, got.Source, "nothing cross-user happened")
 	})
 
 	t.Run("SUDO_UID ignored when not invoking as root", func(t *testing.T) {
@@ -95,7 +143,7 @@ func TestResolveTargetUser(t *testing.T) {
 		// same, and the check passes whichever the code does. Root is the one
 		// uid that resolves on every system this runs on.
 		t.Setenv("SUDO_UID", "0")
-		got, err := resolveTargetUser("", paths.Env{UID: selfUID})
+		got, err := resolveTargetUser("", paths.Env{UID: selfUID}, crossUserWorks)
 		require.NoError(t, err, "resolveTargetUser")
 		assert.Equal(t, selfUID, got.UID, "the caller stays the target when they did not come through sudo")
 		assert.Empty(t, got.Source, "SUDO_UID means nothing when the caller is not root")
@@ -105,7 +153,7 @@ func TestResolveTargetUser(t *testing.T) {
 		// As root with a non-numeric SUDO_UID, the auto-detect lookup fails and
 		// resolveTargetUser reports it rather than silently falling through.
 		t.Setenv("SUDO_UID", "not-a-uid-xyzzy")
-		_, err := resolveTargetUser("", paths.Env{UID: 0})
+		_, err := resolveTargetUser("", paths.Env{UID: 0}, crossUserWorks)
 		assert.Error(t, err, "a SUDO_UID that resolves to nobody must be reported, not fallen through")
 	})
 }

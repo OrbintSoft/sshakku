@@ -106,6 +106,12 @@ type deps struct {
 	// guard consults to decide whether elevation is present. Injected so a test
 	// can drive the root-only cross-user path without actually being root.
 	geteuid func() int
+	// crossUser says whether this build reports on an account other than the one
+	// running the command, and what --user is answered with where it does not
+	// (see crossUserDiagnosis). Platform-bound in production, and injected for
+	// the same reason the dialog is: a machine can only give one of the two
+	// answers, and both have to be exercisable from either.
+	crossUser crossUserDiagnosis
 	// self reports this binary's own path (os.Executable), which askpass-env
 	// bakes into the SSH_ASKPASS export lines. Injected so the lookup's
 	// error branch is testable.
@@ -181,6 +187,7 @@ func realDeps() deps {
 		gather:              gatherReport,
 		tokenSource:         crossuser.Exec{},
 		geteuid:             os.Geteuid,
+		crossUser:           crossUserDiagnosisHere,
 		self:                os.Executable,
 		graphicalPrompter:   dialog.Graphical,
 		fetchHandoff:        handoff.Fetch,

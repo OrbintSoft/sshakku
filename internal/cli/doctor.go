@@ -40,12 +40,46 @@ type targetUser struct {
 	Source   string
 }
 
+// crossUserDiagnosis is what this system can do about reporting on an account
+// other than the one running the command: whether this build implements it here
+// at all and, where it does not, the sentence a caller who asked for it anyway
+// is owed.
+//
+// Only the answer belongs to a platform. Everything that reads it is neutral and
+// takes it as an argument, so both answers stay exercisable from either system —
+// which matters here, because a machine can only ever give one of them.
+type crossUserDiagnosis struct {
+	// implemented says whether --user, and the SUDO_UID auto-detection behind
+	// it, mean anything on this system.
+	implemented bool
+	// refusal answers --user where they do not. It names what is absent and
+	// what reaches the same report instead: the account database's own error
+	// describes a lookup that should never have been attempted, and reads as
+	// though the account were the thing that could not be found.
+	refusal string
+}
+
+// notDiagnosedHereError is what a caller who asked for another account's session
+// is told on a system this build does not report on one from. It carries that
+// system's own sentence rather than composing one, since what is absent, and
+// what reaches the same report instead, are answers only that system has.
+type notDiagnosedHereError struct {
+	refusal string
+}
+
+func (e notDiagnosedHereError) Error() string { return e.refusal }
+
 // resolveTargetUser decides whose session to diagnose: an explicit --user
 // value (userArg), else a uid auto-detected from SUDO_UID when the invoking
 // user is root, else the invoking user themselves. A target that turns out to
 // be the invoking user (however specified) always gets Source == "", since
 // nothing cross-user actually applies.
-func resolveTargetUser(userArg string, selfEnv paths.Env) (targetUser, error) {
+//
+// Where here says this build does not diagnose another account, --user is
+// refused before the account is looked up, since what is absent is the flag
+// rather than the account. The auto-detection is skipped rather than refused: a
+// caller who named nobody else asked for their own session, and gets it.
+func resolveTargetUser(userArg string, selfEnv paths.Env, here crossUserDiagnosis) (targetUser, error) {
 	lookup := func(nameOrUID, source string) (targetUser, error) {
 		u, err := lookupUser(nameOrUID)
 		if err != nil {
@@ -58,13 +92,16 @@ func resolveTargetUser(userArg string, selfEnv paths.Env) (targetUser, error) {
 	}
 
 	if userArg != "" {
+		if !here.implemented {
+			return targetUser{}, notDiagnosedHereError{refusal: here.refusal}
+		}
 		u, err := lookup(userArg, "the --user flag")
 		if err != nil {
 			return targetUser{}, fmt.Errorf("--user %q: %w", userArg, err)
 		}
 		return u, nil
 	}
-	if selfEnv.UID == 0 {
+	if here.implemented && selfEnv.UID == 0 {
 		if sudoUID := os.Getenv("SUDO_UID"); sudoUID != "" {
 			u, err := lookup(sudoUID, "SUDO_UID (auto-detected)")
 			if err != nil {
@@ -213,7 +250,7 @@ func (d deps) doctor(ctx context.Context, stdout, stderr io.Writer, args []strin
 	}
 
 	env := paths.FromOS()
-	target, err := resolveTargetUser(asked.user, env)
+	target, err := resolveTargetUser(asked.user, env, d.crossUser)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "sshakku: doctor: %v\n", err)
 		return 2
