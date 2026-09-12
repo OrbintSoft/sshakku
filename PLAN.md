@@ -477,6 +477,32 @@ done are summarised; see the note at the top of this file for full detail.
     and the matrix gains the row: today no test drives `--edit` from a session
     without a screen on any platform.
 
+28. **Diagnosing another account's session on Windows (goal 13). Raised
+    2026-09-12; deferred, low priority.** `doctor --user`, and the `SUDO_UID`
+    auto-detection behind it, name an account by numeric uid and read its
+    per-login token out of a kernel keyring. Windows has neither: an account
+    there is a SID, and `crossuser.Exec` is a stub with nothing to read. Until
+    this is designed the flag is refused by name on Windows and says it is not
+    implemented (F61), rather than handing back `advapi32`'s own error text.
+
+    **What it would take.** Reading another account's session means
+    impersonation (`LogonUser` / `ImpersonateLoggedOnUser`) and reaching into
+    that account's profile — a privileged path, and one held to the same rule as
+    everything else this project elevates for: read-only, never writing as
+    somebody else (`docs/THREAT-MODEL.md` E1).
+
+    **The authority question is not the POSIX one**, which is most of why this
+    needs designing rather than translating. `euid == 0` has no Windows
+    spelling, and membership of the administrators group is not a substitute:
+    an administrator's ordinary session carries a token with that group
+    filtered out, so the *account* may be an administrator while the *process*
+    asking may do nothing of the kind. What can be asked is the token —
+    `install.haveMachineAuthority` already asks exactly that — and a design
+    starts there, not from comparing uids.
+
+    To decide: whether it is wanted at all. The same report can be had by
+    running `sshakku doctor` as that account, which is what F61 names today.
+
 ---
 
 ## Phases
