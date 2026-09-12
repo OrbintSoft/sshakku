@@ -38,7 +38,7 @@ func TestAMachineWideWiringGoesWhereEveryLoginShellReads(t *testing.T) {
 	t.Run("a startup file every login shell reads", func(t *testing.T) {
 		p := bournePlan(t)
 		file := filepath.Join(t.TempDir(), "zprofile")
-		require.NoError(t, os.WriteFile(file, []byte("umask 022\n"), 0o644))
+		require.NoError(t, os.WriteFile(file, []byte("umask 022\n"), 0o600))
 
 		require.NoError(t, p.forMachine(t.Context(), machineWiring{File: file}))
 

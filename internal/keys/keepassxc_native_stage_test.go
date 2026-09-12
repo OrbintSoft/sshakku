@@ -55,7 +55,7 @@ var errNoAdvertisedSocket = errors.New("keepassxc advertises no socket path on t
 const browserSettings = "../../test/containers/keepassxc-browser.ini"
 
 // stagedPassword unlocks the database this test makes and nothing else.
-const stagedPassword = "sshakku-native-full-round-database"
+const stagedPassword = "sshakku-native-full-round-database" //nolint:gosec // G101 is right that this is a password: the one this test invents for a throwaway database
 
 // stageKeePassXC starts a KeePassXC of this test's own on a database made for
 // it, and returns once the app is answering for an open database.
@@ -68,14 +68,14 @@ func stageKeePassXC(t *testing.T, app, root, stateDir string) {
 	settings := filepath.Join(root, "keepassxc.ini")
 	fragment, err := os.ReadFile(browserSettings)
 	require.NoError(t, err, "the settings fragment that turns the local protocol on")
-	require.NoError(t, os.WriteFile(settings, fragment, 0o600), "write the settings for the staged app")
+	require.NoError(t, os.WriteFile(settings, fragment, 0o600), "write the settings for the staged app") //nolint:gosec // G703 follows this path back to the environment; the test put it there and it names a file under the directory the test is given
 
 	database := stageDatabase(t, root, stateDir)
 
 	// --config takes the settings file to use, so nothing here depends on where
 	// this build would otherwise keep them, and nothing writes to the settings
 	// of whoever is running the test.
-	cmd := exec.CommandContext(t.Context(), app, "--config", settings, "--pw-stdin", database)
+	cmd := exec.CommandContext(t.Context(), app, "--config", settings, "--pw-stdin", database) //nolint:gosec // G702 follows these back to the environment; the app and the files it is pointed at are the ones this test staged, under the directory it was given
 	// Whatever the app says is kept, because the interesting failure is the one
 	// where it starts, answers, and never opens the database: without its own
 	// account of that there is nothing to diagnose but a timeout.

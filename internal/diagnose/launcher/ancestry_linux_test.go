@@ -47,8 +47,8 @@ func TestParseStat(t *testing.T) {
 func TestProcfsAncestryParent(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, "77")
-	require.NoError(t, os.MkdirAll(dir, 0o755), "lay out the fake /proc entry")
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "stat"), []byte("77 (ssh-agent) S 42 77 42"), 0o644), "write the fake stat file")
+	require.NoError(t, os.MkdirAll(dir, 0o750), "lay out the fake /proc entry")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "stat"), []byte("77 (ssh-agent) S 42 77 42"), 0o600), "write the fake stat file")
 
 	ppid, name, ok := ProcfsAncestry{Root: root}.Parent(t.Context(), 77)
 	assert.True(t, ok, "a process whose stat file is there must be answered for")
@@ -144,8 +144,8 @@ func TestProcfsAncestryDefaultRootIsProc(t *testing.T) {
 func TestProcfsAncestryParseFailure(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, "5")
-	require.NoError(t, os.MkdirAll(dir, 0o755), "lay out the fake /proc entry")
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "stat"), []byte("no parentheses here"), 0o644), "write the malformed stat file")
+	require.NoError(t, os.MkdirAll(dir, 0o750), "lay out the fake /proc entry")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "stat"), []byte("no parentheses here"), 0o600), "write the malformed stat file")
 
 	_, _, ok := ProcfsAncestry{Root: root}.Parent(t.Context(), 5)
 	assert.False(t, ok, "a stat file that could not be read must not be answered from")

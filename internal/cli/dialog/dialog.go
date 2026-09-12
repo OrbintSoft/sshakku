@@ -71,13 +71,13 @@ func namedDialog(ctx context.Context, dialogs []dialog, want string, terminal pr
 		}
 		// Saying which one could not ask, and why, is the difference between
 		// something the user can act on and a prompt that simply never came.
-		logGUI(log, "gui_prompter names %s, which %s; asking on the terminal", d.name, prompt.Unavailable(d.prompter))
+		logGUIf(log, "gui_prompter names %s, which %s; asking on the terminal", d.name, prompt.Unavailable(d.prompter))
 		return nil
 	}
 	return nil
 }
 
-// logGUI records why there is no dialog, when there is something to say.
-func logGUI(log keys.Logger, format string, args ...any) {
+// logGUIf records why there is no dialog, when there is something to say.
+func logGUIf(log keys.Logger, format string, args ...any) {
 	logline.Recordf(log, "ERROR", format, args...)
 }

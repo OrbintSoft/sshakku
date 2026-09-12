@@ -7,7 +7,7 @@ package config
 // it. It is declared here because it is this system's mechanism: a build for
 // another operating system has no such thing to name, and a user there cannot
 // choose it.
-const SecretBackendCredentialManager = "credential-manager"
+const SecretBackendCredentialManager = "credential-manager" //nolint:gosec // G101 matches "credential"; the value is what a setting calls this backend
 
 // platformSecretBackends are the wallets that can be chosen on this system, and
 // platformDefaultSecretBackend the one used when the configuration names none.

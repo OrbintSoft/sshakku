@@ -31,8 +31,8 @@ func bashCandidates(t *testing.T) []string {
 // result, and a temporary file is private to its owner by default.
 func TestUpsertBlockFileKeepsThePermissionsItFound(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "bash.bashrc")
-	require.NoError(t, os.WriteFile(path, []byte("umask 022\n"), 0o644))
-	require.NoError(t, os.Chmod(path, 0o644))
+	require.NoError(t, os.WriteFile(path, []byte("umask 022\n"), 0o600))
+	require.NoError(t, os.Chmod(path, 0o644)) //nolint:gosec // G302 is right about the mode and that is the point: at 0o600 there would be nothing left for this test to watch being preserved
 
 	require.NoError(t, UpsertBlockFile(path, ". \"/hook.sh\""))
 
@@ -78,12 +78,12 @@ func TestAWiringInADirectoryThisAccountMayNotWriteIsReported(t *testing.T) {
 
 	dir := t.TempDir()
 	block := filepath.Join(dir, "zprofile")
-	require.NoError(t, os.WriteFile(block, UpsertBlock(nil, ". \"/hook.sh\""), 0o644))
+	require.NoError(t, os.WriteFile(block, UpsertBlock(nil, ". \"/hook.sh\""), 0o600))
 	dropIn := filepath.Join(dir, "50-sshakku-init.sh")
-	require.NoError(t, os.WriteFile(dropIn, BourneDropIn(". \"/hook.sh\""), 0o755))
+	require.NoError(t, os.WriteFile(dropIn, BourneDropIn(". \"/hook.sh\""), 0o755)) //nolint:gosec // G306 is right that this is over 0600 and it has to be: this file is a program the test then runs, and a program that cannot be executed is not one
 
-	require.NoError(t, os.Chmod(dir, 0o555))
-	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+	require.NoError(t, os.Chmod(dir, 0o500))       //nolint:gosec // G302 cannot tell a directory from a file: 0o500 is entered by its owner and written by nobody, which is what this test needs
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) }) //nolint:gosec // G302 cannot tell a directory from a file: 0o700 is the tightest a directory entered by its owner can be
 
 	// The file holds nothing but the wiring, so unwiring it means removing it —
 	// which this account may not do.
@@ -114,8 +114,8 @@ func TestAnInstallThatCannotMakeTheDirectoryForTheStartupFileNamesIt(t *testing.
 	// looking for one under a directory that can still be entered is not itself
 	// a failure — leaving the making of the directory as the step that fails.
 	closed := filepath.Join(home, "closed")
-	require.NoError(t, os.Mkdir(closed, 0o555))
-	t.Cleanup(func() { _ = os.Chmod(closed, 0o755) })
+	require.NoError(t, os.Mkdir(closed, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(closed, 0o700) }) //nolint:gosec // G302 cannot tell a directory from a file: 0o700 is the tightest a directory entered by its owner can be
 	profile := filepath.Join(closed, "shell", "startup-file")
 
 	_, err := Install(t.Context(), wiringRequest(t, home, profile), Ancestry{})

@@ -124,6 +124,17 @@ linters:
     # one, and nothing says so.
     - gocheckcompilerdirectives
 
+    # `init()` runs before main does, in an order across files nobody writes
+    # down, and it is the one function that can be given nothing and return
+    # nothing: what it decides it decides for the whole program, and what goes
+    # wrong inside it can only be panicked or left in a package variable for
+    # somebody to find. This program is a login shell's first act and its
+    # slowest moment is another process it is waiting on, so a package that
+    # arranged itself before main was reached would be work nobody asked for at
+    # the moment there is least room for it — and it could not be handed the
+    # context that says how long to wait, because there is none yet.
+    - gochecknoinits
+
     # `exhaustive`'s question asked of a closed set of types rather than a set
     # of constants: an interface marked `//sumtype:decl` has a known list of
     # implementations, and a type switch that leaves one out is a case the
@@ -161,6 +172,24 @@ linters:
     # that predates the builtin and reads as what it is.
     - gocritic
 
+    # The f at the end of a name is what says the first argument is a format
+    # string and everything after it belongs to a verb. Without it the call
+    # reads like one that prints what it was handed, and a string carrying a
+    # percent sign — a path, a wallet's own error text, a passphrase prompt
+    # somebody pasted — becomes a format directive nobody wrote.
+    - goprintffuncname
+
+    # A catalogue of ways a program can be unsafe: a subprocess built out of
+    # something a caller controls, a file created where anyone may read it, a
+    # weak digest, a host key check turned off, a random number that is not one.
+    #
+    # Most of it reports nothing here, which is the point of having it: this
+    # program starts other programs, writes files somebody logs in through, and
+    # carries passphrases between the two. Every rule that does report has been
+    # read against each place it fires and is either answered there or declined
+    # in the settings below, with the reason.
+    - gosec
+
     # Already on through `default: standard`, and named here anyway: what is
     # configured below is the whole of govet rather than the subset the default
     # runs, and a line in this list is where a reader looks for the reason.
@@ -172,6 +201,24 @@ linters:
     # is what says a thought has finished.
     - godot
 
+    # Two interfaces declared in one package with the same method set are one
+    # interface and a spare name for it: which of the two a signature means is
+    # something the reader has to work out, and a method added to one leaves the
+    # other behind still satisfying nothing.
+    #
+    # Only the default check, `identical`, is on. The other two were measured
+    # and declined, because both report the way this tree is built rather than a
+    # defect in it. `unused` wants an interface referred to inside the package
+    # that declares it, and the interfaces here are declared where a thing is
+    # implemented so that a package consuming it need not import a second one —
+    # `hostcheck.Source`, `launcher.CgroupSource`, `prompt.TTY` — so what it
+    # calls dead is the export itself. `opaque` wants a function that returns an
+    # interface to return the concrete type instead, and the one it reports is
+    # the seam that hands back this system's agent lifecycle, which is an
+    # interface for the one reason it should be: each platform returns a
+    # different concrete type through it.
+    - iface
+
     # An import alias renames somebody else's package inside one file, so the
     # same package answers to a different name depending on which file is open.
     # No alias is allowed that is not listed below, and none is listed: a
@@ -181,6 +228,16 @@ linters:
     # `for i := 0; i < n; i++` states the bound three times and can be wrong in
     # three places; `for i := range n` states it once and cannot count wrong.
     - intrange
+
+    # A const block that opens with iota numbers its members by where they sit
+    # in it, so a plain declaration slipped in among them moves every member
+    # below it — and the members written without a value stop following iota at
+    # that point, repeating the expression above them instead. Either way the
+    # block still compiles under the same names. The enums here are written that
+    # way and are what the rest of the program switches on: what came of trying
+    # to load a key, what state an agent is in, where a setting's value came
+    # from.
+    - iotamixing
 
     # A loop that searches a slice, copies one into another, or picks the
     # larger of two numbers is a loop whose edge cases have to be read to be
@@ -272,6 +329,96 @@ linters:
       # comment standing above a function, and an unfinished thought reads the
       # same in either place.
       scope: all
+
+    gosec:
+      # gosec runs whole. Most of its rules report nothing on this tree, and
+      # they are what it is here for: a host key check turned off, math/rand
+      # asked for a token, a weak digest, a TLS verification skipped. What
+      # follows is the part that does report — first the rules answered at the
+      # line, then, under `excludes`, the three that were read and declined
+      # with the reason each was.
+      #
+      # G101, a constant that looks like a credential, matched on its name. In
+      # a program whose subject is passphrases, tokens and wallets, almost
+      # everything it finds is the name of a place a secret travels rather than
+      # a secret: an environment variable a passphrase is handed through, a
+      # program called keepassxc-cli, a backend called credential-manager. Each
+      # of those names the word that matched. The ones it is right about are a
+      # test's own invented passphrase for a key the test invents, and those say
+      # so as well, because the rule is worth having on for the day a real one
+      # is committed by mistake.
+      #
+      # G115, a conversion that could lose what it is carrying. Nearly every one
+      # is a value crossing into an interface whose width is fixed by somebody
+      # else — a kernel key serial, a uid, a window coordinate, the length of a
+      # buffer the same file declared — or a truncation that is the algorithm
+      # itself, a carry moving through a nonce a byte at a time. It has paid for
+      # itself once: a handoff token is text arriving from the environment, and
+      # read into a 32-bit serial it kept its low half and named a key of this
+      # user's that no stash had put there.
+      #
+      # G301 and G306, a directory or a file made where others may reach it.
+      # Both see only a mode written out at the call, so the directories and
+      # files this program installs — whose modes are named constants — are
+      # invisible to them however open those constants are. What is left is a
+      # test laying out a scene, and those are as tight as they can be: the
+      # fixtures are 0600 and 0750, the one directory a test closes is 0500
+      # because the owner alone being unable to write is what makes the writing
+      # fail, and the fifteen that stay open are programs the test then runs.
+      #
+      # G302, a chmod beyond the owner's own read and write. Read literally,
+      # which is what it does, that rules out every directory there is: entering
+      # one is its execute bit, so 0700 is already over the line. The one file
+      # among its sites is a test watching a startup file keep the mode it was
+      # found with, where a mode this rule would accept would leave nothing to
+      # watch.
+      #
+      # G602, an index that could be past the end of its slice. Its two sites
+      # are guarded by the ordinary guards — the left operand of an `&&`, and a
+      # bound checked on the line above the use — and it reads neither.
+      #
+      # G702 and G703, a command or a path reaching an operation from somewhere
+      # a caller controls, found by following it back rather than by noticing a
+      # variable. Where they arrive here is the environment and a test's own
+      # argv: the log belongs to the account the process runs as, and a test
+      # binary re-entering itself is how a test gets a subprocess. Neither can
+      # tell an account's own environment from a hostile source, which is the
+      # limit as much as the answer — and is why they are on while the two blunt
+      # rules below are not. Fifteen answered sites leave a new one visible;
+      # a hundred and eleven would bury it.
+      excludes:
+        # A subprocess whose program is named by a variable. Every subprocess
+        # this program starts is: ssh-agent and ssh-add, the wallet's own
+        # command, pinentry, the shell a session is running, the editor a
+        # setting names, and this program itself re-entered as another user.
+        # None of them goes through a shell, so there is no command line for
+        # anything to be smuggled into; what the rule sees is that the program's
+        # name came from somewhere, and where it came from is the configuration
+        # and the table that says which build of OpenSSH this system's agent can
+        # be reached with. There is no future case here worth catching — the
+        # next call will take a variable too — and G702 above asks the question
+        # that has an answer.
+        - G204
+
+        # A file opened at a path held in a variable. Every file this program
+        # reads is: the entries under /proc and /sys it reads a machine's state
+        # out of, the lock it takes, the state it left itself last time, the
+        # startup file of a shell somebody chose, the log. Sixty-two sites, and
+        # all they have in common is that a path was worked out before it was
+        # opened. G703 above asks where the path came from instead.
+        - G304
+
+        # Use of unsafe. Thirty-seven sites, and every one is a syscall wrapper:
+        # a window and a credential store reached through this system's own
+        # entry points, a keychain reached through CoreFoundation. Without cgo
+        # there is no other spelling — the call takes a pointer as an integer,
+        # and `uintptr(unsafe.Pointer(&x))` is how Go writes that — so the rule
+        # can only report that the package does what it exists to do.
+        #
+        # The question with an answer in it is whether a given conversion is
+        # sound, and that one is already being asked: `unsafeptr` is a go vet
+        # analyser, and govet below runs all of them.
+        - G103
 
     govet:
       # Everything, so an analyser added to a future Go release arrives with it

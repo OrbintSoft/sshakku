@@ -137,6 +137,21 @@ table above has established where that backend is available at all.
 | 1Password (`op` CLI) | `TestOnePasswordBackendRealAccount`, `onepassword-real-account.yml` |
 | Bitwarden (`bw` CLI) | `TestBitwardenBackendRealAccount`, `desktop-stack.yml` — against a self-hosted Vaultwarden on both platforms: inside the container on Linux, and from macOS against a container the runner emulates a machine for, so the CLI under test is the platform's own |
 
+## Passphrase handoff × OS
+
+How the passphrase reaches the askpass helper `ssh-add` starts, which is one
+process away from the login that has it. Each system has its own mechanism and
+each is exercised against the real thing rather than a stand-in, because what
+has to be true is that the handle one half writes is a handle the other half
+redeems — and a seam on either side of that can only report back what a test
+told it to say.
+
+| System | Mechanism | Covered by |
+| --- | --- | --- |
+| Linux | Kernel user keyring | ✅ `TestAPassphrasePutAsideIsCollectedByTheTokenItWasGiven` — a real `Stash` then a real `Fetch` of the token it returned, against the live keyring, plus the second `Fetch` that has to fail because a handoff is one-shot (F7). Gated on `keyring.Available()`, which is false in a container with no session-keyring link. Made to fail both ways round: with the token's range narrowed it refused an actual serial from the machine it ran on (`value out of range`), and with the stash handing back a serial other than its own the passphrase never came back. `TestKeyringRoundTrip` covers the keyring operations underneath it; what this adds is the two halves agreeing |
+| macOS | Rendezvous over a unix socket | ✅ `TestSocketHandoffRoundTrip` and its neighbours in `handoff_socket_unix_test.go` — a real socket, served once and then gone, including the collector served nothing and the stash nobody claims (F7). `TestChooseSocketBase` covers which directory the rendezvous is made in, which is this platform's own question |
+| Windows | Rendezvous over a named endpoint | ✅ `TestAPassphraseCrossesToTheHelperAndIsGoneAfterwards` — the passphrase crosses without passing through argv or the environment and is not there to be collected twice, with `TestAStashNobodyCollectsExpiresOnItsOwn` for the one nobody comes for (F7) |
+
 ## Install and uninstall methods
 
 | Case | Linux | macOS | Windows |

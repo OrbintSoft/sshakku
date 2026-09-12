@@ -84,7 +84,7 @@ func Command(tb testing.TB, mode string, args ...string) (name string, argv []st
 // each mode does can be checked without spawning anything.
 func act(argv []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(argv) == 0 {
-		say(stderr, "testproc: no mode given\n")
+		sayf(stderr, "testproc: no mode given\n")
 		return 2
 	}
 	mode, args := argv[0], argv[1:]
@@ -98,8 +98,8 @@ func act(argv []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		if err != nil {
 			return misuse(stderr, mode, "<stdout> <stderr> <exit code>")
 		}
-		say(stdout, "%s", args[0])
-		say(stderr, "%s", args[1])
+		sayf(stdout, "%s", args[0])
+		sayf(stderr, "%s", args[1])
 		return code
 
 	case Sleep:
@@ -115,32 +115,32 @@ func act(argv []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 	case EchoStdin:
 		if _, err := io.Copy(stdout, stdin); err != nil {
-			say(stderr, "testproc: copying standard input: %v\n", err)
+			sayf(stderr, "testproc: copying standard input: %v\n", err)
 			return 1
 		}
 		return 0
 
 	case EchoEnv:
 		for _, name := range args {
-			say(stdout, "%s\n", os.Getenv(name))
+			sayf(stdout, "%s\n", os.Getenv(name))
 		}
 		return 0
 
 	default:
-		say(stderr, "testproc: no such mode %q\n", mode)
+		sayf(stderr, "testproc: no such mode %q\n", mode)
 		return 2
 	}
 }
 
 func misuse(stderr io.Writer, mode, usage string) int {
-	say(stderr, "testproc: %s takes %s\n", mode, usage)
+	sayf(stderr, "testproc: %s takes %s\n", mode, usage)
 	return 2
 }
 
-// say writes to one of the child's streams. A stream this process cannot write
+// sayf writes to one of the child's streams. A stream this process cannot write
 // to leaves it nothing to report the failure on and no one to report it to, so
 // the error is dropped here rather than at each of the call sites above; the
 // test that spawned the child sees the truncated output and fails on that.
-func say(w io.Writer, format string, a ...any) {
+func sayf(w io.Writer, format string, a ...any) {
 	_, _ = fmt.Fprintf(w, format, a...)
 }

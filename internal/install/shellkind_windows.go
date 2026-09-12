@@ -44,7 +44,7 @@ func translatorBeside(imagePath string) bool {
 // limited-information right exists for this question and is granted for
 // processes that a full query right would be refused for.
 func ImagePath(pid int) (string, bool) {
-	handle, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
+	handle, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid)) //nolint:gosec // G115 sees the widening: a process id here is 32 bits wide, and this one came from the process table
 	if err != nil {
 		return "", false
 	}
@@ -53,7 +53,7 @@ func ImagePath(pid int) (string, bool) {
 	// The system fills the buffer and writes back how much it used. A path
 	// here may exceed the traditional limit, so the buffer is the long one.
 	buffer := make([]uint16, windows.MAX_LONG_PATH)
-	size := uint32(len(buffer))
+	size := uint32(len(buffer)) //nolint:gosec // G115 sees the length of the buffer declared two lines above
 	if err := windows.QueryFullProcessImageName(handle, 0, &buffer[0], &size); err != nil {
 		return "", false
 	}

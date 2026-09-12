@@ -114,14 +114,14 @@ func TestProbeDir(t *testing.T) {
 // directory is a passphrase waiting to be collected.
 func TestPrivateDir(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, os.Chmod(dir, 0o700))
+	require.NoError(t, os.Chmod(dir, 0o700)) //nolint:gosec // G302 flags the mode this test hands PrivateDir to judge; the subject is the judging
 	assert.True(t, PrivateDir(dir), "a 0700 directory of ours is private")
 
 	for _, mode := range []os.FileMode{0o770, 0o707, 0o750, 0o705, 0o777} {
 		require.NoError(t, os.Chmod(dir, mode))
 		assert.Falsef(t, PrivateDir(dir), "a %o directory is not private", mode)
 	}
-	require.NoError(t, os.Chmod(dir, 0o700))
+	require.NoError(t, os.Chmod(dir, 0o700)) //nolint:gosec // G302 cannot tell a directory from a file: 0o700 is the tightest a directory entered by its owner can be
 
 	file := filepath.Join(dir, "f")
 	require.NoError(t, os.WriteFile(file, nil, 0o600))

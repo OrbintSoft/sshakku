@@ -110,7 +110,7 @@ func FromArgs(args []string) (Dialect, error) {
 			if i >= len(args) {
 				return Dialect{}, errShellRequiresValue
 			}
-			name = args[i]
+			name = args[i] //nolint:gosec // G602 follows the loop's own bound but not one written out in its body: the line above is the check, and i+1 guarding args[i+1] is not followed either
 		default:
 			return Dialect{}, fmt.Errorf("%w %q", errUnknownArgument, args[i])
 		}

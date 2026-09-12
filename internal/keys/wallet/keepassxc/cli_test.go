@@ -87,7 +87,7 @@ func TestKeePassXCCLILookupReturnsWhatWasStored(t *testing.T) {
 // on standard input.
 func TestKeePassXCCLIStoreKeepsThePassphraseOffArgvToo(t *testing.T) {
 	const dbPassword = "db-password"
-	const passphrase = "the-key-passphrase"
+	const passphrase = "the-key-passphrase" //nolint:gosec // G101 is right that this is a passphrase: the one this test invents for a key it invents
 	runner := &runtest.Recorder{Results: []run.Result{
 		{Code: 1}, // the existence check: no such entry yet.
 		{Code: 0}, // creating the group.
@@ -420,7 +420,7 @@ func TestKeePassXCCLIKeyFileOnlyDatabaseAsksNothing(t *testing.T) {
 // still fed on standard input; what goes away is the database password line in
 // front of it, which keepassxc-cli would otherwise read as the entry's.
 func TestKeePassXCCLIKeyFileOnlyStoreSendsOnlyTheEntryPassword(t *testing.T) {
-	const passphrase = "the-key-passphrase"
+	const passphrase = "the-key-passphrase" //nolint:gosec // G101 is right that this is a passphrase: the one this test invents for a key it invents
 	runner := &runtest.Recorder{Results: []run.Result{
 		{Code: 1}, // the lookup that decides between add and edit: not there yet.
 		{Code: 0}, // mkdir.

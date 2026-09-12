@@ -44,7 +44,7 @@ func TestReadProcfsTreeUnreadableCmdline(t *testing.T) {
 	root := t.TempDir()
 	// A pid directory that exists but has no cmdline file (the process vanished
 	// mid-scan). ReadFile fails and the entry is skipped.
-	require.NoError(t, os.Mkdir(filepath.Join(root, "999"), 0o755))
+	require.NoError(t, os.Mkdir(filepath.Join(root, "999"), 0o750))
 	procs, err := readProcfsTree(root)
 	require.NoError(t, err, "readProcfsTree")
 	assert.Empty(t, procs, "the cmdline-less entry must be skipped")

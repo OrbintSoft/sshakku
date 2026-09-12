@@ -17,7 +17,7 @@ import (
 // org.freedesktop.secrets a name the bus knows how to start.
 const (
 	busConfig          = "testdata/dbus-session.xml"
-	secretsServiceFile = "testdata/org.freedesktop.secrets.service"
+	secretsServiceFile = "testdata/org.freedesktop.secrets.service" //nolint:gosec // G101 matches "secrets"; the value is a path into testdata
 )
 
 // startSessionBus spawns a private dbus-daemon session bus for the duration of
@@ -57,14 +57,14 @@ func startBus(t *testing.T, activatable bool) {
 		service, readErr := os.ReadFile(secretsServiceFile)
 		require.NoErrorf(t, readErr, "read %s", secretsServiceFile)
 		installed := filepath.Join(services, filepath.Base(secretsServiceFile))
-		require.NoError(t, os.WriteFile(installed, service, 0o600), "install service file")
+		require.NoError(t, os.WriteFile(installed, service, 0o600), "install service file") //nolint:gosec // G703 follows this path back to the environment; the test put it there and it names a file under the directory the test is given
 	}
 
 	template, err := os.ReadFile(busConfig)
 	require.NoErrorf(t, err, "read %s", busConfig)
 	config := filepath.Join(dir, "bus.xml")
 	contents := strings.ReplaceAll(string(template), "@SERVICEDIR@", services)
-	require.NoError(t, os.WriteFile(config, []byte(contents), 0o600), "write bus configuration")
+	require.NoError(t, os.WriteFile(config, []byte(contents), 0o600), "write bus configuration") //nolint:gosec // G703 follows this path back to the environment; the test put it there and it names a file under the directory the test is given
 
 	cmd := exec.CommandContext(t.Context(), bin, "--config-file="+config, "--nofork", "--print-address")
 	stdout, err := cmd.StdoutPipe()

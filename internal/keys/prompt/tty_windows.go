@@ -142,7 +142,7 @@ func readRealConsole(in windows.Handle) (string, error) {
 	// is a bound rather than an expectation.
 	buf := make([]uint16, 4096)
 	var read uint32
-	if err := windows.ReadConsole(in, &buf[0], uint32(len(buf)), &read, nil); err != nil {
+	if err := windows.ReadConsole(in, &buf[0], uint32(len(buf)), &read, nil); err != nil { //nolint:gosec // G115 sees the length of the buffer declared two lines above
 		return "", err
 	}
 	return string(utf16.Decode(buf[:read])), nil
@@ -155,7 +155,7 @@ func writeRealConsole(out windows.Handle, s string) error {
 	}
 	wide := utf16.Encode([]rune(s))
 	var written uint32
-	return windows.WriteConsole(out, &wide[0], uint32(len(wide)), &written, nil)
+	return windows.WriteConsole(out, &wide[0], uint32(len(wide)), &written, nil) //nolint:gosec // G115 sees the length of the encoding made on the line above
 }
 
 // TTYPrompter prompts for a passphrase on this session's console — the

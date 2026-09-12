@@ -187,7 +187,7 @@ func installFakeBin(t *testing.T, dir, name, script string) {
 	t.Helper()
 	body, err := os.ReadFile(script)
 	require.NoErrorf(t, err, "reading %s", script)
-	require.NoErrorf(t, os.WriteFile(filepath.Join(dir, name), body, 0o755), "installing %s", name)
+	require.NoErrorf(t, os.WriteFile(filepath.Join(dir, name), body, 0o755), "installing %s", name) //nolint:gosec // G306 is right that this is over 0600 and it has to be: this file is a program the test then runs, and a program that cannot be executed is not one
 }
 
 // TestGraphicalPrompterWithASessionAndKDialog covers the opposite answer, which
@@ -201,7 +201,7 @@ func installFakeBin(t *testing.T, dir, name, script string) {
 // it would put it there. What decides remains the real GUIAvailable.
 func TestGraphicalPrompterWithASessionAndKDialog(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "kdialog"), []byte("#!/bin/sh\nexit 0\n"), 0o755),
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "kdialog"), []byte("#!/bin/sh\nexit 0\n"), 0o755), //nolint:gosec // G306 is right that this is over 0600 and it has to be: this file is a program the test then runs, and a program that cannot be executed is not one
 		"writing a kdialog to find")
 	t.Setenv("PATH", dir)
 	t.Setenv("WAYLAND_DISPLAY", "wayland-0")

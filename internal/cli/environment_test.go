@@ -24,7 +24,7 @@ func TestEnvironmentReportReadsTheShellItRunsIn(t *testing.T) {
 		got[v.Name] = v.Value
 	}
 
-	want := map[string]string{
+	want := map[string]string{ //nolint:gosec // G101 matches SSH_ASKPASS; the values are a path and a mode
 		"SSH_ASKPASS":          "/opt/sshakku/bin/sshakku-askpass",
 		"SSH_ASKPASS_REQUIRE":  "force",
 		"SSHAKKU_KEY_LIFETIME": "30m",
@@ -65,7 +65,7 @@ func TestTheNamesForASessionThisProcessCannotReadCarryNoValues(t *testing.T) {
 // set. The token is given a value this test can recognise and the whole
 // rendered report is searched for it.
 func TestASecretsValueNeverReachesTheReport(t *testing.T) {
-	const token = "sshakku-a-token-no-report-may-ever-show"
+	const token = "sshakku-a-token-no-report-may-ever-show" //nolint:gosec // G101 is right that this is a token: the made-up one this test checks never reaches the report
 	t.Setenv(handoff.EnvToken, token)
 	t.Setenv("SSHAKKU_BW_PASSWORD", token)
 

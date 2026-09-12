@@ -92,7 +92,7 @@ func TestListingRefusesToAskForEverything(t *testing.T) {
 func TestACredentialWrittenIsReadBackWhole(t *testing.T) {
 	needsRealStore(t)
 
-	entry := credential{
+	entry := credential{ //nolint:gosec // G101 matches the Secret field: the value is a made-up one this test writes to a throwaway entry
 		Target:  throwawayTarget(t, "whole"),
 		Comment: "SSHakku passphrase for a key that does not exist",
 		User:    "sshakku",

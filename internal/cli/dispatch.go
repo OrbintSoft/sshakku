@@ -38,7 +38,7 @@ import (
 // cannot be passed to say what the invocation is for; the name is what says it,
 // and it is set by whoever runs the program rather than inferred from what they
 // ran it with.
-const askpassProgName = "sshakku-askpass"
+const askpassProgName = "sshakku-askpass" //nolint:gosec // G101 matches "askpass" in the name; the value is this program's own filename
 
 const usage = `sshakku — SSH agent and key shepherd
 

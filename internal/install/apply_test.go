@@ -265,7 +265,7 @@ func TestWiringAFileAndUnwiringItLeavesItAsItWasFound(t *testing.T) {
 
 	startup := filepath.Join(home, "startup-file")
 	before := "# something the user wrote\nexport EDITOR=vi\n"
-	require.NoError(t, os.WriteFile(startup, []byte(before), 0o644))
+	require.NoError(t, os.WriteFile(startup, []byte(before), 0o600))
 
 	binary := filepath.Join(home, "bin", "sshakku")
 	req := Request{Shell: kind, ShellExe: exe, Scope: User, Hosts: AllHosts, Profile: startup, NoPath: true, Binary: binary}
@@ -351,7 +351,7 @@ func TestWithNoFileNamedTheShellIsAskedWhereItLooks(t *testing.T) {
 			installInto(t, home)
 			t.Setenv("HOME", home)
 			if c.existing != "" {
-				require.NoError(t, os.WriteFile(filepath.Join(home, c.existing), []byte("# mine\n"), 0o644))
+				require.NoError(t, os.WriteFile(filepath.Join(home, c.existing), []byte("# mine\n"), 0o600))
 			}
 
 			req := Request{

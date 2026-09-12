@@ -68,7 +68,7 @@ func TestGatherHealthy(t *testing.T) {
 	}}
 	prober := fakeProber{up: map[string]bool{fixed: true}}
 
-	r := Gather(t.Context(), Inputs{
+	r := Gather(t.Context(), Inputs{ //nolint:gosec // G101 matches EnvAskpass; the value is a path to this program
 		FixedSock: fixed,
 		LegacyDir: legacy,
 		EnvSock:   fixed,
@@ -271,7 +271,7 @@ func TestGatherAskpassNotWired(t *testing.T) {
 }
 
 func TestGatherAskpassPartiallyWired(t *testing.T) {
-	r := Gather(t.Context(), Inputs{
+	r := Gather(t.Context(), Inputs{ //nolint:gosec // G101 matches EnvAskpass; the value is a path to this program
 		FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000,
 		EnvAskpass: "/usr/bin/sshakku",
 	}, fakeSource{}, fakeProber{up: map[string]bool{fixed: true}}, nil, nil, nil, nil)
@@ -283,7 +283,7 @@ func TestGatherAskpassWired(t *testing.T) {
 	src := fakeSource{procs: []inspect.AgentProc{
 		{PID: 100, UID: 1000, Socket: fixed, Args: []string{"ssh-agent", "-a", fixed}},
 	}}
-	r := Gather(t.Context(), Inputs{
+	r := Gather(t.Context(), Inputs{ //nolint:gosec // G101 matches EnvAskpass; the value is a path to this program
 		FixedSock: fixed, LegacyDir: legacy, EnvSock: fixed, OurUID: 1000,
 		EnvAskpass: "/usr/bin/sshakku", EnvAskpassRequire: "force",
 	}, src, fakeProber{up: map[string]bool{fixed: true}}, nil, nil, nil, nil)

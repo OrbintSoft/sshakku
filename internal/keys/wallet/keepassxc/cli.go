@@ -16,7 +16,7 @@ import (
 // database file rather than on a running KeePassXC, so it needs the database's
 // own password every time it is invoked — which is why it is the fallback and
 // not the way SSHakku reaches KeePassXC by default.
-const keepassxcCLIBin = "keepassxc-cli"
+const keepassxcCLIBin = "keepassxc-cli" //nolint:gosec // G101 matches "pass" inside keepassxc; the value is a program's name
 
 // keepassxcCLIGroup is the group entries are kept in unless another is
 // configured, matching the one the local-protocol route names, so the same

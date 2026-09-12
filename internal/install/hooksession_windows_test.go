@@ -78,7 +78,7 @@ func standInForSSHakku(args []string) int {
 // writeDownTheCall appends one call to the file the test named, whole, so that
 // a session making several of them leaves all of them behind.
 func writeDownTheCall(args []string) error {
-	file, err := os.OpenFile(os.Getenv(whereToWriteTheCalls),
+	file, err := os.OpenFile(os.Getenv(whereToWriteTheCalls), //nolint:gosec // G703 follows this path back to the environment; the test put it there and it names a file under the directory the test is given
 		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err

@@ -36,7 +36,7 @@ func TestReadTTYLineNoTerminalReturnsPromptly(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestReadTTYLineNoTerminalReturnsPromptly$")
+	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestReadTTYLineNoTerminalReturnsPromptly$") //nolint:gosec // G702 follows os.Args[0] back to this program's own argv: it is the test binary re-entering itself, which is how a test gets a subprocess to watch
 	cmd.Env = append(os.Environ(), "SSHAKKU_TTY_HELPER=1")
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	cmd.Stdin = nil

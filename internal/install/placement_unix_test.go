@@ -16,7 +16,7 @@ import (
 // not found, which is an answer the caller may act on.
 func TestAPathThatCannotBeReachedIsNotReadAsAbsent(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "not-a-directory")
-	require.NoError(t, os.WriteFile(file, []byte("mine"), 0o644))
+	require.NoError(t, os.WriteFile(file, []byte("mine"), 0o600))
 
 	_, err := isDir(filepath.Join(file, "under-a-file"))
 

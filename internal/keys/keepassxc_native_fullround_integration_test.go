@@ -47,7 +47,7 @@ func TestKeePassXCNativeFullRound(t *testing.T) {
 	requireRealKeePassXCNative(t)
 	requireEverythingTheRoundDrives(t)
 
-	const passphrase = "sshakku-native-full-round-passphrase"
+	const passphrase = "sshakku-native-full-round-passphrase" //nolint:gosec // G101 is right that this is a passphrase: the one this test invents for a key it invents
 	env := setupNativeFullRound(t, passphrase)
 
 	// F4 — the first use. The wallet holds nothing for this key yet, so the

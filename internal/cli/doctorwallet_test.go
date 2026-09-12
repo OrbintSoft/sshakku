@@ -49,7 +49,7 @@ func onlyOnPath(t *testing.T, names ...string) {
 	dir := t.TempDir()
 	for _, name := range names {
 		script := filepath.Join(dir, name)
-		require.NoErrorf(t, os.WriteFile(script, []byte("#!/bin/sh\nexit 0\n"), 0o755), "write %s", script)
+		require.NoErrorf(t, os.WriteFile(script, []byte("#!/bin/sh\nexit 0\n"), 0o755), "write %s", script) //nolint:gosec // G306 is right that this is over 0600 and it has to be: this file is a program the test then runs, and a program that cannot be executed is not one
 	}
 	t.Setenv("PATH", dir)
 }

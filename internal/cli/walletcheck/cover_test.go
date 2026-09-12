@@ -76,7 +76,7 @@ func TestWalletViewPerBackend(t *testing.T) {
 		},
 		{
 			name: "keepassxc, cli route, everything there",
-			settings: config.Settings{
+			settings: config.Settings{ //nolint:gosec // G101 matches the KeePassXC fields; the values are a route and a database path
 				SecretBackend:     config.SecretBackendKeePassXC,
 				KeePassXCRoute:    config.KeePassXCRouteCLI,
 				KeePassXCDatabase: "/vault.kdbx",

@@ -281,7 +281,7 @@ func (w *passphraseWindow) pump(hwnd windows.HWND) {
 	for {
 		ret, _, _ := procGetMessage.Call(uintptr(unsafe.Pointer(&m)), 0, 0, 0)
 		// 0 is WM_QUIT and -1 is an error; both mean this loop is over.
-		if ret == 0 || int32(ret) == -1 {
+		if ret == 0 || int32(ret) == -1 { //nolint:gosec // G115 sees the narrowing, which is how -1 is read back: it is what GetMessage returns for an error
 			return
 		}
 		if handled, _, _ := procIsDialogMessage.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&m))); handled != 0 {
@@ -395,7 +395,7 @@ func (w *passphraseWindow) create() (windows.HWND, error) {
 	// and scaled to whatever this screen really is, so the box is the same size
 	// in front of a person whatever their display is set to.
 	dpi := systemDPI()
-	scale := func(v int32) int32 { return v * int32(dpi) / 96 }
+	scale := func(v int32) int32 { return v * int32(dpi) / 96 } //nolint:gosec // G115 sees the narrowing of a screen's dpi, which is 96 or a small multiple of it
 
 	// Made without WS_VISIBLE and shown once its controls are in it: a frame
 	// that appears first and fills in afterwards is one a person can see empty,
@@ -408,8 +408,8 @@ func (w *passphraseWindow) create() (windows.HWND, error) {
 
 	screenW, _, _ := procGetSystemMetrics.Call(smCXScreen)
 	screenH, _, _ := procGetSystemMetrics.Call(smCYScreen)
-	x := (int32(screenW) - winW) / 2
-	y := (int32(screenH) - winH) / 2
+	x := (int32(screenW) - winW) / 2 //nolint:gosec // G115 sees the narrowing of the screen's width in pixels, handed back through a uintptr
+	y := (int32(screenH) - winH) / 2 //nolint:gosec // G115 sees the narrowing of the screen's height in pixels, handed back through a uintptr
 
 	title := windows.StringToUTF16Ptr("SSHakku")
 	hwnd, _, err := procCreateWindowEx.Call(
@@ -417,7 +417,7 @@ func (w *passphraseWindow) create() (windows.HWND, error) {
 		uintptr(unsafe.Pointer(className)),
 		uintptr(unsafe.Pointer(title)),
 		uintptr(style),
-		uintptr(x), uintptr(y), uintptr(winW), uintptr(winH),
+		uintptr(x), uintptr(y), uintptr(winW), uintptr(winH), //nolint:gosec // G115 sees window coordinates going back to Win32 through the uintptr its call takes
 		0, 0, uintptr(instance), 0,
 	)
 	if hwnd == 0 {
@@ -485,7 +485,7 @@ func (w *passphraseWindow) child(parent windows.HWND, instance windows.Handle,
 		uintptr(unsafe.Pointer(classPtr)),
 		uintptr(unsafe.Pointer(textPtr)),
 		uintptr(style),
-		uintptr(x), uintptr(y), uintptr(cx), uintptr(cy),
+		uintptr(x), uintptr(y), uintptr(cx), uintptr(cy), //nolint:gosec // G115 sees control coordinates going back to Win32 through the uintptr its call takes
 		uintptr(parent), id, uintptr(instance), 0,
 	)
 	runtime.KeepAlive(classPtr)
@@ -503,7 +503,7 @@ func (w *passphraseWindow) child(parent windows.HWND, instance windows.Handle,
 // the system's ancient bitmap face, which is how a window that is otherwise
 // correct still manages to look broken.
 func (w *passphraseWindow) makeFont(dpi uint32) windows.Handle {
-	height := -int32(12) * int32(dpi) / 96
+	height := -int32(12) * int32(dpi) / 96 //nolint:gosec // G115 sees a font height in points scaled by the screen's dpi
 	face := windows.StringToUTF16Ptr("Segoe UI")
 	h, _, _ := procCreateFont.Call(
 		uintptr(height), 0, 0, 0, fwNormal, 0, 0, 0,
@@ -523,5 +523,5 @@ func systemDPI() uint32 {
 	if dpi == 0 {
 		return 96
 	}
-	return uint32(dpi)
+	return uint32(dpi) //nolint:gosec // G115 sees the narrowing of what GetDpiForSystem returned through a uintptr
 }

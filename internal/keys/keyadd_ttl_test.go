@@ -52,7 +52,7 @@ func TestAddWithAskpassAppliesKeyLifetime(t *testing.T) {
 
 	dir := t.TempDir()
 	keyfile := filepath.Join(dir, "id_test")
-	const passphrase = "sshakku-ttl-test-passphrase"
+	const passphrase = "sshakku-ttl-test-passphrase" //nolint:gosec // G101 is right that this is a passphrase: the one this test invents for a key it invents
 
 	out, err := exec.CommandContext(t.Context(), "ssh-keygen", "-t", "ed25519", "-N", passphrase, "-f", keyfile, "-q").CombinedOutput()
 	require.NoErrorf(t, err, "a real passphrase-protected key to load:\n%s", out)
@@ -71,7 +71,7 @@ func TestAddWithAskpassAppliesKeyLifetime(t *testing.T) {
 	// print the payload AddWithAskpass stashed under $SSHAKKU_HANDOFF_TOKEN.
 	askpassScript := filepath.Join(dir, "askpass.sh")
 	script := "#!/bin/sh\nexec keyctl pipe \"$" + handoff.EnvToken + "\"\n"
-	require.NoError(t, os.WriteFile(askpassScript, []byte(script), 0o755), "a helper to collect the stashed passphrase")
+	require.NoError(t, os.WriteFile(askpassScript, []byte(script), 0o755), "a helper to collect the stashed passphrase") //nolint:gosec // G306 is right that this is over 0600 and it has to be: this file is a program the test then runs, and a program that cannot be executed is not one
 
 	const lifetime = 2 * time.Second
 	adder := ExecKeyAdder{AskpassProg: askpassScript, KeyLifetime: lifetime}

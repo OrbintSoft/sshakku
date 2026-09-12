@@ -38,7 +38,7 @@ func TestLoadKeysHeadlessVaultHit(t *testing.T) {
 
 	dir := t.TempDir()
 	keyfile := filepath.Join(dir, "id_test")
-	const passphrase = "sshakku-headless-vault-test-passphrase"
+	const passphrase = "sshakku-headless-vault-test-passphrase" //nolint:gosec // G101 is right that this is a passphrase: the one this test invents for a key it invents
 	out, err := exec.CommandContext(t.Context(), "ssh-keygen", "-t", "ed25519", "-N", passphrase, "-f", keyfile, "-q").CombinedOutput()
 	require.NoErrorf(t, err, "a real passphrase-protected key to load:\n%s", out)
 
@@ -54,7 +54,7 @@ func TestLoadKeysHeadlessVaultHit(t *testing.T) {
 
 	askpassScript := filepath.Join(dir, "askpass.sh")
 	script := "#!/bin/sh\nexec keyctl pipe \"$" + handoff.EnvToken + "\"\n"
-	require.NoError(t, os.WriteFile(askpassScript, []byte(script), 0o755), "a helper to collect the stashed passphrase")
+	require.NoError(t, os.WriteFile(askpassScript, []byte(script), 0o755), "a helper to collect the stashed passphrase") //nolint:gosec // G306 is right that this is over 0600 and it has to be: this file is a program the test then runs, and a program that cannot be executed is not one
 
 	loader := Loader{
 		Keys:   fakeLister{paths: []string{keyfile}},
@@ -92,7 +92,7 @@ func TestLoadKeysNoTerminalReturnsPromptly(t *testing.T) {
 
 	dir := t.TempDir()
 	keyfile := filepath.Join(dir, "id_test")
-	const passphrase = "sshakku-no-terminal-test-passphrase"
+	const passphrase = "sshakku-no-terminal-test-passphrase" //nolint:gosec // G101 is right that this is a passphrase: the one this test invents for a key it invents
 	genOut, err := exec.CommandContext(t.Context(), "ssh-keygen", "-t", "ed25519", "-N", passphrase, "-f", keyfile, "-q").CombinedOutput()
 	require.NoErrorf(t, err, "a real passphrase-protected key to load:\n%s", genOut)
 
@@ -107,7 +107,7 @@ func TestLoadKeysNoTerminalReturnsPromptly(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestLoadKeysNoTerminalReturnsPromptly$")
+	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestLoadKeysNoTerminalReturnsPromptly$") //nolint:gosec // G702 follows os.Args[0] back to this program's own argv: it is the test binary re-entering itself, which is how a test gets a subprocess to watch
 	cmd.Env = append(os.Environ(),
 		"SSHAKKU_LOADKEYS_HELPER=1",
 		"SSH_AUTH_SOCK="+sock,
