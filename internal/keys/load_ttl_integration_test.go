@@ -31,7 +31,7 @@ func TestLoadKeysReloadsAfterRealExpiry(t *testing.T) {
 
 	dir := t.TempDir()
 	keyfile := filepath.Join(dir, "id_test")
-	const passphrase = "sshakku-reload-test-passphrase"
+	const passphrase = "sshakku-reload-test-passphrase" //nolint:gosec // G101 is right that this is a passphrase: the one this test invents for a key it invents
 	out, err := exec.CommandContext(t.Context(), "ssh-keygen", "-t", "ed25519", "-N", passphrase, "-f", keyfile, "-q").CombinedOutput()
 	require.NoErrorf(t, err, "a real passphrase-protected key to load:\n%s", out)
 

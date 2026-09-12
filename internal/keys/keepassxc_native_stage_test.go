@@ -55,7 +55,7 @@ var errNoAdvertisedSocket = errors.New("keepassxc advertises no socket path on t
 const browserSettings = "../../test/containers/keepassxc-browser.ini"
 
 // stagedPassword unlocks the database this test makes and nothing else.
-const stagedPassword = "sshakku-native-full-round-database"
+const stagedPassword = "sshakku-native-full-round-database" //nolint:gosec // G101 is right that this is a password: the one this test invents for a throwaway database
 
 // stageKeePassXC starts a KeePassXC of this test's own on a database made for
 // it, and returns once the app is answering for an open database.

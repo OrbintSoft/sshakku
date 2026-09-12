@@ -42,7 +42,7 @@ func TestFormatShowsEveryVariableItWasGiven(t *testing.T) {
 	out := buf.String()
 
 	assert.Contains(t, out, "environment variables:", "the report must have a section for them")
-	cases := map[string]string{
+	cases := map[string]string{ //nolint:gosec // G101 matches SSH_ASKPASS; the values are a path and a mode
 		"SSH_ASKPASS":          "/usr/local/bin/sshakku-askpass",
 		"SSH_ASKPASS_REQUIRE":  "force",
 		"SSHAKKU_KEY_LIFETIME": "(unset)",

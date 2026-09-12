@@ -29,7 +29,7 @@ import (
 const (
 	envTTYHelper    = "SSHAKKU_TTY_PROMPT_HELPER"
 	envTTYKeyfile   = "SSHAKKU_TTY_PROMPT_KEYFILE"
-	envTTYAskpass   = "SSHAKKU_TTY_PROMPT_ASKPASS"
+	envTTYAskpass   = "SSHAKKU_TTY_PROMPT_ASKPASS" //nolint:gosec // G101 matches "askpass"; the value names an environment variable
 	envTTYGiveupDir = "SSHAKKU_TTY_PROMPT_GIVEUP_DIR"
 )
 
@@ -88,7 +88,7 @@ func TestLoadKeysFirstTimePromptRealTerminal(t *testing.T) {
 	requireRealSSHBinaries(t)
 	requireUsableHandoff(t)
 
-	const passphrase = "sshakku-live-terminal-test-passphrase"
+	const passphrase = "sshakku-live-terminal-test-passphrase" //nolint:gosec // G101 is right that this is a passphrase: the one this test invents for a key it invents
 	env := setupTTYPromptTest(t, passphrase)
 
 	master, slave := openPTY(t)

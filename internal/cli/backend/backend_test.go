@@ -27,7 +27,7 @@ func TestNewSecretBackend(t *testing.T) {
 	t.Setenv("DISPLAY", "")
 
 	t.Run("1password", func(t *testing.T) {
-		s := config.Settings{SecretBackend: config.SecretBackendOnePassword, OnePasswordVault: "sshakku-vault"}
+		s := config.Settings{SecretBackend: config.SecretBackendOnePassword, OnePasswordVault: "sshakku-vault"} //nolint:gosec // G101 matches the vault field; the value is a vault's name
 		backend, closeFn := Open(t.Context(), "alice", fakeLogger{}, s)
 		defer closeFn()
 		op, ok := backend.(*wallet.OnePassword)

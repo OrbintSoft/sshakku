@@ -26,7 +26,7 @@ const bitwardenBin = "bw"
 // via --passwordenv, so it travels through the child's environment rather
 // than argv or a temp file. Exported because a name that holds a master
 // password has to be known to whatever decides what may be printed.
-const EnvBitwardenPassword = "SSHAKKU_BW_PASSWORD"
+const EnvBitwardenPassword = "SSHAKKU_BW_PASSWORD" //nolint:gosec // G101 matches "password"; the value names the variable a password travels in, not a password
 
 // bitwardenLoginItemType is Bitwarden's numeric item category for a Login
 // item (as opposed to a secure note, card, or identity) — the shape that

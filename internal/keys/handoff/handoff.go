@@ -41,4 +41,4 @@ func randomToken() (string, error) {
 // EnvToken names the environment variable the token travels to the askpass
 // helper in. Only the token — a handle — crosses the environment; the
 // passphrase itself never does.
-const EnvToken = "SSHAKKU_HANDOFF_TOKEN"
+const EnvToken = "SSHAKKU_HANDOFF_TOKEN" //nolint:gosec // G101 matches "token"; the value names the variable a token travels in, not a token

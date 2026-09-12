@@ -117,7 +117,7 @@ func TestDoctorDetectsAndFixesDeadOursAgent(t *testing.T) {
 	// wired (the normal case once shell-init and askpass-env have run), so the
 	// report's findings reflect the agent's own health — what this test is
 	// about — rather than an environment this test never set up.
-	in := Inputs{
+	in := Inputs{ //nolint:gosec // G101 matches EnvAskpass; the value is a path to this program
 		FixedSock: cfg.FixedSock, EnvSock: cfg.FixedSock, LegacyDir: cfg.LegacyDir,
 		StatePath: cfg.StatePath, OurUID: cfg.OurUID,
 		EnvAskpass: "/usr/local/bin/sshakku", EnvAskpassRequire: "force",

@@ -17,7 +17,7 @@ import (
 // org.freedesktop.secrets a name the bus knows how to start.
 const (
 	busConfig          = "testdata/dbus-session.xml"
-	secretsServiceFile = "testdata/org.freedesktop.secrets.service"
+	secretsServiceFile = "testdata/org.freedesktop.secrets.service" //nolint:gosec // G101 matches "secrets"; the value is a path into testdata
 )
 
 // startSessionBus spawns a private dbus-daemon session bus for the duration of

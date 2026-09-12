@@ -179,6 +179,17 @@ linters:
     # somebody pasted — becomes a format directive nobody wrote.
     - goprintffuncname
 
+    # A catalogue of ways a program can be unsafe: a subprocess built out of
+    # something a caller controls, a file created where anyone may read it, a
+    # weak digest, a host key check turned off, a random number that is not one.
+    #
+    # Its rules are being taken through this tree one at a time, and `includes`
+    # below is how far that has got. A rule listed there has been read against
+    # every place it fires and is either clean or answered at the line; a rule
+    # not listed is not running, which is where one starts rather than where it
+    # is left.
+    - gosec
+
     # Already on through `default: standard`, and named here anyway: what is
     # configured below is the whole of govet rather than the subset the default
     # runs, and a line in this list is where a reader looks for the reason.
@@ -318,6 +329,21 @@ linters:
       # comment standing above a function, and an unfinished thought reads the
       # same in either place.
       scope: all
+
+    gosec:
+      # The rules that have been read against this tree. See the note beside the
+      # linter for what the list means.
+      includes:
+        # A constant that looks like a credential — matched on its name. In a
+        # program whose subject is passphrases, tokens and wallets, almost
+        # everything it finds is the name of a place a secret travels rather
+        # than a secret: an environment variable a passphrase is handed through,
+        # a program called keepassxc-cli, a backend called credential-manager.
+        # Each of those carries a suppression naming the word that matched. The
+        # ones it is right about are a test's own invented passphrase for a key
+        # the test invents, and those say so as well, because the rule is worth
+        # keeping on for the day a real one is committed by mistake.
+        - G101
 
     govet:
       # Everything, so an analyser added to a future Go release arrives with it

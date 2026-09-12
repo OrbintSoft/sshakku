@@ -30,7 +30,7 @@ func saveKeyaddSeams(t *testing.T) {
 func TestAddWithAskpassStashError(t *testing.T) {
 	saveKeyaddSeams(t)
 	stashPass = func(string, time.Duration) (string, error) { return "", errNoKeyring }
-	a := ExecKeyAdder{AskpassProg: "/usr/bin/sshakku"}
+	a := ExecKeyAdder{AskpassProg: "/usr/bin/sshakku"} //nolint:gosec // G101 matches AskpassProg; the value is a path to this program
 	_, err := a.AddWithAskpass(t.Context(), "/home/u/.ssh/id_rsa", "pw")
 	assert.Error(t, err,
 		"with nowhere to put the passphrase for the helper, ssh-add would prompt on a terminal nobody is watching")
@@ -41,7 +41,7 @@ func TestAddWithAskpassRunsSSHAdd(t *testing.T) {
 	var stashedTTL time.Duration
 	stashPass = func(_ string, ttl time.Duration) (string, error) { stashedTTL = ttl; return "token", nil }
 	runCmd = func(*exec.Cmd) error { return nil }
-	a := ExecKeyAdder{AskpassProg: "/usr/bin/sshakku"}
+	a := ExecKeyAdder{AskpassProg: "/usr/bin/sshakku"} //nolint:gosec // G101 matches AskpassProg; the value is a path to this program
 	rc, err := a.AddWithAskpass(t.Context(), "/home/u/.ssh/id_rsa", "pw")
 	require.NoError(t, err, "running ssh-add must succeed")
 	assert.Zero(t, rc, "and a key that opened exits zero")

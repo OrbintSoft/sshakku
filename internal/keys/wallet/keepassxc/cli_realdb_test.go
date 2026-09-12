@@ -39,7 +39,7 @@ func TestKeePassXCCLIRealDatabase(t *testing.T) {
 
 	const dbPassword = "throwaway-database-password"
 	const service = wallet.DefaultServicePrefix + "-id_ed25519"
-	const passphrase = "the-key-passphrase"
+	const passphrase = "the-key-passphrase" //nolint:gosec // G101 is right that this is a passphrase: the one this test invents for a key it invents
 
 	db := filepath.Join(t.TempDir(), "throwaway.kdbx")
 	createRealDatabase(t, db, dbPassword)

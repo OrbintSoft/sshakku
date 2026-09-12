@@ -16,7 +16,7 @@ import (
 // inside the test — so this must default to skipped and only ever be set by
 // an environment built to be disposable, e.g. a desktop-stack container's
 // entrypoint, never by a developer running `go test` locally.
-const allowRealSecretServiceEnv = "SSHAKKU_TEST_ALLOW_REAL_SECRETSERVICE"
+const allowRealSecretServiceEnv = "SSHAKKU_TEST_ALLOW_REAL_SECRETSERVICE" //nolint:gosec // G101 matches "secret"; the value names an opt-in environment variable
 
 // TestSecretServiceBackendRealDaemon exercises SecretService end to
 // end against a real Secret Service daemon (ksecretd, GNOME Keyring, ...) —

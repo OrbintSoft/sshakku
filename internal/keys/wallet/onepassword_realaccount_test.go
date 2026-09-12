@@ -29,7 +29,7 @@ import (
 // cloud account, not a disposable local daemon a container can stand up
 // from nothing — the CI job authenticates as a dedicated service account
 // instead of standing up a container.
-const allowRealOnePasswordEnv = "SSHAKKU_TEST_ALLOW_REAL_ONEPASSWORD"
+const allowRealOnePasswordEnv = "SSHAKKU_TEST_ALLOW_REAL_ONEPASSWORD" //nolint:gosec // G101 matches "password" inside OnePassword; the value names an opt-in environment variable
 
 // opSetupTimeout bounds each vault create/delete call made directly by the
 // test (outside OnePassword) in case op ever prompts interactively
