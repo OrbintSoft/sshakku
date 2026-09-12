@@ -393,6 +393,16 @@ linters:
         # so where they stand.
         - G306
 
+        # An index that could be past the end of its slice. Both sites are
+        # guarded and the guards are the ordinary ones: `len(args) == 1 &&
+        # args[0] == …`, where Go evaluates the left operand first and the rule
+        # does not read it as a condition; and an index stepped on inside a loop
+        # with the new bound checked on the line above, which it does not follow
+        # either, in that spelling or in the one that checks i+1 before using
+        # it. Two suppressions, and the rule stays on for an index with nothing
+        # in front of it at all.
+        - G602
+
       excludes:
         # A subprocess whose program is named by a variable. Every subprocess
         # this program starts is: ssh-agent and ssh-add, the wallet's own
