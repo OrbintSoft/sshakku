@@ -296,7 +296,7 @@ func startTTYPromptHelper(t *testing.T, env ttyPromptEnv, slave *os.File) *exec.
 	ctx, cancel := context.WithTimeout(t.Context(), ttyHelperTimeout)
 	t.Cleanup(cancel)
 
-	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^"+t.Name()+"$")
+	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^"+t.Name()+"$") //nolint:gosec // G702 follows os.Args[0] back to this program's own argv: it is the test binary re-entering itself, which is how a test gets a subprocess to watch
 	cmd.Env = []string{
 		envTTYHelper + "=1",
 		envTTYKeyfile + "=" + env.keyfile,

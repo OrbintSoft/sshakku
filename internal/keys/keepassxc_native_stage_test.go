@@ -75,7 +75,7 @@ func stageKeePassXC(t *testing.T, app, root, stateDir string) {
 	// --config takes the settings file to use, so nothing here depends on where
 	// this build would otherwise keep them, and nothing writes to the settings
 	// of whoever is running the test.
-	cmd := exec.CommandContext(t.Context(), app, "--config", settings, "--pw-stdin", database)
+	cmd := exec.CommandContext(t.Context(), app, "--config", settings, "--pw-stdin", database) //nolint:gosec // G702 follows these back to the environment; the app and the files it is pointed at are the ones this test staged, under the directory it was given
 	// Whatever the app says is kept, because the interesting failure is the one
 	// where it starts, answers, and never opens the database: without its own
 	// account of that there is nothing to diagnose but a timeout.

@@ -107,7 +107,7 @@ func TestLoadKeysNoTerminalReturnsPromptly(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestLoadKeysNoTerminalReturnsPromptly$")
+	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestLoadKeysNoTerminalReturnsPromptly$") //nolint:gosec // G702 follows os.Args[0] back to this program's own argv: it is the test binary re-entering itself, which is how a test gets a subprocess to watch
 	cmd.Env = append(os.Environ(),
 		"SSHAKKU_LOADKEYS_HELPER=1",
 		"SSH_AUTH_SOCK="+sock,

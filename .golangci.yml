@@ -183,11 +183,11 @@ linters:
     # something a caller controls, a file created where anyone may read it, a
     # weak digest, a host key check turned off, a random number that is not one.
     #
-    # Its rules are being taken through this tree one at a time, and `includes`
-    # below is how far that has got. A rule listed there has been read against
-    # every place it fires and is either clean or answered at the line; a rule
-    # not listed is not running, which is where one starts rather than where it
-    # is left.
+    # Most of it reports nothing here, which is the point of having it: this
+    # program starts other programs, writes files somebody logs in through, and
+    # carries passphrases between the two. Every rule that does report has been
+    # read against each place it fires and is either answered there or declined
+    # in the settings below, with the reason.
     - gosec
 
     # Already on through `default: standard`, and named here anyway: what is
@@ -331,93 +331,61 @@ linters:
       scope: all
 
     gosec:
-      # `includes` names the rules that have been read against this tree and
-      # kept; `excludes` names the ones that were read and declined, with the
-      # reason each was. Between them they are how far the linter has been
-      # taken — see the note beside it.
-      includes:
-        # A constant that looks like a credential — matched on its name. In a
-        # program whose subject is passphrases, tokens and wallets, almost
-        # everything it finds is the name of a place a secret travels rather
-        # than a secret: an environment variable a passphrase is handed through,
-        # a program called keepassxc-cli, a backend called credential-manager.
-        # Each of those carries a suppression naming the word that matched. The
-        # ones it is right about are a test's own invented passphrase for a key
-        # the test invents, and those say so as well, because the rule is worth
-        # keeping on for the day a real one is committed by mistake.
-        - G101
-
-        # A conversion that could lose what it is carrying. Nearly every one
-        # here is a value crossing into an interface whose width is fixed by
-        # somebody else — a kernel key serial, a uid, a window coordinate, the
-        # length of a buffer this file declared — or a truncation that is the
-        # algorithm itself, an increment carried through a nonce a byte at a
-        # time. Each of those says so at the line. The rule stays on because it
-        # paid for itself once already: a handoff token is text arriving from
-        # the environment, and read into a 32-bit serial it kept its low half
-        # and named a key of this user's that no stash had put there.
-        - G115
-
-        # A directory made where anyone may enter it. What this catches is
-        # narrower than it looks: gosec reads the mode where it is written, so a
-        # directory made with a named constant is invisible to it however open
-        # that constant is, and the modes this program gives the directories it
-        # installs are all named. What is left is a mode written out at the call
-        # — which in this tree means a test laying out a scene — and those are
-        # tight now, including the one directory a test deliberately closes: it
-        # needs writing into to fail, and the owner alone being unable to write
-        # is enough for that.
-        - G301
-
-        # A chmod to something more open than the owner's own read and write.
-        # Read literally, which is what it does, that rules out every directory
-        # there is: entering one is its execute bit, so 0o700 — the tightest a
-        # directory can be and still be used by the account that owns it — is
-        # already over the line. Those say so where they stand. The one file
-        # among them is a test watching a startup file keep the mode it was
-        # found with, where a mode the rule would accept would leave nothing to
-        # watch.
-        - G302
-
-        # A file written where somebody other than its owner may read it. It
-        # sees only what G301 sees — a mode written out at the call — so the
-        # files this program installs, whose modes are named constants, are not
-        # what it is watching; what it watches is a test laying out a scene, and
-        # every one of those is a file nobody but the test has any business
-        # reading. They are 0600 now, and the suite was run with every one of
-        # them moved to be sure none had been relying on the access.
-        #
-        # What is left is the fifteen that are programs: a stand-in for zenity
-        # or for a shell, an askpass helper, an editor. A program that cannot be
-        # executed is not one, so those are over the line by necessity and say
-        # so where they stand.
-        - G306
-
-        # An index that could be past the end of its slice. Both sites are
-        # guarded and the guards are the ordinary ones: `len(args) == 1 &&
-        # args[0] == …`, where Go evaluates the left operand first and the rule
-        # does not read it as a condition; and an index stepped on inside a loop
-        # with the new bound checked on the line above, which it does not follow
-        # either, in that spelling or in the one that checks i+1 before using
-        # it. Two suppressions, and the rule stays on for an index with nothing
-        # in front of it at all.
-        - G602
-
-        # A path reaching a file operation from somewhere a caller controls,
-        # found by following the path back rather than by noticing that it is a
-        # variable. Where it arrives here is the environment, because that is
-        # where this program's paths come from: the log file it appends a
-        # session's lines to belongs to the account the process is running as,
-        # named by that account's own XDG_STATE_HOME or home directory, and
-        # doctor prints which file is in force.
-        #
-        # That is the rule's limit as much as its answer — it cannot tell an
-        # account's own environment from a hostile source, so ten sites say
-        # which one this is. It is on regardless, and the reason is arithmetic:
-        # ten answered sites leave a new one visible, where the sixty-two of
-        # G304 would bury it.
-        - G703
-
+      # gosec runs whole. Most of its rules report nothing on this tree, and
+      # they are what it is here for: a host key check turned off, math/rand
+      # asked for a token, a weak digest, a TLS verification skipped. What
+      # follows is the part that does report — first the rules answered at the
+      # line, then, under `excludes`, the three that were read and declined
+      # with the reason each was.
+      #
+      # G101, a constant that looks like a credential, matched on its name. In
+      # a program whose subject is passphrases, tokens and wallets, almost
+      # everything it finds is the name of a place a secret travels rather than
+      # a secret: an environment variable a passphrase is handed through, a
+      # program called keepassxc-cli, a backend called credential-manager. Each
+      # of those names the word that matched. The ones it is right about are a
+      # test's own invented passphrase for a key the test invents, and those say
+      # so as well, because the rule is worth having on for the day a real one
+      # is committed by mistake.
+      #
+      # G115, a conversion that could lose what it is carrying. Nearly every one
+      # is a value crossing into an interface whose width is fixed by somebody
+      # else — a kernel key serial, a uid, a window coordinate, the length of a
+      # buffer the same file declared — or a truncation that is the algorithm
+      # itself, a carry moving through a nonce a byte at a time. It has paid for
+      # itself once: a handoff token is text arriving from the environment, and
+      # read into a 32-bit serial it kept its low half and named a key of this
+      # user's that no stash had put there.
+      #
+      # G301 and G306, a directory or a file made where others may reach it.
+      # Both see only a mode written out at the call, so the directories and
+      # files this program installs — whose modes are named constants — are
+      # invisible to them however open those constants are. What is left is a
+      # test laying out a scene, and those are as tight as they can be: the
+      # fixtures are 0600 and 0750, the one directory a test closes is 0500
+      # because the owner alone being unable to write is what makes the writing
+      # fail, and the fifteen that stay open are programs the test then runs.
+      #
+      # G302, a chmod beyond the owner's own read and write. Read literally,
+      # which is what it does, that rules out every directory there is: entering
+      # one is its execute bit, so 0700 is already over the line. The one file
+      # among its sites is a test watching a startup file keep the mode it was
+      # found with, where a mode this rule would accept would leave nothing to
+      # watch.
+      #
+      # G602, an index that could be past the end of its slice. Its two sites
+      # are guarded by the ordinary guards — the left operand of an `&&`, and a
+      # bound checked on the line above the use — and it reads neither.
+      #
+      # G702 and G703, a command or a path reaching an operation from somewhere
+      # a caller controls, found by following it back rather than by noticing a
+      # variable. Where they arrive here is the environment and a test's own
+      # argv: the log belongs to the account the process runs as, and a test
+      # binary re-entering itself is how a test gets a subprocess. Neither can
+      # tell an account's own environment from a hostile source, which is the
+      # limit as much as the answer — and is why they are on while the two blunt
+      # rules below are not. Fifteen answered sites leave a new one visible;
+      # a hundred and eleven would bury it.
       excludes:
         # A subprocess whose program is named by a variable. Every subprocess
         # this program starts is: ssh-agent and ssh-add, the wallet's own
@@ -427,23 +395,30 @@ linters:
         # anything to be smuggled into; what the rule sees is that the program's
         # name came from somewhere, and where it came from is the configuration
         # and the table that says which build of OpenSSH this system's agent can
-        # be reached with. Unlike the rules above there is no future case here
-        # worth catching — the next call will be a variable too, and a
-        # suppression every one of them has to carry is one nobody reads.
+        # be reached with. There is no future case here worth catching — the
+        # next call will take a variable too — and G702 above asks the question
+        # that has an answer.
         - G204
 
         # A file opened at a path held in a variable. Every file this program
         # reads is: the entries under /proc and /sys it reads a machine's state
         # out of, the lock it takes, the state it left itself last time, the
         # startup file of a shell somebody chose, the log. Sixty-two sites, and
-        # what they have in common is only that a path was worked out before it
-        # was opened.
-        #
-        # The question worth asking of a path — whether it came from somewhere a
-        # caller controls — is G703's, which follows it there instead of noticing
-        # the variable, and which is on. Turning both on would bury the eight
-        # that know something under the sixty-two that do not.
+        # all they have in common is that a path was worked out before it was
+        # opened. G703 above asks where the path came from instead.
         - G304
+
+        # Use of unsafe. Thirty-seven sites, and every one is a syscall wrapper:
+        # a window and a credential store reached through this system's own
+        # entry points, a keychain reached through CoreFoundation. Without cgo
+        # there is no other spelling — the call takes a pointer as an integer,
+        # and `uintptr(unsafe.Pointer(&x))` is how Go writes that — so the rule
+        # can only report that the package does what it exists to do.
+        #
+        # The question with an answer in it is whether a given conversion is
+        # sound, and that one is already being asked: `unsafeptr` is a go vet
+        # analyser, and govet below runs all of them.
+        - G103
 
     govet:
       # Everything, so an analyser added to a future Go release arrives with it

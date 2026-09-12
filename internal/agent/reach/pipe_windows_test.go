@@ -406,7 +406,7 @@ func TestTheAgentsEndpointIsOpenedSoItsServerCannotActAsUs(t *testing.T) {
 	}
 
 	pipe, report := pipeName(t), filepath.Join(t.TempDir(), "offer.json")
-	server := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^"+t.Name()+"$")
+	server := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^"+t.Name()+"$") //nolint:gosec // G702 follows os.Args[0] back to this program's own argv: it is the test binary re-entering itself, which is how a test gets a subprocess to watch
 	server.Env = append(os.Environ(), pipeServerEnv+"="+pipe, pipeReportEnv+"="+report)
 	var said bytes.Buffer
 	server.Stdout, server.Stderr = &said, &said
