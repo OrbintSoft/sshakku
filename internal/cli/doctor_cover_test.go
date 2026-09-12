@@ -5,7 +5,9 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/user"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/OrbintSoft/sshakku/internal/agent"
@@ -81,16 +83,52 @@ func TestDoctorUnknownUser(t *testing.T) {
 	assert.Contains(t, errOut.String(), "--user", "and the answer must name the flag that was wrong")
 }
 
-// TestDoctorCrossUserRefused covers crossUserGuard's non-root refusal: naming a
-// different real user (nobody) while not root is rejected with exit code 2, and
-// never reaches the token source.
-func TestDoctorCrossUserRefused(t *testing.T) {
-	if _, err := lookupUser("nobody"); err != nil {
-		t.Skip("no 'nobody' user on this host")
+// fabricatedTargetUID is the uid the tests below have the account database hand
+// back. It must not be the caller's own, or naming it would not be going
+// cross-user at all and the branch under test would never be entered; the tests
+// assert that rather than assuming it.
+const fabricatedTargetUID = 4242
+
+// crossUserTarget makes the account database name an account, and says this
+// build diagnoses another account's session (F61), so what follows is the
+// dispatch and the report body rather than whether this machine keeps a
+// `nobody` and this platform has uids. Both are upstream of what these tests
+// judge, and together they let a body that is platform-neutral run on every
+// system that compiles it.
+func crossUserTarget(t *testing.T) {
+	t.Helper()
+	require.NotEqual(t, fabricatedTargetUID, paths.FromOS().UID,
+		"the fabricated target must be somebody other than the caller, or nothing cross-user happens")
+
+	origID, origName := userLookupID, userLookup
+	t.Cleanup(func() { userLookupID, userLookup = origID, origName })
+	home := t.TempDir()
+	named := func(name string) (*user.User, error) {
+		return &user.User{
+			Uid: strconv.Itoa(fabricatedTargetUID), Gid: strconv.Itoa(fabricatedTargetUID),
+			Username: name, HomeDir: home,
+		}, nil
 	}
-	d := doctorDeps(diagnose.Report{}, fakeTokenSource{err: errMustNotRun}, 1000)
+	userLookup, userLookupID = named, named
+}
+
+// crossUserDeps is doctorDeps with the cross-user answer of a system that has
+// one, so the dispatch below is reached from either kind of machine.
+func crossUserDeps(ts crossuser.Source, euid int) deps {
+	d := doctorDeps(diagnose.Report{}, ts, euid)
+	d.crossUser = crossUserWorks
+	return d
+}
+
+// TestDoctorCrossUserRefused covers crossUserGuard's non-root refusal: naming a
+// different user while not root is rejected with exit code 2, and never reaches
+// the token source.
+func TestDoctorCrossUserRefused(t *testing.T) {
+	crossUserTarget(t)
+
+	d := crossUserDeps(fakeTokenSource{err: errMustNotRun}, 1000)
 	var out, errOut bytes.Buffer
-	assert.Equal(t, 2, d.doctor(t.Context(), &out, &errOut, []string{"--user", "nobody"}),
+	assert.Equal(t, 2, d.doctor(t.Context(), &out, &errOut, []string{"--user", "somebody-else"}),
 		"reading another user's session takes root, and the refusal comes before anything is read")
 	assert.Contains(t, errOut.String(), "root", "and must say what would be needed")
 }
@@ -176,22 +214,20 @@ func TestDoctorFix(t *testing.T) {
 // for reading the target's keyring. A token read error returns 1; a successful
 // read reports on the target's session and returns 0.
 func TestDoctorCrossUser(t *testing.T) {
-	if _, err := lookupUser("nobody"); err != nil {
-		t.Skip("no 'nobody' user on this host")
-	}
+	crossUserTarget(t)
 
 	t.Run("token read failure returns 1", func(t *testing.T) {
-		d := doctorDeps(diagnose.Report{}, fakeTokenSource{err: errKeyringBoom}, 0)
+		d := crossUserDeps(fakeTokenSource{err: errKeyringBoom}, 0)
 		var out, errOut bytes.Buffer
-		assert.Equal(t, 1, d.doctor(t.Context(), &out, &errOut, []string{"--user", "nobody"}),
+		assert.Equal(t, 1, d.doctor(t.Context(), &out, &errOut, []string{"--user", "somebody-else"}),
 			"a session that could not be reached must not be reported on as though it had been")
 		assert.Contains(t, errOut.String(), "keyring boom", "and the reason must reach the caller")
 	})
 
 	t.Run("successful read reports the target session", func(t *testing.T) {
-		d := doctorDeps(diagnose.Report{}, fakeTokenSource{token: "tok"}, 0)
+		d := crossUserDeps(fakeTokenSource{token: "tok"}, 0)
 		var out, errOut bytes.Buffer
-		require.Zerof(t, d.doctor(t.Context(), &out, &errOut, []string{"--user", "nobody"}),
+		require.Zerof(t, d.doctor(t.Context(), &out, &errOut, []string{"--user", "somebody-else"}),
 			"root may look at another user's session; stderr=%q", errOut.String())
 		assert.Contains(t, out.String(), "diagnosing uid",
 			"and the report must say whose session it is about")

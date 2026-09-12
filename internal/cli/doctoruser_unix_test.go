@@ -21,10 +21,10 @@ import (
 // They need this system to name an account by a number. Windows names one by a
 // SID — user.Current().Uid there is `S-1-5-21-…`, which lookupUser cannot make
 // a uid of — and the whole of --user is a question about a uid: whose files to
-// read, and whether that is somebody other than the caller. What that question
-// even means on a system with no uids is unsettled, and the branches that do
-// not consult the database at all stay in main_test.go, where they run
-// everywhere.
+// read, and whether that is somebody other than the caller. A system with no
+// uids is not asked it at all (F61), so these drive the answer that says this
+// build does diagnose another account; both answers, and the branches that never
+// reach the database, stay in main_test.go, where they run everywhere.
 func TestResolveTargetUserResolvesARealAccount(t *testing.T) {
 	self, err := user.Current()
 	if err != nil {
@@ -33,7 +33,7 @@ func TestResolveTargetUserResolvesARealAccount(t *testing.T) {
 	selfUID := os.Getuid()
 
 	t.Run("--user names the invoking user: still self", func(t *testing.T) {
-		got, err := resolveTargetUser(self.Username, paths.Env{UID: selfUID})
+		got, err := resolveTargetUser(self.Username, paths.Env{UID: selfUID}, crossUserWorks)
 		require.NoError(t, err, "resolveTargetUser")
 		assert.Equal(t, selfUID, got.UID, "the caller's own uid")
 		assert.Empty(t, got.Source, "naming yourself is not going cross-user")
@@ -43,7 +43,7 @@ func TestResolveTargetUserResolvesARealAccount(t *testing.T) {
 		// selfEnv.UID is deliberately a uid nothing resolves to, so this exercises
 		// the "different from invoker" branch without depending on whether the test
 		// process happens to be root.
-		got, err := resolveTargetUser(self.Username, paths.Env{UID: -1})
+		got, err := resolveTargetUser(self.Username, paths.Env{UID: -1}, crossUserWorks)
 		require.NoError(t, err, "resolveTargetUser")
 		assert.Equal(t, selfUID, got.UID, "the uid of the user named")
 		assert.NotEmpty(t, got.Source, "a target that is not the caller must say how it was arrived at")
@@ -59,7 +59,7 @@ func TestResolveTargetUserResolvesARealAccount(t *testing.T) {
 			t.Skip("test process is already root: can't fake a distinct non-root SUDO_UID")
 		}
 		t.Setenv("SUDO_UID", strconv.Itoa(selfUID))
-		got, err := resolveTargetUser("", paths.Env{UID: 0})
+		got, err := resolveTargetUser("", paths.Env{UID: 0}, crossUserWorks)
 		require.NoError(t, err, "resolveTargetUser")
 		assert.Equal(t, selfUID, got.UID, "the uid sudo recorded")
 		assert.NotEmpty(t, got.Source, "a target arrived at through SUDO_UID must say so")
