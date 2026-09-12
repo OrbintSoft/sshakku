@@ -190,6 +190,24 @@ linters:
     # is what says a thought has finished.
     - godot
 
+    # Two interfaces declared in one package with the same method set are one
+    # interface and a spare name for it: which of the two a signature means is
+    # something the reader has to work out, and a method added to one leaves the
+    # other behind still satisfying nothing.
+    #
+    # Only the default check, `identical`, is on. The other two were measured
+    # and declined, because both report the way this tree is built rather than a
+    # defect in it. `unused` wants an interface referred to inside the package
+    # that declares it, and the interfaces here are declared where a thing is
+    # implemented so that a package consuming it need not import a second one —
+    # `hostcheck.Source`, `launcher.CgroupSource`, `prompt.TTY` — so what it
+    # calls dead is the export itself. `opaque` wants a function that returns an
+    # interface to return the concrete type instead, and the one it reports is
+    # the seam that hands back this system's agent lifecycle, which is an
+    # interface for the one reason it should be: each platform returns a
+    # different concrete type through it.
+    - iface
+
     # An import alias renames somebody else's package inside one file, so the
     # same package answers to a different name depending on which file is open.
     # No alias is allowed that is not listed below, and none is listed: a

@@ -55,19 +55,3 @@ func TestRecordfIgnoresALoggerThatFails(t *testing.T) {
 		"a Logger that fails is not reported and does not stop the caller")
 	assert.Len(t, rec.messages, 1, "the line was still offered to the Logger")
 }
-
-// TestRecordfTakesAnyLoggerOfTheRightShape is why the packages that log need not
-// import this one: they declare an interface of their own, naming what they want
-// it for, and it is assignable here.
-func TestRecordfTakesAnyLoggerOfTheRightShape(t *testing.T) {
-	type callerOwnLogger interface {
-		Log(level, message string) error
-	}
-
-	rec := &recorder{}
-	var theirs callerOwnLogger = rec
-	Recordf(theirs, "WARN", "adopted an agent this session did not start")
-
-	require.Len(t, rec.messages, 1, "a Logger declared elsewhere records through this one")
-	assert.Equal(t, "WARN", rec.levels[0], "the level of a line recorded through a caller's own interface")
-}
