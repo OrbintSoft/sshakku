@@ -52,7 +52,7 @@ func TestAPowerShellDropInDirectoryIsNotUsedUnlessSomethingLoadsIt(t *testing.T)
 	dir := t.TempDir()
 	profile := filepath.Join(dir, "Microsoft.PowerShell_profile.ps1")
 	require.NoError(t, os.Mkdir(PowerShellDropInDir(profile), 0o750))
-	require.NoError(t, os.WriteFile(profile, []byte("Set-Alias ll Get-ChildItem\n"), 0o644))
+	require.NoError(t, os.WriteFile(profile, []byte("Set-Alias ll Get-ChildItem\n"), 0o600))
 
 	where, err := PlacePowerShell(profile, "50-sshakku.ps1")
 
@@ -68,7 +68,7 @@ func TestAPowerShellDropInDirectoryIsUsedWhenTheProfileLoadsIt(t *testing.T) {
 	profile := filepath.Join(dir, "Microsoft.PowerShell_profile.ps1")
 	require.NoError(t, os.Mkdir(PowerShellDropInDir(profile), 0o750))
 	require.NoError(t, os.WriteFile(profile, []byte(
-		"Get-ChildItem \"$PSScriptRoot\\Profile.d\\*.ps1\" | ForEach-Object { . $_.FullName }\n"), 0o644))
+		"Get-ChildItem \"$PSScriptRoot\\Profile.d\\*.ps1\" | ForEach-Object { . $_.FullName }\n"), 0o600))
 
 	where, err := PlacePowerShell(profile, "50-sshakku.ps1")
 
@@ -86,7 +86,7 @@ func TestOurOwnBlockIsNotEvidenceThatTheDirectoryIsLoaded(t *testing.T) {
 	profile := filepath.Join(dir, "Microsoft.PowerShell_profile.ps1")
 	require.NoError(t, os.Mkdir(PowerShellDropInDir(profile), 0o750))
 	ours := string(UpsertBlock(nil, `# nothing here loads Profile.d, this line only names it`))
-	require.NoError(t, os.WriteFile(profile, []byte(ours), 0o644))
+	require.NoError(t, os.WriteFile(profile, []byte(ours), 0o600))
 
 	where, err := PlacePowerShell(profile, "50-sshakku.ps1")
 
@@ -112,7 +112,7 @@ func TestWithNoPowerShellDropInDirectoryTheBlockGoesInTheProfile(t *testing.T) {
 func TestAFileWhereTheDropInDirectoryShouldBeIsReported(t *testing.T) {
 	t.Run("bourne", func(t *testing.T) {
 		startup := filepath.Join(t.TempDir(), ".bash_profile")
-		require.NoError(t, os.WriteFile(BourneDropInDir(startup), []byte("not a directory"), 0o644))
+		require.NoError(t, os.WriteFile(BourneDropInDir(startup), []byte("not a directory"), 0o600))
 
 		_, err := PlaceBourne(startup, "50-sshakku.sh")
 
@@ -122,7 +122,7 @@ func TestAFileWhereTheDropInDirectoryShouldBeIsReported(t *testing.T) {
 
 	t.Run("powershell", func(t *testing.T) {
 		profile := filepath.Join(t.TempDir(), "Microsoft.PowerShell_profile.ps1")
-		require.NoError(t, os.WriteFile(PowerShellDropInDir(profile), []byte("not a directory"), 0o644))
+		require.NoError(t, os.WriteFile(PowerShellDropInDir(profile), []byte("not a directory"), 0o600))
 
 		_, err := PlacePowerShell(profile, "50-sshakku.ps1")
 
@@ -148,11 +148,11 @@ func TestTheTwoFamiliesJudgeTheSameDirectoryDifferently(t *testing.T) {
 	dir := t.TempDir()
 
 	bourne := filepath.Join(dir, ".bash_profile")
-	require.NoError(t, os.WriteFile(bourne, []byte("export EDITOR=vi\n"), 0o644))
+	require.NoError(t, os.WriteFile(bourne, []byte("export EDITOR=vi\n"), 0o600))
 	require.NoError(t, os.Mkdir(BourneDropInDir(bourne), 0o750))
 
 	powershell := filepath.Join(dir, "Microsoft.PowerShell_profile.ps1")
-	require.NoError(t, os.WriteFile(powershell, []byte("Set-Alias ll Get-ChildItem\n"), 0o644))
+	require.NoError(t, os.WriteFile(powershell, []byte("Set-Alias ll Get-ChildItem\n"), 0o600))
 	require.NoError(t, os.Mkdir(PowerShellDropInDir(powershell), 0o750))
 
 	viaShell, err := PlaceBourne(bourne, "50-sshakku.sh")
@@ -172,13 +172,13 @@ func TestSomethingThatIsNotADirectoryWhereOneWouldBeIsReported(t *testing.T) {
 	dir := t.TempDir()
 
 	bourne := filepath.Join(dir, "profile")
-	require.NoError(t, os.WriteFile(BourneDropInDir(bourne), []byte("not a directory"), 0o644))
+	require.NoError(t, os.WriteFile(BourneDropInDir(bourne), []byte("not a directory"), 0o600))
 	_, err := PlaceBourne(bourne, "50-sshakku.sh")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not a directory")
 
 	powershell := filepath.Join(dir, "Microsoft.PowerShell_profile.ps1")
-	require.NoError(t, os.WriteFile(PowerShellDropInDir(powershell), []byte("not a directory"), 0o644))
+	require.NoError(t, os.WriteFile(PowerShellDropInDir(powershell), []byte("not a directory"), 0o600))
 	_, err = PlacePowerShell(powershell, "50-sshakku.ps1")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not a directory")

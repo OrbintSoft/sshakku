@@ -54,7 +54,7 @@ func TestLoadKeysHeadlessVaultHit(t *testing.T) {
 
 	askpassScript := filepath.Join(dir, "askpass.sh")
 	script := "#!/bin/sh\nexec keyctl pipe \"$" + handoff.EnvToken + "\"\n"
-	require.NoError(t, os.WriteFile(askpassScript, []byte(script), 0o755), "a helper to collect the stashed passphrase")
+	require.NoError(t, os.WriteFile(askpassScript, []byte(script), 0o755), "a helper to collect the stashed passphrase") //nolint:gosec // G306 is right that this is over 0600 and it has to be: this file is a program the test then runs, and a program that cannot be executed is not one
 
 	loader := Loader{
 		Keys:   fakeLister{paths: []string{keyfile}},

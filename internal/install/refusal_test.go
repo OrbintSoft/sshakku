@@ -80,7 +80,7 @@ func TestAnInstallThatCannotFinishSaysWhichStepStoppedIt(t *testing.T) {
 		home := t.TempDir()
 		installInto(t, home)
 		notAShell := filepath.Join(home, "notepad")
-		require.NoError(t, os.WriteFile(notAShell, []byte("not a shell"), 0o755))
+		require.NoError(t, os.WriteFile(notAShell, []byte("not a shell"), 0o755)) //nolint:gosec // G306 is right that this is over 0600 and it has to be: this file is a program the test then runs, and a program that cannot be executed is not one
 
 		_, err := Install(t.Context(), Request{Shell: Auto, ShellExe: notAShell, Scope: User, NoPath: true}, Ancestry{})
 
@@ -102,7 +102,7 @@ func TestAnInstallThatCannotFinishSaysWhichStepStoppedIt(t *testing.T) {
 	t.Run("the directory for the hook cannot be made", func(t *testing.T) {
 		home := t.TempDir()
 		inTheWay := filepath.Join(home, "a-file-not-a-directory")
-		require.NoError(t, os.WriteFile(inTheWay, []byte("mine"), 0o644))
+		require.NoError(t, os.WriteFile(inTheWay, []byte("mine"), 0o600))
 		installInto(t, inTheWay)
 		profile := filepath.Join(home, "startup-file")
 
@@ -131,7 +131,7 @@ func TestAnInstallThatCannotFinishSaysWhichStepStoppedIt(t *testing.T) {
 		// nothing; one that cannot be made is what stops an install, and a file
 		// where the directory would go is that.
 		inTheWay := filepath.Join(home, "not-a-directory")
-		require.NoError(t, os.WriteFile(inTheWay, []byte("something of somebody's own"), 0o644))
+		require.NoError(t, os.WriteFile(inTheWay, []byte("something of somebody's own"), 0o600))
 		profile := filepath.Join(inTheWay, "startup-file")
 
 		_, err := Install(t.Context(), wiringRequest(t, home, profile), Ancestry{})
@@ -172,11 +172,11 @@ func TestAnUninstallThatCannotFinishSaysWhichStepStoppedIt(t *testing.T) {
 		home := t.TempDir()
 		installInto(t, home)
 		profile := filepath.Join(home, "startup-file")
-		require.NoError(t, os.WriteFile(profile, []byte("# mine\n"), 0o644))
+		require.NoError(t, os.WriteFile(profile, []byte("# mine\n"), 0o600))
 		// A file where the drop-in directory would be is neither a directory nor
 		// nothing: reported as absent, the hook would go into the profile and the
 		// real problem would go unmentioned.
-		require.NoError(t, os.WriteFile(dropInDirBeside(profile), []byte("not a directory"), 0o644))
+		require.NoError(t, os.WriteFile(dropInDirBeside(profile), []byte("not a directory"), 0o600))
 
 		_, err := Uninstall(t.Context(), wiringRequest(t, home, profile), Ancestry{})
 
@@ -223,7 +223,7 @@ func TestAnUninstallThatCannotFinishSaysWhichStepStoppedIt(t *testing.T) {
 		// platform's, and the directory would be one the uninstall never looks at.
 		hook := filepath.Join(locations.HookDir, plan{kind: req.Shell}.hookName())
 		require.NoError(t, os.MkdirAll(hook, 0o750))
-		require.NoError(t, os.WriteFile(filepath.Join(hook, "something-else"), []byte("mine"), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(hook, "something-else"), []byte("mine"), 0o600))
 
 		_, err = Uninstall(t.Context(), req, Ancestry{})
 
@@ -287,7 +287,7 @@ func TestOnlySomethingWorthSayingBecomesANote(t *testing.T) {
 // with the directory named, rather than a hook written nowhere and called done.
 func TestADropInDirectoryThatCannotBeMadeIsReported(t *testing.T) {
 	inTheWay := filepath.Join(t.TempDir(), "a-file-not-a-directory")
-	require.NoError(t, os.WriteFile(inTheWay, []byte("mine"), 0o644))
+	require.NoError(t, os.WriteFile(inTheWay, []byte("mine"), 0o600))
 	p := bournePlan(t)
 	require.NoError(t, p.forMachine(t.Context(), machineWiring{DropInDir: filepath.Join(inTheWay, "profile.d")}))
 
@@ -357,8 +357,8 @@ func TestAnUninstallStopsOnAFileItCannotJudge(t *testing.T) {
 	// The file the shell will read, and something that is not a directory where
 	// another candidate's drop-in directory would be. The install's own choice is
 	// sound; the sweep meets the other one.
-	require.NoError(t, os.WriteFile(filepath.Join(home, ".profile"), []byte("# mine\n"), 0o644))
-	require.NoError(t, os.WriteFile(dropInDirBeside(filepath.Join(home, ".bash_profile")), []byte("x"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".profile"), []byte("# mine\n"), 0o600))
+	require.NoError(t, os.WriteFile(dropInDirBeside(filepath.Join(home, ".bash_profile")), []byte("x"), 0o600))
 
 	_, err := Uninstall(t.Context(), Request{
 		Shell: kind, ShellExe: exe, Scope: User, Hosts: AllHosts, NoPath: true,
@@ -381,7 +381,7 @@ func TestAShellThatCannotBeAskedAboutItselfIsReported(t *testing.T) {
 	// A file under the name this system's table knows, which is not a program.
 	name, _ := aShellName()
 	notReallyAShell := filepath.Join(home, filepath.Base(name))
-	require.NoError(t, os.WriteFile(notReallyAShell, []byte("not a program at all"), 0o644))
+	require.NoError(t, os.WriteFile(notReallyAShell, []byte("not a program at all"), 0o600))
 
 	_, err := Install(t.Context(), Request{
 		Shell: Auto, ShellExe: notReallyAShell, Scope: User, Hosts: AllHosts, NoPath: true,
@@ -414,7 +414,7 @@ func TestAMachineWideInstallForAShellWithNoAnswerStopsAtTheTable(t *testing.T) {
 		// A file under that shell's name: what is being exercised is the table,
 		// which is read before the interpreter is asked anything.
 		exe := filepath.Join(home, string(kind))
-		require.NoError(t, os.WriteFile(exe, []byte("a shell"), 0o755))
+		require.NoError(t, os.WriteFile(exe, []byte("a shell"), 0o755)) //nolint:gosec // G306 is right that this is over 0600 and it has to be: this file is a program the test then runs, and a program that cannot be executed is not one
 
 		_, err := resolve(t.Context(), Request{Shell: Auto, ShellExe: exe, Scope: Machine}, Ancestry{})
 

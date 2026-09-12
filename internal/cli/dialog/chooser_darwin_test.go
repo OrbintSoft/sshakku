@@ -24,7 +24,7 @@ import (
 func fakeTool(t *testing.T, dir, name, out string) {
 	t.Helper()
 	script := "#!/bin/sh\nprintf '%s\\n' " + "'" + out + "'\n"
-	require.NoErrorf(t, os.WriteFile(filepath.Join(dir, name), []byte(script), 0o755), "writing a fake %s", name)
+	require.NoErrorf(t, os.WriteFile(filepath.Join(dir, name), []byte(script), 0o755), "writing a fake %s", name) //nolint:gosec // G306 is right that this is over 0600 and it has to be: this file is a program the test then runs, and a program that cannot be executed is not one
 }
 
 // TestGraphicalPrompterInAGraphicalSession is the case macOS has never had: a

@@ -251,7 +251,7 @@ func anEditorUnderAPathWithASpace(t *testing.T) string {
 	body, err := os.ReadFile(editorScript(t))
 	require.NoError(t, err, "read the stand-in editor")
 	path := filepath.Join(dir, editorFixtureName)
-	require.NoError(t, os.WriteFile(path, body, 0o700), "put a copy of it there")
+	require.NoError(t, os.WriteFile(path, body, 0o700), "put a copy of it there") //nolint:gosec // G306 is right that this is over 0600 and it has to be: this file is a program the test then runs, and a program that cannot be executed is not one
 	return path
 }
 

@@ -46,7 +46,7 @@ func TestARealShellReadsOneLoginFileAndTheChoiceFollowsIt(t *testing.T) {
 
 func write(t *testing.T, home, name, line string) {
 	t.Helper()
-	require.NoError(t, os.WriteFile(filepath.Join(home, name), []byte(line+"\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(home, name), []byte(line+"\n"), 0o600))
 }
 
 // present answers whether a path in the shell's spelling is there, by looking

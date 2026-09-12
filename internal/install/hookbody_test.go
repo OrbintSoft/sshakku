@@ -130,7 +130,7 @@ func TestAHookThatCannotBeRenderedOrPlacedIsNotWritten(t *testing.T) {
 
 	t.Run("the directory cannot be made", func(t *testing.T) {
 		inTheWay := filepath.Join(t.TempDir(), "a-file-not-a-directory")
-		require.NoError(t, os.WriteFile(inTheWay, []byte("mine"), 0o644))
+		require.NoError(t, os.WriteFile(inTheWay, []byte("mine"), 0o600))
 
 		_, err := renderInto(filepath.Join(inTheWay, "sshakku"), User, bournePlan(t), "/opt/sshakku/bin/sshakku")
 
@@ -144,7 +144,7 @@ func TestAHookThatCannotBeRenderedOrPlacedIsNotWritten(t *testing.T) {
 		// cannot be replaced by a file, and the install has to say so.
 		hook := filepath.Join(dir, "shell-hook.sh")
 		require.NoError(t, os.Mkdir(hook, 0o750))
-		require.NoError(t, os.WriteFile(filepath.Join(hook, "something"), []byte("mine"), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(hook, "something"), []byte("mine"), 0o600))
 
 		_, err := renderInto(dir, User, bournePlan(t), "/opt/sshakku/bin/sshakku")
 

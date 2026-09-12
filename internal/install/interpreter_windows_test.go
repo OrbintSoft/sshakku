@@ -36,7 +36,7 @@ func TestTheBashThatIsFoundBelongsToAPosixEnvironment(t *testing.T) {
 // hook into a filesystem this program cannot see.
 func TestABashWithNoEnvironmentAroundItIsNotWired(t *testing.T) {
 	only := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(only, "bash.exe"), []byte("not really"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(only, "bash.exe"), []byte("not really"), 0o755)) //nolint:gosec // G306 is right that this is over 0600 and it has to be: this file is a program the test then runs, and a program that cannot be executed is not one
 	// Git is off PATH too, so the shell that ships with it cannot be found and
 	// this is the only candidate left to judge.
 	t.Setenv("PATH", only)

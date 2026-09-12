@@ -335,7 +335,7 @@ func TestNewHostSource(t *testing.T) {
 
 func writeFile(t *testing.T, path, content string) {
 	t.Helper()
-	require.NoErrorf(t, os.WriteFile(path, []byte(content), 0o644), "write the fixture file %s", path)
+	require.NoErrorf(t, os.WriteFile(path, []byte(content), 0o600), "write the fixture file %s", path)
 }
 
 // TestMainDispatchesWhatTheProcessWasGiven covers the entry point the process

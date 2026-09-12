@@ -185,7 +185,7 @@ func keepPreviousPath(scope Scope, raw string, kind uint32) error {
 	if err := makeHookDirectory(scope, filepath.Dir(path)); err != nil {
 		return fmt.Errorf("making somewhere to record the previous search list: %w", err)
 	}
-	if err := os.WriteFile(path, append(content, '\n'), 0o644); err != nil {
+	if err := os.WriteFile(path, append(content, '\n'), 0o600); err != nil {
 		return fmt.Errorf("recording the previous search list in %s: %w", path, err)
 	}
 	return nil

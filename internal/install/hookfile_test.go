@@ -169,12 +169,12 @@ func TestUpsertBlockOnACRLFProfileReplacesRatherThanAppends(t *testing.T) {
 func TestUninstallingACRLFProfileGivesItBackByteForByte(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "Microsoft.PowerShell_profile.ps1")
 	original := "Set-Alias ll Get-ChildItem\r\n$PSStyle.OutputRendering = 'Ansi'\r\n"
-	require.NoError(t, os.WriteFile(path, []byte(original), 0o644))
+	require.NoError(t, os.WriteFile(path, []byte(original), 0o600))
 	require.NoError(t, UpsertBlockFile(path, ". \"/hook.ps1\""))
 
 	wired, err := os.ReadFile(path)
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(path, asCRLF(wired), 0o644))
+	require.NoError(t, os.WriteFile(path, asCRLF(wired), 0o600))
 
 	require.NoError(t, StripBlockFile(path))
 
@@ -213,7 +213,7 @@ func TestUpsertBlockFileCreatesThenReplacesInPlace(t *testing.T) {
 func TestStripBlockFileLeavesTheRestOfTheFileAlone(t *testing.T) {
 	path := filepath.Join(t.TempDir(), ".bash_profile")
 	original := "export EDITOR=vi\nalias ll='ls -l'\n"
-	require.NoError(t, os.WriteFile(path, []byte(original), 0o644))
+	require.NoError(t, os.WriteFile(path, []byte(original), 0o600))
 	require.NoError(t, UpsertBlockFile(path, ". \"/hook.sh\""))
 
 	require.NoError(t, StripBlockFile(path))
@@ -253,7 +253,7 @@ func TestDropInIsWrittenAndRemoved(t *testing.T) {
 func TestAFailureNamesTheFileItWasWorkingOn(t *testing.T) {
 	dir := t.TempDir()
 	inTheWay := filepath.Join(dir, "not-a-directory")
-	require.NoError(t, os.WriteFile(inTheWay, []byte("something of somebody's own"), 0o644))
+	require.NoError(t, os.WriteFile(inTheWay, []byte("something of somebody's own"), 0o600))
 	missing := filepath.Join(inTheWay, "profile")
 
 	err := UpsertBlockFile(missing, ". \"/hook.sh\"")
@@ -307,7 +307,7 @@ func TestTheShellLibraryAgreesByteForByte(t *testing.T) {
 
 			// upsert-block, compared as the file the library leaves behind.
 			path := filepath.Join(dir, "profile")
-			require.NoError(t, os.WriteFile(path, []byte(in.file), 0o644))
+			require.NoError(t, os.WriteFile(path, []byte(in.file), 0o600))
 			run(t, bash, lib, "upsert-block", path, sourceLine)
 			theirs, err := os.ReadFile(path)
 			require.NoError(t, err)
@@ -315,7 +315,7 @@ func TestTheShellLibraryAgreesByteForByte(t *testing.T) {
 
 			// strip-block, which the library prints rather than writes.
 			stripPath := filepath.Join(dir, "strip")
-			require.NoError(t, os.WriteFile(stripPath, []byte(in.file), 0o644))
+			require.NoError(t, os.WriteFile(stripPath, []byte(in.file), 0o600))
 			assert.Equal(t, run(t, bash, lib, "strip-block", stripPath), string(StripBlock([]byte(in.file))))
 		})
 	}
@@ -341,7 +341,7 @@ func TestTheShellLibraryUnwiresACRLFProfileToo(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "profile")
 	original := "export EDITOR=vi\r\n"
 	wired := original + "\r\n" + MarkerStart + "\r\n. \"/hook.sh\"\r\n" + MarkerEnd + "\r\n"
-	require.NoError(t, os.WriteFile(path, []byte(wired), 0o644))
+	require.NoError(t, os.WriteFile(path, []byte(wired), 0o600))
 
 	run(t, bash, lib, "strip-block-file", path)
 
@@ -410,7 +410,7 @@ func TestAStartupFileWhoseDirectoryIsNotThereIsWrittenAnyway(t *testing.T) {
 func TestAWiringThatCannotBeRenamedIntoPlaceIsReported(t *testing.T) {
 	occupied := filepath.Join(t.TempDir(), "profile")
 	require.NoError(t, os.Mkdir(occupied, 0o750))
-	require.NoError(t, os.WriteFile(filepath.Join(occupied, "something"), []byte("mine"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(occupied, "something"), []byte("mine"), 0o600))
 
 	err := replace(occupied, []byte("# >>> sshakku >>>\n"), 0o644)
 
@@ -427,16 +427,16 @@ func TestAFileThatHeldNothingButTheWiringAndCannotGoIsReported(t *testing.T) {
 	// what is there is not ours to take away, and it will not be removed.
 	occupied := filepath.Join(t.TempDir(), "profile")
 	require.NoError(t, os.Mkdir(occupied, 0o750))
-	require.NoError(t, os.WriteFile(filepath.Join(occupied, "something"), []byte("mine"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(occupied, "something"), []byte("mine"), 0o600))
 	stripped := filepath.Join(t.TempDir(), "profile")
-	require.NoError(t, os.WriteFile(stripped, UpsertBlock(nil, ". '/hook.sh'"), 0o644))
+	require.NoError(t, os.WriteFile(stripped, UpsertBlock(nil, ". '/hook.sh'"), 0o600))
 
 	// The same file, with nothing of anybody else's in it: this one goes.
 	require.NoError(t, StripBlockFile(stripped))
 	assert.NoFileExists(t, stripped)
 
 	// And one that cannot: reported, rather than reported as removed.
-	require.NoError(t, os.WriteFile(filepath.Join(occupied, "another"), []byte("mine"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(occupied, "another"), []byte("mine"), 0o600))
 	err := StripBlockFile(occupied)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), occupied)

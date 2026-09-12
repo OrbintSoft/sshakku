@@ -38,7 +38,7 @@ func fakePowerShell(t *testing.T, answer string) string {
 
 	dir := t.TempDir()
 	exe := filepath.Join(dir, "pwsh")
-	require.NoError(t, os.WriteFile(exe, fixture, 0o755))
+	require.NoError(t, os.WriteFile(exe, fixture, 0o755)) //nolint:gosec // G306 is right that this is over 0600 and it has to be: this file is a program the test then runs, and a program that cannot be executed is not one
 
 	said := filepath.Join(dir, "answer.json")
 	require.NoError(t, os.WriteFile(said, []byte(answer), 0o600))

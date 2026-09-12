@@ -379,6 +379,20 @@ linters:
         # watch.
         - G302
 
+        # A file written where somebody other than its owner may read it. It
+        # sees only what G301 sees — a mode written out at the call — so the
+        # files this program installs, whose modes are named constants, are not
+        # what it is watching; what it watches is a test laying out a scene, and
+        # every one of those is a file nobody but the test has any business
+        # reading. They are 0600 now, and the suite was run with every one of
+        # them moved to be sure none had been relying on the access.
+        #
+        # What is left is the fifteen that are programs: a stand-in for zenity
+        # or for a shell, an askpass helper, an editor. A program that cannot be
+        # executed is not one, so those are over the line by necessity and say
+        # so where they stand.
+        - G306
+
       excludes:
         # A subprocess whose program is named by a variable. Every subprocess
         # this program starts is: ssh-agent and ssh-add, the wallet's own

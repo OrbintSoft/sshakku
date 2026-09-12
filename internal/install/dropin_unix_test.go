@@ -26,7 +26,7 @@ func TestWhereAShellReadsADropInDirectoryTheWiringIsAFileOfItsOwn(t *testing.T) 
 	home := t.TempDir()
 	installInto(t, home)
 	profile := filepath.Join(home, "startup-file")
-	require.NoError(t, os.WriteFile(profile, []byte("# mine\n"), 0o644))
+	require.NoError(t, os.WriteFile(profile, []byte("# mine\n"), 0o600))
 	require.NoError(t, os.Mkdir(dropInDirBeside(profile), 0o750))
 	req := wiringRequest(t, home, profile)
 

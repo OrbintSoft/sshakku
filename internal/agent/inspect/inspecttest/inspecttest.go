@@ -28,9 +28,9 @@ func FakeProc(t *testing.T, root string, pid int, argv []string, uid int) {
 	if len(argv) > 0 {
 		cmdline += "\x00" // the kernel NUL-terminates the final arg too.
 	}
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "cmdline"), []byte(cmdline), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "cmdline"), []byte(cmdline), 0o600))
 	if uid >= 0 {
 		status := "Name:\tssh-agent\nUid:\t" + strconv.Itoa(uid) + "\t" + strconv.Itoa(uid) + "\t" + strconv.Itoa(uid) + "\t" + strconv.Itoa(uid) + "\n"
-		require.NoError(t, os.WriteFile(filepath.Join(dir, "status"), []byte(status), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "status"), []byte(status), 0o600))
 	}
 }

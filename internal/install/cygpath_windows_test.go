@@ -42,7 +42,7 @@ func TestTheTranslatorIsFoundWhicheverPlaceItIsIn(t *testing.T) {
 	for _, place := range places {
 		t.Run(place, func(t *testing.T) {
 			require.NoError(t, os.MkdirAll(filepath.Dir(place), 0o750))
-			require.NoError(t, os.WriteFile(place, []byte("stands in for a translator"), 0o755))
+			require.NoError(t, os.WriteFile(place, []byte("stands in for a translator"), 0o755)) //nolint:gosec // G306 is right that this is over 0600 and it has to be: this file is a program the test then runs, and a program that cannot be executed is not one
 			t.Cleanup(func() { require.NoError(t, os.Remove(place)) })
 
 			found, ok := FindCygpath(interpreter)

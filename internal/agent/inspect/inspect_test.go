@@ -35,7 +35,7 @@ func TestInspectorAgents(t *testing.T) {
 	// directories (net, self, irq) and plain files (uptime, meminfo). Neither
 	// is a process and neither may be reported as one.
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "net"), 0o750))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "uptime"), []byte("1234.56 789.01\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "uptime"), []byte("1234.56 789.01\n"), 0o600))
 
 	in := Inspector{ProcRoot: root}
 	procs, err := in.Agents()

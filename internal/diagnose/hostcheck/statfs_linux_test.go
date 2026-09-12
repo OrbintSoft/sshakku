@@ -24,7 +24,7 @@ func settled(t *testing.T, got *bool, what string) bool {
 func writeFile(t *testing.T, path, content string) {
 	t.Helper()
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o750), "lay out the directory for the fake file")
-	require.NoError(t, os.WriteFile(path, []byte(content), 0o644), "write the fake file")
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o600), "write the fake file")
 }
 
 func symlink(t *testing.T, oldname, newname string) {

@@ -33,7 +33,7 @@ func blockingTools(t *testing.T) {
 	// from the implementation would agree with it whatever it became.
 	tools := append([]string{"bw", "op"}, platformBlockingTools()...)
 	for _, bin := range tools {
-		require.NoErrorf(t, os.WriteFile(filepath.Join(dir, bin), src, 0o755), "install the blocking %s", bin)
+		require.NoErrorf(t, os.WriteFile(filepath.Join(dir, bin), src, 0o755), "install the blocking %s", bin) //nolint:gosec // G306 is right that this is over 0600 and it has to be: this file is a program the test then runs, and a program that cannot be executed is not one
 	}
 	// Prepended, not substituted: the fixture is a shell script and still needs
 	// the ordinary PATH to find the tools it runs.
