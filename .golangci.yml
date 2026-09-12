@@ -393,6 +393,19 @@ linters:
         # suppression every one of them has to carry is one nobody reads.
         - G204
 
+        # A file opened at a path held in a variable. Every file this program
+        # reads is: the entries under /proc and /sys it reads a machine's state
+        # out of, the lock it takes, the state it left itself last time, the
+        # startup file of a shell somebody chose, the log. Sixty-two sites, and
+        # what they have in common is only that a path was worked out before it
+        # was opened.
+        #
+        # The question worth asking of a path — whether it came from somewhere a
+        # caller controls — is G703's, which follows it there instead of noticing
+        # the variable, and which is on. Turning both on would bury the eight
+        # that know something under the sixty-two that do not.
+        - G304
+
     govet:
       # Everything, so an analyser added to a future Go release arrives with it
       # rather than waiting to be noticed. What that turns on beyond the default
