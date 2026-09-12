@@ -105,7 +105,7 @@ func blobFromSecret(secret string) ([]byte, error) {
 	units := utf16.Encode([]rune(secret))
 	blob := make([]byte, 2*len(units))
 	for i, u := range units {
-		blob[2*i] = byte(u)
+		blob[2*i] = byte(u) //nolint:gosec // G115 sees the low byte of a UTF-16 code unit; the high byte is the line below, and the split is the encoding
 		blob[2*i+1] = byte(u >> 8)
 	}
 	if len(blob) > maxCredentialBlobSize {
@@ -149,7 +149,7 @@ func credWrite(entry credential) error {
 		Type:               credTypeGeneric,
 		TargetName:         target,
 		Comment:            comment,
-		CredentialBlobSize: uint32(len(blob)),
+		CredentialBlobSize: uint32(len(blob)), //nolint:gosec // G115 sees a length the lines below bound against the largest blob the store takes
 		Persist:            credPersistLocalMachine,
 		UserName:           user,
 	}

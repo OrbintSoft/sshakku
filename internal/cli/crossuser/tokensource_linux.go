@@ -48,7 +48,7 @@ func (Exec) ReadToken(ctx context.Context, uid, gid int) (string, error) {
 	//coverage:ignore
 	cmd := exec.CommandContext(ctx, self, ReadSocketTokenCmd)
 	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Credential: &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)},
+		Credential: &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)}, //nolint:gosec // G115 sees the widening: a uid and a gid are 32 bits wide on this system, which is where these came from
 	}
 	out, err := cmd.Output()
 	if err != nil {

@@ -11,5 +11,5 @@ func realTmpfsSize(path string) int64 {
 	if err := syscall.Statfs(path, &st); err != nil {
 		return 0
 	}
-	return int64(st.Bsize) * int64(st.Blocks) //nolint:unconvert // Bsize's width varies by arch
+	return int64(st.Bsize) * int64(st.Blocks) //nolint:unconvert,gosec // Bsize's width varies by arch, which is what G115 sees; the product is the size statfs reports
 }

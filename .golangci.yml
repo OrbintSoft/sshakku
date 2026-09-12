@@ -345,6 +345,17 @@ linters:
         # keeping on for the day a real one is committed by mistake.
         - G101
 
+        # A conversion that could lose what it is carrying. Nearly every one
+        # here is a value crossing into an interface whose width is fixed by
+        # somebody else — a kernel key serial, a uid, a window coordinate, the
+        # length of a buffer this file declared — or a truncation that is the
+        # algorithm itself, an increment carried through a nonce a byte at a
+        # time. Each of those says so at the line. The rule stays on because it
+        # paid for itself once already: a handoff token is text arriving from
+        # the environment, and read into a 32-bit serial it kept its low half
+        # and named a key of this user's that no stash had put there.
+        - G115
+
     govet:
       # Everything, so an analyser added to a future Go release arrives with it
       # rather than waiting to be noticed. What that turns on beyond the default

@@ -121,7 +121,7 @@ func TestSocketArg(t *testing.T) {
 func buildKernProcArgs2(execPath string, padding int, argv []string) []byte {
 	var buf []byte
 	argc := make([]byte, 4)
-	binary.LittleEndian.PutUint32(argc, uint32(len(argv)))
+	binary.LittleEndian.PutUint32(argc, uint32(len(argv))) //nolint:gosec // G115 sees the length of an argv this test just built, written into the 32-bit count the format has
 	buf = append(buf, argc...)
 	buf = append(buf, execPath...)
 	buf = append(buf, 0)

@@ -156,7 +156,7 @@ func writeIdentitiesAnswer(rw io.Writer, nkeys uint32) {
 	payload := []byte{msgIdentitiesAnswer, 0, 0, 0, 0}
 	binary.BigEndian.PutUint32(payload[1:], nkeys)
 	frame := make([]byte, 4+len(payload))
-	binary.BigEndian.PutUint32(frame, uint32(len(payload)))
+	binary.BigEndian.PutUint32(frame, uint32(len(payload))) //nolint:gosec // G115 sees the length of a payload this test just built, written into the 32-bit frame header
 	copy(frame[4:], payload)
 	_, _ = rw.Write(frame)
 }

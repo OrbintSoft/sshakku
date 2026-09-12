@@ -29,7 +29,7 @@ func Add(description string, payload []byte) (Serial, error) {
 	if err != nil {
 		return 0, err
 	}
-	return Serial(id), nil
+	return Serial(id), nil //nolint:gosec // G115 sees the narrowing: a key serial is what the kernel just returned, and it is 32 bits wide
 }
 
 // Search returns the serial of the @u "user" key with description and whether it
@@ -39,7 +39,7 @@ func Search(description string) (Serial, bool) {
 	if err != nil {
 		return 0, false
 	}
-	return Serial(id), true
+	return Serial(id), true //nolint:gosec // G115 sees the narrowing: a key serial is what the kernel just returned, and it is 32 bits wide
 }
 
 // Read returns the payload of the key with serial s. The first call sizes the

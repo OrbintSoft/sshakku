@@ -136,7 +136,7 @@ func incrementNonce(n [nonceLen]byte) [nonceLen]byte {
 	carry := 1
 	for i := range n {
 		carry += int(n[i])
-		n[i] = byte(carry)
+		n[i] = byte(carry) //nolint:gosec // G115 sees the byte of the sum that stays; the rest is the carry, shifted out on the line below
 		carry >>= 8
 	}
 	return n
