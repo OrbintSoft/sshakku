@@ -32,7 +32,7 @@ func (s systemService) enable(ctx context.Context) error {
 		return err
 	}
 	return s.withServiceHandle(windows.SERVICE_CHANGE_CONFIG, func(handle windows.Handle) error {
-		err := windows.ChangeServiceConfig(handle,
+		err := changeServiceConfig(handle,
 			windows.SERVICE_NO_CHANGE, windows.SERVICE_AUTO_START, windows.SERVICE_NO_CHANGE,
 			nil, nil, nil, nil, nil, nil, nil)
 		if err != nil {
@@ -41,6 +41,15 @@ func (s systemService) enable(ctx context.Context) error {
 		return nil
 	}, s.explainEnabling)
 }
+
+// changeServiceConfig writes a service's configuration.
+//
+// It is a variable because the one field this changes, and the nine it leaves
+// exactly as it found them, are the whole of what makes the call above a safe
+// thing to offer — and the only way to see that is to see the arguments, since
+// a machine inspected afterwards cannot tell a field that was left alone from
+// one that was rewritten to the value it already had.
+var changeServiceConfig = windows.ChangeServiceConfig
 
 // The two ways enabling can be refused. They are not the same sentences as a
 // refusal to start: what puts a refused enable right is this same command run

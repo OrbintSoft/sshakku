@@ -40,12 +40,10 @@ func (s systemService) State(ctx context.Context) (serviceState, error) {
 	err := s.withService(windows.SERVICE_QUERY_STATUS, func(handle windows.Handle) error {
 		var status windows.SERVICE_STATUS
 		if err := windows.QueryServiceStatus(handle, &status); err != nil {
-			// The handle above was opened for exactly this question and nothing
-			// else, so a handle that opened is one this can be asked of. It is
-			// handled because the alternative is reading a state out of a record
-			// nobody filled in, and what a session does about "stopped" is start
-			// another agent.
-			//coverage:ignore
+			// Reported rather than passed over. Carrying on would read a state
+			// out of a record nobody filled in and hand it back with no error
+			// beside it, which leaves a caller unable to tell a state the
+			// service manager gave from one it never did.
 			return fmt.Errorf("asking what the %s service is doing: %w", s.name(), err)
 		}
 		state = stateOf(status.CurrentState)
@@ -62,12 +60,20 @@ func (s systemService) Start(ctx context.Context) error {
 		return err
 	}
 	return s.withService(windows.SERVICE_START, func(handle windows.Handle) error {
-		if err := windows.StartService(handle, 0, nil); err != nil {
+		if err := startService(handle, 0, nil); err != nil {
 			return s.explain(err)
 		}
 		return nil
 	})
 }
+
+// startService is the request that starts a service.
+//
+// It is a variable because the answer this cares most about — a service already
+// running, which is the outcome that was wanted — cannot be had from a machine
+// without starting something on it, and a test that did that would be
+// rearranging the system it is judging.
+var startService = windows.StartService
 
 // withService opens the agent's service for the given access and hands it to
 // do.
@@ -110,7 +116,7 @@ func (s systemService) withServiceHandle(
 	if err != nil {
 		return fmt.Errorf("naming the %s service: %w", s.name(), err)
 	}
-	service, err := windows.OpenService(manager, wide, access)
+	service, err := openServiceHandle(manager, wide, access)
 	if err != nil {
 		return explaining(err)
 	}
@@ -118,6 +124,16 @@ func (s systemService) withServiceHandle(
 
 	return do(service)
 }
+
+// openServiceHandle asks the service manager for a handle to one service,
+// carrying the rights the caller named and no others.
+//
+// It is a variable because those rights are what decide whether the calls made
+// through the handle are answered or refused, and a handle carrying fewer of
+// them is how the refusals are reached: the service manager itself does the
+// refusing, on the machine the suite happens to be running on, rather than
+// that machine having to be arranged to refuse.
+var openServiceHandle = windows.OpenService
 
 // The three states that stand between an account and its agent, each carrying
 // the service name because the command that puts it right names the service.
