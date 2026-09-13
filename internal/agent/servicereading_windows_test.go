@@ -120,3 +120,48 @@ func TestHowAServiceStartsIsNotLookedUpForACallerWhoHasGoneAway(t *testing.T) {
 
 	require.ErrorIs(t, err, context.Canceled)
 }
+
+// F55: a read of the configuration that the service manager refuses is reported
+// — naming the service and what was being asked about it — rather than answered
+// with a start type nobody gave.
+//
+// The handle is opened for reading the service's state and nothing else, so the
+// refusal happens at the read and not at the handle: this is the case where the
+// service was reached and the question still could not be put.
+func TestAConfigurationThatCannotBeReadIsNoStartTypeToReport(t *testing.T) {
+	withServiceHandlesOpenedFor(t, windows.SERVICE_QUERY_STATUS)
+
+	start, err := systemService{}.startType(t.Context())
+
+	require.Error(t, err, "the read was refused, so there is no start type")
+	assert.Contains(t, err.Error(), "asking how the "+agentServiceName+" service is started",
+		"the message names the service and the question that was put about it")
+	assert.Equal(t, ServiceStartUnknown, start, "and no start type is claimed alongside the refusal")
+}
+
+// F41: what the machine was willing to say is kept, even when the rest of the
+// reading is refused.
+//
+// An account may be allowed to see that the service is running and not allowed
+// to see how it starts. That account has still been told something, and a report
+// that threw it away would leave a reader with less than the machine offered —
+// and with no way to tell a question that could not be put from one that was put
+// and answered.
+//
+// The handle is opened for reading the state and nothing else, so the first
+// question is answered for real and the second refused for real. What the first
+// one answers is whatever this machine's service is doing, which is why it is
+// taken once with nothing in the way and then compared.
+func TestWhatTheMachineAnsweredBeforeARefusalStaysInTheReading(t *testing.T) {
+	answered := ReadAgentService(t.Context())
+	require.NoError(t, answered.Err, "this account can take the whole reading when nothing is in the way")
+
+	withServiceHandlesOpenedFor(t, windows.SERVICE_QUERY_STATUS)
+	reading := ReadAgentService(t.Context())
+
+	assert.Equal(t, agentServiceName, reading.Name, "which service it was about is still there")
+	assert.Equal(t, answered.Running, reading.Running,
+		"and so is the half that was answered, unchanged from what it says when nothing is refused")
+	require.Error(t, reading.Err, "the refused half is reported")
+	assert.Equal(t, ServiceStartUnknown, reading.Start, "with nothing claimed in its place")
+}
