@@ -24,6 +24,12 @@ import (
 // code under test cannot be made to produce on demand.
 var errMustNotBePromptedA = errors.New("must not be prompted: a vault hit should never reach the prompt step")
 
+// envNoTerminalAskpass carries the askpass helper to the detached child below.
+// A session with nowhere to ask is not the same thing as one whose helper is
+// missing — the second stops before the first can happen — and this test is
+// about the first, so the child is given an install that is complete.
+const envNoTerminalAskpass = "SSHAKKU_TEST_ASKPASS" //nolint:gosec // G101 matches "askpass"; the value names an environment variable
+
 // TestLoadKeysHeadlessVaultHit confirms the full proactive path — a real
 // ssh-agent, real ssh-add, and the real keyring+SSH_ASKPASS handoff — loads a
 // key from a stored passphrase with no graphical prompter involved at all: a
@@ -105,6 +111,14 @@ func TestLoadKeysNoTerminalReturnsPromptly(t *testing.T) {
 	})
 	waitForSocket(t, sock)
 
+	// Never run: the prompt fails before any passphrase is handed anywhere. It
+	// is here because the child's loader asks whether there is a program to ask
+	// through before it asks anybody anything, and a session whose helper is
+	// missing comes back for that reason instead of this one — which would
+	// leave this test passing while measuring something else.
+	askpassScript := filepath.Join(dir, "askpass.sh")
+	require.NoError(t, os.WriteFile(askpassScript, []byte("#!/bin/sh\nexit 1\n"), 0o755), "a helper for the child to point at") //nolint:gosec // G306 is right that this is over 0600 and it has to be: this file stands in for a program, and one that cannot be executed is not one
+
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestLoadKeysNoTerminalReturnsPromptly$") //nolint:gosec // G702 follows os.Args[0] back to this program's own argv: it is the test binary re-entering itself, which is how a test gets a subprocess to watch
@@ -112,6 +126,7 @@ func TestLoadKeysNoTerminalReturnsPromptly(t *testing.T) {
 		"SSHAKKU_LOADKEYS_HELPER=1",
 		"SSH_AUTH_SOCK="+sock,
 		"SSHAKKU_TEST_KEYFILE="+keyfile,
+		envNoTerminalAskpass+"="+askpassScript,
 	)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	cmd.Stdin = nil
@@ -140,7 +155,7 @@ func runLoadKeysNoTerminalHelper() {
 		Runner: run.ExecRunner{},
 		Secret: &fakeSecret{lookupFound: false},
 		Prompt: prompt.TTYPrompter{},
-		Adder:  ExecKeyAdder{},
+		Adder:  ExecKeyAdder{AskpassProg: os.Getenv(envNoTerminalAskpass)},
 		Log:    &fakeLogger{},
 	}
 	// This runs in the re-executed child, which is a process of its own with
