@@ -254,3 +254,191 @@ func TestTheTwoScopesAreDifferentEnvironments(t *testing.T) {
 func TestAnnouncingTheChangeReturns(t *testing.T) {
 	announceEnvironmentChange()
 }
+
+// noSuchKey names a key that is not there, and makes sure of it.
+//
+// An account that has never had a search list of its own is not this: a value
+// that is missing from a key that exists is an empty list. This is the key
+// itself being unopenable, which is what a scope somebody removed looks like,
+// and what every refusal by permission looks like from in here.
+func noSuchKey(t *testing.T) environmentLocation {
+	t.Helper()
+
+	where := environmentLocation{
+		root: registry.CURRENT_USER,
+		path: fmt.Sprintf(`Software\SSHakku\test-%d-no-such-key`, os.Getpid()),
+	}
+	_, err := registry.OpenKey(where.root, where.path, registry.QUERY_VALUE)
+	require.Error(t, err, "this key must not exist, or the tests below prove nothing")
+	return where
+}
+
+// F44: a step that could not be taken says which step it was, and here that
+// means naming the key — because what a person does next is go and look at it.
+func TestASearchListThatCannotBeReadSaysWhereItWasLookedFor(t *testing.T) {
+	t.Run("nothing there to open", func(t *testing.T) {
+		where := noSuchKey(t)
+
+		_, _, err := readPath(where)
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), where.path, "which key could not be opened is the whole of the answer")
+		assert.Contains(t, err.Error(), "read", "and what was being done to it when it refused")
+	})
+
+	// The one that matters most of all. A value stored as something other than
+	// text is not an absent one, and answering as though it were would hand back
+	// an empty list — which the caller would then add this program's directory
+	// to and write back, replacing the account's entire search list with one
+	// entry. It is refused instead, and the account's own value is left alone.
+	t.Run("a search list stored as something that is not text", func(t *testing.T) {
+		where := scratch(t)
+		key, err := registry.OpenKey(where.root, where.path, registry.SET_VALUE)
+		require.NoError(t, err)
+		require.NoError(t, key.SetDWordValue(pathValue, 1))
+		require.NoError(t, key.Close())
+
+		raw, _, err := readPath(where)
+
+		require.Error(t, err, "a list that cannot be read is not an empty list")
+		assert.Empty(t, raw)
+		assert.Contains(t, err.Error(), where.path)
+	})
+}
+
+// The same for writing, and with it the promise that nothing is half-written:
+// a list this cannot store is left as it was found.
+func TestASearchListThatCannotBeWrittenSaysWhereItWouldHaveGone(t *testing.T) {
+	t.Run("nothing there to open", func(t *testing.T) {
+		where := noSuchKey(t)
+
+		err := writePath(where, `C:\somewhere`, registry.EXPAND_SZ)
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), where.path)
+		assert.Contains(t, err.Error(), "write", "and what was being done to it when it refused")
+	})
+
+	// A list with a NUL in it is not a list this system can store as text, and
+	// the conversion is where that is met. Nothing that reads a real search list
+	// produces one — which is the point: the value arrives from a caller, and a
+	// caller that hands over something unstorable gets told so rather than
+	// having it stored in some other shape.
+	t.Run("a list this system cannot store as text", func(t *testing.T) {
+		where := scratch(t)
+		original := `%SystemRoot%\system32;C:\Program Files\Git\cmd`
+		require.NoError(t, writePath(where, original, registry.EXPAND_SZ))
+
+		err := writePath(where, "C:\\one\x00C:\\two", registry.EXPAND_SZ)
+
+		require.Error(t, err)
+		raw, kind, readErr := readPath(where)
+		require.NoError(t, readErr)
+		assert.Equal(t, original, raw, "what was there is still there, whole")
+		assert.Equal(t, uint32(registry.EXPAND_SZ), kind)
+	})
+}
+
+// F47: the record of what the search list was is what an administrator puts
+// back by hand, so a change that cannot be written down is not made at all. The
+// list reads afterwards exactly as it read before — the alternative is an
+// account's search list altered with no record anywhere of what it had been.
+func TestAChangeThatCannotBeWrittenDownIsNotMade(t *testing.T) {
+	original := `%SystemRoot%\system32;C:\Program Files\Git\cmd`
+
+	cases := map[string]func(t *testing.T){
+		"the environment names nowhere to keep it": func(t *testing.T) {
+			t.Helper()
+			t.Setenv("LOCALAPPDATA", "")
+		},
+		"a file where the directory would go": func(t *testing.T) {
+			t.Helper()
+			dir := backupIn(t)
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "sshakku"), []byte("somebody's own"), 0o600))
+		},
+		"a directory where the file would go": func(t *testing.T) {
+			t.Helper()
+			dir := backupIn(t)
+			taken, err := backupFile(User)
+			require.NoError(t, err)
+			require.NoError(t, os.MkdirAll(taken, 0o750), "under "+dir)
+		},
+	}
+	for name, inTheWay := range cases {
+		t.Run(name, func(t *testing.T) {
+			where := scratch(t)
+			require.NoError(t, writePath(where, original, registry.EXPAND_SZ))
+			inTheWay(t)
+			list := PersistentPathList()
+
+			changed, err := changePath(where, User, recordPrevious, func(raw string) (string, bool) {
+				return list.Add(raw, `C:\ours`)
+			})
+
+			require.Error(t, err)
+			assert.False(t, changed, "a change that was refused is not one to report as made")
+			raw, _, readErr := readPath(where)
+			require.NoError(t, readErr)
+			assert.Equal(t, original, raw, "and the account's search list is what it was")
+		})
+	}
+}
+
+// A list that could not be read is not one to write over. What would be written
+// is built from what was read, so carrying on from a failed read would put this
+// program's directory where an account's whole search list used to be.
+func TestAListThatCouldNotBeReadIsNotWritten(t *testing.T) {
+	where := noSuchKey(t)
+	list := PersistentPathList()
+
+	changed, err := changePath(where, User, recordPrevious, func(raw string) (string, bool) {
+		return list.Add(raw, `C:\ours`)
+	})
+
+	require.Error(t, err)
+	assert.False(t, changed)
+	_, openErr := registry.OpenKey(where.root, where.path, registry.QUERY_VALUE)
+	assert.Error(t, openErr, "and nothing was created on the way past")
+}
+
+// The key going away between the read and the write is the one failure that
+// cannot be arranged by pointing somewhere else, since the same location has to
+// answer once and then refuse. It is reported as a change not made, naming the
+// key, rather than reported as made.
+func TestAKeyThatGoesAwayMidChangeIsReportedAsAChangeNotMade(t *testing.T) {
+	where := scratch(t)
+	require.NoError(t, writePath(where, `C:\one`, registry.EXPAND_SZ))
+	list := PersistentPathList()
+
+	changed, err := changePath(where, User, leaveRecord, func(raw string) (string, bool) {
+		require.NoError(t, registry.DeleteKey(where.root, where.path), "taken away after the read and before the write")
+		return list.Add(raw, `C:\ours`)
+	})
+
+	require.Error(t, err)
+	assert.False(t, changed)
+	assert.Contains(t, err.Error(), where.path)
+}
+
+// A scope with no environment behind it is refused before anything is opened,
+// and the refusal names the two there are. Both directions are asked, because
+// an uninstall reaches this by the other door.
+func TestAScopeNobodyServesIsRefusedWhicheverDirectionItCameFrom(t *testing.T) {
+	for name, change := range map[string]func(Scope, string) (bool, error){
+		"adding":   AddToPath,
+		"removing": RemoveFromPath,
+	} {
+		t.Run(name, func(t *testing.T) {
+			// Safe to call the real entry points with this: a scope that names no
+			// environment is refused before one is opened, so the account's own is
+			// never reached. Any scope that did name one would be the live
+			// environment of the person running the tests.
+			changed, err := change("everyone", `C:\somewhere`)
+
+			require.Error(t, err)
+			assert.False(t, changed)
+			assert.Contains(t, err.Error(), string(User), "and says which scopes there are")
+			assert.Contains(t, err.Error(), string(Machine))
+		})
+	}
+}
