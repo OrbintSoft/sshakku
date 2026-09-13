@@ -3,7 +3,10 @@
 package prompt
 
 import (
+	"errors"
 	"testing"
+	"unicode/utf16"
+	"unsafe"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -68,4 +71,89 @@ func TestWritingNothingIsNotAWrite(t *testing.T) {
 // caller stops on rather than reads past.
 func TestWritingToWhatIsNotAConsoleIsReported(t *testing.T) {
 	assert.Error(t, writeRealConsole(windows.InvalidHandle, "Enter passphrase for id_ed25519: "))
+}
+
+// errNoConsoleHere is the failure these tests hand their seams, standing for a
+// real one a session that has a console cannot be made to produce.
+var errNoConsoleHere = errors.New("no console here")
+
+// F29: a session with no console to ask on is told so, and neither half of one
+// is left open behind the refusal.
+//
+// The two halves are opened separately and either can be the one that refuses.
+// What must not happen is the second refusing while the first stays open: a
+// process that failed to ask would then be holding a handle to the console it
+// did not ask on, for as long as it lives.
+func TestAConsoleThatWillNotOpenIsReportedAndNothingIsLeftHolding(t *testing.T) {
+	t.Run("the half that is read from", func(t *testing.T) {
+		restore := openConsoleHandle
+		t.Cleanup(func() { openConsoleHandle = restore })
+		openConsoleHandle = func(string) (windows.Handle, error) { return windows.InvalidHandle, errNoConsoleHere }
+
+		_, closeConsole, err := openRealConsole()
+
+		require.ErrorIs(t, err, errNoConsoleHere)
+		require.NotNil(t, closeConsole, "a caller always has something to defer, even where nothing opened")
+		closeConsole()
+	})
+
+	// The half that is written to refuses after the half that is read from has
+	// already opened. The code gives the open one back before it returns; that
+	// the handle really is released is the system's to know and not observable
+	// from here, so what this holds is that the refusal reaches the caller
+	// rather than being lost behind the half that worked.
+	t.Run("the half that is written to", func(t *testing.T) {
+		restore := openConsoleHandle
+		t.Cleanup(func() { openConsoleHandle = restore })
+		asked := make([]string, 0, 2)
+		openConsoleHandle = func(name string) (windows.Handle, error) {
+			asked = append(asked, name)
+			if name == "CONOUT$" {
+				return windows.InvalidHandle, errNoConsoleHere
+			}
+			return windows.Handle(0x1234), nil
+		}
+
+		_, _, err := openRealConsole()
+
+		require.ErrorIs(t, err, errNoConsoleHere)
+		assert.Equal(t, []string{"CONIN$", "CONOUT$"}, asked,
+			"both halves were asked for, so this is the case where one opened and the other did not")
+	})
+}
+
+// F29: a console that stops answering mid-question is reported rather than
+// handed on as the passphrase somebody typed. An empty string is what an
+// answer of nothing looks like, and only one of the two is an answer.
+func TestAConsoleThatFailsMidReadIsNotAnAnswer(t *testing.T) {
+	restore := readConsoleInto
+	t.Cleanup(func() { readConsoleInto = restore })
+	readConsoleInto = func(windows.Handle, *uint16, uint32, *uint32, *byte) error { return errNoConsoleHere }
+
+	got, err := readRealConsole(windows.InvalidHandle)
+
+	require.ErrorIs(t, err, errNoConsoleHere)
+	assert.Empty(t, got, "nothing was read, and nothing is what is handed back — as an error, not as a passphrase")
+}
+
+// What a console hands over is UTF-16 with its terminator included, and what
+// comes back is the line as typed. The read itself needs somebody at the
+// keyboard, so the console's answer is handed over instead — what is being
+// judged is the decoding of it, which is this program's own.
+func TestALineIsReadBackTheWayTheConsoleHandsItOver(t *testing.T) {
+	restore := readConsoleInto
+	t.Cleanup(func() { readConsoleInto = restore })
+	readConsoleInto = func(_ windows.Handle, buf *uint16, toread uint32, read *uint32, _ *byte) error {
+		typed := utf16.Encode([]rune("a pässphrase\r\n"))
+		require.LessOrEqual(t, len(typed), int(toread), "the fixture must fit the buffer the code offered")
+		copy(unsafe.Slice(buf, toread), typed)
+		*read = uint32(len(typed)) //nolint:gosec // G115 sees the length of a fixture written three lines above
+		return nil
+	}
+
+	got, err := readRealConsole(windows.InvalidHandle)
+
+	require.NoError(t, err)
+	assert.Equal(t, "a pässphrase\r\n", got,
+		"the terminator is kept: an answer of nothing has to be tellable from an input that was closed")
 }

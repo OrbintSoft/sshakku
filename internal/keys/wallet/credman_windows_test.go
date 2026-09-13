@@ -189,3 +189,118 @@ func TestListingAPrefixNothingWasStoredUnderIsEmptyRatherThanAnError(t *testing.
 	require.NoError(t, err)
 	assert.Empty(t, listed)
 }
+
+// Every part of an entry that this system cannot spell is refused by the part
+// it was, and none of these ever reaches the store: the conversion fails first,
+// so nothing is written, read or removed while the name is being worked out.
+//
+// A key's name is a file name, a label is built from it, and neither is
+// something this program chooses the contents of. What must not happen is a
+// call made with a name that was quietly cut short at the character the system
+// would not take, since every later call would then look somewhere else.
+func TestAnEntryThisSystemCannotSpellIsRefusedByThePartItWas(t *testing.T) {
+	t.Parallel()
+
+	const refused = "SSHakku-Key-with\x00a-nul"
+
+	t.Run("the name it is filed under", func(t *testing.T) {
+		t.Parallel()
+		err := credWrite(credential{Target: refused, Secret: "s"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "target name", "which part could not be spelled is the thing to say")
+	})
+
+	t.Run("the description beside it", func(t *testing.T) {
+		t.Parallel()
+		err := credWrite(credential{Target: "SSHakku-Key-fine", Comment: refused, Secret: "s"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "comment")
+	})
+
+	t.Run("the account name it carries", func(t *testing.T) {
+		t.Parallel()
+		err := credWrite(credential{Target: "SSHakku-Key-fine", User: refused, Secret: "s"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "user name")
+	})
+
+	t.Run("reading one back", func(t *testing.T) {
+		t.Parallel()
+		_, found, err := credRead(refused)
+		require.Error(t, err)
+		assert.False(t, found, "a name that could not be spelled found nothing, and is not a miss either")
+	})
+
+	t.Run("removing one", func(t *testing.T) {
+		t.Parallel()
+		removed, err := credDelete(refused)
+		require.Error(t, err)
+		assert.False(t, removed, "nothing was removed, and forgetting must not report otherwise")
+	})
+
+	t.Run("listing what is there", func(t *testing.T) {
+		t.Parallel()
+		_, err := credList(refused)
+		require.Error(t, err, "an empty answer would read as an account that has saved nothing")
+	})
+}
+
+// A passphrase over the store's cap is refused where it is written, not only
+// where it is encoded. Truncating one would store a secret that is not the
+// passphrase, and every later use would fail against a key whose passphrase the
+// user knows they saved.
+// The name is a throwaway with a cleanup even though nothing should ever be
+// written under it: what this test guards against is precisely a write that
+// happens when it should not, and a guard that leaves an entry behind the day
+// it catches something is not one to run on somebody's own machine.
+func TestAPassphraseTooLongForTheStoreStopsTheWrite(t *testing.T) {
+	needsRealStore(t)
+
+	target := throwawayTarget(t, "too-long")
+
+	err := credWrite(credential{Target: target, Secret: strings.Repeat("x", maxCredentialBlobSize)})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "too long", "the limit that was met is what the caller is told")
+
+	_, found, readErr := credRead(target)
+	require.NoError(t, readErr)
+	assert.False(t, found,
+		"a passphrase that was refused is not one that was quietly shortened and stored")
+}
+
+// What the store refuses for a reason of its own is reported as a failure,
+// naming the entry — and told apart from the entry simply not being there,
+// which is the ordinary state of a key whose passphrase was never saved.
+//
+// Nothing is stored by any of these: the store rejects the call, and a name it
+// will not take is a name it never files anything under.
+func TestWhatTheStoreItselfRefusesIsReportedAndNotReadAsAbsent(t *testing.T) {
+	needsRealStore(t)
+
+	// Longer than this system will take for a name, which is how the store is
+	// made to refuse without anything being asked of the account's own entries.
+	refused := strings.Repeat("x", 40000)
+
+	t.Run("writing", func(t *testing.T) {
+		require.Error(t, credWrite(credential{Target: refused, Secret: "s"}))
+	})
+
+	t.Run("reading", func(t *testing.T) {
+		_, found, err := credRead(refused)
+		require.Error(t, err, "a store that refused the question did not answer that there is no entry")
+		assert.False(t, found)
+	})
+
+	t.Run("removing", func(t *testing.T) {
+		removed, err := credDelete(refused)
+		require.Error(t, err)
+		assert.False(t, removed, "a removal that was refused is not a removal that happened")
+	})
+
+	t.Run("listing", func(t *testing.T) {
+		_, err := credList(refused)
+		require.Error(t, err,
+			"an empty list would say this account has saved no passphrases, which is a different thing entirely")
+	})
+}

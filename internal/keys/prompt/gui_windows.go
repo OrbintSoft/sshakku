@@ -42,12 +42,18 @@ type userObjectFlags struct {
 // call failed: it carries the last error either way, and after a call that
 // succeeded that is whatever happened before it.
 func thisSessionsStation() (WindowStation, error) {
-	station, _, err := procGetProcessWindowStation.Call()
+	station, _, err := processWindowStation()
 	if station == 0 {
 		return WindowStation{}, err
 	}
 	return stationFlags(station)
 }
+
+// processWindowStation is the call that names the station this process is in.
+// It is a variable because a process always belongs to one: there is no session
+// a test can be run in where this refuses, and what is done about a refusal is
+// worth holding all the same.
+var processWindowStation = procGetProcessWindowStation.Call
 
 // stationFlags reads one station's USEROBJECTFLAGS.
 //
@@ -68,14 +74,22 @@ func stationFlags(station uintptr) (WindowStation, error) {
 	if r == 0 {
 		return WindowStation{}, err
 	}
-	// The system says how much it filled in, and that is the only chance to
-	// notice that the struct above no longer matches the one it was filling:
-	// a field added, removed or reordered reads the wrong bytes and answers
-	// confidently with them, and the bytes in question decide whether anybody
-	// can see the window.
-	if needed != uint32(unsafe.Sizeof(flags)) {
+	return stationAsDescribed(flags, needed)
+}
+
+// stationAsDescribed turns what the call filled in into an answer, once it is
+// established that the call succeeded.
+//
+// The size is the only chance to notice that the struct this build declares no
+// longer matches the one the system was filling: a field added, removed or
+// reordered reads the wrong bytes and answers confidently with them, and the
+// bytes in question decide whether anybody can see the window. It is taken
+// apart from the call because that is the half a test can put a wrong answer
+// to — the system itself will only ever fill the size it agreed to.
+func stationAsDescribed(flags userObjectFlags, filled uint32) (WindowStation, error) {
+	if filled != uint32(unsafe.Sizeof(flags)) {
 		return WindowStation{}, fmt.Errorf("%w: it filled %d bytes where USEROBJECTFLAGS is %d",
-			errStationNotAsDescribed, needed, unsafe.Sizeof(flags))
+			errStationNotAsDescribed, filled, unsafe.Sizeof(flags))
 	}
 	return WindowStation{Flags: flags.Flags}, nil
 }

@@ -224,3 +224,71 @@ func TestAStoreThatFailsSaysSoRatherThanLookingEmpty(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "the store said no")
 }
+
+// A backend nobody handed a store to uses this system's own.
+//
+// Every test above hands one in, which is what makes the decisions checkable —
+// and it is also what would let this default quietly become something else
+// with nothing going red, while every use in production went through it.
+func TestABackendNobodyGaveAStoreToUsesThisSystemsOwn(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, systemCredentialStore{}, (&CredentialManager{}).store(),
+		"the zero value is the one production uses, so it has to be the real store")
+
+	handed := newFakeCredentialStore()
+	assert.Same(t, handed, (&CredentialManager{credentials: handed}).store(),
+		"and a store that was handed in is not swapped for the real one")
+}
+
+// F54: the four calls that carry an entry between this backend and the store
+// this system keeps, driven against the real store rather than a stand-in.
+//
+// They are four one-line delegations, which is exactly why they are worth a
+// test. Nothing above them can tell whether Delete was wired to the call that
+// deletes or to the one that reads, and every test above hands in a store of
+// its own, so all of them would agree with either wiring. What this checks is
+// the wiring itself, and wiring to a system library can only be checked by
+// using it.
+//
+// One entry, named so no other run can collide with it, and gone when the test
+// ends whatever happens in between.
+func TestTheStoreThisSystemKeepsIsReachedByEachCallInTurn(t *testing.T) {
+	needsRealStore(t)
+
+	store := systemCredentialStore{}
+	target := throwawayTarget(t, "backend-wiring")
+	const passphrase = "the-one-that-was-put-in"
+
+	_, found, err := store.Read(target)
+	require.NoError(t, err, "asking about an entry nobody has written is not a failure")
+	require.False(t, found, "and there must be nothing there yet, or what follows proves nothing")
+
+	require.NoError(t, store.Write(credential{
+		Target:  target,
+		Comment: "written by a test",
+		User:    ServicePrefixOrDefault(""),
+		Secret:  passphrase,
+	}))
+
+	got, found, err := store.Read(target)
+	require.NoError(t, err)
+	require.True(t, found, "what was written is there to be read")
+	assert.Equal(t, passphrase, got.Secret, "and it is what was written, not something near it")
+
+	names, err := store.List(target)
+	require.NoError(t, err)
+	assert.Contains(t, names, target, "an entry that is there is one this account's own listing finds")
+
+	removed, err := store.Delete(target)
+	require.NoError(t, err)
+	assert.True(t, removed, "the entry was there, so removing it removed something")
+
+	_, found, err = store.Read(target)
+	require.NoError(t, err)
+	assert.False(t, found, "and afterwards there is nothing left to read")
+
+	removed, err = store.Delete(target)
+	require.NoError(t, err, "forgetting an already-forgotten entry is not a failure")
+	assert.False(t, removed, "but it is reported as having removed nothing, which is what happened")
+}
