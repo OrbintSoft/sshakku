@@ -15,5 +15,9 @@ import (
 type TTY struct{}
 
 func (TTY) Prompt(question string, secret bool) (string, error) {
+	// Reads the real console (CONIN$/CONOUT$); this is the production
+	// prompt.TTY implementation that unit tests replace with a fake, so its body
+	// cannot run in a unit test.
+	//coverage:ignore
 	return prompt.ReadTTYLine(question, secret)
 }
