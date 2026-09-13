@@ -117,3 +117,109 @@ func TestARefusalToEnableNobodyAnticipatedStillSaysWhatHappened(t *testing.T) {
 		"what the service manager said is kept, not replaced by a sentence of ours")
 	assert.Contains(t, err.Error(), "ssh-agent", "and which service it was about")
 }
+
+// configWrite is what a service's configuration was asked to be written with.
+// A test asks about the call, because a machine inspected afterwards cannot
+// tell a field that was left alone from one rewritten to the value it already
+// had.
+type configWrite struct {
+	calls            int
+	handle           windows.Handle
+	serviceType      uint32
+	startType        uint32
+	errorControl     uint32
+	binaryPathName   *uint16
+	loadOrderGroup   *uint16
+	tagID            *uint32
+	dependencies     *uint16
+	serviceStartName *uint16
+	password         *uint16
+	displayName      *uint16
+}
+
+// withChangeServiceConfigAnswering puts a fixed answer in the place of the call
+// that writes a service's configuration, and reports back what it was given.
+func withChangeServiceConfigAnswering(t *testing.T, answer error) *configWrite {
+	t.Helper()
+	restore := changeServiceConfig
+	t.Cleanup(func() { changeServiceConfig = restore })
+	made := &configWrite{}
+	changeServiceConfig = func(handle windows.Handle, serviceType, startType, errorControl uint32,
+		binaryPathName, loadOrderGroup *uint16, tagID *uint32,
+		dependencies, serviceStartName, password, displayName *uint16,
+	) error {
+		made.calls++
+		made.handle = handle
+		made.serviceType, made.startType, made.errorControl = serviceType, startType, errorControl
+		made.binaryPathName, made.loadOrderGroup, made.tagID = binaryPathName, loadOrderGroup, tagID
+		made.dependencies, made.serviceStartName = dependencies, serviceStartName
+		made.password, made.displayName = password, displayName
+		return answer
+	}
+	return made
+}
+
+// F55: enabling asks for one thing. The service manager is given the start type
+// and, for every other field, the word that means leave this as it is — so a
+// service enabled here keeps the program it runs, the account it runs as, the
+// name it is listed under and everything else it was set to.
+//
+// It is checked at the call rather than on the machine afterwards, because a
+// machine inspected later cannot tell a field left alone from one rewritten to
+// the value it already had. The day one of these arguments is something else,
+// sshakku doctor --fix is a command that reconfigures a system service on its
+// way to enabling it, which is a far larger thing than the report offered to do
+// and one nobody would notice until after it had happened.
+func TestEnablingChangesHowTheServiceStartsAndNothingElseAboutIt(t *testing.T) {
+	withServiceHandlesOpenedFor(t, windows.SERVICE_QUERY_STATUS)
+	written := withChangeServiceConfigAnswering(t, nil)
+
+	require.NoError(t, systemService{}.enable(t.Context()))
+
+	require.Equal(t, 1, written.calls, "the configuration is written once")
+	assert.NotZero(t, written.handle, "through the handle that was opened to change it")
+	assert.Equal(t, uint32(windows.SERVICE_AUTO_START), written.startType,
+		"the service is set back to starting by itself, which is what a system nobody has changed has it at")
+	assert.Equal(t, uint32(windows.SERVICE_NO_CHANGE), written.serviceType,
+		"what kind of service it is stays as it is")
+	assert.Equal(t, uint32(windows.SERVICE_NO_CHANGE), written.errorControl,
+		"and so does what this system does when it fails to start")
+	assert.Nil(t, written.binaryPathName, "the program it runs is not rewritten on the way to enabling it")
+	assert.Nil(t, written.serviceStartName, "nor the account it runs as")
+	assert.Nil(t, written.password, "nor that account's password")
+	assert.Nil(t, written.displayName, "nor the name somebody reads in the services list")
+	assert.Nil(t, written.loadOrderGroup, "nor where it comes in the order things are started")
+	assert.Nil(t, written.tagID, "nor its place within that")
+	assert.Nil(t, written.dependencies, "nor what it waits for")
+}
+
+// F55: a refusal met at the write itself, rather than at the handle, is still
+// the enabling sentence — and still sends somebody to run this same command
+// again with what it needs, instead of to the other command entirely.
+//
+// The handle carries reading the service's state and nothing else, so the
+// service manager turns the write down. Nothing is written, and nothing could
+// be: the right to write was never on the handle.
+func TestAWriteTheServiceManagerRefusesIsStillTheEnablingSentence(t *testing.T) {
+	withServiceHandlesOpenedFor(t, windows.SERVICE_QUERY_STATUS)
+
+	err := systemService{}.enable(t.Context())
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "sshakku doctor --fix",
+		"what puts it right is this command, run again with what it needs")
+	assert.NotContains(t, err.Error(), "Start-Service",
+		"a refused write is not a refused start, and does not send anybody to the command for one")
+}
+
+// F55: a service that is not there is not written to. The refusal arrives at the
+// handle, and what comes after the handle never runs — so a system without the
+// service is one this leaves alone entirely, rather than one it attempts a write
+// on and is turned down by.
+func TestAServiceThatIsNotThereIsNeverWrittenTo(t *testing.T) {
+	written := withChangeServiceConfigAnswering(t, nil)
+
+	require.Error(t, systemService{Name: noSuchService}.enable(t.Context()))
+
+	assert.Zero(t, written.calls, "there was nothing to write to, so nothing was written")
+}
