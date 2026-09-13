@@ -27,10 +27,10 @@ func TestRandomHandoffTokenReadError(t *testing.T) {
 		"a token that is not random is one another process can guess, so an RNG that failed must stop the handoff")
 }
 
-// TestFetchHandoffMalformedToken covers Fetch (and its platform
-// Fetch) rejecting a token it cannot redeem: a non-numeric keyring
-// serial on Linux, an undialable socket path on Darwin, and on Windows a
-// handoff there is no mechanism for at all.
+// TestFetchHandoffMalformedToken covers each system's Fetch rejecting a token
+// it cannot redeem: a non-numeric keyring serial where the keyring holds the
+// passphrase, and a socket path nothing is listening at where a rendezvous
+// does.
 func TestFetchHandoffMalformedToken(t *testing.T) {
 	_, err := Fetch(t.Context(), "definitely-not-a-valid-handoff-token")
 	assert.Error(t, err, "a handle no stash was made under can redeem nothing")
