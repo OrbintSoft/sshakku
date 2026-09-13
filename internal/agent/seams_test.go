@@ -1,5 +1,3 @@
-//go:build unix
-
 package agent
 
 import (
@@ -8,10 +6,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"golang.org/x/sys/unix"
 
 	"github.com/OrbintSoft/sshakku/internal/agent/inspect"
-
 	"github.com/OrbintSoft/sshakku/internal/testtmp"
 )
 
@@ -38,6 +34,14 @@ func (l *nthErrLister) Agents() ([]inspect.AgentProc, error) {
 
 // TestEnsureAgentForeignSurveyError covers EnsureAgent's error return when the
 // healthy-agent survey (the second process scan, after a successful reap) fails.
+//
+// What a session must not do is decide there are no agents about because it
+// could not look: that reads as an empty machine, and an empty machine is one
+// this starts another agent on. The survey and the reap go through the same
+// collaborator, which is why the failure is aimed at the second call alone.
+//
+// The lifecycle this exercises is nobody's platform in particular, so neither
+// is the test: every system that runs EnsureAgent runs this branch.
 func TestEnsureAgentForeignSurveyError(t *testing.T) {
 	dir := testtmp.ShortDir(t)
 	fixed := filepath.Join(dir, "agent.sock")
@@ -51,16 +55,4 @@ func TestEnsureAgentForeignSurveyError(t *testing.T) {
 	_, err := m.EnsureAgent(t.Context(), EnsureConfig{FixedSock: fixed, OurUID: 1000}, nil)
 	assert.Error(t, err, "a healthy-agent survey that cannot read the process list must be reported")
 	assert.Equal(t, 2, lister.calls, "Agents is called twice: reap then survey")
-}
-
-// TestFlockLockerFlockError covers Lock's fatal branch: a flock failure other than
-// EWOULDBLOCK closes the file and returns the error rather than proceeding unlocked.
-func TestFlockLockerFlockError(t *testing.T) {
-	orig := flock
-	t.Cleanup(func() { flock = orig })
-	flock = func(int, int) error { return unix.EINVAL }
-
-	path := filepath.Join(t.TempDir(), "agent.lock")
-	_, err := (FlockLocker{}).Lock(path)
-	assert.Error(t, err, "a non-EWOULDBLOCK flock failure must be reported")
 }

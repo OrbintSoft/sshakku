@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sys/unix"
 )
 
 func TestFlockLockerSerialises(t *testing.T) {
@@ -46,4 +47,16 @@ func TestFlockLockerOpenError(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "no-such-dir", "agent.lock")
 	_, err := (FlockLocker{}).Lock(path)
 	assert.Error(t, err, "a lock file that cannot be opened must be reported")
+}
+
+// TestFlockLockerFlockError covers Lock's fatal branch: a flock failure other than
+// EWOULDBLOCK closes the file and returns the error rather than proceeding unlocked.
+func TestFlockLockerFlockError(t *testing.T) {
+	orig := flock
+	t.Cleanup(func() { flock = orig })
+	flock = func(int, int) error { return unix.EINVAL }
+
+	path := filepath.Join(t.TempDir(), "agent.lock")
+	_, err := (FlockLocker{}).Lock(path)
+	assert.Error(t, err, "a non-EWOULDBLOCK flock failure must be reported")
 }
