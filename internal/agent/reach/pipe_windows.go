@@ -204,6 +204,13 @@ func ownerOf(handle windows.Handle) (*windows.SID, error) {
 	}
 	owner, _, err := descriptor.Owner()
 	if err != nil {
+		// The descriptor above was asked for the owner and was returned, so it
+		// holds one: a descriptor that answered the question without carrying the
+		// answer is not something this system hands back. Handled because the
+		// alternative is reading an owner out of a result nobody looked at, and
+		// what that owner is compared against decides whether this speaks on the
+		// endpoint at all.
+		//coverage:ignore
 		return nil, err
 	}
 	return owner.Copy()
