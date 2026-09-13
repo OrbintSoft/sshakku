@@ -177,6 +177,10 @@ func keepPreviousPath(scope Scope, raw string, kind uint32) error {
 	}
 	content, err := json.MarshalIndent(pathBackup{Value: raw, Kind: kind, Scope: scope}, "", "  ")
 	if err != nil {
+		// A string, a number and a scope: there is no value of this record the
+		// encoder refuses, so nothing can arrive here. It is handled because the
+		// alternative is writing a file from a result nobody looked at.
+		//coverage:ignore
 		return fmt.Errorf("recording the previous search list: %w", err)
 	}
 	// The same directory the hook goes in, made the same way: it is written for
@@ -273,6 +277,9 @@ func announceEnvironmentChange() {
 
 	environment, err := windows.UTF16PtrFromString("Environment")
 	if err != nil {
+		// The only string this conversion refuses is one with a NUL inside it,
+		// and this one is a literal written here.
+		//coverage:ignore
 		return
 	}
 	var result uintptr

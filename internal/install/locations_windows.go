@@ -23,6 +23,10 @@ func locationsFor(scope Scope, lookup func(string) (string, bool)) (Locations, e
 		}
 		hook, err := directory(lookup, "LOCALAPPDATA", "sshakku")
 		if err != nil {
+			// The same variable was read a line above, so an environment that
+			// answered for it once answers again: this is handled because the
+			// alternative is a path built from a result nobody looked at.
+			//coverage:ignore
 			return Locations{}, err
 		}
 		return Locations{BinDir: bin, HookDir: hook}, nil

@@ -99,15 +99,23 @@ func writableOnlyByTheMachinesOwn() (*windows.SecurityAttributes, error) {
 		})
 	}
 
+	// The three below are handled and cannot be reached: every entry is built
+	// here from an account this system has just named, a descriptor is refused
+	// only when the system cannot allocate one, and a list that was accepted is
+	// not then refused by the descriptor it is put on. What a wrong table does is
+	// met above, where the account is named.
 	list, err := windows.ACLFromEntries(entries, nil)
 	if err != nil {
+		//coverage:ignore
 		return nil, fmt.Errorf("building the permissions of a shared directory: %w", err)
 	}
 	permissions, err := windows.NewSecurityDescriptor()
 	if err != nil {
+		//coverage:ignore
 		return nil, fmt.Errorf("building the permissions of a shared directory: %w", err)
 	}
 	if err := permissions.SetDACL(list, true, false); err != nil {
+		//coverage:ignore
 		return nil, fmt.Errorf("building the permissions of a shared directory: %w", err)
 	}
 	return &windows.SecurityAttributes{

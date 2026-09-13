@@ -3,6 +3,7 @@
 package install
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 	"unsafe"
@@ -175,6 +176,64 @@ func TestAMachineWideInstallMakesTheDirectoryItSharesWritableByNobodyElse(t *tes
 		[]string{wellKnown(t, windows.WinLocalSystemSid), wellKnown(t, windows.WinBuiltinAdministratorsSid)},
 		accountsThatMayWriteIn(t, filepath.Dir(out.HookFile)),
 		"the hook an install writes goes in a directory only the machine's own may write")
+}
+
+// F44: a directory the machine shares that cannot be made says so, naming the
+// path — each of the three ways it can refuse, which are met at three different
+// moments and would otherwise be three ways of failing with nothing to read.
+func TestASharedDirectoryThatCannotBeMadeIsReportedWithThePath(t *testing.T) {
+	t.Run("something that is not a directory where the directory above it goes", func(t *testing.T) {
+		parent := filepath.Join(t.TempDir(), "not-a-directory")
+		require.NoError(t, os.WriteFile(parent, []byte("somebody's own"), 0o600))
+
+		err := makeDirectoryTheMachineShares(filepath.Join(parent, "sshakku"))
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), parent, "the directory that could not be made is the one to name")
+	})
+
+	t.Run("a name this system will not have", func(t *testing.T) {
+		refused := filepath.Join(t.TempDir(), "sshakku|not-a-name")
+
+		err := makeDirectoryTheMachineShares(refused)
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), refused)
+	})
+
+	// A path with a NUL in it is not a path this system can be asked about at
+	// all, and the asking is where that is met. It arrives from the environment,
+	// which is a place this program does not get to choose what it is handed.
+	t.Run("a path this system cannot be asked about", func(t *testing.T) {
+		refused := filepath.Join(t.TempDir(), "sshakku\x00hidden")
+
+		err := makeDirectoryTheMachineShares(refused)
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "sshakku")
+	})
+}
+
+// F59: the permissions are the reason this directory is made the way it is, so
+// permissions that cannot be built are not a detail to carry on without. A
+// directory made without them is the one outcome that must not happen: every
+// account on the machine could then write what every login on it runs.
+func TestASharedDirectoryIsNotMadeAtAllWhenItsPermissionsCannotBe(t *testing.T) {
+	// An account this system cannot name. The table is data, and data this
+	// system will not answer for must stop the step rather than thin it.
+	previous := whoMayDoWhat
+	whoMayDoWhat = []struct {
+		account windows.WELL_KNOWN_SID_TYPE
+		may     windows.ACCESS_MASK
+	}{{account: windows.WELL_KNOWN_SID_TYPE(0x7fffffff), may: windows.GENERIC_ALL}}
+	t.Cleanup(func() { whoMayDoWhat = previous })
+	shared := filepath.Join(t.TempDir(), "sshakku")
+
+	err := makeDirectoryTheMachineShares(shared)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "accounts", "what could not be named is what to say")
+	assert.NoDirExists(t, shared, "and nothing is left behind that every account could write into")
 }
 
 // F59: a directory that is already there is left exactly as it was found. What
