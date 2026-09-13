@@ -80,6 +80,16 @@ macOS). The askpass half of this check only applies to your own session;
 `--user` reports never inspect it, since it describes the invoking shell's
 environment, not the target's.
 
+There is a second cause with the same symptom, and the report tells them apart
+rather than leaving you to. `SSH_ASKPASS` is also unset in a shell where the
+wiring ran perfectly well but `sshakku-askpass` is not beside `sshakku` — the
+lines are printed together or not at all, because forcing `ssh` to a helper
+that is not there would take away its own prompt and put nothing in its place.
+When that is what happened, the finding names the missing program instead, and
+says outright that opening a shell will not put it back: no session can wire an
+export pointing at a file that does not exist. Installing sshakku is what puts
+it there.
+
 ### Keys and their remaining time
 
 The ssh-agent protocol has no query for a key's remaining lifetime, so sshakku

@@ -14,7 +14,11 @@ run.
    which you never run yourself. This is `make`'s work on every platform. The
    second name is a link to the same file wherever the system makes links
    cheaply, and it carries whatever that system puts at the end of a program's
-   name, so on Windows it is `sshakku-askpass.exe` beside `sshakku.exe`.
+   name, so on Windows it is `sshakku-askpass.exe` beside `sshakku.exe`. A copy
+   of the program without it is not left to fail quietly: nothing is exported
+   into your shell pointing at a helper that is not there, loading a key says
+   once that the program is missing and names it, and `sshakku doctor` reports
+   it as a finding of its own.
 2. **Wires a login hook into one shell startup file**, so every new session has
    a working agent without your doing anything.
 3. **Makes `sshakku` runnable by name**, which on some systems the first step

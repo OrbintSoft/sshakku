@@ -165,7 +165,16 @@ func findings(in Inputs, r Report) []string {
 	if r.InspectErr != nil && !keepsNoAgentProcessList(r) {
 		f = append(f, fmt.Sprintf("could not enumerate processes: %v (report is partial)", r.InspectErr))
 	}
-	if !in.EnvUnreadable && (in.EnvAskpass == "" || in.EnvAskpassRequire == "") {
+	// Two causes of one symptom, and only one of them is put right by opening a
+	// shell. Where the helper is not there the exports are deliberately never
+	// printed — a shell pointed at a program that is not there could no longer
+	// be asked for a passphrase at all — so the shell has no SSH_ASKPASS, which
+	// is exactly what a shell nobody wired looks like. The one that names a
+	// missing file wins, because it is the one with something to do about it.
+	switch {
+	case in.AskpassProgThere != nil && !*in.AskpassProgThere:
+		f = append(f, askpassProgMissingMsg(in.AskpassProg))
+	case !in.EnvUnreadable && (in.EnvAskpass == "" || in.EnvAskpassRequire == ""):
 		f = append(f, askpassNotWiredMsg)
 	}
 	f = append(f, hostFindings(r.Host)...)

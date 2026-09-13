@@ -117,11 +117,42 @@ func (d deps) askpassEnv(stdout, stderr io.Writer, args []string) int {
 		_, _ = fmt.Fprintf(stderr, "sshakku: %v\n", err)
 		return 1
 	}
+	// A shell is handed both lines or neither. The pair does not degrade: what
+	// REQUIRE=force buys is that ssh consults the helper in a session with no
+	// display, and what it costs is ssh's own prompt — so pointing it at a
+	// program that is not there leaves a session with no way of being asked for
+	// a passphrase at all, rather than a worse one. Printing nothing leaves the
+	// shell as it would be on a machine where SSHakku was never installed,
+	// which is a shell that can still be asked. What is missing is named by
+	// `sshakku doctor`, and said once on the terminal by the loader; a line
+	// from here would be a third telling of it, in every session.
+	if keys.CanAskWith(askpassProg(self)) != nil {
+		return 0
+	}
 	if _, err := io.WriteString(stdout, askpassExports(dialect, self)); err != nil {
 		_, _ = fmt.Fprintf(stderr, "sshakku: %v\n", err)
 		return 1
 	}
 	return 0
+}
+
+// askpassHelperHere names the program this build points a shell at for a
+// passphrase, and whether it is there — a nil answer where this program cannot
+// say where it is itself, since a helper looked for beside nowhere is not one
+// that was found absent.
+//
+// It is asked of this binary rather than of the shell's SSH_ASKPASS on purpose.
+// Where the helper is gone the exports are never printed, so the variable is
+// unset, and reading the absence of a variable would report the one thing a new
+// login shell cannot fix as the one thing it can.
+func askpassHelperHere() (prog string, there *bool) {
+	self, err := os.Executable()
+	if err != nil {
+		return "", nil
+	}
+	prog = askpassProg(self)
+	found := keys.CanAskWith(prog) == nil
+	return prog, &found
 }
 
 // askpassExports returns the lines, in the caller's own shell language, that

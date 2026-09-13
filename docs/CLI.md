@@ -106,6 +106,15 @@ $env:SSH_ASKPASS_REQUIRE = 'force'
 `sshakku-askpass` is installed alongside `sshakku` and is the program `ssh`
 runs when it needs a passphrase; you never run it yourself.
 
+Where it is **not** there, nothing is printed at all — not one line of the two.
+They go together: `SSH_ASKPASS_REQUIRE=force` is what takes away `ssh`'s own
+terminal prompt, so a shell pointed at a helper that is not there could no
+longer be asked for a passphrase by anything. Printing nothing leaves the shell
+as it would be on a machine where sshakku was never installed, which is a shell
+that can still be asked. The command still exits 0, since a session that cannot
+be wired this way is not a failed session; `sshakku doctor` names the program
+that is missing.
+
 Every session gets them, with or without a desktop: reading the wallet needs
 no graphical prompter, and when the wallet has no entry the broker asks on the
 terminal just as `ssh` would have. The login hook evals this in every login
