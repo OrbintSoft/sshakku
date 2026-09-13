@@ -145,8 +145,12 @@ func windowFor(hwnd windows.HWND) (*passphraseWindow, bool) {
 
 // errClass is whatever the one class registration came to, kept so that every
 // window after the first is told the same thing rather than a nil error.
+// It is held behind a pointer rather than as a value so that the one
+// registration can be put back to never-having-run, which is the only way to
+// reach what happens when it fails: it succeeds the first time it is asked in
+// any process, and a class cannot be registered twice under the same name.
 var (
-	classOnce sync.Once
+	classOnce = new(sync.Once)
 	errClass  error
 )
 
@@ -351,11 +355,19 @@ func passphraseWndProc(hwnd, message, wParam, lParam uintptr) uintptr {
 func moduleHandle() (windows.Handle, error) {
 	const unchangedRefcount = 0x00000002
 	var h windows.Handle
-	if err := windows.GetModuleHandleEx(unchangedRefcount, nil, &h); err != nil {
+	if err := getModuleHandleEx(unchangedRefcount, nil, &h); err != nil {
 		return 0, fmt.Errorf("%w: %w", errNoWindow, err)
 	}
 	return h, nil
 }
+
+// getModuleHandleEx is asked for this program's own module, which is the one
+// case this call has no way of failing in. It is a variable because everything
+// that draws the box is created against what it hands back, so what happens
+// when there is nothing to create against is worth holding: the answer must be
+// that no box is drawn and the caller is told, rather than a window built on a
+// handle of zero.
+var getModuleHandleEx = windows.GetModuleHandleEx
 
 // registerWindowClass registers this window's class, once for the process. A
 // second registration of the same name fails, and a class outlives every window
@@ -516,12 +528,21 @@ func (w *passphraseWindow) makeFont(dpi uint32) windows.Handle {
 // systemDPI is what this screen is set to, or the 96 every measurement in the
 // documentation assumes where the system is too old to be asked.
 func systemDPI() uint32 {
-	if err := procGetDpiForSystem.Find(); err != nil {
-		return 96
-	}
-	dpi, _, _ := procGetDpiForSystem.Call()
-	if dpi == 0 {
+	dpi, asked := screenDPI()
+	if !asked || dpi == 0 {
 		return 96
 	}
 	return uint32(dpi) //nolint:gosec // G115 sees the narrowing of what GetDpiForSystem returned through a uintptr
+}
+
+// screenDPI asks this system what the screen is set to, and says whether it
+// could be asked at all. It is a variable because a machine new enough to run
+// this has the call, and a machine that has it answers: neither the system too
+// old to be asked nor the answer of nothing can be arranged on one that works.
+var screenDPI = func() (uintptr, bool) {
+	if err := procGetDpiForSystem.Find(); err != nil {
+		return 0, false
+	}
+	dpi, _, _ := procGetDpiForSystem.Call()
+	return dpi, true
 }

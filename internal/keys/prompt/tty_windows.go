@@ -38,6 +38,16 @@ var (
 	writeConsole   = writeRealConsole
 )
 
+// The two calls openRealConsole and readRealConsole are built out of, kept
+// separately so those two are exercisable as well. A console either opens for
+// this session or does not, and which of its two halves refused is not
+// something a session that has one can be asked to demonstrate — nor can a read
+// be made to fail by anyone who is not at the keyboard.
+var (
+	openConsoleHandle = openConsoleFile
+	readConsoleInto   = windows.ReadConsole
+)
+
 // ReadTTYLine writes prompt to the console and reads one line back from it,
 // optionally with echo disabled. Where there is no console the open fails
 // immediately — it never blocks waiting for one to appear — reported as
@@ -104,12 +114,15 @@ func disableEcho(in windows.Handle) (func(), error) {
 // openRealConsole opens this session's console by name and returns it with the
 // function that closes it again.
 func openRealConsole() (console, func(), error) {
-	in, err := openConsoleFile("CONIN$")
+	in, err := openConsoleHandle("CONIN$")
 	if err != nil {
 		return console{}, func() {}, err
 	}
-	out, err := openConsoleFile("CONOUT$")
+	out, err := openConsoleHandle("CONOUT$")
 	if err != nil {
+		// The half that did open is given back before this returns. A session
+		// that failed to be asked must not also be a session holding a handle
+		// to the console nobody asked on.
 		_ = windows.CloseHandle(in)
 		return console{}, func() {}, err
 	}
@@ -142,7 +155,7 @@ func readRealConsole(in windows.Handle) (string, error) {
 	// is a bound rather than an expectation.
 	buf := make([]uint16, 4096)
 	var read uint32
-	if err := windows.ReadConsole(in, &buf[0], uint32(len(buf)), &read, nil); err != nil { //nolint:gosec // G115 sees the length of the buffer declared two lines above
+	if err := readConsoleInto(in, &buf[0], uint32(len(buf)), &read, nil); err != nil { //nolint:gosec // G115 sees the length of the buffer declared two lines above
 		return "", err
 	}
 	return string(utf16.Decode(buf[:read])), nil

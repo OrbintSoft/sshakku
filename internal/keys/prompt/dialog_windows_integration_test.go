@@ -149,3 +149,50 @@ func TestABoxNobodyAnsweredIsNotADismissal(t *testing.T) {
 	assert.ErrorIs(t, err, errBudgetRanOut, "and it says so as something a caller can match on")
 	assert.NotErrorIs(t, err, ErrCanceled, "it is emphatically not the user's decision")
 }
+
+// F37: a control that cannot be made stops the box being drawn at all.
+//
+// The alternative is what makes this worth a test: a window that appears with
+// one of its four controls missing. A box with no edit field is one a person
+// looks at, cannot answer, and closes — which this program then reads as them
+// declining to give the passphrase. Every other outcome of a dialog is
+// something the user chose; that one is not.
+//
+// Each of the three ways one control can fail to be made is asked separately,
+// because they are met at different moments: two before the system is asked at
+// all, and one in its answer.
+func TestAControlThatCannotBeMadeIsReportedRatherThanDrawnMissing(t *testing.T) {
+	needsADesktopToDrawOn(t)
+
+	instance, err := moduleHandle()
+	require.NoError(t, err, "this program's own module is what a control is created against")
+
+	t.Run("a class name this system cannot spell", func(t *testing.T) {
+		w := &passphraseWindow{}
+
+		_, err := w.child(0, instance, "EDIT\x00nonsense", "", 0, 0, 0, 10, 10, 0)
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errNoWindow, "there is no box to answer, and that is what the caller is told")
+	})
+
+	t.Run("a label this system cannot spell", func(t *testing.T) {
+		w := &passphraseWindow{}
+
+		_, err := w.child(0, instance, "STATIC", "the key\x00name", 0, 0, 0, 10, 10, 0)
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errNoWindow)
+	})
+
+	t.Run("a class nothing ever registered", func(t *testing.T) {
+		w := &passphraseWindow{}
+
+		_, err := w.child(0, instance, "SSHakkuNoSuchControlClass", "text", 0, 0, 0, 10, 10, 0)
+
+		require.Error(t, err, "the system refused to make it, and a box is not drawn without it")
+		assert.ErrorIs(t, err, errNoWindow)
+		assert.Contains(t, err.Error(), "SSHakkuNoSuchControlClass",
+			"which control could not be made is what a person reading the log needs")
+	})
+}
