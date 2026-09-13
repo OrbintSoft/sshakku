@@ -565,6 +565,8 @@ func gatherReport(ctx context.Context, env paths.Env, layout paths.Layout, setti
 	}
 	shownEnv, secretEnv := environmentReport()
 	endpoint := platformEndpoint(layout)
+	helper, helperThere := askpassHelperHere()
+
 	return diagnose.Gather(ctx, diagnose.Inputs{
 		FixedSock:         endpoint.Native(),
 		FixedSockPosix:    endpoint.ForPosixShell(),
@@ -575,6 +577,8 @@ func gatherReport(ctx context.Context, env paths.Env, layout paths.Layout, setti
 		OurUID:            env.UID,
 		EnvAskpass:        os.Getenv("SSH_ASKPASS"),
 		EnvAskpassRequire: os.Getenv("SSH_ASKPASS_REQUIRE"),
+		AskpassProg:       helper,
+		AskpassProgThere:  helperThere,
 		Env:               shownEnv,
 		SecretEnv:         secretEnv,
 		NoAgentMechanism:  !agent.KeepsAgents(),

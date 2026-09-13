@@ -38,6 +38,11 @@ type KeyAdder interface {
 	// AddWithAskpass adds keyfile, handing passphrase to ssh-add out of band
 	// through the keyring + SSH_ASKPASS helper, so it never appears in argv.
 	AddWithAskpass(ctx context.Context, keyfile, passphrase string) (int, error)
+	// CanAsk reports whether there is a program to ask for a passphrase with,
+	// and says why not where there is none. Asked once before any key is
+	// considered, since without one every passphrase spent — stored or typed —
+	// comes back as though it were wrong.
+	CanAsk() error
 }
 
 // GiveupStore persists, per key, that loading was abandoned after the bounded
@@ -156,6 +161,15 @@ func (l Loader) LoadKeys(ctx context.Context) error {
 	sshAdd, err := l.SSHAdd.name()
 	if err != nil {
 		return fmt.Errorf("no ssh-add to reach the agent with: %w", err)
+	}
+	// Asked here for the same reason the one above is: both are things the
+	// whole batch needs, and neither is worth mentioning to an account with no
+	// key to load. Without a program to ask with, every passphrase spent below
+	// — the one in the wallet and every one the user types — comes back as
+	// though it were wrong, so the keys would be given up on one after another
+	// and nothing in any of it would name the cause.
+	if cannotAsk := l.Adder.CanAsk(); cannotAsk != nil {
+		return fmt.Errorf("no program to ask for a passphrase with: %w", cannotAsk)
 	}
 	loaded, err := AgentFingerprints(ctx, l.Runner, sshAdd)
 	if err != nil {

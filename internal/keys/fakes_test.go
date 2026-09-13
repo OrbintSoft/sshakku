@@ -43,6 +43,8 @@ type fakeSecret struct {
 	listServices []string
 	listErr      error
 
+	lookupCalls int
+
 	unlockErr   error
 	unlockCalls int
 	lockErr     error
@@ -52,6 +54,7 @@ type fakeSecret struct {
 type storeCall struct{ service, label, passphrase string }
 
 func (s *fakeSecret) Lookup(context.Context, string) (string, bool, error) {
+	s.lookupCalls++
 	return s.lookupPass, s.lookupFound, s.lookupErr
 }
 
@@ -90,7 +93,10 @@ type fakeKeyAdder struct {
 	withCodes []int // exit codes for successive AddWithAskpass calls.
 	err       error
 	calls     []addCall
+	cannotAsk error // what CanAsk answers; nil is an adder with a helper to ask through.
 }
+
+func (a *fakeKeyAdder) CanAsk() error { return a.cannotAsk }
 
 type addCall struct {
 	keyfile    string

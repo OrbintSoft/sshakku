@@ -24,9 +24,11 @@ func TestAskpassEnv(t *testing.T) {
 	t.Run("resolved path emits the export lines", func(t *testing.T) {
 		// The helper's path is derived from the binary's with filepath, so it
 		// comes back in this system's own spelling; what is asserted is the
-		// path made of these components, not one system's separator.
-		self := filepath.Join(filepath.FromSlash("/opt/sshakku/bin"), "sshakku")
-		helper := filepath.Join(filepath.FromSlash("/opt/sshakku/bin"), "sshakku-askpass"+programSuffix)
+		// path made of these components, not one system's separator. The two
+		// files are really there, because a helper that is not is a session
+		// these lines would take the last way of asking away from.
+		self := binaryBesideItsHelper(t)
+		helper := filepath.Join(filepath.Dir(self), "sshakku-askpass"+programSuffix)
 		d := realDeps()
 		d.self = func() (string, error) { return self, nil }
 		var out, errOut bytes.Buffer
@@ -41,9 +43,10 @@ func TestAskpassEnv(t *testing.T) {
 	// directory is the host's own, since where the helper sits is not what this
 	// is about and a path is spelled differently on each.
 	t.Run("the dialect asked for is what it prints", func(t *testing.T) {
-		dir := t.TempDir()
+		self := binaryBesideItsHelper(t)
+		dir := filepath.Dir(self)
 		d := realDeps()
-		d.self = func() (string, error) { return filepath.Join(dir, "sshakku"), nil }
+		d.self = func() (string, error) { return self, nil }
 		var out, errOut bytes.Buffer
 		require.Zerof(t, d.askpassEnv(&out, &errOut, []string{"--shell=powershell"}),
 			"askpassEnv; stderr=%q", errOut.String())
@@ -77,7 +80,8 @@ func TestAskpassEnv(t *testing.T) {
 
 	t.Run("stdout write error returns 1", func(t *testing.T) {
 		d := realDeps()
-		d.self = func() (string, error) { return "/opt/sshakku/bin/sshakku", nil }
+		self := binaryBesideItsHelper(t)
+		d.self = func() (string, error) { return self, nil }
 		var errOut bytes.Buffer
 		assert.Equal(t, 1, d.askpassEnv(errWriter{}, &errOut, nil),
 			"exports the shell never received must not be reported as delivered")
