@@ -107,3 +107,16 @@ func TestAReadingIsNotTakenForACallerWhoHasGoneAway(t *testing.T) {
 	assert.Equal(t, agentServiceName, reading.Name,
 		"which service was being asked about is known without asking anybody")
 }
+
+// Rule 28: how a service is started is read from the machine, and a caller who
+// has stopped waiting is not served. This one only reads, but the check is what
+// makes the answer come back at all: a report asked for by a shell that has
+// since gone is a report nobody will read.
+func TestHowAServiceStartsIsNotLookedUpForACallerWhoHasGoneAway(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	_, err := systemService{}.startType(ctx)
+
+	require.ErrorIs(t, err, context.Canceled)
+}

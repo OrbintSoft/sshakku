@@ -94,6 +94,31 @@ func TestADialogThisPlatformHasNotGotAsksOnTheTerminal(t *testing.T) {
 		"a name this platform has no dialog for sends the question to the terminal, not to another dialog")
 }
 
+// A session where nothing can draw is told there is no dialog, and is not
+// handed a chain that happens to end at the terminal.
+//
+// The two are the same question answered on the terminal either way, and they
+// are different answers to the caller: nil is what says the question is going
+// there because there was nowhere else for it to go. A chain would say a dialog
+// was found, which is what decides whether a session with nobody in front of it
+// is left waiting on a window.
+//
+// This is asked of the shared decision rather than of one platform's, because
+// every platform reaches it: a desktop whose toolkits are all missing, a
+// session with no screen, or a system that has only one dialog and it cannot
+// draw today.
+func TestNothingThatCanDrawIsNoDialogRatherThanTheTerminalDressedAsOne(t *testing.T) {
+	terminal := &fakeDialog{name: "the terminal", installed: true, answer: "the-one-typed-on-the-terminal"}
+
+	p := chooseDialog(t.Context(), []dialog{
+		{"pinentry", &fakeDialog{name: "pinentry"}},
+		{"zenity", &fakeDialog{name: "zenity"}},
+	}, "", terminal, nil)
+
+	assert.Nil(t, p,
+		"with nothing installed that can draw, the answer is that there is no dialog here")
+}
+
 // TestANamedDialogThatIsNotInstalledIsSaidSo verifies the sentence F37 makes
 // about a dialog the user chose and does not have: they are asked on the
 // terminal, and told which one could not ask. Being asked somewhere they were

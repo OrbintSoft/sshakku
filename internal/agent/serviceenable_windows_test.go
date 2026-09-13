@@ -93,3 +93,27 @@ func elevated(t *testing.T) bool {
 	token := windows.GetCurrentProcessToken()
 	return token.IsElevated()
 }
+
+// Rule 28 again, at the door this time: EnableAgentService is what the
+// diagnostic tool calls, and a caller that has stopped waiting must not have
+// the machine changed on its behalf. Nothing is opened and nothing is written.
+func TestTheMachineIsNotChangedForACallerWhoHasGoneAway(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	require.ErrorIs(t, EnableAgentService(ctx), context.Canceled,
+		"a caller who has gone away does not get a machine-wide change made for them")
+}
+
+// A refusal this code has no sentence of its own for is still reported, with
+// what the service manager said kept inside it. Answering only the two refusals
+// that were anticipated would leave every other one as a bare failure with
+// nothing in it to act on, and the service manager has a long list.
+func TestARefusalToEnableNobodyAnticipatedStillSaysWhatHappened(t *testing.T) {
+	err := systemService{Name: "ssh-agent"}.explainEnabling(errSomethingTheServiceManagerHas)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errSomethingTheServiceManagerHas,
+		"what the service manager said is kept, not replaced by a sentence of ours")
+	assert.Contains(t, err.Error(), "ssh-agent", "and which service it was about")
+}

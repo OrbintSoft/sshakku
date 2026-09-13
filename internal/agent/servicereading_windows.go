@@ -99,6 +99,11 @@ func serviceStartType(handle windows.Handle) (uint32, error) {
 			return 0, err
 		}
 	}
+	// Reaching here would be a service manager that asked for a bigger buffer,
+	// was given exactly the size it named, and then asked for more again. It is
+	// answered rather than looped on, because a loop would go round for as long
+	// as it kept asking.
+	//coverage:ignore
 	return 0, errServiceManagerKeptAsking
 }
 

@@ -28,6 +28,11 @@ func NewToolhelpAncestry() *SnapshotAncestry {
 func toolhelpSnapshot() ([]ProcessEntry, bool) {
 	handle, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
 	if err != nil {
+		// The table arrives whole or not at all, and this system declines to take
+		// one only when it cannot allocate it. What a refusal means is the
+		// caller's to decide, and the caller is handed this same answer by a
+		// snapshot it can arrange.
+		//coverage:ignore
 		return nil, false
 	}
 	defer func() { _ = windows.CloseHandle(handle) }()
@@ -35,6 +40,11 @@ func toolhelpSnapshot() ([]ProcessEntry, bool) {
 	var entry windows.ProcessEntry32
 	entry.Size = uint32(unsafe.Sizeof(entry))
 	if err := windows.Process32First(handle, &entry); err != nil {
+		// A snapshot that was taken holds at least the process that took it, so
+		// there is always a first entry to read. It is handled because a walk
+		// begun from an entry nobody read would report a tree built out of
+		// whatever the unfilled record happened to contain.
+		//coverage:ignore
 		return nil, false
 	}
 

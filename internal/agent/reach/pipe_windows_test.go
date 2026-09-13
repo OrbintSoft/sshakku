@@ -531,3 +531,110 @@ func serveAndWriteDownWhatWasOffered(t *testing.T, pipe, report string) {
 		require.Fail(t, "nobody connected to the pipe this half was asked to serve")
 	}
 }
+
+// A prober given no budget of its own still has one. Zero is what a caller
+// that never thought about it passes, and the wait it stands for is the
+// default rather than no wait at all — an endpoint that has gone quiet would
+// otherwise hold a login for as long as it stayed quiet.
+func TestAProberGivenNoBudgetStillHasOne(t *testing.T) {
+	p := PipeProber{}
+
+	assert.True(t, p.Reachable(t.Context(), fakeAgentPipe(t, pipeReplyIdentities(1))),
+		"an agent that answers is reached by a prober nobody set a timeout on")
+}
+
+// F58: a name this system cannot even be asked about is not an agent. It
+// arrives from configuration or from the environment, neither of which this
+// program chooses the contents of, and the answer has to be "no agent there"
+// rather than a panic or a name treated as reachable.
+func TestANameThisSystemCannotBeAskedAboutIsNotAnAgent(t *testing.T) {
+	answering, heldBy := PipeProber{Timeout: time.Second}.ReadEndpoint(t.Context(), `\.\pipe\openssh`+"\x00"+`-ssh-agent`)
+
+	assert.False(t, answering, "a name that cannot be looked up is not one an agent answers on")
+	assert.Empty(t, heldBy, "and nobody is named as holding a name nothing was asked about")
+}
+
+// F21: a caller that has stopped waiting is not kept waiting by an endpoint
+// whose one instance is busy. The budget bounds how long the wait *can* be;
+// only the caller giving up ends it sooner, and a login shell that has moved on
+// must not be held by a retry loop it is no longer interested in.
+func TestAnEndpointStillBusyWhenTheCallerGivesUpIsNotWaitedOutAnyway(t *testing.T) {
+	name := pipeName(t)
+	_, f := aPipeNamed(t, name)
+	t.Cleanup(func() { _ = f.Close() })
+	taken, err := openPipe(t.Context(), name, time.Now().Add(time.Second))
+	require.NoError(t, err, "taking the pipe's one instance and never letting it go")
+	t.Cleanup(func() { _ = windows.CloseHandle(taken) })
+
+	// A budget far longer than the test is willing to sit through, so what ends
+	// the wait can only be the caller and not the deadline.
+	ctx, giveUp := context.WithCancel(t.Context())
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		giveUp()
+	}()
+
+	start := time.Now()
+	reachable := PipeProber{Timeout: 30 * time.Second}.Reachable(ctx, name)
+
+	assert.False(t, reachable, "nothing answered, and the caller is not told otherwise")
+	assert.Less(t, time.Since(start), 5*time.Second,
+		"the caller stopped waiting, so the retry loop stopped with it rather than running out its own budget")
+}
+
+// An endpoint held by something that is not a named pipe's server still names
+// who holds it. The process that holds a name is worth saying where it can be
+// had, and where it cannot the account alone is still something to go and look
+// for — a reader given neither is told only that the name is taken.
+func TestSomethingHoldingANameThatNamesNoProcessStillNamesItsAccount(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "not-a-pipe")
+	require.NoError(t, os.WriteFile(path, nil, 0o600))
+	wide, err := windows.UTF16PtrFromString(path)
+	require.NoError(t, err)
+	handle, err := windows.CreateFile(wide, windows.GENERIC_READ, windows.FILE_SHARE_READ, nil,
+		windows.OPEN_EXISTING, 0, 0)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = windows.CloseHandle(handle) })
+
+	held := whoIsHolding(handle)
+
+	assert.NotEmpty(t, held, "something holds it, and the reader is told what")
+	assert.NotContains(t, held, "process ",
+		"no process id could be had here, and inventing one would send the reader after a number that means nothing")
+}
+
+// An account this machine cannot put a name to is still named as precisely as
+// it can be. A domain this machine cannot reach, or an account that no longer
+// exists, leaves the identifier itself — which is what an administrator looks
+// the account up by — and leaving it out would report an endpoint as held by
+// nobody at all.
+func TestAnAccountThisMachineCannotNameIsStillIdentified(t *testing.T) {
+	// Well formed, and from a domain that is not this one.
+	stranger, err := windows.StringToSid("S-1-5-21-1111111111-2222222222-3333333333-4444")
+	require.NoError(t, err)
+
+	assert.Equal(t, stranger.String(), accountName(stranger),
+		"an account with no name to be had is named by the one thing it does have")
+}
+
+// An account this system names without a domain is named without one. Writing
+// the separator anyway would produce a name that is not the account's, in a
+// report a person reads to find out who is holding their agent's endpoint.
+func TestAnAccountWithNoDomainIsNamedWithoutOne(t *testing.T) {
+	everyone, err := windows.CreateWellKnownSid(windows.WinWorldSid)
+	require.NoError(t, err)
+
+	name := accountName(everyone)
+
+	assert.NotEmpty(t, name)
+	assert.NotContains(t, name, `\`, "there is no domain here, so there is no separator to write")
+}
+
+// F58: an endpoint whose owner cannot be read is not one to speak on. The
+// refusal is the safe direction: an agent's own handshake proves only that
+// whatever is there knows the protocol, which is exactly what something after
+// your authentication would know.
+func TestAnEndpointWhoseOwnerCannotBeReadIsNotYourAgent(t *testing.T) {
+	assert.False(t, couldBeYourAgent(0, nil),
+		"nothing could be established about who holds it, and that is answered no rather than assumed yes")
+}

@@ -102,3 +102,43 @@ func TestACallerWhoHasGoneAwayIsNotServed(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 	require.ErrorIs(t, systemService{}.Start(ctx), context.Canceled)
 }
+
+// F51: the states the lifecycle acts on, read off the service manager's own
+// numbers. Running is adopted, stopped is started, starting is waited for, and
+// everything else — pausing, stopping, a state this system adds in a later
+// release — is waited on rather than acted on.
+//
+// The last of those is the one worth pinning. A state nobody anticipated must
+// not fall through to "stopped", because what a session does about stopped is
+// start a second agent, and doing that to a service that is merely on its way
+// somewhere is how a machine ends up with two.
+func TestTheServiceStatesThisLifecycleActsOn(t *testing.T) {
+	assert.Equal(t, serviceRunning, stateOf(windows.SERVICE_RUNNING))
+	assert.Equal(t, serviceStopped, stateOf(windows.SERVICE_STOPPED))
+	assert.Equal(t, serviceStarting, stateOf(windows.SERVICE_START_PENDING))
+
+	for _, midway := range []uint32{
+		windows.SERVICE_STOP_PENDING,
+		windows.SERVICE_CONTINUE_PENDING,
+		windows.SERVICE_PAUSE_PENDING,
+		windows.SERVICE_PAUSED,
+		// A number this system does not use today, and one it might tomorrow.
+		0, 9999,
+	} {
+		assert.Equalf(t, serviceSomethingElse, stateOf(midway),
+			"a state the lifecycle has no move for is waited on, not read as stopped (%d)", midway)
+	}
+}
+
+// A service name this system cannot even be asked about is reported as that,
+// naming the service. The name is configuration, which is somewhere this
+// program does not choose what it is handed, and the answer has to be a
+// refusal rather than a question asked about some other service.
+func TestAServiceNameThisSystemCannotBeAskedAboutIsRefusedByName(t *testing.T) {
+	svc := systemService{Name: "ssh\x00agent"}
+
+	_, err := svc.State(t.Context())
+
+	require.Error(t, err, "a name that cannot be looked up is not a service to report on")
+	assert.Contains(t, err.Error(), "ssh", "and the refusal names what was asked about")
+}

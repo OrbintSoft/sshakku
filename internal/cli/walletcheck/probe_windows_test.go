@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/OrbintSoft/sshakku/internal/config"
 )
@@ -62,4 +63,34 @@ func TestAWalletThisSystemHasNotGotIsNotDescribedAsGuarded(t *testing.T) {
 	view := walletView(t.Context(), settings, probeWith(runtime.GOOS, nil, nil, "", nil))
 
 	assert.Empty(t, view.Guard, "another wallet's guarantees are not this one's to describe")
+}
+
+// F23 and F48: a route the user pinned is answered under the name they wrote,
+// and what this system has not got is named as absent rather than reported as
+// something to go and install.
+//
+// The Secret Service is the one way in that cannot exist here — there is no
+// session bus for it to be on — so the report has two things to get right at
+// once. It must not quietly answer about a different route, which would leave
+// the user reading about a way in they did not choose and cannot tell apart
+// from the one they did; and it must not send them after a piece to install,
+// because there is no version of this system where that piece arrives. Naming
+// the route that does reach the same database here is the part they can act on.
+func TestARouteThisSystemHasNoWayInForIsNamedRatherThanSwapped(t *testing.T) {
+	settings := config.Settings{
+		SecretBackend:  config.SecretBackendKeePassXC,
+		KeePassXCRoute: config.KeePassXCRouteSecretService,
+	}
+
+	view := walletView(t.Context(), settings, probeWith(runtime.GOOS, nil, nil, "", nil))
+
+	assert.Equal(t, config.KeePassXCRouteSecretService, view.Route,
+		"the route reported is the one that was written down, not one substituted for it")
+	require.Len(t, view.Requirements, 1,
+		"there is one thing to say about a way in that does not exist here")
+	assert.Equal(t, "secret service", view.Requirements[0].Name)
+	assert.Contains(t, view.Requirements[0].Detail, runtime.GOOS,
+		"the reason is this operating system, and saying so is what stops the reader looking for a package")
+	assert.Contains(t, view.Requirements[0].Detail, config.KeePassXCRouteNative,
+		"and a route that does reach the same database here is what the reader can act on")
 }

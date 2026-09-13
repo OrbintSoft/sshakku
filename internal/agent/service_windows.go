@@ -40,6 +40,12 @@ func (s systemService) State(ctx context.Context) (serviceState, error) {
 	err := s.withService(windows.SERVICE_QUERY_STATUS, func(handle windows.Handle) error {
 		var status windows.SERVICE_STATUS
 		if err := windows.QueryServiceStatus(handle, &status); err != nil {
+			// The handle above was opened for exactly this question and nothing
+			// else, so a handle that opened is one this can be asked of. It is
+			// handled because the alternative is reading a state out of a record
+			// nobody filled in, and what a session does about "stopped" is start
+			// another agent.
+			//coverage:ignore
 			return fmt.Errorf("asking what the %s service is doing: %w", s.name(), err)
 		}
 		state = stateOf(status.CurrentState)
@@ -92,6 +98,10 @@ func (s systemService) withServiceHandle(
 ) error {
 	manager, err := windows.OpenSCManager(nil, nil, windows.SC_MANAGER_CONNECT)
 	if err != nil {
+		// Connecting to the service manager is granted to every account on the
+		// machine; what an account may or may not do is settled at the service
+		// below, which is where the refusals this reports are met and tested.
+		//coverage:ignore
 		return fmt.Errorf("reaching this system's service manager: %w", err)
 	}
 	defer func() { _ = windows.CloseServiceHandle(manager) }()

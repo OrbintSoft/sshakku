@@ -43,15 +43,26 @@ func TestTheRealTreeCanBeWalkedUpwards(t *testing.T) {
 // The table is this platform's own answer about which names mean something, so
 // it is checked where it lives.
 func TestTheNamesThisSystemRecognises(t *testing.T) {
+	// Every name the table answers for, alternates included: each one is a
+	// sentence somebody reads in a report about their own machine, and a name
+	// that quietly stopped being recognised reads as "an unknown launcher",
+	// which is the answer for a program nobody has ever heard of.
 	known := map[string]string{
 		"explorer.exe":        "desktop shell",
+		"winlogon.exe":        "interactive logon",
+		"userinit.exe":        "interactive logon",
 		"sshd.exe":            "sshd",
 		"powershell.exe":      "Windows PowerShell",
 		"pwsh.exe":            "PowerShell",
 		"cmd.exe":             "cmd",
 		"services.exe":        "service control manager",
+		"svchost.exe":         "service host",
 		"WindowsTerminal.exe": "terminal",
+		"OpenConsole.exe":     "terminal",
+		"conhost.exe":         "terminal",
 		"bash.exe":            "bash.exe",
+		"sh.exe":              "sh.exe",
+		"zsh.exe":             "zsh.exe",
 	}
 
 	for image, expect := range known {
@@ -111,4 +122,32 @@ func TestStartedByOnWindows(t *testing.T) {
 
 		assert.False(t, ok, "a chain of one is the agent itself, which did not launch itself")
 	})
+
+	// The shared rule has a step for a process whose launcher is gone from the
+	// tree, and that step asks this platform what else is known about it. Here
+	// the answer is nothing, so what the rule arrives at is the unknown launcher
+	// rather than a record this system does not keep. Asked here because it is
+	// the meeting of the shared rule and this platform's empty answer, and
+	// neither half says on its own what the pair produces.
+	t.Run("a launcher gone from the tree is named as unknown and not invented", func(t *testing.T) {
+		chain := []ProcInfo{{PID: 900, Name: "ssh-agent.exe"}, {PID: 1, Name: "whatever-holds-pid-1.exe"}}
+
+		who, ok := StartedBy(chain, "a record this system does not keep")
+
+		require.True(t, ok, "there is still something to say, and it is said rather than withheld")
+		assert.Equal(t, "an unknown launcher", who,
+			"nothing outlives a parent here, so nothing is read back out of what was handed in")
+	})
+}
+
+// This system groups processes in job objects, which a launcher opts into
+// rather than something every process carries, so there is no record here that
+// survives a parent and still names what started it. Reporting nothing is the
+// whole truth, and reporting it for every process asked about is what keeps the
+// attribution above honest.
+func TestNoCgroupsReportsNothing(t *testing.T) {
+	unit, ok := NoCgroups{}.Cgroup(os.Getpid())
+
+	assert.False(t, ok, "there is no such record here, and saying so is the answer")
+	assert.Empty(t, unit, "and nothing is handed back to be read as one")
 }
