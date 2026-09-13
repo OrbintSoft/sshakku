@@ -55,6 +55,49 @@ type ExecKeyAdder struct {
 	SSHAdd SSHAddNamer
 }
 
+// askpassProgMissingError is the program ssh-add would have been sent to for a
+// passphrase, not found where this program expects it beside itself. It carries
+// the path because putting that file back is the whole of the remedy, and the
+// reason because a directory standing where a program should be is found by any
+// check that only asks whether the name exists.
+type askpassProgMissingError struct{ prog, why string }
+
+func (e askpassProgMissingError) Error() string {
+	return e.prog + " " + e.why + ", and ssh-add takes a passphrase from nowhere else"
+}
+
+// CanAskWith reports whether prog is a program a passphrase can be asked for
+// with, and says why not where it is not.
+//
+// It is a question worth asking before any other, because the answer to it
+// arrives disguised as something else. ssh-add takes a passphrase only from the
+// program named in SSH_ASKPASS, and OpenSSH meeting a name that resolves to
+// nothing does not report that: it hands ssh-add an empty passphrase, which
+// comes back indistinguishable from a wrong one. Everything downstream then
+// reasons about a wrong passphrase — a stored one written off as stale, the
+// user asked again as often as they allowed, and the key finally given up on
+// and skipped in every later shell — and none of it names the program that was
+// not there.
+//
+// It is one function rather than a check made wherever the question comes up,
+// because the two places that ask — the loader, before it spends a passphrase,
+// and the exports a shell is handed — have to agree. A session told it has a
+// helper by one of them and not by the other is the state this exists to make
+// impossible.
+func CanAskWith(prog string) error {
+	info, err := os.Stat(prog)
+	if err != nil {
+		return askpassProgMissingError{prog: prog, why: "is not there"}
+	}
+	if info.IsDir() {
+		return askpassProgMissingError{prog: prog, why: "is a directory, not a program"}
+	}
+	return nil
+}
+
+// CanAsk reports whether this adder has a program to ask for a passphrase with.
+func (a ExecKeyAdder) CanAsk() error { return CanAskWith(a.AskpassProg) }
+
 // AddWithAskpass stashes passphrase in the handoff this system provides, then
 // runs ssh-add detached from any terminal so it fetches the passphrase through
 // the SSH_ASKPASS helper keyed by the handoff token. The passphrase never

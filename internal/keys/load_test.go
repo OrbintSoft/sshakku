@@ -574,7 +574,9 @@ func TestLoadKeysEnumerateError(t *testing.T) {
 
 func TestLoadKeysAgentSnapshotError(t *testing.T) {
 	r := runtest.NewRunner().On("ssh-add", runtest.Fails(errNoSshAdd))
-	l := Loader{Keys: fakeLister{paths: []string{"/ssh/id_rsa"}}, Runner: r}
+	// An adder with a helper to ask through, so what this reports is the agent
+	// snapshot failing and not the question asked before it.
+	l := Loader{Keys: fakeLister{paths: []string{"/ssh/id_rsa"}}, Runner: r, Adder: &fakeKeyAdder{}}
 	assert.Error(t, l.LoadKeys(t.Context()),
 		"an agent that could not be asked what it holds must be reported: every key would look unloaded")
 }

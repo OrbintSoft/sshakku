@@ -202,12 +202,13 @@ func TestRunDispatch(t *testing.T) {
 	// mechanism, so asserting only the exit code would pass either way.
 	t.Run("askpass-env headless", func(t *testing.T) {
 		d := realDeps()
+		self := binaryBesideItsHelper(t)
 		d.graphicalPrompter = func(context.Context, config.Settings, keys.Logger) prompt.Prompter { return nil }
-		d.self = func() (string, error) { return "/opt/sshakku/bin/sshakku", nil }
+		d.self = func() (string, error) { return self, nil }
 		var out, errOut bytes.Buffer
 		require.Zerof(t, d.run(t.Context(), &out, &errOut, []string{"askpass-env"}),
 			"a session with no dialog is still one the broker serves; stderr=%q", errOut.String())
-		assert.Equal(t, askpassExports(posixDialect(t), "/opt/sshakku/bin/sshakku"), out.String(),
+		assert.Equal(t, askpassExports(posixDialect(t), self), out.String(),
 			"and it gets the same exports a graphical session does")
 	})
 }

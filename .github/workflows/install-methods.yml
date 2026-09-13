@@ -34,3 +34,30 @@ jobs:
 
       - name: Smoke-test make install/install-user (staged, not the real /etc or $HOME)
         run: test/linux-install-smoke.sh "$RUNNER_TEMP/install-smoke"
+
+  windows-askpass-helper-smoke:
+    name: Windows askpass-helper smoke
+    # Not gated behind the opt-in the job above carries, and deliberately so.
+    # That one stages a whole install tree and is priced accordingly; this one
+    # builds the program and runs two commands that only read, which is cheap
+    # enough to ask on every push. What it guards is also the kind of breakage
+    # that is never noticed by the person who causes it: a shell pointed at an
+    # askpass helper that is not there does not report one, it reports the key
+    # as having a wrong passphrase.
+    runs-on: windows-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: ./.github/actions/setup-go-env
+
+      # A runner is the machine this needs: nothing is installed, so the
+      # program built here has no helper beside it until the script puts one
+      # there, which is the state a developer's own machine cannot be put back
+      # into. Nothing on the runner is wired either — the two commands driven
+      # are `askpass-env`, which prints lines for a shell, and `doctor`, which
+      # is a look rather than an action.
+      - name: Smoke-test a program with and without its askpass helper (F62)
+        shell: pwsh
+        run: test/windows-askpass-helper-smoke.ps1 "$env:RUNNER_TEMP/askpass-helper-smoke"

@@ -306,10 +306,11 @@ func TestAskpassEnvHeadless(t *testing.T) {
 	t.Setenv("WAYLAND_DISPLAY", "")
 	t.Setenv("DISPLAY", "")
 	d := realDeps()
-	d.self = func() (string, error) { return "/opt/sshakku/bin/sshakku", nil }
+	self := binaryBesideItsHelper(t)
+	d.self = func() (string, error) { return self, nil }
 	var out, errOut bytes.Buffer
 	require.Zero(t, d.askpassEnv(&out, &errOut, nil), "a session with no display is still one the broker serves")
-	assert.Equal(t, askpassExports(posixDialect(t), "/opt/sshakku/bin/sshakku"), out.String(),
+	assert.Equal(t, askpassExports(posixDialect(t), self), out.String(),
 		"the same exports a graphical session gets")
 }
 

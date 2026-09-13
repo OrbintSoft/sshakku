@@ -26,6 +26,20 @@ var askpassNotWiredMsg = "SSH_ASKPASS is not wired into this shell — once a ke
 	"agent, ssh will ask for its passphrase on the terminal instead of taking it from the wallet; " +
 	loginShellHint
 
+// askpassProgMissingMsg is the finding for an install whose askpass helper is
+// no longer beside the program that points shells at it.
+//
+// It names the file, because putting that file back is the whole of the remedy,
+// and it says outright that a shell will not fix it — this is the one finding
+// about askpass wiring whose cause no session can repair, and the advice the
+// other one carries would send the reader round in a circle.
+func askpassProgMissingMsg(prog string) string {
+	return "the program ssh and ssh-add are asked for a passphrase through is not beside this one: " + prog +
+		" — a key that needs a passphrase is not loaded at login while it is gone, and ssh asks for one on the" +
+		" terminal instead of taking it from the wallet. Installing sshakku is what puts it there; opening a" +
+		" shell is not"
+}
+
 // envUnreadableMsg replaces every finding that would otherwise have been drawn
 // from an environment variable, when the session being reported on is not this
 // process's own. Those findings all read an empty string as a fact about the
@@ -102,6 +116,18 @@ type Inputs struct {
 	// without prompting.
 	EnvAskpass        string // SSH_ASKPASS as this shell sees it.
 	EnvAskpassRequire string // SSH_ASKPASS_REQUIRE as this shell sees it.
+
+	// AskpassProg is the program a shell would be pointed at for a passphrase,
+	// and AskpassProgThere whether the caller found it there. A nil is the
+	// third answer — nobody looked — and is never read as absence, since a
+	// question that went unasked is not evidence either way.
+	//
+	// This is a fact about the install rather than about the shell, and the two
+	// are worth telling apart: a helper that is gone leaves the shell with no
+	// SSH_ASKPASS at all, which is indistinguishable from a shell nobody wired
+	// and has the opposite remedy.
+	AskpassProg      string
+	AskpassProgThere *bool
 
 	// Env and SecretEnv are the variables SSHakku reads, as the report
 	// presents them; the caller collects them, since which variables those
