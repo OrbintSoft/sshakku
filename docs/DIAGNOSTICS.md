@@ -90,6 +90,24 @@ says outright that opening a shell will not put it back: no session can wire an
 export pointing at a file that does not exist. Installing sshakku is what puts
 it there.
 
+### An `ssh` that cannot be sent to the wallet
+
+A third finding appears beside those two rather than instead of one of them,
+and on the machines it applies to everything else in the report is in perfect
+order. `SSH_ASKPASS_REQUIRE` arrived in OpenSSH 8.4; an older `ssh` has no idea
+what it is, and reaches a passphrase helper only where `DISPLAY` names an X
+server. A session that names none — a Windows console, a Mac without one, a
+machine you are on over SSH — therefore asks you on the terminal, with a
+correct passphrase sitting in the wallet the whole time and nothing anywhere
+saying why it was not used.
+
+The report reads the version out of the `ssh` your session would run, names it
+and the release it would take, and says plainly that this one is not sshakku's
+to fix. It says nothing at all where the build is new enough, and nothing
+either where the version could not be read: a question that could not be asked
+has no answer to report, and guessing one would send you off to replace an
+OpenSSH that was never the problem.
+
 ### Keys and their remaining time
 
 The ssh-agent protocol has no query for a key's remaining lifetime, so sshakku

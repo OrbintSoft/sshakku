@@ -1,18 +1,19 @@
 # Dependencies
 
-What has to be present on Linux or macOS to *run* SSHakku, versus what's
-needed only to *build* it from source — for end users and for anyone
+What has to be present on Linux, macOS or Windows to *run* SSHakku, versus
+what's needed only to *build* it from source — for end users and for anyone
 packaging it.
 
 ## To build
 
-- **Go 1.26.5 or newer.** The only build-time requirement, on either platform;
+- **Go 1.26.0 or newer**, which is what `go.mod` requires. The only build-time
+  requirement, on any of the three;
   `go build ./...` (or `make build`) fetches the Go module dependencies itself
   (`github.com/godbus/dbus/v5`, `github.com/BurntSushi/toml`,
   `golang.org/x/sys`, `github.com/ebitengine/purego`,
   `github.com/gofrs/flock`). All are pure Go: nothing
-  here needs a C compiler, an Apple SDK, or cgo, so a build for either platform
-  can be produced on either one. The macOS Keychain backend reaches
+  here needs a C compiler, an Apple SDK, or cgo, so a build for any of the
+  three can be produced on any of them. The macOS Keychain backend reaches
   Security.framework by loading it at run time rather than by linking against it
   at build time.
 
@@ -24,7 +25,16 @@ Always required, regardless of configuration:
   starts and manages its own `ssh-agent` process and drives `ssh-add`/
   `ssh-keygen` for every key it loads or fingerprints — there is no bundled
   reimplementation of any of these. Present by default on both Linux and
-  macOS.
+  macOS; on Windows it is an optional capability that has to be added first,
+  see below.
+- **OpenSSH 8.4 or newer**, on every platform. Below that release there is no
+  way to tell `ssh` to ask a passphrase helper it would not have reached on its
+  own — and on a session that sets no `DISPLAY` it would not have reached one,
+  which is an ordinary Windows console, a Mac without an X server, and any
+  machine you are on over SSH. On such a build your keys still load, but the
+  wallet is never consulted for them and you are asked on the terminal instead.
+  `ssh -V` says which build you have; `sshakku doctor` says so too, naming the
+  version it found, so you do not have to know this number to find out.
 - **A login shell that sources `/etc/profile.d`** on Linux, or `/etc/zprofile`
   on macOS (or, for a per-user install, `~/.bash_profile`/
   `~/.bash_profile.d/` on Linux, `~/.zprofile`/`~/.zprofile.d/` on macOS) —
@@ -73,12 +83,44 @@ Required only when `secret_backend` selects that backend in `config.toml` (see
   sign-in is assumed ahead of time; SSHakku drives `bw login`/`bw unlock`
   itself, prompting for the master password each time it needs the vault.
 
+### On Windows
+
+Windows is the one platform where the SSH tools themselves are not there until
+somebody puts them there:
+
+- **The OpenSSH client capability.** From Windows 10 build 1809 and Windows
+  Server 2019 it ships as an optional feature that is *not* installed; an
+  administrator adds it with `Add-WindowsCapability -Online -Name
+  OpenSSH.Client~~~~0.0.1.0`, which is the command SSHakku names for you when
+  it finds the tools missing. The `ssh-agent` service comes with it, and that
+  service is what SSHakku drives here — it never starts an agent process of its
+  own on this platform. Which OpenSSH release a given Windows carries is not
+  something Microsoft publishes, and versions below the 8.4 floor above have
+  shipped in the box; `sshakku doctor` names the one you have.
+- **Nothing for the wallet.** Passphrases go into the Windows Credential
+  Manager, which SSHakku reaches through the OS directly: no CLI to install, no
+  daemon to run, no configuration to get it. It also has no lock of its own —
+  see [Hardening](HARDENING.md#dont-leave-the-wallet-unlocked) for what that
+  means and what to do instead.
+- **Nothing for the passphrase dialog.** SSHakku draws it with `user32`, so
+  there is no `kdialog` equivalent to install, nothing to package, and no
+  script execution policy in the way of it.
+- **`keepassxc-cli`**, and only if you configure `secret_backend =
+  "keepassxc"`. It must be on `PATH`: SSHakku runs it by name.
+- **Git Bash, GNU Make and the Go toolchain**, to install SSHakku at all. The
+  install path described in [Installation](INSTALLATION.md) is a `make` target
+  building from source, so these are needed on the machine being installed to —
+  which is a requirement of that path rather than of the program, and one a
+  packaged installer would remove.
+
 ## For packagers
 
 A distribution package should declare:
 
-- A build-time dependency on the Go toolchain (`>= 1.25`), and nothing else on
-  either platform — no C toolchain is involved.
+- A build-time dependency on the Go toolchain (`>= 1.26.0`, the version
+  `go.mod` requires — not the newer `toolchain` line beside it, which says
+  which toolchain this repository builds with and not what the module needs),
+  and nothing else — no C toolchain is involved.
 - A runtime dependency on `openssh` (for `ssh-add`/`ssh-agent`/`ssh-keygen`).
 - On Linux: `libsecret`'s tools (for `secret-tool`) and `kdialog` as
   recommended, not mandatory, runtime dependencies — both are optional
