@@ -14,6 +14,7 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/diagnose/hostcheck"
 	"github.com/OrbintSoft/sshakku/internal/diagnose/launcher"
 	"github.com/OrbintSoft/sshakku/internal/keystate"
+	"github.com/OrbintSoft/sshakku/internal/sshtools"
 
 	"github.com/OrbintSoft/sshakku/internal/agent/inspect"
 )
@@ -165,6 +166,13 @@ type Inputs struct {
 	// ordinary case: either no lifetime was asked for, or the agent honours the
 	// one that was.
 	LifetimeKeptBySessions bool
+
+	// SSHVersion is what the OpenSSH this session's `ssh` comes from says it
+	// is, taken by the caller because which build that is depends on the
+	// session's own lookup. Its zero value is the third answer — no version
+	// was read — and is never read as an old build: a report that could not
+	// ask must not send a reader off to replace a current OpenSSH.
+	SSHVersion sshtools.Version
 }
 
 // EndpointReader is a Prober that can also say who was holding an endpoint it
