@@ -549,6 +549,29 @@ func (d deps) doctorCrossUser(ctx context.Context, stdout, stderr io.Writer, inv
 	return 0
 }
 
+// sshVersionHere is what the OpenSSH this session would run for `ssh` says it
+// is, or the zero value where it could not be asked.
+//
+// It is that program rather than the ssh-add SSHakku drives itself, because
+// what rests on the answer is every `ssh` the user's own session runs: those
+// are the ones that go to the wallet for a passphrase, or do not.
+//
+// A build that cannot be found or will not answer leaves the report saying
+// nothing about a version, which is the honest outcome — a question that could
+// not be asked has no answer to report, and guessing one here would send a
+// reader off to replace an OpenSSH that was never the problem.
+func sshVersionHere(ctx context.Context, runner run.Runner) sshtools.Version {
+	prog, err := sshtools.ThisSystem().Tool(sshtools.SSHName)
+	if err != nil {
+		return sshtools.Version{}
+	}
+	v, err := sshtools.ReadVersion(ctx, runner, prog)
+	if err != nil {
+		return sshtools.Version{}
+	}
+	return v
+}
+
 // gatherReport builds the diagnostic report for the resolved layout, reading the
 // real procfs, sockets, and process tree. Both the read-only and --fix paths use
 // it so they present the situation identically.
@@ -589,6 +612,7 @@ func gatherReport(ctx context.Context, env paths.Env, layout paths.Layout, setti
 		// What was asked for and what this agent can do are both known here,
 		// so the report is handed the one answer rather than the two facts.
 		LifetimeKeptBySessions: settings.KeyLifetime > 0 && !agent.KeepsLifetimes(),
+		SSHVersion:             sshVersionHere(ctx, runner),
 	}, inspect.Inspector{}, platformProber(), newAncestrySource(), newCgroupSource(), keySource,
 		newHostSource(env.Home))
 }

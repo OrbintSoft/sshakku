@@ -3,6 +3,10 @@ package sshtools
 import (
 	"context"
 	"errors"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/OrbintSoft/sshakku/internal/run"
 )
@@ -18,10 +22,22 @@ const (
 	AskpassRequireMinor = 4
 )
 
+// versionTimeout bounds asking a program what it is. Answering takes no
+// filesystem, no network and no agent, so a build that has not answered in
+// this long is one that is not going to.
+const versionTimeout = 5 * time.Second
+
 // errNoVersion is what an answer that is not a version is refused with. A
 // build whose version could not be read is not an old build, and the two must
 // never collapse into one another.
 var errNoVersion = errors.New("no OpenSSH version in what the program answered")
+
+// versionPattern matches the release in what an OpenSSH build prints for `-V`.
+// The optional words between the name and the number are how a fork spells
+// itself — Microsoft's build calls itself OpenSSH_for_Windows — and the
+// portable suffix after the number (`p1`, `p2`) is deliberately left out: it
+// counts releases of the portability layer, not of OpenSSH.
+var versionPattern = regexp.MustCompile(`OpenSSH_(?:[A-Za-z]+_)*(\d+)\.(\d+)`)
 
 // Version is what one build of OpenSSH says it is when asked.
 //
@@ -32,9 +48,6 @@ var errNoVersion = errors.New("no OpenSSH version in what the program answered")
 //
 // The zero value means no version was read, which is a third answer and not a
 // very old one — see Unread.
-//
-// Nothing below is implemented yet: the tests beside this file say what each
-// of them has to do, and say it by failing.
 type Version struct {
 	Major int
 	Minor int
@@ -42,20 +55,32 @@ type Version struct {
 }
 
 // Label is how the build names itself, without the crypto library it was
-// linked against.
+// linked against. OpenSSH answers `-V` with both, separated by a comma; only
+// the first identifies the build, and a report quoting the whole line hands a
+// reader a library's release date to weigh a decision about ssh with.
 func (v Version) Label() string {
-	return ""
+	name, _, _ := strings.Cut(v.Text, ",")
+	return strings.TrimSpace(name)
 }
 
-// Unread reports whether no version was read at all.
+// Unread reports whether no version was read at all. No OpenSSH has ever had a
+// major of zero, so the zero value is free to mean this.
 func (v Version) Unread() bool {
-	return false
+	return v.Major == 0
 }
 
 // CanBeToldToAsk reports whether this build understands being pointed at a
-// passphrase helper it would not have used on its own.
+// passphrase helper it would not have used on its own. A version nobody read
+// is not reported as unable: that would tell a reader with a current OpenSSH
+// to replace the one thing that was never the problem.
 func (v Version) CanBeToldToAsk() bool {
-	return false
+	if v.Unread() {
+		return true
+	}
+	if v.Major != AskpassRequireMajor {
+		return v.Major > AskpassRequireMajor
+	}
+	return v.Minor >= AskpassRequireMinor
 }
 
 // ParseVersion reads the release out of the line an OpenSSH build prints when
@@ -63,14 +88,32 @@ func (v Version) CanBeToldToAsk() bool {
 // name Microsoft's build gives itself. An answer with no version in it is an
 // error rather than a zero.
 func ParseVersion(printed string) (Version, error) {
-	_ = printed
-	return Version{}, nil
+	m := versionPattern.FindStringSubmatch(printed)
+	if m == nil {
+		return Version{}, errNoVersion
+	}
+	major, err := strconv.Atoi(m[1])
+	if err != nil {
+		return Version{}, errNoVersion
+	}
+	minor, err := strconv.Atoi(m[2])
+	if err != nil {
+		return Version{}, errNoVersion
+	}
+	return Version{Major: major, Minor: minor, Text: printed}, nil
 }
 
 // ReadVersion asks the named OpenSSH program what it is. OpenSSH answers `-V`
-// on standard error, which is where this reads it from.
+// on standard error, which is where this reads it from; a build that answers
+// on standard output instead is read there rather than called unreadable.
 func ReadVersion(ctx context.Context, r run.Runner, prog string) (Version, error) {
-	_, _ = ctx, r
-	_ = prog
-	return Version{}, nil
+	res, err := r.Run(ctx, run.Cmd{Name: prog, Args: []string{"-V"}, Timeout: versionTimeout})
+	if err != nil {
+		return Version{}, err
+	}
+	said := strings.TrimSpace(string(res.Stderr))
+	if said == "" {
+		said = strings.TrimSpace(string(res.Stdout))
+	}
+	return ParseVersion(said)
 }

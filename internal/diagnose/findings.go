@@ -177,6 +177,13 @@ func findings(in Inputs, r Report) []string {
 	case !in.EnvUnreadable && (in.EnvAskpass == "" || in.EnvAskpassRequire == ""):
 		f = append(f, askpassNotWiredMsg)
 	}
+	// Beside those rather than instead of one of them: a build that cannot be
+	// sent to a helper is a separate fact from whether a helper is there and
+	// whether this shell was pointed at it, and on such a machine the other two
+	// can both be perfectly in order while the wallet is still never reached.
+	if !in.SSHVersion.CanBeToldToAsk() {
+		f = append(f, sshVersionTooOldMsg(in.SSHVersion))
+	}
 	f = append(f, hostFindings(r.Host)...)
 
 	if len(f) == 0 {

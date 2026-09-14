@@ -41,6 +41,21 @@ func askpassProgMissingMsg(prog string) string {
 		" shell is not"
 }
 
+// sshVersionTooOldMsg is the finding for an OpenSSH that cannot be sent to a
+// passphrase helper at all.
+//
+// It names both numbers, because the reader's next move is to compare them,
+// and it says what is lost rather than only what is old: everything else about
+// the wiring is correct on such a machine, and correct wiring that produces a
+// terminal prompt looks like a fault in the wallet.
+func sshVersionTooOldMsg(v sshtools.Version) string {
+	return fmt.Sprintf("the ssh this session runs is %s, and reaching the wallet for a passphrase needs"+
+		" %d.%d or newer — older builds ask a helper only where DISPLAY names an X server, and where nothing"+
+		" names one they ask you on the terminal instead, however full the wallet is. Nothing in sshakku's"+
+		" own wiring changes that: it is the build that has to be newer",
+		v.Label(), sshtools.AskpassRequireMajor, sshtools.AskpassRequireMinor)
+}
+
 // envUnreadableMsg replaces every finding that would otherwise have been drawn
 // from an environment variable, when the session being reported on is not this
 // process's own. Those findings all read an empty string as a fact about the
