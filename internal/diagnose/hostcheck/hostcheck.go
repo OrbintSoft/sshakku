@@ -27,6 +27,14 @@ type Checks struct {
 	// overlay, tmpfs root, missing /proc/mounts, an unparseable `fdesetup
 	// status`).
 	DiskEncrypted *bool
+	// DiskEncryptionKind names the scheme DiskEncrypted is an answer about —
+	// "LUKS", "FileVault", "BitLocker" — and is set whenever this system
+	// looked, whichever way the answer came out. It is what was looked *for*,
+	// so unlike SecureHardwareKind it is not emptied by a no: a reader told
+	// their disk is unencrypted is being sent to turn something on, and which
+	// something depends entirely on the machine they are sitting at. Empty
+	// where nobody looked.
+	DiskEncryptionKind string
 
 	// TmpTmpfs reports whether /tmp is its own tmpfs mount, as opposed to
 	// living on the root filesystem. nil when this could not be determined.
