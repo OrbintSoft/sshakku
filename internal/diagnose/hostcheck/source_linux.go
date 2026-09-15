@@ -35,6 +35,7 @@ func (h Procfs) Checks(context.Context) Checks {
 		if m, ok := findMountFor(mounts, target); ok && strings.HasPrefix(m.device, "/dev/") {
 			devBase := resolveDevBase(devRoot, m.device)
 			hc.DiskEncrypted = deviceEncrypted(sysRoot, devBase, 1)
+			hc.DiskEncryptionKind = "LUKS"
 		}
 		if tm, ok := findExactMount(mounts, "/tmp"); ok {
 			tmpfs := tm.fstype == "tmpfs"

@@ -211,7 +211,14 @@ const minTmpBytes = 512 * 1024 * 1024
 func hostFindings(h hostcheck.Checks) []string {
 	var f []string
 	if h.DiskEncrypted != nil && !*h.DiskEncrypted {
-		f = append(f, "the disk does not appear to be encrypted (best-effort LUKS check) — outside sshakku's control, but exposes the wallet database directly if the drive is lost, stolen, or discarded")
+		// The scheme is named by whoever went and looked, never here: this
+		// sentence is read on every platform, and each of them has a different
+		// answer to what "encrypt the disk" means.
+		looked := "best-effort check"
+		if h.DiskEncryptionKind != "" {
+			looked = "best-effort " + h.DiskEncryptionKind + " check"
+		}
+		f = append(f, "the disk does not appear to be encrypted ("+looked+") — outside sshakku's control, but exposes the wallet database directly if the drive is lost, stolen, or discarded")
 	}
 	if h.TmpTmpfs != nil {
 		switch {
