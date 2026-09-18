@@ -15,6 +15,17 @@ nothing. It bounds how long an unlocked key sits in the agent, available to
 anything running as you, without ever asking you to retype a passphrase from
 memory. See [Settings](CONFIGURATION.md#settings) for how to change it.
 
+**Where the agent keeps no lifetimes, this bounds less than it looks like it
+does.** Windows' `ssh-agent` accepts no expiry, so the key is taken out by
+SSHakku instead, as the next session opens — which means the window closes at
+your next login rather than at the deadline you set, and on a machine nobody
+logs into it does not close at all. The key also survives a reboot there, since
+that agent keeps what it is given in your account's registry. A short lifetime
+is still worth setting and still costs nothing; what bounds the window on that
+platform is locking the session, and the shortest lifetime in the world does
+not substitute for it. `sshakku doctor` says which of the two kinds of agent
+you are on.
+
 ## Don't leave the wallet unlocked
 
 SSHakku itself only unlocks your secret-store collection for the seconds
@@ -30,6 +41,12 @@ Set one:
   timeout short (Settings → Privacy → Screen Lock).
 - **KeePassXC** — Application Settings → Security: "Lock databases after
   inactivity".
+- **Windows Credential Manager** — there is nothing to close. A credential
+  stored there is decrypted for anything running as your account: no unlock
+  step, and no idle timeout to set. What stands between a stored passphrase and
+  another program running as you is the session lock itself — the same thing
+  that bounds the agent's keys above, which is why on this platform the two
+  recommendations collapse into one. Lock the screen.
 
 ## Encrypt the disk
 

@@ -61,3 +61,26 @@ jobs:
       - name: Smoke-test a program with and without its askpass helper (F62)
         shell: pwsh
         run: test/windows-askpass-helper-smoke.ps1 "$env:RUNNER_TEMP/askpass-helper-smoke"
+
+  windows-ssh-version-smoke:
+    name: Windows ssh-version smoke
+    # Ungated for the same reason as the job above: it builds the program and a
+    # stand-in and runs one command that only reads. What it guards is the walk
+    # from `doctor` out to whichever ssh a session resolves and back, which the
+    # unit suite cannot reach — those tests hand the version in at the seam, so
+    # everything before the seam is exercised here or nowhere.
+    runs-on: windows-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: ./.github/actions/setup-go-env
+
+      # Both halves run against a stand-in rather than the runner's own
+      # OpenSSH: which release that is may change under us, and the half
+      # testing for silence would then be reporting the runner's version
+      # instead of asking the question. `doctor` is a look, not an action.
+      - name: Smoke-test an ssh on either side of the release askpass needs (F63)
+        shell: pwsh
+        run: test/windows-ssh-version-smoke.ps1 "$env:RUNNER_TEMP/ssh-version-smoke"

@@ -14,6 +14,7 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/diagnose/hostcheck"
 	"github.com/OrbintSoft/sshakku/internal/diagnose/launcher"
 	"github.com/OrbintSoft/sshakku/internal/keystate"
+	"github.com/OrbintSoft/sshakku/internal/sshtools"
 
 	"github.com/OrbintSoft/sshakku/internal/agent/inspect"
 )
@@ -38,6 +39,21 @@ func askpassProgMissingMsg(prog string) string {
 		" — a key that needs a passphrase is not loaded at login while it is gone, and ssh asks for one on the" +
 		" terminal instead of taking it from the wallet. Installing sshakku is what puts it there; opening a" +
 		" shell is not"
+}
+
+// sshVersionTooOldMsg is the finding for an OpenSSH that cannot be sent to a
+// passphrase helper at all.
+//
+// It names both numbers, because the reader's next move is to compare them,
+// and it says what is lost rather than only what is old: everything else about
+// the wiring is correct on such a machine, and correct wiring that produces a
+// terminal prompt looks like a fault in the wallet.
+func sshVersionTooOldMsg(v sshtools.Version) string {
+	return fmt.Sprintf("the ssh this session runs is %s, and reaching the wallet for a passphrase needs"+
+		" %d.%d or newer — older builds ask a helper only where DISPLAY names an X server, and where nothing"+
+		" names one they ask you on the terminal instead, however full the wallet is. Nothing in sshakku's"+
+		" own wiring changes that: it is the build that has to be newer",
+		v.Label(), sshtools.AskpassRequireMajor, sshtools.AskpassRequireMinor)
 }
 
 // envUnreadableMsg replaces every finding that would otherwise have been drawn
@@ -165,6 +181,13 @@ type Inputs struct {
 	// ordinary case: either no lifetime was asked for, or the agent honours the
 	// one that was.
 	LifetimeKeptBySessions bool
+
+	// SSHVersion is what the OpenSSH this session's `ssh` comes from says it
+	// is, taken by the caller because which build that is depends on the
+	// session's own lookup. Its zero value is the third answer — no version
+	// was read — and is never read as an old build: a report that could not
+	// ask must not send a reader off to replace a current OpenSSH.
+	SSHVersion sshtools.Version
 }
 
 // EndpointReader is a Prober that can also say who was holding an endpoint it
