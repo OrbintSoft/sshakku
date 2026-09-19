@@ -503,6 +503,32 @@ done are summarised; see the note at the top of this file for full detail.
     To decide: whether it is wanted at all. The same report can be had by
     running `sshakku doctor` as that account, which is what F61 names today.
 
+29. **Whose a directory is, on Windows (goal 13). Raised 2026-09-19;
+    deferred, to be done from a Windows environment.** Asking whether a
+    directory belongs to this account and to nobody else is what keeps the
+    environment from pointing a session at somebody else's files. On Unix it is
+    two fields of one `stat`. On Windows it is a different question with a
+    different answer: an account is a SID, not a uid, and the permission bits Go
+    reports for a file there are synthesised from the read-only attribute — they
+    say nothing about who else may enter. `paths.PrivateDir` therefore answers
+    `false` for every path on Windows today.
+
+    **What it would take.** The directory's owner SID and its DACL
+    (`GetNamedSecurityInfo`), the owner compared against the process token's
+    user SID, and the DACL examined for any entry granting write to a principal
+    that is neither the owner nor the system — the Windows spelling of "grants
+    nothing to group or other". `install.haveMachineAuthority` already asks the
+    token a question of this shape and is where a design starts.
+
+    **Until then, `false` must keep meaning "cannot tell" and never "not
+    yours".** An unanswered question is not a refusal: a build that cannot
+    establish ownership has to leave behaviour exactly as it was, or every
+    Windows user's own configuration would be discarded as though it belonged to
+    a stranger. That is the same three-valued shape F66 needed for a passphrase
+    a build cannot check, and for the same reason — refusing what was merely
+    unverifiable is a worse failure than the one being guarded against, and one
+    the user can do nothing about.
+
 ---
 
 ## Phases
