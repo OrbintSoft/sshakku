@@ -2,7 +2,9 @@
 
 package testtmp
 
-import "os"
+import (
+	"os"
+)
 
 // socketBase is the directory this system's tests bind their unix sockets
 // under. There is no /tmp here; the temporary directory this account was given

@@ -2,7 +2,9 @@
 
 package agent
 
-import "github.com/OrbintSoft/sshakku/internal/platform"
+import (
+	"github.com/OrbintSoft/sshakku/internal/platform"
+)
 
 // errNoTerminate is what SysSignaler reports here. Terminate is asked for a
 // graceful stop — SIGTERM, which a process can act on — and Windows has no

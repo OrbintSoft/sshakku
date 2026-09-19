@@ -1,6 +1,8 @@
 package agent
 
-import "strings"
+import (
+	"strings"
+)
 
 // An Endpoint is what a shell is pointed at to reach the agent, in every
 // writing a shell may need it in.

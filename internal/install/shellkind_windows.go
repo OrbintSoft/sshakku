@@ -2,7 +2,9 @@
 
 package install
 
-import "golang.org/x/sys/windows"
+import (
+	"golang.org/x/sys/windows"
+)
 
 // shellPatterns is this system's table of interpreters an install can wire.
 //

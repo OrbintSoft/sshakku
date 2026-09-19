@@ -12,7 +12,9 @@
 // read it, and one place to change it.
 package logline
 
-import "fmt"
+import (
+	"fmt"
+)
 
 // Logger records one level-tagged line.
 //

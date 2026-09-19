@@ -2,7 +2,9 @@
 
 package prompt
 
-import "golang.org/x/sys/unix"
+import (
+	"golang.org/x/sys/unix"
+)
 
 // tcGetTermiosReq/tcSetTermiosReq: the BSD family (including Darwin) names
 // these ioctl requests TIOCGETA/TIOCSETA rather than Linux's TCGETS/TCSETS

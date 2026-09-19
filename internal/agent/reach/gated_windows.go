@@ -2,7 +2,9 @@
 
 package reach
 
-import "context"
+import (
+	"context"
+)
 
 // UIDGatedProber wraps another Prober and reports a socket unreachable unless
 // it belongs to UID. That ownership question is asked of the filesystem, which

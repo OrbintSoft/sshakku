@@ -2,7 +2,9 @@
 
 package install
 
-import "golang.org/x/sys/windows"
+import (
+	"golang.org/x/sys/windows"
+)
 
 // machineAuthorityName is what this system calls the authority a change to what
 // every account runs has to be made with.

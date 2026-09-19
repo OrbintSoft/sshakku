@@ -1,6 +1,8 @@
 package diagnose
 
-import "github.com/OrbintSoft/sshakku/internal/agent/inspect"
+import (
+	"github.com/OrbintSoft/sshakku/internal/agent/inspect"
+)
 
 // State names the agent-lifecycle situation the report observes, following the
 // five states the login path resolves (clean, ours-healthy, ours-zombie,

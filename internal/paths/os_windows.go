@@ -2,7 +2,9 @@
 
 package paths
 
-import "os"
+import (
+	"os"
+)
 
 // FromOS reads the path inputs from the process environment.
 //

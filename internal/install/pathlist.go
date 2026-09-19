@@ -1,6 +1,8 @@
 package install
 
-import "strings"
+import (
+	"strings"
+)
 
 // PathList describes how one system spells a list of directories held in a
 // single environment variable, and knows how to add one entry to such a list

@@ -2,7 +2,9 @@
 
 package agent
 
-import "context"
+import (
+	"context"
+)
 
 // ReadAgentService reports that this system serves its agent from no service.
 //

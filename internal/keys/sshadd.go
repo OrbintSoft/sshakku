@@ -1,6 +1,8 @@
 package keys
 
-import "github.com/OrbintSoft/sshakku/internal/sshtools"
+import (
+	"github.com/OrbintSoft/sshakku/internal/sshtools"
+)
 
 // SSHAddNamer names the ssh-add this session has to run to reach the agent it
 // was pointed at, or reports why it has none it can.

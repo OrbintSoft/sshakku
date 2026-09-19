@@ -2,7 +2,9 @@
 
 package prompt
 
-import "os/exec"
+import (
+	"os/exec"
+)
 
 // execLookPath resolves a binary on PATH; it is a variable so tests can stub the
 // PATH lookup. It lives beside the dialogs because they are what asks: a

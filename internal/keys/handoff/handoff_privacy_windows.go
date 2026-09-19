@@ -2,7 +2,9 @@
 
 package handoff
 
-import "io/fs"
+import (
+	"io/fs"
+)
 
 // What makes a handoff rendezvous private here is where it is, not a bit on it.
 // The socket goes under this account's own profile, whose access-control list

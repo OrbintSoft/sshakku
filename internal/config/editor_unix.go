@@ -2,7 +2,9 @@
 
 package config
 
-import "os/exec"
+import (
+	"os/exec"
+)
 
 // platformEditors is the editor to open a file in where nobody named one.
 // POSIX requires vi of every system this file is built for, which is the only

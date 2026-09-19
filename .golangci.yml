@@ -201,6 +201,15 @@ linters:
     # is what says a thought has finished.
     - godot
 
+    # A file's imports belong in one place and in one shape. Two `import`
+    # declarations in a file compile, and nothing here joins them — gofumpt
+    # leaves both exactly as it found them — so the second is a list nobody
+    # reads and nobody adds to, and the same package can end up imported twice
+    # under two names. The single-line form is what a second declaration grows
+    # out of: `import "os"` has nowhere to put the next import but beside
+    # itself.
+    - grouper
+
     # Two interfaces declared in one package with the same method set are one
     # interface and a spare name for it: which of the two a signature means is
     # something the reader has to work out, and a method added to one leaves the
@@ -455,6 +464,23 @@ linters:
         # rewrites that would each make a struct harder to read against a saving
         # nothing here is short of — this program runs once per login shell.
         - fieldalignment
+
+    grouper:
+      # The two import checks, and only those. Nothing in the tree had two
+      # import declarations, so the first is a guard; the second cost 41 files
+      # whose one import was written on the declaration line itself, which is a
+      # shape rather than a rewrite.
+      #
+      # The six checks for const, type and var were measured and declined, at
+      # 46, 54, 103, 142, 168 and 315 sites. They report how this tree declares
+      # things rather than a defect in it: a type or a sentinel is declared
+      # beside what it is for, with the prose that explains it above it, and
+      # gathering them into one block per file would put the names in one place
+      # and the reasons in another. Imports are the opposite case — there is
+      # nothing to explain about one, and a reader looking for them wants them
+      # all at once.
+      import-require-single-import: true
+      import-require-grouping: true
 
     importas:
       # There is no `alias:` list here, and its absence is the rule: an alias

@@ -2,7 +2,9 @@
 
 package hostcheck
 
-import "syscall"
+import (
+	"syscall"
+)
 
 // realTmpfsSize statfs's path and returns its total size in bytes, or 0 on
 // any error (a missing mount point, a race with an unmount).

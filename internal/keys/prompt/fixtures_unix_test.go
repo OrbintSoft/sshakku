@@ -2,7 +2,9 @@
 
 package prompt
 
-import "errors"
+import (
+	"errors"
+)
 
 // The failures these tests hand their seams. Each stands for a real one the
 // code under test cannot be made to produce on demand.
