@@ -588,7 +588,7 @@ func gatherReport(ctx context.Context, env paths.Env, layout paths.Layout, setti
 	}
 	shownEnv, secretEnv := environmentReport()
 	endpoint := platformEndpoint(layout)
-	helper, helperThere := askpassHelperHere()
+	helper, helperThere := askpassHelperHere(os.Executable)
 
 	return diagnose.Gather(ctx, diagnose.Inputs{
 		FixedSock:         endpoint.Native(),
