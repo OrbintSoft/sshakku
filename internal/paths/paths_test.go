@@ -146,3 +146,54 @@ func TestResolveStateDir(t *testing.T) {
 	assert.Equal(t, filepath.Join(stateHome, "sshakku"), got.StateDir, "StateDir with XDG_STATE_HOME")
 	assert.Equal(t, filepath.Join(stateHome, "sshakku", "sessions.log"), got.LogFile, "LogFile with XDG_STATE_HOME")
 }
+
+// TestResolveRefusesDirectoriesThatAreNotThisAccountsOwn covers every directory
+// the environment can name. A variable is inherited by any shell that becomes
+// another account without opening a session of its own, so each of these can
+// arrive pointing at somebody else's home — and what is at stake differs by
+// directory rather than being the same worry repeated. The configuration
+// decides where passphrases are filed and which command is run to edit it; the
+// state directory takes the record of what was done with the keys; the cache
+// directory is where the endpoint goes when there is no runtime directory to
+// use, and a parent another account owns is one our directory can be renamed
+// out of and answered in place of.
+func TestResolveRefusesDirectoriesThatAreNotThisAccountsOwn(t *testing.T) {
+	home := filepath.FromSlash("/home/u")
+	theirs := filepath.FromSlash("/home/them/.config")
+
+	// there reports the directory as present and as not this account's alone,
+	// which is the one answer that must change what Resolve picks.
+	there := func(p string, private bool) bool { return p == theirs && !private }
+
+	tests := []struct {
+		name string
+		env  Env
+		got  func(Layout) string
+		want string
+	}{
+		{
+			name: "a configuration directory belonging to another account",
+			env:  Env{Home: home, ConfigHome: theirs, UID: 1000},
+			got:  func(l Layout) string { return l.ConfigDir },
+			want: filepath.Join(home, ".config", "sshakku"),
+		},
+		{
+			name: "a state directory belonging to another account",
+			env:  Env{Home: home, StateHome: theirs, UID: 1000},
+			got:  func(l Layout) string { return l.StateDir },
+			want: filepath.Join(home, ".local", "state", "sshakku"),
+		},
+		{
+			name: "a cache directory belonging to another account",
+			env:  Env{Home: home, CacheHome: theirs, UID: 1000},
+			got:  func(l Layout) string { return l.RuntimeDir },
+			want: filepath.Join(home, ".cache", "sshakku"),
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, tc.got(Resolve(tc.env, there)),
+				"nothing of this account's goes in a directory another account may write")
+		})
+	}
+}
