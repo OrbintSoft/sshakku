@@ -2,6 +2,7 @@ package keys
 
 import (
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -209,4 +210,87 @@ func TestBrokerLookupErrorLogsInfoNotError(t *testing.T) {
 		"the log must say the wallet was not reached: %v", log.lines)
 	assertNothingWentWrong(t, log,
 		"a machine with no wallet in this session is not a machine with something wrong with it")
+}
+
+// TestBrokerDoesNotKeepAPassphraseThatOpenedNothing verifies F66 at the moment
+// the mistake is made. The answer still goes to ssh — ssh is what judges a
+// passphrase, and it will say so — but a wrong one must not be written down:
+// what the wallet holds is answered with at every later use, with nobody asked,
+// so a typo kept here is a key that fails silently from now on.
+func TestBrokerDoesNotKeepAPassphraseThatOpenedNothing(t *testing.T) {
+	keyfile := encryptedKeyFile(t, "the-right-one")
+	secret := &fakeSecret{lookupFound: false}
+	tty := &fakeTTY{answer: "the-typo"}
+	log := &fakeLogger{}
+	b := Broker{Secret: secret, TTY: tty, Log: log}
+
+	reply, ok := b.Answer(t.Context(), "Enter passphrase for "+keyfile+": ")
+	require.True(t, ok, "the user answered, and their answer is ssh's to judge")
+	assert.Equal(t, "the-typo", reply, "so it is handed on as typed")
+	assert.Emptyf(t, secret.stored,
+		"but nothing that opens no key may be kept: %v", secret.stored)
+	assert.Truef(t, log.contains("does not open"),
+		"and the log must say why nothing was saved: %v", log.lines)
+}
+
+// TestBrokerKeepsAPassphraseThatOpenedTheKey is the other half of F66, and the
+// reason the half above cannot be had by simply never storing anything: the
+// right answer still has to reach the wallet, or every later use asks again.
+func TestBrokerKeepsAPassphraseThatOpenedTheKey(t *testing.T) {
+	const right = "the-right-one"
+	keyfile := encryptedKeyFile(t, right)
+	secret := &fakeSecret{lookupFound: false}
+	b := Broker{Secret: secret, TTY: &fakeTTY{answer: right}, Log: &fakeLogger{}}
+
+	reply, ok := b.Answer(t.Context(), "Enter passphrase for "+keyfile+": ")
+	require.True(t, ok, "the key opens")
+	assert.Equal(t, right, reply, "with what the user typed")
+	require.Lenf(t, secret.stored, 1, "and it must be saved: %v", secret.stored)
+	assert.Equal(t, right, secret.stored[0].passphrase, "so the next use asks nobody")
+}
+
+// TestBrokerAsksWhenWhatItHoldsNoLongerOpensTheKey verifies the part of F66
+// that decides whether a user can get themselves out of this. An entry that has
+// stopped fitting — the passphrase was changed with ssh-keygen -p, or a wrong
+// one was written down before this was checked — must not be handed to ssh
+// forever: the user is asked, exactly as the proactive loader asks when ssh-add
+// rejects what the wallet was holding.
+func TestBrokerAsksWhenWhatItHoldsNoLongerOpensTheKey(t *testing.T) {
+	const now = "the-new-one"
+	keyfile := encryptedKeyFile(t, now)
+	secret := &fakeSecret{lookupPass: "the-old-one", lookupFound: true}
+	tty := &fakeTTY{answer: now}
+	log := &fakeLogger{}
+	b := Broker{Secret: secret, TTY: tty, Log: log}
+
+	reply, ok := b.Answer(t.Context(), "Enter passphrase for "+keyfile+": ")
+	require.True(t, ok, "the key must still be openable")
+	assert.Equal(t, now, reply, "with the answer the user gave, not the one that stopped working")
+	require.Lenf(t, tty.calls, 1, "so they must be asked: %+v", tty.calls)
+	require.Lenf(t, secret.stored, 1, "and the new answer takes the old one's place: %v", secret.stored)
+	assert.Equal(t, now, secret.stored[0].passphrase, "so this is asked once and not at every use")
+	assert.Truef(t, log.contains("no longer opens"),
+		"and the log must say what happened to the entry: %v", log.lines)
+}
+
+// TestBrokerUsesWhatItCannotCheck covers the answer that is neither yes nor no.
+// A key file this build cannot open for itself, or one it cannot read at all —
+// ssh prompts with the path as it was written, which for a relative one need
+// not resolve in this process — leaves the passphrase unjudged. Unjudged has to
+// mean "carry on as before": treating it as wrong would refuse a passphrase
+// that works and withhold a wallet entry that was never faulty, which is a
+// worse failure than the one being guarded against, and one the user could do
+// nothing about.
+func TestBrokerUsesWhatItCannotCheck(t *testing.T) {
+	const stored = "unjudgeable"
+	unreadable := filepath.Join(t.TempDir(), "not-here", "id_rsa")
+
+	secret := &fakeSecret{lookupPass: stored, lookupFound: true}
+	tty := &fakeTTY{answer: "typed"}
+	b := Broker{Secret: secret, TTY: tty, Log: &fakeLogger{}}
+
+	reply, ok := b.Answer(t.Context(), "Enter passphrase for "+unreadable+": ")
+	require.True(t, ok, "a key that cannot be checked is not a key that must not be loaded")
+	assert.Equal(t, stored, reply, "what the wallet holds is still what answers")
+	assert.Emptyf(t, tty.calls, "and the user is not asked for something already saved: %+v", tty.calls)
 }

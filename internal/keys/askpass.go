@@ -40,6 +40,12 @@ func ParsePassphrasePrompt(question string) (keyfile string, ok bool) {
 // user types — on a miss; any other prompt is passed straight through to the
 // terminal. It never reads or writes the keyring: that one-shot path belongs to
 // the proactive key-loading flow, not to this reactive broker.
+//
+// Both times a passphrase passes through here it is tried against the key file
+// first. The broker prints its answer and exits, so it never learns what ssh
+// made of it: without that check a passphrase the user mistyped would be saved
+// and then handed back at every later use, and the user — who is only asked
+// when the wallet has nothing — would never be asked again.
 type Broker struct {
 	Secret wallet.Backend
 	TTY    prompt.TTY
@@ -79,8 +85,11 @@ func (b Broker) Answer(ctx context.Context, question string) (reply string, ok b
 	if err != nil {
 		b.logf("INFO", "askpass: secret lookup for %s: %v", keyname, err)
 	} else if found && strings.TrimSpace(pass) != "" {
-		b.logf("INFO", "askpass: provided passphrase for %s from the wallet", keyname)
-		return pass, true
+		if passphraseOpens(keyfile, pass) != verdictWrong {
+			b.logf("INFO", "askpass: provided passphrase for %s from the wallet", keyname)
+			return pass, true
+		}
+		b.logf("INFO", "askpass: the stored passphrase no longer opens %s, asking", keyname)
 	}
 
 	// Wallet miss: prompt on the terminal, then store what the user types so the
@@ -95,7 +104,7 @@ func (b Broker) Answer(ctx context.Context, question string) (reply string, ok b
 		return "", false
 	}
 	if strings.TrimSpace(typed) != "" {
-		b.storePassphrase(ctx, service, keyname, typed)
+		b.storePassphrase(ctx, service, keyname, keyfile, typed)
 	}
 	return typed, true
 }
@@ -109,9 +118,13 @@ func looksLikeConfirmation(question string) bool {
 		strings.Contains(p, "continue connecting")
 }
 
-func (b Broker) storePassphrase(ctx context.Context, service, keyname, passphrase string) {
+func (b Broker) storePassphrase(ctx context.Context, service, keyname, keyfile, passphrase string) {
 	if !walletStores(b.Config, keyname) {
 		b.logf("INFO", "askpass: wallet-store policy excludes %s, not storing", keyname)
+		return
+	}
+	if passphraseOpens(keyfile, passphrase) == verdictWrong {
+		b.logf("INFO", "askpass: what was typed does not open %s, not storing", keyname)
 		return
 	}
 	if err := storeInWallet(ctx, b.Secret, service, keyname, passphrase); err != nil {

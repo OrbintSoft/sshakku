@@ -4512,3 +4512,47 @@ that must pass on both do. `make test`, `make lint-go` clean on all five builds,
 fail by breaking the function rather than the test.
 
 → FEATURES F65, F58, F64, F13; THREAT-MODEL D1, E1; rules 1, 5, 9, 15, 19, 21, 22, 23, 25, 26.
+
+### Phase 59 — The passphrase that was written down before it opened anything ✅ Done
+
+The reactive broker saved what the user typed with nothing having tried it, and
+its lookup had no notion of an entry being wrong. Measured through the real
+binary against a real Secret Service: one typo at the prompt `ssh` raises, and
+the wallet holds the typo. From then on the broker answers `ssh` with it at
+every use — the session log says *provided passphrase from the wallet* — and the
+user is never asked again. Zero prompts on the second login. The key cannot be
+loaded through that path any more, and nothing says why.
+
+So the damaging half is not the storing but what the storing makes unreachable:
+one wrong keystroke and the wallet is poisoned with no way back through the
+product. The proactive loader has never had this problem — it stores only once
+`ssh-add` exits 0, and treats a stored passphrase `ssh-add` rejects as stale and
+asks. The same promise, kept on one path and broken on the other, and written
+down nowhere: hence F66 rather than a widening of F4, which the bug literally
+satisfies (*asked once, saved* — F4 never said what is saved has to work).
+
+The broker prints its answer and exits, so it can never learn `ssh`'s verdict;
+it has to judge for itself. Running `ssh-keygen -y -P` is ruled out by F7, which
+forbids a passphrase on a command line, so the key file is opened in process
+with `golang.org/x/crypto/ssh` — a package of a module already here, no new
+dependency. One predicate then serves both moments: not storing what opens
+nothing, and not answering with what has stopped opening it.
+
+**The measurement that shaped it** is that the predicate needs three answers and
+not two. `ssh-keygen -m PKCS8` produces a key OpenSSH is happy with and this
+build cannot open, and it fails there with the *same* error for the right
+passphrase as for the wrong one. Only `x509.IncorrectPasswordError` is taken for
+"wrong"; everything else — an unreadable path, an unimplemented format, a file
+that is not a key — means the question went unanswered and the caller must do
+exactly what it did before. Treating "could not tell" as "wrong" would refuse a
+passphrase that works and withhold a wallet entry that was never faulty, which
+is a worse failure than the one being fixed and one the user could do nothing
+about.
+
+Verified by driving the real binary in a container: against the previous build
+the scenario fails five assertions, against this one all nine hold, and the four
+that must pass on both do — including the one that fails any "fix" that simply
+stops using the wallet. `make test`, `make lint-go` clean on all five builds;
+`shellcheck`, `shfmt`, `actionlint` clean.
+
+→ FEATURES F66, F4, F6, F7, F8, F18; rules 1, 5, 9, 15, 19, 21, 22, 23, 24, 25.
