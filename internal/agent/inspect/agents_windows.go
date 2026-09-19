@@ -2,7 +2,9 @@
 
 package inspect
 
-import "github.com/OrbintSoft/sshakku/internal/platform"
+import (
+	"github.com/OrbintSoft/sshakku/internal/platform"
+)
 
 // errNoProcessEnumeration is what Agents reports on Windows: the process list
 // is reachable here, but a process's argv — which is how an ssh-agent is told

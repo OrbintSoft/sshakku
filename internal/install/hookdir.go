@@ -1,6 +1,8 @@
 package install
 
-import "os"
+import (
+	"os"
+)
 
 // makeHookDirectory makes the directory a scope's rendered hook goes in.
 //

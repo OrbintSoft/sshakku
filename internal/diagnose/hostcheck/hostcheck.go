@@ -10,7 +10,9 @@
 // configures anything on their behalf.
 package hostcheck
 
-import "context"
+import (
+	"context"
+)
 
 // Checks are best-effort, read-only observations about the host
 // environment: conditions outside sshakku's own control that materially

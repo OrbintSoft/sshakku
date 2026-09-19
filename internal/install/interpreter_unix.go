@@ -2,7 +2,9 @@
 
 package install
 
-import "context"
+import (
+	"context"
+)
 
 // interpreterCandidates is where to look for a shell of one kind on this
 // system: on PATH, under the names the table already knows.

@@ -2,7 +2,9 @@
 
 package agent
 
-import "syscall"
+import (
+	"syscall"
+)
 
 // SysSignaler terminates a process with SIGTERM via the kernel.
 type SysSignaler struct{}

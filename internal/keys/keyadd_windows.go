@@ -2,7 +2,9 @@
 
 package keys
 
-import "os/exec"
+import (
+	"os/exec"
+)
 
 // platformChildEnv names the variables ssh-add and the askpass helper it starts
 // must be given on this system, beyond the ones every system needs.

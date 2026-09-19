@@ -1,6 +1,8 @@
 package install
 
-import "fmt"
+import (
+	"fmt"
+)
 
 // runningForTheMachine is this system's answer about the session running this
 // command: whether it may make a change that every account on the machine will

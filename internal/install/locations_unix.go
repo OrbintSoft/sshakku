@@ -2,7 +2,9 @@
 
 package install
 
-import "path/filepath"
+import (
+	"path/filepath"
+)
 
 // locationsFor is this platform's table of where an install writes.
 //

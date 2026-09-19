@@ -44,7 +44,7 @@ var ErrDeleteUnsupported = errors.New("secret backend cannot delete a stored ent
 // approves this client once rather than on every run.
 type AssociationStore interface {
 	Load() (wire.Association, bool, error)
-	Save(wire.Association) error
+	Save(a wire.Association) error
 }
 
 // Session is the part of KeePassXC's protocol this backend uses. It
@@ -53,7 +53,7 @@ type AssociationStore interface {
 // protocol underneath is verified separately, against a server that speaks it
 // for real.
 type Session interface {
-	TestAssociate(wire.Association) error
+	TestAssociate(a wire.Association) error
 	Associate() (wire.Association, error)
 	GetLogins(url string, a wire.Association) ([]wire.Entry, error)
 	SetLogin(url, login, password, uuid, group string, a wire.Association) error

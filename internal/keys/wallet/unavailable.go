@@ -1,6 +1,8 @@
 package wallet
 
-import "context"
+import (
+	"context"
+)
 
 // Unavailable stands for a secret store that cannot be reached at all —
 // a route the user pinned that this platform does not provide, for instance.

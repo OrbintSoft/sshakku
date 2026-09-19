@@ -155,3 +155,33 @@ func TestAskpassDispatch(t *testing.T) {
 		assert.Equal(t, "wallet-pass\n", out.String(), "and the answer comes from it, not from the terminal")
 	})
 }
+
+// TestAskpassHelperHere covers what the report is told about the passphrase
+// helper, against a fake executable lookup so it runs wherever the test binary
+// lives. The three answers are distinct on purpose: a helper that is there, a
+// helper that is not, and no answer at all — which is what a binary that cannot
+// say where it is has to report, since a helper looked for beside nowhere was
+// never found absent.
+func TestAskpassHelperHere(t *testing.T) {
+	t.Run("a helper beside a binary that knows where it is", func(t *testing.T) {
+		self := binaryBesideItsHelper(t)
+		prog, there := askpassHelperHere(func() (string, error) { return self, nil })
+		assert.Equal(t, askpassProg(self), prog, "the helper named is the one beside the binary")
+		require.NotNil(t, there, "a binary that knows where it is can say whether the helper is there")
+		assert.True(t, *there, "and this one is")
+	})
+
+	t.Run("a helper that is not there is named and reported missing", func(t *testing.T) {
+		self := filepath.Join(t.TempDir(), "sshakku"+programSuffix)
+		prog, there := askpassHelperHere(func() (string, error) { return self, nil })
+		assert.Equal(t, askpassProg(self), prog, "what is missing has to be named, or the user is told to install nothing in particular")
+		require.NotNil(t, there, "and it is missing rather than unknown: the place it would be was looked at")
+		assert.False(t, *there, "so the report says it is not there")
+	})
+
+	t.Run("a binary that cannot say where it is", func(t *testing.T) {
+		prog, there := askpassHelperHere(func() (string, error) { return "", errNoExe })
+		assert.Empty(t, prog, "a helper looked for beside nowhere has no name to report")
+		assert.Nil(t, there, "and it was not found absent — nothing was looked for, which is a different thing to tell the user")
+	})
+}

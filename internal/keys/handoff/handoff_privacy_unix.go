@@ -2,7 +2,9 @@
 
 package handoff
 
-import "os"
+import (
+	"os"
+)
 
 // What makes a handoff rendezvous private here: the permission bits on the
 // directory and on the socket in it. They are set rather than inherited,

@@ -2,7 +2,9 @@
 
 package prompt
 
-import "golang.org/x/sys/unix"
+import (
+	"golang.org/x/sys/unix"
+)
 
 // tcGetTermiosReq/tcSetTermiosReq are the ioctl request numbers disableEcho
 // passes to golang.org/x/sys/unix's Ioctl{Get,Set}Termios — they differ

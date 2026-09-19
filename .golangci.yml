@@ -201,6 +201,15 @@ linters:
     # is what says a thought has finished.
     - godot
 
+    # A file's imports belong in one place and in one shape. Two `import`
+    # declarations in a file compile, and nothing here joins them — gofumpt
+    # leaves both exactly as it found them — so the second is a list nobody
+    # reads and nobody adds to, and the same package can end up imported twice
+    # under two names. The single-line form is what a second declaration grows
+    # out of: `import "os"` has nowhere to put the next import but beside
+    # itself.
+    - grouper
+
     # Two interfaces declared in one package with the same method set are one
     # interface and a spare name for it: which of the two a signature means is
     # something the reader has to work out, and a method added to one leaves the
@@ -225,6 +234,15 @@ linters:
     # package is called what it calls itself.
     - importas
 
+    # A parameter with no name in an interface method leaves the method saying
+    # only what type it takes, and an interface is the one place a reader goes
+    # to find out what is expected of whoever implements it. Where the type's
+    # own name reads like an answer it is not one: `Save(wire.Association)` does
+    # not say whether the association is what gets stored or what it gets stored
+    # under, and the only way left to ask is to open an implementation — which
+    # is what declaring the interface was meant to save.
+    - inamedparam
+
     # `for i := 0; i < n; i++` states the bound three times and can be wrong in
     # three places; `for i := range n` states it once and cannot count wrong.
     - intrange
@@ -238,6 +256,35 @@ linters:
     # to load a key, what state an agent is in, where a setting's value came
     # from.
     - iotamixing
+
+    # cyclop counts the paths through a function and gocognit charges it for
+    # nesting; this one puts how much a function does together with how much of
+    # it there is — Halstead volume, cyclomatic complexity and length in one
+    # number — and so reaches the function neither of the other two objects to
+    # and nobody can hold in their head. At its default bar of 20 it reports
+    # nothing here, and that is where it stays: raised, the first thing it
+    # finds is a table-driven test, whose volume is the cases it lists and
+    # whose complexity is 1. The lowest production function in the tree sits
+    # at 34.
+    - maintidx
+
+    # `make([]byte, n)` is n zeros, and `append` puts what follows after them,
+    # so a buffer made that way and then appended to carries a run of zeros in
+    # front of what it was meant to hold — `make([]byte, 0, n)` is the one that
+    # reserves without filling. This program frames bytes for somebody else to
+    # read: an agent request is a four-byte length and what that length counts,
+    # and a frame whose count includes the padding is one the other end waits
+    # out rather than refuses.
+    - makezero
+
+    # The bytes and strings halves of the standard library mirror each other,
+    # so a call that converts in order to reach the other half — WriteString
+    # handed string(b), a pattern matched against string(b) — copies everything
+    # it touches to ask what the function beside it answers about the bytes
+    # themselves. What travels in the buffers here is passphrases, and a copy
+    # of one is a second place it has to be cleared from, made by a conversion
+    # nobody meant to write.
+    - mirror
 
     # A loop that searches a slice, copies one into another, or picks the
     # larger of two numbers is a loop whose edge cases have to be read to be
@@ -437,6 +484,23 @@ linters:
         # rewrites that would each make a struct harder to read against a saving
         # nothing here is short of — this program runs once per login shell.
         - fieldalignment
+
+    grouper:
+      # The two import checks, and only those. Nothing in the tree had two
+      # import declarations, so the first is a guard; the second cost 41 files
+      # whose one import was written on the declaration line itself, which is a
+      # shape rather than a rewrite.
+      #
+      # The six checks for const, type and var were measured and declined, at
+      # 46, 54, 103, 142, 168 and 315 sites. They report how this tree declares
+      # things rather than a defect in it: a type or a sentinel is declared
+      # beside what it is for, with the prose that explains it above it, and
+      # gathering them into one block per file would put the names in one place
+      # and the reasons in another. Imports are the opposite case — there is
+      # nothing to explain about one, and a reader looking for them wants them
+      # all at once.
+      import-require-single-import: true
+      import-require-grouping: true
 
     importas:
       # There is no `alias:` list here, and its absence is the rule: an alias

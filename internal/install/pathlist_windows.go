@@ -2,7 +2,9 @@
 
 package install
 
-import "strings"
+import (
+	"strings"
+)
 
 // PersistentPathList is how this system spells the list of directories in its
 // PATH variable.

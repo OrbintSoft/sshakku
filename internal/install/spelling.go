@@ -1,6 +1,8 @@
 package install
 
-import "context"
+import (
+	"context"
+)
 
 // spelling moves a path between this program's way of writing one and a
 // shell's.

@@ -2,7 +2,9 @@
 
 package install
 
-import "os"
+import (
+	"os"
+)
 
 // makeDirectoryTheMachineShares makes the directory a machine-wide install's
 // hook goes in.

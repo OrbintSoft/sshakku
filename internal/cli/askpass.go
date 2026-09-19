@@ -145,12 +145,15 @@ func (d deps) askpassEnv(stdout, stderr io.Writer, args []string) int {
 // Where the helper is gone the exports are never printed, so the variable is
 // unset, and reading the absence of a variable would report the one thing a new
 // login shell cannot fix as the one thing it can.
-func askpassHelperHere() (prog string, there *bool) {
-	self, err := os.Executable()
+//
+// self reports this binary's own path (os.Executable in production), since the
+// helper is looked for beside it.
+func askpassHelperHere(self func() (string, error)) (prog string, there *bool) {
+	path, err := self()
 	if err != nil {
 		return "", nil
 	}
-	prog = askpassProg(self)
+	prog = askpassProg(path)
 	found := keys.CanAskWith(prog) == nil
 	return prog, &found
 }

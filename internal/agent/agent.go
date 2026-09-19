@@ -4,7 +4,9 @@
 // lifecycle of OpenSSH's ssh-agent.
 package agent
 
-import "context"
+import (
+	"context"
+)
 
 // Prober reports whether a usable ssh-agent answers on a unix socket path.
 // Reachable mirrors `ssh-add -l`: an agent with zero keys is still healthy.

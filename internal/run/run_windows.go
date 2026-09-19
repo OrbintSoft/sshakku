@@ -2,7 +2,9 @@
 
 package run
 
-import "os/exec"
+import (
+	"os/exec"
+)
 
 // boundToProcessGroup leaves cmd as it is: Windows has no process group a
 // single kill can address, and terminating a tree here means a job object,

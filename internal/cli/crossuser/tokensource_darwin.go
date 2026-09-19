@@ -2,7 +2,9 @@
 
 package crossuser
 
-import "context"
+import (
+	"context"
+)
 
 // Exec has nothing to read on platforms without a Linux kernel
 // keyring: paths.SocketToken/ReadSocketToken already degrade to "" there, so no

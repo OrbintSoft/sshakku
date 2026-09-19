@@ -2,7 +2,9 @@
 
 package hostcheck
 
-import "context"
+import (
+	"context"
+)
 
 // Windows gathers the host-hardening observations on this system —
 // none of them yet. Every field of the zero Checks means "could not

@@ -1,6 +1,8 @@
 package crossuser
 
-import "context"
+import (
+	"context"
+)
 
 // Source reads another user's per-login socket token. A kernel
 // keyring is only visible to the uid that owns it, unlike files, which root can

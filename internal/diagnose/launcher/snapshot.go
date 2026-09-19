@@ -1,6 +1,8 @@
 package launcher
 
-import "context"
+import (
+	"context"
+)
 
 // ProcessEntry is one row of a process-table snapshot: a process, the parent it
 // names, and the short name the system records for it.
