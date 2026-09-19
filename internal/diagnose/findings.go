@@ -135,11 +135,12 @@ func findings(in Inputs, r Report) []string {
 	// Where the endpoint is belongs ahead of what is answering on it: an
 	// endpoint somewhere other than where this session's environment points is
 	// otherwise a difference the report shows and does not account for.
-	if in.RuntimeDirRefused != "" {
-		f = append(f, fmt.Sprintf("$XDG_RUNTIME_DIR names %s, which is not a directory this account has to"+
-			" itself — nothing of this session was put there, and the endpoint is %s instead."+
-			" A socket under that directory would be one another account could rename away and answer in place of",
-			in.RuntimeDirRefused, r.FixedSock))
+	for _, d := range in.RefusedDirs {
+		f = append(f, fmt.Sprintf("%s names %s, which is not a directory this account has to"+
+			" itself — nothing of this session was read from it or put in it, and this account's own"+
+			" directory was used instead. A directory another account may write is one they can rename"+
+			" ours out of and leave their own in place of, whatever the mode on what is inside it",
+			d.Var, d.Path))
 	}
 	if line := answeringFinding(r, reachable); line != "" {
 		f = append(f, line)

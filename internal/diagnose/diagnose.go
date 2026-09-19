@@ -109,6 +109,14 @@ type KeySource struct {
 	State       KeyStateSource
 }
 
+// RefusedDir is one directory the environment named and this session did not
+// use. The variable travels with the path because a reader sent to edit the
+// wrong one would be sent a long way.
+type RefusedDir struct {
+	Var  string
+	Path string
+}
+
 // Inputs are the facts Gather reasons over, injected so it stays pure and
 // testable — nothing here is read from the ambient process.
 type Inputs struct {
@@ -120,14 +128,14 @@ type Inputs struct {
 	// report that knew only one of them would call the other one somebody
 	// else's agent.
 	FixedSockPosix string
-	// RuntimeDirRefused names a runtime directory the environment pointed at
-	// and this session did not put its endpoint in, because it is there and is
-	// not one this account has to itself. Stated by the caller, which is the
+	// RefusedDirs names the directories the environment pointed at and this
+	// session neither read from nor put anything in, because each is there and
+	// is not one this account has to itself. Stated by the caller, which is the
 	// only part of the program that reads the environment this report is about.
-	// Empty where the environment named none, named one that was used, or named
-	// one that is not there at all — nothing was turned down in that last case,
-	// so there is nothing for a reader to go and look into.
-	RuntimeDirRefused string
+	// Empty where the environment named none, named ones that were used, or
+	// named ones that are not there at all — nothing was turned down in that
+	// last case, so there is nothing for a reader to go and look into.
+	RefusedDirs []RefusedDir
 
 	LegacyDir string // ~/.ssh/agent, for spotting a pre-sshakku agent.
 	StatePath string // agent.state, holding the pid of the agent we started.

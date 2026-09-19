@@ -50,19 +50,21 @@ func TestFromOS(t *testing.T) {
 }
 
 // TestProbeDir covers the directory probe: a real directory passes and a file or
-// a missing path does not. The ownership question is refused rather than
-// guessed at — an owner is a SID and access is an ACL, neither of which a uid
-// can name — so requireOwner answers no for a directory that is plainly there.
+// a missing path does not. Every question about who may write or enter is
+// refused rather than guessed at — an owner is a SID and access is an ACL,
+// neither of which a uid can name — so both answer no for a directory that is
+// plainly there.
 func TestProbeDir(t *testing.T) {
 	dir := t.TempDir()
 
-	assert.True(t, ProbeDir(dir, false), "a real directory passes")
-	assert.False(t, ProbeDir(dir, true), "the ownership question has no answer here, so it is not answered yes")
+	assert.True(t, ProbeDir(dir, NeedThere), "a real directory passes")
+	assert.False(t, ProbeDir(dir, NeedUnwritable), "who may write it has no answer here, so it is not answered yes")
+	assert.False(t, ProbeDir(dir, NeedPrivate), "nor has who may enter it")
 
 	file := filepath.Join(dir, "f")
 	require.NoError(t, os.WriteFile(file, nil, 0o600))
-	assert.False(t, ProbeDir(file, false), "a plain file is not a directory")
-	assert.False(t, ProbeDir(filepath.Join(dir, "missing"), false), "a missing path fails")
+	assert.False(t, ProbeDir(file, NeedThere), "a plain file is not a directory")
+	assert.False(t, ProbeDir(filepath.Join(dir, "missing"), NeedThere), "a missing path fails")
 }
 
 // TestProbeDirAs covers the same probe asked on another account's behalf: the
@@ -70,9 +72,10 @@ func TestProbeDir(t *testing.T) {
 func TestProbeDirAs(t *testing.T) {
 	dir := t.TempDir()
 
-	assert.True(t, ProbeDirAs(1000)(dir, false), "a real directory passes whatever uid was asked about")
-	assert.False(t, ProbeDirAs(1000)(dir, true), "and the ownership question is still refused")
-	assert.False(t, ProbeDirAs(1000)(filepath.Join(dir, "missing"), false), "a missing path fails")
+	assert.True(t, ProbeDirAs(1000)(dir, NeedThere), "a real directory passes whatever uid was asked about")
+	assert.False(t, ProbeDirAs(1000)(dir, NeedUnwritable), "and the ownership question is still refused")
+	assert.False(t, ProbeDirAs(1000)(dir, NeedPrivate), "in both of its shapes")
+	assert.False(t, ProbeDirAs(1000)(filepath.Join(dir, "missing"), NeedThere), "a missing path fails")
 }
 
 // TestPrivateDir covers the question asked of a directory before anything of

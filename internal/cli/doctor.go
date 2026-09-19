@@ -580,6 +580,16 @@ func sshVersionHere(ctx context.Context, runner run.Runner, system sshtools.Syst
 // gatherReport builds the diagnostic report for the resolved layout, reading the
 // real procfs, sockets, and process tree. Both the read-only and --fix paths use
 // it so they present the situation identically.
+// refusedDirs carries the layout's refusals across to the report, which reads
+// no environment of its own and so is told rather than asked.
+func refusedDirs(layout paths.Layout) []diagnose.RefusedDir {
+	out := make([]diagnose.RefusedDir, 0, len(layout.Refused))
+	for _, d := range layout.Refused {
+		out = append(out, diagnose.RefusedDir{Var: "$" + d.Var, Path: d.Path})
+	}
+	return out
+}
+
 func gatherReport(ctx context.Context, env paths.Env, layout paths.Layout, settings config.Settings) diagnose.Report {
 	runner := run.ExecRunner{}
 	// One enumerator, read for the keys and named in the report: the set
@@ -603,7 +613,7 @@ func gatherReport(ctx context.Context, env paths.Env, layout paths.Layout, setti
 		EnvSock:           os.Getenv("SSH_AUTH_SOCK"),
 		LogFile:           layout.LogFile,
 		OurUID:            env.UID,
-		RuntimeDirRefused: layout.RuntimeDirRefused,
+		RefusedDirs:       refusedDirs(layout),
 		EnvAskpass:        os.Getenv("SSH_ASKPASS"),
 		EnvAskpassRequire: os.Getenv("SSH_ASKPASS_REQUIRE"),
 		AskpassProg:       helper,

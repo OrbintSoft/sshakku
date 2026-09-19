@@ -503,6 +503,89 @@ done are summarised; see the note at the top of this file for full detail.
     To decide: whether it is wanted at all. The same report can be had by
     running `sshakku doctor` as that account, which is what F61 names today.
 
+29. **Whose a directory is, on Windows (goal 13). Raised 2026-09-19;
+    deferred, to be done from a Windows environment.** Asking whether a
+    directory belongs to this account and to nobody else is what keeps the
+    environment from pointing a session at somebody else's files. On Unix it is
+    two fields of one `stat`. On Windows it is a different question with a
+    different answer: an account is a SID, not a uid, and the permission bits Go
+    reports for a file there are synthesised from the read-only attribute — they
+    say nothing about who else may enter. `paths.PrivateDir` therefore answers
+    `false` for every path on Windows today.
+
+    **What it would take.** The directory's owner SID and its DACL
+    (`GetNamedSecurityInfo`), the owner compared against the process token's
+    user SID, and the DACL examined for any entry granting write to a principal
+    that is neither the owner nor the system — the Windows spelling of "grants
+    nothing to group or other". `install.haveMachineAuthority` already asks the
+    token a question of this shape and is where a design starts.
+
+    **Until then, `false` must keep meaning "cannot tell" and never "not
+    yours".** An unanswered question is not a refusal: a build that cannot
+    establish ownership has to leave behaviour exactly as it was, or every
+    Windows user's own configuration would be discarded as though it belonged to
+    a stranger. That is the same three-valued shape F66 needed for a passphrase
+    a build cannot check, and for the same reason — refusing what was merely
+    unverifiable is a worse failure than the one being guarded against, and one
+    the user can do nothing about.
+
+30. **Protecting the private keys at rest (goals 1, 2). Raised 2026-09-19;
+    open.** A key with no passphrase has nothing but its mode bits between it
+    and anyone who reads the disk — a stolen laptop, a backup, a snapshot, a
+    cloned image, a filesystem mounted somewhere else. `fscrypt` would give it
+    real encryption keyed to the login, and with the key removed from the
+    kernel keyring the files are unreadable even by root. What it does not
+    change is the account that is logged in: root and this user's own processes
+    read it exactly as before while it is unlocked, so the trust boundaries in
+    `docs/THREAT-MODEL.md` stay where they are, and a passphrase leaked during a
+    live session is no safer for it. The win is the window where nobody is
+    logged in, which is where a passphraseless key spends most of its life.
+
+    **Not `~/.ssh`, and `authorized_keys` is the reason.** `sshd` reads
+    `authorized_keys` to decide whether to let someone in — before there is a
+    session, and therefore before anything could have unlocked that directory.
+    Encrypting `~/.ssh` wholesale locks the user out of their own machine by
+    key, which is the classic encrypted-home failure; the usual answer is to
+    move the file out with `AuthorizedKeysFile /etc/ssh/authorized_keys/%u`.
+    There is a better one here: `authorized_keys` holds public keys and wants no
+    protection at all. What is worth encrypting is the private keys, and those
+    live in a directory this program already names — `key_dir`.
+
+    **The constraint that shapes the whole feature** is that a policy can only
+    be put on an *empty* directory: nothing is encrypted in place. Protecting
+    keys therefore means making a new directory, moving them into it and
+    swapping it in — a migration of the user's private keys, and the most
+    dangerous thing this program could be asked to do, on a directory whose
+    half-failure locks someone out of every machine they administer.
+
+    **Where it will simply not be available**, and the report has to say which
+    rather than only "no": `btrfs` has no fscrypt at all and is the default on
+    Fedora and openSUSE; `ext4` needs its `encrypt` feature turned on, at times
+    with the filesystem unmounted; `XFS` gained it only recently. `f2fs`, `ceph`
+    and `ubifs` have it.
+
+    **Unlocking is PAM's** (`pam_fscrypt`), a root-level and distro-specific
+    change: print what to run, never edit PAM. And losing a protector loses the
+    keys, which has to be said before anything moves — survivable for SSH keys,
+    since they can be regenerated and the public halves redeployed, but only if
+    the person knew.
+
+    **Split it.** The reporting half — `sshakku doctor` saying whether the keys
+    are protected at rest, and where they are not, why this filesystem cannot —
+    touches nothing, is useful on its own, and is squarely this program's job.
+    The enabling half comes after, behind an explicit command, a dry run, and a
+    confirmation.
+
+    **Rule 16 before any of it**: `fscrypt` would be a runtime-invoked tool
+    (Apache-2.0). Invoking a separate binary does not link it and does not
+    obstruct relicensing, but the check belongs on the record before it is
+    added, not after.
+
+    Worth saying alongside: for a key with no passphrase the cheapest real
+    protection is still a passphrase on it, or a key whose secret never sits in
+    the file at all — FIDO (`ed25519-sk`), a TPM, a smartcard. This is
+    complementary to those, not a substitute for them.
+
 ---
 
 ## Phases
@@ -4556,3 +4639,49 @@ stops using the wallet. `make test`, `make lint-go` clean on all five builds;
 `shellcheck`, `shfmt`, `actionlint` clean.
 
 → FEATURES F66, F4, F6, F7, F8, F18; rules 1, 5, 9, 15, 19, 21, 22, 23, 24, 25.
+
+### Phase 60 — The directories a shell carries in when it becomes another account ✅ Done
+
+`paths.Resolve` asked whose a directory was of one variable out of four.
+`$XDG_CONFIG_HOME`, `$XDG_STATE_HOME` and the `$XDG_CACHE_HOME` the socket falls
+back to were taken as given, and a comment said `$XDG_RUNTIME_DIR` was the one
+input that could still be naming another account's directory — which was untrue,
+and was why the question was asked once.
+
+Measured through the real binary, with two accounts. A root shell holding an
+ordinary user's `$XDG_CONFIG_HOME` read and obeyed their `config.toml`: their
+`service_prefix` in force, `key_lifetime` turned off — the very mitigation
+`docs/THREAT-MODEL.md` names for the same-user residual risk — and
+`sshakku config --edit` running the command line they wrote, as root. A root
+shell holding their `$XDG_CACHE_HOME` put root's endpoint in a directory they
+own; they own the parent, so the agent at that path is theirs to leave waiting,
+and root's key went into it. Full LPE, stock tooling, the same outcome as
+Phases 56 and 58 through a third variable.
+
+**F67 is new and F65 was breached.** What a session obeys as its settings, and
+where it keeps the record of what it did, had no promise of their own; the
+endpoint's promise existed and its second sentence named only the runtime
+directory, so nothing derived from it had reason to ask about the fallback.
+
+**The measurement that changed the design** came from the scenario and could
+have come from nowhere else. Asking every named directory to be one this
+account has to itself — 0700 and an owner — turns away `~/.config` and
+`~/.cache`, which are 0755 on an ordinary machine: a user pointing a variable at
+a directory plainly their own would have had their settings discarded as a
+stranger's. What protects a directory whose contents are read or kept is that
+nobody else may **write** it, since renaming and unlinking are governed by the
+directory; being visible hands nobody anything. The probe now answers three
+questions instead of two, and the runtime directory keeps the strictest, which
+is what it was already asked and what the system's own 0700 makes free. The
+unit tests could not have found this: they supply the probe themselves, so they
+agree with whatever the answer is defined to be.
+
+Verified by driving the real binary in a container: ten assertions hold on this
+build, seven fail against the previous one, and the three that must pass on both
+do — a directory that really is this account's own is still obeyed, one merely
+absent is still this session's to create, and the other account's configuration
+is readable to begin with, so declining it is a decision. `make test`,
+`make lint-go` clean on all five builds; `shellcheck`, `shfmt`, `actionlint`
+clean.
+
+→ FEATURES F67, F65, F64; rules 1, 5, 9, 15, 18, 19, 21, 22, 23, 25, 26.

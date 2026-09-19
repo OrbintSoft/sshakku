@@ -161,8 +161,8 @@ func TestAnEndpointNobodyStrangeIsHoldingIsNotReportedAsHeld(t *testing.T) {
 // the thing a report exists to spare them.
 func TestReportNamesARuntimeDirectoryThatWasNotUsed(t *testing.T) {
 	r := Gather(t.Context(), Inputs{
-		FixedSock:         "/root/.cache/sshakku/agent.sock",
-		RuntimeDirRefused: "/run/user/1000",
+		FixedSock:   "/root/.cache/sshakku/agent.sock",
+		RefusedDirs: []RefusedDir{{Var: "$XDG_RUNTIME_DIR", Path: "/run/user/1000"}},
 	}, fakeSource{}, fakeProber{}, nil, nil, nil, nil)
 
 	assert.Truef(t, hasFinding(r, "/run/user/1000"),

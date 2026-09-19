@@ -88,35 +88,49 @@ func TestFromOS(t *testing.T) {
 	})
 }
 
-// TestProbeDir covers the probe both questions go through: a real directory
-// passes, a plain file and a missing path fail, and requirePrivate asks not
-// only who owns the directory but whether anybody else was let into it. The
-// second half is not decoration — renaming and unlinking an entry are governed
-// by the directory, so a directory its owner opened to the group or to everyone
-// is one somebody else can swap our socket out of, whatever the socket's own
-// mode says.
+// TestProbeDir covers each question the probe answers, and most of all the
+// distance between the two that matter. Renaming and unlinking an entry are
+// governed by the directory, so a directory its owner opened to the group or
+// to everyone is one somebody else can swap our socket out of, whatever the
+// socket's own mode says — that is what NeedUnwritable asks. NeedPrivate asks
+// more, and the difference is not decoration: mode 0755 is what ~/.config and
+// ~/.cache have on an ordinary system, and a build that treated those as
+// somebody else's would discard a user's own settings over a permission that
+// hands nobody anything.
 func TestProbeDir(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.Chmod(dir, 0o700), "a directory we have to ourselves") //nolint:gosec // G302: the mode is what is being asked about
 
-	assert.True(t, ProbeDir(dir, false), "a real directory passes")
-	assert.True(t, ProbeDir(dir, true), "a real directory we have to ourselves passes")
+	assert.True(t, ProbeDir(dir, NeedThere), "a real directory passes")
+	assert.True(t, ProbeDir(dir, NeedUnwritable), "nobody else may write a 0700 directory of ours")
+	assert.True(t, ProbeDir(dir, NeedPrivate), "and nobody else may enter it either")
 
 	file := filepath.Join(dir, "f")
 	require.NoError(t, os.WriteFile(file, nil, 0o600))
-	assert.False(t, ProbeDir(file, false), "a plain file is not a directory")
-	assert.False(t, ProbeDir(filepath.Join(dir, "missing"), false), "a missing path fails")
+	assert.False(t, ProbeDir(file, NeedThere), "a plain file is not a directory")
+	assert.False(t, ProbeDir(filepath.Join(dir, "missing"), NeedThere), "a missing path fails")
 
-	// A uid that cannot own the temp dir must fail the ownership check.
-	assert.False(t, ProbeDirAs(os.Getuid()+99999)(dir, true), "another uid does not own it")
-	// Without requirePrivate the same probe asks only whether it is there.
-	assert.True(t, ProbeDirAs(os.Getuid()+99999)(dir, false), "without requirePrivate only existence is asked")
+	// A uid that cannot own the temp dir must fail the ownership check, which
+	// is asked for both of the questions that have anything to do with trust.
+	assert.False(t, ProbeDirAs(os.Getuid()+99999)(dir, NeedPrivate), "another uid does not own it")
+	assert.False(t, ProbeDirAs(os.Getuid()+99999)(dir, NeedUnwritable), "nor may we keep anything in it")
+	assert.True(t, ProbeDirAs(os.Getuid()+99999)(dir, NeedThere), "existence is asked of nobody's account")
 
-	// Ours, and open to everybody: owning it is not having it to ourselves.
-	for _, mode := range []os.FileMode{0o750, 0o770, 0o755, 0o777} {
-		require.NoError(t, os.Chmod(dir, mode), "reopen the directory to others")
-		assert.Falsef(t, ProbeDir(dir, true), "a %o directory of ours is not one we have to ourselves", mode)
-		assert.Truef(t, ProbeDir(dir, false), "a %o directory is still plainly there", mode)
+	// Ours, and readable by others: nobody else may write it, so what we keep
+	// there cannot be replaced or renamed away — but it is not ours alone.
+	for _, mode := range []os.FileMode{0o755, 0o750, 0o711} {
+		require.NoError(t, os.Chmod(dir, mode), "open the directory to others for reading")
+		assert.Truef(t, ProbeDir(dir, NeedUnwritable), "a %o directory of ours is one only we may write", mode)
+		assert.Falsef(t, ProbeDir(dir, NeedPrivate), "a %o directory of ours is not one we have to ourselves", mode)
+	}
+
+	// Ours, and open for others to write: this is the one that loses us what
+	// is inside, whatever the mode on what is inside.
+	for _, mode := range []os.FileMode{0o770, 0o777, 0o727} {
+		require.NoError(t, os.Chmod(dir, mode), "open the directory to others for writing")
+		assert.Falsef(t, ProbeDir(dir, NeedUnwritable), "a %o directory is one somebody else may write", mode)
+		assert.Falsef(t, ProbeDir(dir, NeedPrivate), "a %o directory is plainly not one we have to ourselves", mode)
+		assert.Truef(t, ProbeDir(dir, NeedThere), "a %o directory is still plainly there", mode)
 	}
 }
 

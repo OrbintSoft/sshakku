@@ -17,18 +17,26 @@ func FromOS() Env {
 	return fromEnv(os.Getenv, os.UserHomeDir, os.Getuid, PrivateDir)
 }
 
-// ProbeDir reports whether path is a directory. requireOwner cannot be answered
-// here (see PrivateDir), so a caller who asks for it is told no.
-func ProbeDir(path string, requireOwner bool) bool {
-	return ProbeDirAs(os.Getuid())(path, requireOwner)
+// ownerUnknowable: an account here is a SID and access is granted by ACL,
+// neither of which PrivateDir can read yet, so no directory is turned down for
+// whose it is — a question this build cannot answer must not be answered as
+// though it came back "somebody else's".
+const ownerUnknowable = true
+
+// ProbeDir reports whether path is a directory meeting need. Anything beyond
+// NeedThere cannot be answered here (see PrivateDir), so a caller who asks for
+// it is told no.
+func ProbeDir(path string, need Need) bool {
+	return ProbeDirAs(os.Getuid())(path, need)
 }
 
 // ProbeDirAs is like ProbeDir for a given uid. Windows identifies an owner by
-// SID and grants access by ACL, neither of which a uid can name, so the
-// ownership question is refused rather than guessed at.
-func ProbeDirAs(int) func(path string, requireOwner bool) bool {
-	return func(path string, requireOwner bool) bool {
-		if requireOwner {
+// SID and grants access by ACL, neither of which a uid can name, so every
+// question about who may write or enter a directory is refused rather than
+// guessed at.
+func ProbeDirAs(int) func(path string, need Need) bool {
+	return func(path string, need Need) bool {
+		if need != NeedThere {
 			return false
 		}
 		fi, err := os.Lstat(path)
