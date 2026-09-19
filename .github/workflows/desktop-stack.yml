@@ -97,6 +97,19 @@ jobs:
           keyctl session - test/containers/keyring-session.sh
           test/containers/gnome-keyring-headless-scenario.sh
 
+      # What that wallet is left holding for a key, on a machine where it can
+      # hold something: a passphrase that opened the key and no other. The
+      # session's own screen is enough here — the asking happens on the terminal
+      # either way, because it is ssh that raises it and the askpass helper that
+      # answers.
+      - name: Run the stored-passphrase scenario
+        if: matrix.name == 'gnome-keyring'
+        run: >
+          docker run --init --rm
+          -v "${{ github.workspace }}":/src:ro
+          sshakku-test-desktop-stack-gnome-keyring
+          test/containers/stored-passphrase-scenario.sh
+
       # What the doctor says about that wallet, on the machine where it can hold
       # nothing. The activation file is removed so that a bus this scenario
       # starts for itself has no wallet on it and none that could be started —

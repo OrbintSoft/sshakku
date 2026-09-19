@@ -1,0 +1,5 @@
+# The key is added on demand rather than at login, so the reactive path — ssh
+# asking, sshakku-askpass answering — is the only thing that writes to the
+# wallet in stored-passphrase-scenario.sh.
+auto_load_mode = "exclude"
+auto_load_exclude = ["id_ed25519"]
