@@ -220,6 +220,11 @@ jobs:
       - name: Run the two-account agent scenario in ${{ matrix.name }}
         run: docker run --init --rm -v "${{ github.workspace }}":/src:ro -w /src sshakku-test-${{ matrix.name }} test/containers/two-account-agent-scenario.sh
 
+      # Runtime directories belonging to two different accounts, which needs
+      # both accounts and a login shell for each.
+      - name: Run the runtime-directory scenario in ${{ matrix.name }}
+        run: docker run --init --rm -v "${{ github.workspace }}":/src:ro -w /src sshakku-test-${{ matrix.name }} test/containers/runtime-directory-scenario.sh
+
   test-windows:
     name: go test (windows)
     runs-on: windows-latest
