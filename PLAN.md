@@ -4451,3 +4451,64 @@ flaking is that job's to report — it cannot be observed from here, and this
 entry does not claim it.
 
 → FEATURES F21, F7; rules 1, 5, 15, 19, 22, 23, 28.
+
+### Phase 58 — The runtime directory nobody asked about ✅ Done
+
+`resolveRuntimeDir` took `$XDG_RUNTIME_DIR` on trust. The variable is inherited
+like any other, so a shell that becomes another user without opening a session
+of its own carries the account it came from — and both sessions then resolve the
+same path. Measured through the real binary, an ordinary account and a root
+login ended up on one socket, that account's own:
+
+    alice  SSH_AUTH_SOCK=/run/user/1000/sshakku/agent.sock
+    root   SSH_AUTH_SOCK=/run/user/1000/sshakku/agent.sock
+
+No attack step is involved. `Ensure` does not fail closed here either: root can
+`chmod` another account's directory, so the one check that would have stopped an
+ordinary caller lets through the one account whose capture matters. Root's
+session listed that account's key, root's own key landed in their agent, and
+from there they signed with it — while the private key file itself stayed
+unreadable to them, which is what makes the agent the whole of the exposure.
+
+Phase 56 does not intercept this. That filtered which **process** may be
+adopted; nothing is adopted here. It is a second way to break the same promise,
+reached through the path instead of through the process — so F65 is a feature of
+its own rather than a widening of F64. F58 already named the assumption, in the
+clause that says what the Windows case is unlike: *a file in a directory only
+you may write*. Nothing promised it. Three questions, one per leg: who holds the
+endpoint (F58), whose is the process that would be adopted (F64), whose is the
+directory it lives in (F65).
+
+**The reasoning in the code had it backwards**, which is the part worth keeping.
+`Resolve` said `requireOwner` was *"used for the guessed /run/user/$UID path,
+which we did not get from the environment and therefore must not trust
+blindly"* — treating provenance from the environment as grounds **for** trust,
+when it is the one input another account can still be holding. Five lines above,
+the `TempDir` field stated the opposite rule for `$TMPDIR` and applied it.
+
+**Two things the work itself turned up.** A fixture pointed `$XDG_RUNTIME_DIR`
+at a directory that does not exist, and the first fix reported it as not being
+this account's — false, and it would fire for anyone carrying a stale variable
+after a logout. Telling *absent* from *somebody else's* needs the question
+`Resolve` already asks of a path, so the check moved there from the environment
+boundary and the refusal travels on `Layout`. And `t.TempDir()` hands back a
+`0755` directory — the numbered subdirectory is created `0777`, kept out of
+reach by its `0700` parent rather than by its own mode — so every test standing
+in for a runtime directory was quietly failing the new question and falling
+through to the machine's own `/run/user/$UID`. The helper now narrows it to
+`0700`, which is what a real one is.
+
+`requireOwner` became `requirePrivate` and now asks both halves at once, with
+`PrivateDir` expressed as that same predicate asked about this process's account
+rather than as a second implementation of it. Owning a directory is not having
+it to oneself: unlinking and renaming an entry are governed by the directory, so
+a `0700` socket inside a group-writable directory is one somebody else can move
+aside and answer in place of.
+
+Verified by driving the real binary in a container: against the previous build
+the scenario fails five assertions, against this one all hold, and the three
+that must pass on both do. `make test`, `make lint-go` clean on all five builds,
+`shellcheck`/`shfmt`/`actionlint` clean. Each half of the decision was made to
+fail by breaking the function rather than the test.
+
+→ FEATURES F65, F58, F64, F13; THREAT-MODEL D1, E1; rules 1, 5, 9, 15, 19, 21, 22, 23, 25, 26.
