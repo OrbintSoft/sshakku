@@ -1,6 +1,7 @@
 package handoff
 
 import (
+	"context"
 	"errors"
 	"io"
 	"net"
@@ -42,15 +43,21 @@ var (
 	errListenBoom = errors.New("listen boom")
 	errNoBase     = errors.New("no base")
 	errReadBoom   = errors.New("read boom")
+
+	errDeadlineBoom = errors.New("deadline boom")
 )
 
-// saveHandoffSocketSeams snapshots the RNG, listen, and chmod seams shared by
-// the token and socket-handoff code, restoring them when the (sub)test ends.
+// saveHandoffSocketSeams snapshots the RNG, listen, chmod, read and deadline
+// seams shared by the token and socket-handoff code — and the collecting budget
+// beside them, which a test shortens for the same reason it swaps a seam —
+// restoring them when the (sub)test ends.
 func saveHandoffSocketSeams(t *testing.T) {
 	t.Helper()
 	oRand, oListen, oChmodDir, oChmod, oRead := randRead, netListen, chmodDir, chmodSock, readAll
+	oDeadline, oBudget := setDeadline, fetchBudget
 	t.Cleanup(func() {
 		randRead, netListen, chmodDir, chmodSock, readAll = oRand, oListen, oChmodDir, oChmod, oRead
+		setDeadline, fetchBudget = oDeadline, oBudget
 	})
 }
 
@@ -78,6 +85,12 @@ func TestSocketHandoffFetchReadError(t *testing.T) {
 // Nothing handed over and a passphrase the user left empty are the same string
 // and different events, and only the second one is an answer.
 func TestSocketHandoffServedNothingIsNotAPassphrase(t *testing.T) {
+	// The budget is shortened rather than left at its own value: where closing
+	// a socket does not reach the other end as an end of file, what ends this
+	// read is the budget, and a test must not spend the real one to find out.
+	saveHandoffSocketSeams(t)
+	fetchBudget = 100 * time.Millisecond
+
 	sock := filepath.Join(testtmp.ShortDir(t), "collected.sock")
 	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "unix", sock)
 	require.NoError(t, err, "a rendezvous to collect from must be there")
@@ -96,6 +109,88 @@ func TestSocketHandoffServedNothingIsNotAPassphrase(t *testing.T) {
 	_, err = socketHandoffFetch(t.Context(), sock)
 	assert.Error(t, err,
 		"a handoff that handed nothing over must be reported as that, not passed on as a passphrase")
+}
+
+// TestSocketHandoffFetchGivesUpOnARendezvousThatSaysNothing verifies F21 on the
+// handoff: nothing SSHakku waits on may hold a shell up with no end, and a
+// rendezvous that neither answers nor fails is exactly the shape that promise
+// is about. Behind this read are sshakku-askpass, the ssh-add waiting on it,
+// and the login shell waiting on that.
+//
+// The peer accepts and then says nothing at all, which hangs on every platform
+// rather than only where closing an AF_UNIX socket fails to deliver an end of
+// file — the state this was first seen in is one system's way of reaching it,
+// not the fault itself.
+func TestSocketHandoffFetchGivesUpOnARendezvousThatSaysNothing(t *testing.T) {
+	saveHandoffSocketSeams(t)
+	fetchBudget = 100 * time.Millisecond
+
+	sock := filepath.Join(testtmp.ShortDir(t), "silent.sock")
+	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "unix", sock)
+	require.NoError(t, err, "a rendezvous to collect from must be there")
+	t.Cleanup(func() { _ = ln.Close() })
+
+	// Accepted and then held open, with no byte written and no close: a server
+	// that has stopped answering without having failed.
+	held := make(chan net.Conn, 1)
+	go func() {
+		conn, acceptErr := ln.Accept()
+		if acceptErr != nil {
+			return
+		}
+		held <- conn
+	}()
+	t.Cleanup(func() {
+		select {
+		case conn := <-held:
+			_ = conn.Close()
+		default:
+		}
+	})
+
+	start := time.Now()
+	_, err = socketHandoffFetch(t.Context(), sock)
+	assert.Error(t, err, "a rendezvous that says nothing must be given up on, not waited on")
+	assert.Less(t, time.Since(start), time.Minute,
+		"the waiting must end on its own, and not because something else came along and ended it")
+}
+
+// TestSocketHandoffFetchHonoursTheCallersOwnDeadline verifies that a caller who
+// has already stopped waiting is not left holding a read that has not: the
+// sooner of the two moments is the one collecting gives up at.
+func TestSocketHandoffFetchHonoursTheCallersOwnDeadline(t *testing.T) {
+	saveHandoffSocketSeams(t)
+	fetchBudget = time.Hour
+
+	var asked time.Time
+	setDeadline = func(_ net.Conn, at time.Time) error {
+		asked = at
+		return nil
+	}
+
+	token, err := socketHandoffStash("s3cr3t", 5*time.Second, fixedBase(testtmp.ShortDir(t)), addrLimit)
+	require.NoError(t, err, "putting a passphrase aside must succeed")
+
+	theirs := time.Now().Add(time.Second)
+	ctx, cancel := context.WithDeadline(t.Context(), theirs)
+	defer cancel()
+	_, err = socketHandoffFetch(ctx, token)
+	require.NoError(t, err, "the passphrase is there to collect")
+	assert.WithinDuration(t, theirs, asked, time.Millisecond,
+		"the caller's own deadline falls first, so it is the one collecting stops at")
+}
+
+// TestSocketHandoffFetchDeadlineError covers the branch where the collecting
+// budget cannot be put on the connection at all. Reading on without it would be
+// the unbounded wait this exists to prevent, so it is refused instead.
+func TestSocketHandoffFetchDeadlineError(t *testing.T) {
+	saveHandoffSocketSeams(t)
+	setDeadline = func(net.Conn, time.Time) error { return errDeadlineBoom }
+
+	token, err := socketHandoffStash("s3cr3t", 5*time.Second, fixedBase(testtmp.ShortDir(t)), addrLimit)
+	require.NoError(t, err, "putting a passphrase aside must succeed")
+	_, err = socketHandoffFetch(t.Context(), token)
+	assert.ErrorIs(t, err, errDeadlineBoom, "a read that cannot be bounded must not be made anyway")
 }
 
 func TestSocketHandoffDirErrors(t *testing.T) {

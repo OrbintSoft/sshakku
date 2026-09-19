@@ -16,16 +16,32 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/OrbintSoft/sshakku/internal/run"
 )
 
-// Seams over the socket listen and read, so socketHandoffStash's failure
-// branches are exercisable deterministically. Production points them at the
-// real net and io operations; what makes the socket private is a seam too, and
-// lives with the system that decides it.
+// Seams over the socket listen, read and deadline, so the failure branches on
+// either side of the rendezvous are exercisable deterministically. Production
+// points them at the real net and io operations; what makes the socket private
+// is a seam too, and lives with the system that decides it.
 var (
-	netListen = net.Listen
-	readAll   = io.ReadAll
+	netListen   = net.Listen
+	readAll     = io.ReadAll
+	setDeadline = func(conn net.Conn, t time.Time) error { return conn.SetDeadline(t) }
 )
+
+// fetchBudget bounds the collecting of a passphrase from the rendezvous.
+//
+// It is the budget of something expected to answer by itself rather than of a
+// wait on a person: whoever had to type the passphrase has already typed it,
+// and what is being waited on here is a server this program started, on this
+// machine, holding an answer it writes the moment a caller arrives. A read that
+// has not finished in this long is not slow, it is one that is not going to
+// finish.
+//
+// A var rather than a const so a test can shorten it, since what it bounds is
+// the one thing a test of it must not actually spend.
+var fetchBudget = run.DefaultCommandTimeout
 
 // socketHandoffDir returns (creating it if needed) the private per-user
 // directory passphrase-handoff sockets live in, under base. Named "h", not
@@ -148,6 +164,9 @@ func socketHandoffFetch(ctx context.Context, token string) (string, error) {
 		return "", err
 	}
 	defer func() { _ = conn.Close() }()
+	if err = setDeadline(conn, collectBy(ctx)); err != nil {
+		return "", err
+	}
 	buf, err := readAll(conn)
 	if err != nil {
 		return "", err
@@ -156,4 +175,18 @@ func socketHandoffFetch(ctx context.Context, token string) (string, error) {
 		return "", errNothingHandedOver
 	}
 	return string(buf), nil
+}
+
+// collectBy is the moment collecting gives up: the caller's own deadline where
+// they set one that falls sooner, and this package's budget otherwise.
+//
+// The dial honours the context and the read would not, which is the whole of
+// what this exists to put right — a caller that has already stopped waiting is
+// left holding a read that has not.
+func collectBy(ctx context.Context) time.Time {
+	by := time.Now().Add(fetchBudget)
+	if theirs, ok := ctx.Deadline(); ok && theirs.Before(by) {
+		return theirs
+	}
+	return by
 }
