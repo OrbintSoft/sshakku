@@ -277,6 +277,15 @@ linters:
     # out rather than refuses.
     - makezero
 
+    # The bytes and strings halves of the standard library mirror each other,
+    # so a call that converts in order to reach the other half — WriteString
+    # handed string(b), a pattern matched against string(b) — copies everything
+    # it touches to ask what the function beside it answers about the bytes
+    # themselves. What travels in the buffers here is passphrases, and a copy
+    # of one is a second place it has to be cleared from, made by a conversion
+    # nobody meant to write.
+    - mirror
+
     # A loop that searches a slice, copies one into another, or picks the
     # larger of two numbers is a loop whose edge cases have to be read to be
     # trusted; the standard function it replaces has a name that says what the
