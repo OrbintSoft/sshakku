@@ -151,6 +151,76 @@ func TestEnsureAgentForeign(t *testing.T) {
 	assert.Equal(t, foreignSock, target, "the fixed path must point at the adopted socket")
 }
 
+// TestEnsureAgentDoesNotAdoptAnotherAccountsAgent verifies F64: an ssh-agent
+// belonging to another account on the machine is not adopted, however correctly
+// it answers. One of ours is started instead, so a key loaded afterwards is held
+// where only this account can reach it.
+func TestEnsureAgentDoesNotAdoptAnotherAccountsAgent(t *testing.T) {
+	dir := testtmp.ShortDir(t)
+	fixed := filepath.Join(dir, "agent.sock")
+	proc := testtmp.ShortDir(t)
+	theirSock := filepath.Join(dir, "theirs.sock")
+
+	// Answering perfectly, and not ours: their uid against the one we run as.
+	inspecttest.FakeProc(t, proc, 300, []string{"ssh-agent", "-a", theirSock}, 2000)
+
+	runner := &recordRunner{pid: 9100}
+	m := Manager{
+		Prober:    mapProber{theirSock: true}, // fixed silent, theirs healthy.
+		Inspector: inspect.Inspector{ProcRoot: proc},
+		Runner:    runner,
+		Signaler:  &recordSignaler{},
+	}
+	log := &fakeLogger{}
+
+	cfg := EnsureConfig{FixedSock: fixed, LegacyDir: "/nope", StatePath: filepath.Join(dir, "st"), OurUID: 1000}
+	res, err := m.EnsureAgent(t.Context(), cfg, log)
+	require.NoError(t, err)
+	assert.Nil(t, res.Adopted, "another account's agent must not be adopted")
+	assert.NotEqual(t, theirSock, res.Live.Native(), "no session may be pointed at their socket")
+	assert.Equal(t, SituationClean, res.Situation, "with nothing of ours alive, this is a clean start")
+	assert.Equal(t, fixed, runner.started, "one of ours must be started instead")
+	assert.Equal(t, fixed, res.Live.Native(), "the live endpoint is our own fixed socket")
+
+	_, err = os.Readlink(fixed)
+	assert.Error(t, err, "the fixed path must not have been pointed at their socket")
+
+	// Said in the log and nowhere else: on a shared machine somebody else's
+	// agent is an ordinary sight, not something to put on the screen at every
+	// login -- but somebody looking into why their own agent was started has to
+	// be able to find that one was passed over, and why.
+	assert.True(t, log.hasLevel("INFO"), "passing over their agent must be recorded")
+}
+
+// TestEnsureAgentDoesNotAdoptAnAgentItCannotAttribute verifies F64 for the agent
+// whose owner cannot be read at all: not ours until it is known to be. Adopting
+// is trusting, so what cannot be attributed is refused -- the opposite direction
+// from Reap, which leaves such a process alone rather than signalling it.
+func TestEnsureAgentDoesNotAdoptAnAgentItCannotAttribute(t *testing.T) {
+	dir := testtmp.ShortDir(t)
+	fixed := filepath.Join(dir, "agent.sock")
+	proc := testtmp.ShortDir(t)
+	unattributed := filepath.Join(dir, "nobody.sock")
+
+	// A negative uid writes no status file, which is the process whose owner
+	// this cannot read.
+	inspecttest.FakeProc(t, proc, 300, []string{"ssh-agent", "-a", unattributed}, -1)
+
+	runner := &recordRunner{pid: 9200}
+	m := Manager{
+		Prober:    mapProber{unattributed: true},
+		Inspector: inspect.Inspector{ProcRoot: proc},
+		Runner:    runner,
+		Signaler:  &recordSignaler{},
+	}
+
+	cfg := EnsureConfig{FixedSock: fixed, LegacyDir: "/nope", StatePath: filepath.Join(dir, "st"), OurUID: 1000}
+	res, err := m.EnsureAgent(t.Context(), cfg, nil)
+	require.NoError(t, err)
+	assert.Nil(t, res.Adopted, "an agent that cannot be attributed must not be adopted")
+	assert.Equal(t, fixed, runner.started, "one of ours must be started instead")
+}
+
 func TestEnsureAgentDisasterMultiple(t *testing.T) {
 	dir := testtmp.ShortDir(t)
 	fixed := filepath.Join(dir, "agent.sock")
