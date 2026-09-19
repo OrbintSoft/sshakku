@@ -4209,3 +4209,133 @@ run belongs here: no user-visible behaviour changed, and the whole of the source
 change is five test files.
 
 → rules 1, 5, 20, 22, 23, 24, 26, 27.
+
+### Phase 54 — Five analysers, and the one that does nothing until told ✅ Done
+
+`grouper`, `inamedparam`, `maintidx`, `makezero` and `mirror` are new to
+`.golangci.yml`. Between them they found three sites in the tree, which is what
+the phase looks like from the outside; what it decided is which of the five say
+anything at all, and at what bar.
+
+**Rule 12 decision.** All five ship inside the golangci-lint the lint workflow
+pins, so `go.mod` is untouched and there is no new licence to record. Each was
+surveyed on all five builds `lint-go` names — linux, darwin, windows,
+`backend_unresponsive`, `midsession_failure` — with
+`--max-issues-per-linter=0 --max-same-issues=0`, and every build reported the
+same three issues.
+
+**`grouper` is off until it is configured**, which is the thing worth knowing
+about it: all eight of its checks default to false, so enabling the linter
+changes nothing by itself. Each was measured alone before being chosen —
+`import-require-single-import` 0, `import-require-grouping` 25,
+`var-require-single-var` 46, `const-require-single-const` 54,
+`const-require-grouping` 103, `var-require-grouping` 142,
+`type-require-single-type` 168, `type-require-grouping` 315.
+
+The two import checks are on. The first is a guard: nothing here had two
+`import` declarations in one file, and nothing here would have joined them
+either — `gofumpt -w` leaves both exactly as it found them, which was checked
+rather than assumed — so the second declaration would have been a list nobody
+reads, with the same package free to arrive twice under two names. The second
+cost 41 files across the three builds, each of which had written its one import
+on the declaration line, which is where a second declaration comes from: `import
+"os"` has nowhere to put the next import but beside itself.
+
+The six checks for `const`, `type` and `var` were measured and declined. They
+report how this tree declares things rather than a defect in it: a type or a
+sentinel is declared beside what it is for, with the prose that explains it
+above it, and gathering them into one block per file would put the names in one
+place and the reasons in another. Imports are the opposite case — there is
+nothing to explain about one, and a reader looking for them wants them all at
+once.
+
+**`maintidx` stays at its default bar of 20**, where it reports nothing. Raised,
+it was measured rather than guessed: 25 reports nothing either, 30 reports two,
+35 twenty-one, 40 sixty-five. The two at 30 are `TestDoctorMakesTheCompartment`
+and `TestLookForCollection`, both table-driven and both of cyclomatic complexity
+1 — what the measure charges them for is the cases they list. The lowest
+production function in the tree sits at 34, so any bar that reached a production
+function would report tables first. What it adds beside `cyclop` and `gocognit`
+is that it multiplies rather than counts: Halstead volume, complexity and length
+in one number, so it reaches the function neither of the other two objects to
+and nobody can hold in their head.
+
+**Two had something to say.** `inamedparam` named two interface methods in the
+KeePassXC backend whose parameter was a bare `wire.Association`, beside two that
+already named theirs — an interface is where a reader goes to learn what is
+expected of an implementation, and `Save(wire.Association)` does not say whether
+the association is what gets stored or what it gets stored under. `makezero`
+found one `append` to a `make([]byte, 4)`, in a test that then filled all four
+bytes, so it was not a bug — but it is the shape a bug wears, indistinguishable
+from outside from the same lines with the fill left out;
+`binary.BigEndian.AppendUint32(nil, …)` builds the same header without the
+question.
+
+**`mirror` reports nothing and is here for what it watches**: the bytes and
+strings halves of the standard library, where a conversion to reach the other
+half copies everything it touches. What travels in the buffers here is
+passphrases, and a copy of one is a second place it has to be cleared from.
+
+**Each of the three that report nothing was made to fire once** before being
+trusted, per Phase 34: a throwaway package with two `import` declarations for
+grouper, one 800-line function for maintidx, and three of mirror's shapes — a
+bufio write, a strings prefix test and a regexp match, each handed `string(b)`.
+
+**Verified**: `golangci-lint run` clean on all five builds after each of the
+five commits, `golangci-lint fmt --diff` clean, and `go test ./...` clean
+uncached. No end-to-end run belongs here: nothing user-visible changed, and the
+whole of the source change is two parameter names, one header built by
+appending, and 41 files whose imports moved into parentheses.
+
+→ rules 1, 5, 12, 15.
+
+### Phase 55 — The three arms two helpers could not be asked for ✅ Done
+
+Linux and macOS are both back to 100.0% of statements. They had fallen to the
+same figure for the same reason: one package below 100, `internal/cli` at
+99.5146% on each, which is three uncovered statements out of 618 — the same
+three, since every other package was at 100 on both.
+
+**Neither helper could be reached with the failure it handles.**
+`askpassHelperHere` called `os.Executable` itself, and `sshVersionHere` asked
+`sshtools.ThisSystem()` itself — and on unix that is the empty `System`, whose
+`Tool` returns the name unchanged and cannot fail at all. So the arm was not
+merely untested: from linux and macOS it was unreachable, and it ran only on a
+machine that keeps more than one OpenSSH. Each now takes the answer as an
+argument, the way the rest of this package already does — `deps.self` is the
+precedent for the first, and for the second it is the shape a platform's
+answers are given everywhere here: the table belongs to the machine, the logic
+that reads it is neutral and takes it as an argument, so both answers stay
+checkable from either.
+
+Each was watched failing first, and by breaking the function rather than the
+test:
+
+- `askpassHelperHere` answers with a name and a `*bool`, and the nil is the
+  interesting one: a helper looked for beside nowhere was not found absent. With
+  the early return dropped it reports the helper as `sshakku-askpass`, a bare
+  name that reads as a program on PATH, and hands the report a non-nil "not
+  there" — which is a thing the user can go and install, about a lookup that
+  never happened.
+- `sshVersionHere`'s lookup arm runs `ssh -V` on a program with no name once
+  dropped, and the runner's recorded call is what says so. The test asserts the
+  runner was never called at all, beside the zero `Version`.
+
+**What the version arm does not pin**, because a test that covers a line is not
+the same as a test that pins a decision: dropping its error check alone changes
+nothing a test can see, since `ReadVersion` reports its own failure as that same
+zero `Version`. What the arm decides is the thing beside it — that no version is
+invented — so it was broken the way the function's own comment warns against,
+returning the 8.4 that `SSH_ASKPASS_REQUIRE` arrived in. That is the break the
+subtest goes red on.
+
+**Verified**: `make test-json` uncached, 1953 tests, 14 skipped, 0 failures,
+100.0% of statements on linux; `golangci-lint run` clean on all five builds and
+`golangci-lint fmt --diff` clean. macOS cannot be run from here, and
+both helpers are in files with no build tag, so a darwin build compiles all
+three tests — the figure itself comes from the macOS job. No end-to-end run
+belongs here: the only production change is two signatures that now take what
+they used to ask for, and the values production passes are the calls they made
+before.
+
+→ rules 1, 5, 20, 22, 23, 24, 26, 27.
