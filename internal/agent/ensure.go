@@ -110,7 +110,7 @@ func (m Manager) EnsureAgent(ctx context.Context, cfg EnsureConfig, log Logger) 
 		logf("INFO", "reaped dead agents: pids %v, sockets %v", reap.Terminated, reap.RemovedSockets)
 	}
 
-	foreign, err := m.healthyForeign(ctx, cfg.FixedSock)
+	foreign, err := m.healthyForeign(ctx, cfg.FixedSock, cfg.OurUID, logf)
 	if err != nil {
 		return EnsureResult{}, err
 	}
@@ -183,21 +183,53 @@ func (m Manager) adoptOne(cfg EnsureConfig, logf recordf, foreign []inspect.Agen
 	}, nil
 }
 
-// healthyForeign returns the live ssh-agents bound to a socket other than the
-// fixed one, sorted by pid for a deterministic adoption choice.
-func (m Manager) healthyForeign(ctx context.Context, fixedSock string) ([]inspect.AgentProc, error) {
+// ours reports whether p belongs to the account this program is running as.
+//
+// Both halves of the lifecycle ask it, and asking the same question is the
+// point: what may be signalled and what may be adopted are the same set of
+// processes, and a half that decided for itself would sooner or later decide
+// differently.
+//
+// A process whose owner could not be read is answered no. That reads as two
+// sentences and is one: what cannot be put to an account is neither acted on
+// nor trusted.
+func ours(p inspect.AgentProc, ourUID int) bool { return p.UID == ourUID }
+
+// healthyForeign returns the live ssh-agents of this account bound to a socket
+// other than the fixed one, sorted by pid for a deterministic adoption choice.
+//
+// An agent belonging to somebody else on the machine is passed over, and is not
+// even asked whether it answers. Adopting one means pointing this session at it,
+// and the next key loaded is then handed to whoever is behind it — so answering
+// the agent protocol correctly cannot be what qualifies an agent, since that is
+// the one thing a program after this account's keys would be sure to get right.
+//
+// They are counted rather than named one by one: on a machine several people
+// use, other accounts' agents are an ordinary sight rather than a problem, and
+// a line each would crowd out of a bounded log the lines that are about this
+// session.
+func (m Manager) healthyForeign(ctx context.Context, fixedSock string, ourUID int, logf recordf) ([]inspect.AgentProc, error) {
 	procs, err := m.Inspector.Agents()
 	if err != nil {
 		return nil, fmt.Errorf("inspect agents: %w", err)
 	}
 	var out []inspect.AgentProc
+	passedOver := 0
 	for _, p := range procs {
 		if p.Socket == "" || p.Socket == fixedSock {
+			continue
+		}
+		if !ours(p, ourUID) {
+			passedOver++
 			continue
 		}
 		if m.Prober.Reachable(ctx, p.Socket) {
 			out = append(out, p)
 		}
+	}
+	if passedOver > 0 {
+		logf("INFO", "passed over %d ssh-agent process(es) belonging to another account on this machine;"+
+			" this session uses an agent of its own", passedOver)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].PID < out[j].PID })
 	return out, nil

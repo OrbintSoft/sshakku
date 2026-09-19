@@ -4339,3 +4339,62 @@ they used to ask for, and the values production passes are the calls they made
 before.
 
 → rules 1, 5, 20, 22, 23, 24, 26, 27.
+
+### Phase 56 — The agent that was not this account's, and the login that took it ✅ Done
+
+`EnsureAgent` adopted any reachable `ssh-agent` on the machine. `Reap` asked
+whose a process was before signalling it; the adoption path never asked at all,
+and adopting is the graver of the two — signalling ends somebody's agent, while
+adopting points this session at it and hands it every key loaded afterwards.
+
+The diagnostic half already had the right model and had had it all along:
+`classifyState` skips an agent owned by another real uid, with the reason
+written out, and the report names such agents as visible but not part of this
+account's session. So on one machine at one moment `doctor` said no agent was
+answering and a login shell would start one, while the login shell adopted a
+stranger's. The change brings the login path onto the model the report already
+used; it does not invent one.
+
+**What the first attempt at an end-to-end scenario got wrong**, and it is the
+reason this entry exists rather than a one-line fix. It was written for two
+ordinary accounts, and it passed against the build it was meant to catch. An
+`ssh-agent` refuses a client whose uid is not its own, so one ordinary account
+cannot reach another's however open the socket is left. Measured on OpenSSH
+9.2p1 against a socket at mode 0666 in a 0755 directory: the owner is served,
+another account gets "error fetching identities", and **uid 0 is served**. That
+exception is the whole of it. It is a root login that is in reach of every agent
+on the machine, so it is root's session that gets taken — and with stock tooling
+and nobody attacking anything: an ordinary user logs in once, root logs in
+after, root's fixed socket is a symlink to that user's agent, and the key root
+adds next is in an agent that user can list and sign with.
+
+The unprivileged victim is still reachable, but only by a program pretending to
+be an agent: `SocketProber` asks whether the peer answers the protocol and
+nothing else, which is the one thing something after this account's keys would
+be sure to get right. `couldBeYourAgent` says exactly that on the Windows side,
+where the same question is asked of a named pipe. What differs between the two
+is only the table of who an endpoint may belong to — there, the account plus
+SYSTEM and the administrators, because the agent service really does run as
+SYSTEM; here, the account alone, because no system service serves a user's
+agent and a root-owned one is not something to put this session's keys into.
+
+**Two defects in the scenario's own assertions**, both of which made a red thing
+look green, and neither of which any amount of reading would have found:
+
+- the precondition read `ssh-add -l`'s exit code, and 1 means both "this agent
+  holds nothing" and "this agent would not talk to you". It now asserts on a key
+  that is really there.
+- `stat -c %U` reports a *symlink's* own owner, `stat` being lstat unless told
+  otherwise — so the question "who is serving this endpoint" answered "root" for
+  an endpoint serving somebody else, which is the one answer it must never give.
+
+**Verified**: the scenario was run against `origin/master` and failed on four
+assertions — the endpoint a symlink to the other account's socket, the endpoint
+owned by that account, root's session listing that account's keys, and root's
+key arriving in that account's agent — then run against this build and held on
+all of them. The two unit tests were watched failing first, reporting the
+adopted `AgentProc` with its uid beside the uid the config carried. `make test`
+passes, `make lint-go` is clean on all five builds, and `internal/agent` keeps
+100% on the statements this touched.
+
+→ FEATURES F2, F64; THREAT-MODEL D1, E1; rules 1, 5, 9, 15, 19, 21, 22, 23, 25.
