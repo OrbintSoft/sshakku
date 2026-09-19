@@ -225,6 +225,11 @@ jobs:
       - name: Run the runtime-directory scenario in ${{ matrix.name }}
         run: docker run --init --rm -v "${{ github.workspace }}":/src:ro -w /src sshakku-test-${{ matrix.name }} test/containers/runtime-directory-scenario.sh
 
+      # A shell that became another account carries that account's directories
+      # in with it, which takes two accounts and a login shell to arrange.
+      - name: Run the inherited-directories scenario in ${{ matrix.name }}
+        run: docker run --init --rm -v "${{ github.workspace }}":/src:ro -w /src sshakku-test-${{ matrix.name }} test/containers/inherited-directories-scenario.sh
+
   test-windows:
     name: go test (windows)
     runs-on: windows-latest
