@@ -4398,3 +4398,56 @@ passes, `make lint-go` is clean on all five builds, and `internal/agent` keeps
 100% on the statements this touched.
 
 → FEATURES F2, F64; THREAT-MODEL D1, E1; rules 1, 5, 9, 15, 19, 21, 22, 23, 25.
+
+### Phase 57 — The read that had no end, in the one place a passphrase crosses ✅ Done
+
+`socketHandoffFetch` dialled with the caller's context and then read with
+nothing bounding it at all. A peer that neither wrote nor closed left it there
+for good — and behind that read are `sshakku-askpass`, the `ssh-add` waiting on
+it, and the login shell waiting on that. F21 is the promise it broke, word for
+word: *nothing SSHakku waits on can hold your shell up with no end*.
+
+The shape done right was already in the tree, in another package.
+`reach.SocketProber.Reachable` dials **and** sets a deadline; this path had half
+of it. Nothing here is new knowledge — only applied where it was missing.
+
+**How it was found**, which is the part worth keeping. The windows job of the
+branch before this one failed, in a package that branch did not touch, having
+burned the full ten-minute suite timeout inside `io.ReadAll`. Re-running the
+same commit passed in 3m58s against 12m59s. A test that passes in seconds or
+blocks until something else kills it is not a broken test, it is an unbounded
+wait seen from outside: the outcome depends on timing and the bad case has no
+end. The flake was the symptom; this is what it was a symptom of.
+
+**Linux never reaches this code** — the handoff there is a kernel keyring entry,
+not a socket — so the fault could only be met on macOS or Windows, and was first
+met on Windows because closing an AF_UNIX socket there does not always reach the
+other end as an end of file. That is one system's way of arriving at the state,
+not the state itself, and the test says so by arriving at it another way: a
+server that accepts and then says nothing hangs everywhere. Watched failing on
+Linux, by dropping the deadline from the function rather than by changing the
+test — `panic: test timed out`, the stack ending in the `readAll` that had
+nothing to stop it.
+
+**The budget is named rather than chosen.** F21 says how long to wait is
+configurable *separately for something expected to answer on its own and
+something that is waiting on you*, and this read is the first: whoever had to
+type the passphrase has already typed it, and what is being waited on is a
+server this program started, on this machine, holding an answer it writes the
+moment a caller arrives. So `run.DefaultCommandTimeout`, and the caller's own
+deadline instead wherever it falls sooner. Not read from the configuration:
+`askpassFromHandoff` does not load settings today, and plumbing them through
+`Fetch` would change three platform files for a value whose default is already
+the right answer.
+
+**The test that flaked is left saying what it always said**, and only stops
+being able to hang: it now shortens the budget, because where a close does not
+reach the other end it is the budget that ends that read, and a test must not
+spend the real one to find that out.
+
+**Verified**: `internal/keys/handoff` at 100.0% of statements, `make test`
+passing, `make lint-go` clean on all five builds. Whether the windows job stops
+flaking is that job's to report — it cannot be observed from here, and this
+entry does not claim it.
+
+→ FEATURES F21, F7; rules 1, 5, 15, 19, 22, 23, 28.
