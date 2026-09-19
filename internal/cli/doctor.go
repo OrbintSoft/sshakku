@@ -560,8 +560,13 @@ func (d deps) doctorCrossUser(ctx context.Context, stdout, stderr io.Writer, inv
 // nothing about a version, which is the honest outcome — a question that could
 // not be asked has no answer to report, and guessing one here would send a
 // reader off to replace an OpenSSH that was never the problem.
-func sshVersionHere(ctx context.Context, runner run.Runner) sshtools.Version {
-	prog, err := sshtools.ThisSystem().Tool(sshtools.SSHName)
+//
+// system is what this machine has to say about the OpenSSH builds on it
+// (sshtools.ThisSystem in production): on a system with one of them the name
+// comes straight back, and on one that emulates another there may be no build
+// to name at all.
+func sshVersionHere(ctx context.Context, runner run.Runner, system sshtools.System) sshtools.Version {
+	prog, err := system.Tool(sshtools.SSHName)
 	if err != nil {
 		return sshtools.Version{}
 	}
@@ -612,7 +617,7 @@ func gatherReport(ctx context.Context, env paths.Env, layout paths.Layout, setti
 		// What was asked for and what this agent can do are both known here,
 		// so the report is handed the one answer rather than the two facts.
 		LifetimeKeptBySessions: settings.KeyLifetime > 0 && !agent.KeepsLifetimes(),
-		SSHVersion:             sshVersionHere(ctx, runner),
+		SSHVersion:             sshVersionHere(ctx, runner, sshtools.ThisSystem()),
 	}, inspect.Inspector{}, platformProber(), newAncestrySource(), newCgroupSource(), keySource,
 		newHostSource(env.Home))
 }

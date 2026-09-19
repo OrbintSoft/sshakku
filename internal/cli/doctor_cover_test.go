@@ -261,11 +261,15 @@ var errSSHWillNotStart = errors.New("ssh will not start")
 // another — a version nobody read is not an old version, and a reader told to
 // replace an OpenSSH that was never the problem goes and changes the one thing
 // that was working.
+//
+// Which system the question is asked of is handed in, so a machine with one
+// OpenSSH and a machine that has to choose between several are both askable
+// from either.
 func TestSSHVersionHere(t *testing.T) {
 	t.Run("a build that answers is read", func(t *testing.T) {
 		r := runtest.NewRunner().On(sshtools.SSHName,
 			runtest.Stdout("OpenSSH_9.6p1, OpenSSL 3.0.13 30 Jan 2024\n", 0))
-		v := sshVersionHere(t.Context(), r)
+		v := sshVersionHere(t.Context(), r, sshtools.System{})
 		assert.Equal(t, 9, v.Major, "the release a build prints is the release reported")
 		assert.Equal(t, 6, v.Minor, "and so is the minor, which is what decides whether it can be sent to a helper")
 		assert.False(t, v.Unread(), "a build that answered is not one that was never asked")
@@ -273,8 +277,21 @@ func TestSSHVersionHere(t *testing.T) {
 
 	t.Run("a build that will not run says nothing about a version", func(t *testing.T) {
 		r := runtest.NewRunner().On(sshtools.SSHName, runtest.Fails(errSSHWillNotStart))
-		v := sshVersionHere(t.Context(), r)
+		v := sshVersionHere(t.Context(), r, sshtools.System{})
 		assert.True(t, v.Unread(), "a question that could not be asked has no answer to report")
 		assert.Empty(t, v.Text, "and nothing to quote either")
+	})
+
+	t.Run("a system with no ssh it can name is asked nothing", func(t *testing.T) {
+		// A system that emulates another keeps more than one build of OpenSSH
+		// and they are not interchangeable, so which to run has to be worked
+		// out — and with nothing on the session's PATH and nowhere of its own
+		// to look, there is no build to name. The empty directory is what makes
+		// the lookup fail for the real reason rather than for the host's.
+		t.Setenv("PATH", t.TempDir())
+		r := runtest.NewRunner()
+		v := sshVersionHere(t.Context(), r, sshtools.System{EmulationRuntimes: []string{"msys-2.0.dll"}})
+		assert.True(t, v.Unread(), "a build that could not be named was never asked what it is")
+		assert.Empty(t, r.Calls, "and nothing may be run at all: there was no program to run")
 	})
 }
