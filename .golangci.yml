@@ -225,6 +225,15 @@ linters:
     # package is called what it calls itself.
     - importas
 
+    # A parameter with no name in an interface method leaves the method saying
+    # only what type it takes, and an interface is the one place a reader goes
+    # to find out what is expected of whoever implements it. Where the type's
+    # own name reads like an answer it is not one: `Save(wire.Association)` does
+    # not say whether the association is what gets stored or what it gets stored
+    # under, and the only way left to ask is to open an implementation — which
+    # is what declaring the interface was meant to save.
+    - inamedparam
+
     # `for i := 0; i < n; i++` states the bound three times and can be wrong in
     # three places; `for i := range n` states it once and cannot count wrong.
     - intrange
