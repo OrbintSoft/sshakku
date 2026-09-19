@@ -19,32 +19,32 @@ func TestResolveRuntimeDir(t *testing.T) {
 	tests := []struct {
 		name        string
 		env         Env
-		probe       func(string, bool) bool
+		probe       func(string, Need) bool
 		wantBase    string
 		wantRefused []Refusal
 	}{
 		{
 			name:     "XDG_RUNTIME_DIR present",
 			env:      Env{Home: home, RuntimeDir: runUser, UID: 1000},
-			probe:    func(p string, _ bool) bool { return p == runUser },
+			probe:    func(p string, _ Need) bool { return p == runUser },
 			wantBase: filepath.Join(runUser, "sshakku"),
 		},
 		{
 			name:     "fallback to /run/user/UID when owned",
 			env:      Env{Home: home, UID: 1000},
-			probe:    func(p string, owner bool) bool { return p == runUser && owner },
+			probe:    func(p string, need Need) bool { return p == runUser && need == NeedPrivate },
 			wantBase: filepath.Join(runUser, "sshakku"),
 		},
 		{
 			name:     "/run/user ignored when not owned by us",
 			env:      Env{Home: home, UID: 1000},
-			probe:    func(p string, owner bool) bool { return p == runUser && !owner },
+			probe:    func(p string, need Need) bool { return p == runUser && need == NeedThere },
 			wantBase: filepath.Join(home, ".cache", "sshakku"),
 		},
 		{
 			name:     "cache fallback when no tmpfs",
 			env:      Env{Home: home, UID: 1000},
-			probe:    func(string, bool) bool { return false },
+			probe:    func(string, Need) bool { return false },
 			wantBase: filepath.Join(home, ".cache", "sshakku"),
 		},
 		{
@@ -54,13 +54,13 @@ func TestResolveRuntimeDir(t *testing.T) {
 			// agent it can reach at all.
 			name:     "the private temporary directory comes before the home",
 			env:      Env{Home: home, TempDir: tempDir, UID: 1000},
-			probe:    func(string, bool) bool { return false },
+			probe:    func(string, Need) bool { return false },
 			wantBase: filepath.Join(tempDir, "sshakku"),
 		},
 		{
 			name:     "a logind directory still wins over the temporary one",
 			env:      Env{Home: home, RuntimeDir: runUser, TempDir: tempDir, UID: 1000},
-			probe:    func(p string, _ bool) bool { return p == runUser },
+			probe:    func(p string, _ Need) bool { return p == runUser },
 			wantBase: filepath.Join(runUser, "sshakku"),
 		},
 		{
@@ -71,7 +71,7 @@ func TestResolveRuntimeDir(t *testing.T) {
 			// rename our socket out of.
 			name:        "a runtime directory that is there but not ours alone is refused, and named",
 			env:         Env{Home: home, RuntimeDir: runUser, UID: 1000},
-			probe:       func(p string, private bool) bool { return p == runUser && !private },
+			probe:       func(p string, need Need) bool { return p == runUser && need == NeedThere },
 			wantBase:    filepath.Join(home, ".cache", "sshakku"),
 			wantRefused: []Refusal{{Var: "XDG_RUNTIME_DIR", Path: runUser}},
 		},
@@ -82,13 +82,13 @@ func TestResolveRuntimeDir(t *testing.T) {
 			// where there is only a path that no longer exists.
 			name:     "a runtime directory that is merely absent is not refused",
 			env:      Env{Home: home, RuntimeDir: filepath.FromSlash("/run/user/9999"), UID: 1000},
-			probe:    func(string, bool) bool { return false },
+			probe:    func(string, Need) bool { return false },
 			wantBase: filepath.Join(home, ".cache", "sshakku"),
 		},
 		{
 			name:     "XDG_CACHE_HOME honoured in cache fallback",
 			env:      Env{Home: home, CacheHome: cacheHome, UID: 1000},
-			probe:    func(string, bool) bool { return false },
+			probe:    func(string, Need) bool { return false },
 			wantBase: filepath.Join(cacheHome, "sshakku"),
 		},
 	}
@@ -106,7 +106,7 @@ func TestResolveRuntimeDir(t *testing.T) {
 func TestWithSocketToken(t *testing.T) {
 	runUser := filepath.FromSlash("/run/user/1")
 	base := Resolve(Env{Home: filepath.FromSlash("/h"), RuntimeDir: runUser, UID: 1},
-		func(p string, _ bool) bool { return p == runUser })
+		func(p string, _ Need) bool { return p == runUser })
 	require.Equal(t, filepath.Join(runUser, "sshakku"), base.SocketDir, "base SocketDir")
 
 	got := base.WithSocketToken("deadbeef")
@@ -119,7 +119,7 @@ func TestWithSocketToken(t *testing.T) {
 }
 
 func TestResolveConfigDir(t *testing.T) {
-	noProbe := func(string, bool) bool { return false }
+	noProbe := func(string, Need) bool { return false }
 
 	home := filepath.FromSlash("/home/u")
 	configHome := filepath.FromSlash("/cfg")
@@ -132,7 +132,7 @@ func TestResolveConfigDir(t *testing.T) {
 }
 
 func TestResolveStateDir(t *testing.T) {
-	noProbe := func(string, bool) bool { return false }
+	noProbe := func(string, Need) bool { return false }
 
 	home := filepath.FromSlash("/home/u")
 	stateHome := filepath.FromSlash("/state")
@@ -163,7 +163,7 @@ func TestResolveRefusesDirectoriesThatAreNotThisAccountsOwn(t *testing.T) {
 
 	// there reports the directory as present and as not this account's alone,
 	// which is the one answer that must change what Resolve picks.
-	there := func(p string, private bool) bool { return p == theirs && !private }
+	there := func(p string, need Need) bool { return p == theirs && need == NeedThere }
 
 	tests := []struct {
 		name    string
@@ -218,7 +218,7 @@ func TestResolveDoesNotRefuseADirectoryThatIsMerelyAbsent(t *testing.T) {
 	gone := filepath.FromSlash("/home/them/.config")
 
 	layout := Resolve(Env{Home: home, ConfigHome: gone, UID: 1000},
-		func(string, bool) bool { return false })
+		func(string, Need) bool { return false })
 
 	assert.Equal(t, filepath.Join(gone, "sshakku"), layout.ConfigDir,
 		"a directory that is not there yet is this session's to create")
@@ -241,7 +241,7 @@ func TestResolveKeepsADirectoryItCannotAttribute(t *testing.T) {
 
 	// The directory is there, and the ownership question comes back no because
 	// this build cannot answer it rather than because the answer is no.
-	cannotTell := func(p string, private bool) bool { return p == named && !private }
+	cannotTell := func(p string, need Need) bool { return p == named && need == NeedThere }
 
 	layout := Resolve(Env{Home: home, ConfigHome: named, UID: 1000, OwnerUnknowable: true}, cannotTell)
 

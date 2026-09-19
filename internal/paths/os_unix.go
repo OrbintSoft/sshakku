@@ -16,10 +16,19 @@ func FromOS() Env {
 // directory can be attributed and a doubtful one can be turned down.
 const ownerUnknowable = false
 
-// ProbeDir reports whether path is a directory. When requirePrivate is set it
-// must also be one the current user has to themselves.
-func ProbeDir(path string, requirePrivate bool) bool {
-	return ProbeDirAs(os.Getuid())(path, requirePrivate)
+// denied is the permission bits a need forbids to group and other. Which bits
+// those are is this system's answer and not the question's: a mode is what
+// carries the answer here.
+func (n Need) denied() os.FileMode {
+	if n == NeedPrivate {
+		return 0o077
+	}
+	return 0o022
+}
+
+// ProbeDir reports whether path is a directory meeting need.
+func ProbeDir(path string, need Need) bool {
+	return ProbeDirAs(os.Getuid())(path, need)
 }
 
 // ProbeDirAs is like ProbeDir, but for resolving another user's runtime
@@ -28,29 +37,26 @@ func ProbeDir(path string, requirePrivate bool) bool {
 // the path — no need to assume that uid's identity just to answer "is this
 // theirs?".
 //
-// Having it to themselves means more than owning it. A directory its owner has
-// opened to the group or to everyone is one somebody else can create in and
-// rename in, and unlinking an entry is governed by the directory rather than by
-// the entry, so what is inside being ours and mode 0700 buys nothing there.
-// That is why both halves are one question and not two: a caller who could ask
-// for the owner alone would eventually ask for it in the place that needed
-// both.
-func ProbeDirAs(uid int) func(path string, requirePrivate bool) bool {
-	return func(path string, requirePrivate bool) bool {
+// Ownership is asked alongside the mode rather than separately, because a
+// caller who could ask for the owner alone would eventually ask for it in the
+// place that needed both: a directory nobody else may write is no use if it is
+// not ours to begin with, and one that is ours is no use if anyone may write
+// in it — unlinking an entry is governed by the directory rather than by the
+// entry, so what is inside being ours and mode 0700 buys nothing there.
+func ProbeDirAs(uid int) func(path string, need Need) bool {
+	return func(path string, need Need) bool {
 		fi, err := os.Lstat(path)
 		if err != nil || !fi.IsDir() {
 			return false
 		}
-		if requirePrivate {
-			if fi.Mode().Perm()&0o077 != 0 {
-				return false
-			}
-			st, ok := fi.Sys().(*syscall.Stat_t)
-			if !ok || int(st.Uid) != uid {
-				return false
-			}
+		if need == NeedThere {
+			return true
 		}
-		return true
+		if fi.Mode().Perm()&need.denied() != 0 {
+			return false
+		}
+		st, ok := fi.Sys().(*syscall.Stat_t)
+		return ok && int(st.Uid) == uid
 	}
 }
 
@@ -64,5 +70,5 @@ func ProbeDirAs(uid int) func(path string, requirePrivate bool) bool {
 // It is ProbeDirAs asked about this process's own account, rather than a second
 // implementation of the same question, so the two cannot come to disagree.
 func PrivateDir(path string) bool {
-	return ProbeDirAs(os.Getuid())(path, true)
+	return ProbeDirAs(os.Getuid())(path, NeedPrivate)
 }

@@ -11,6 +11,31 @@ import (
 
 const app = "sshakku"
 
+// Need is what a directory has to be before something of ours goes into it.
+// There are two questions and not one because the stakes differ by directory,
+// and asking the stricter one everywhere would turn away directories that are
+// plainly the user's own.
+type Need int
+
+const (
+	// NeedThere asks only that the path be a directory at all.
+	NeedThere Need = iota
+	// NeedUnwritable asks that this account owns it and nobody else may write
+	// it. It is the question for a directory whose contents we read or keep —
+	// a configuration, a record — because what would harm us there is somebody
+	// replacing what is inside or renaming it away, and both of those are
+	// governed by write permission. Being merely visible to others is not a
+	// wrong: ~/.config and ~/.cache are mode 0755 on an ordinary system, and a
+	// build that refused them would discard a user's own settings for a
+	// permission that gives nobody else anything.
+	NeedUnwritable
+	// NeedPrivate asks that nobody else may even enter it. It is the question
+	// for the directory the socket's home is chosen from, where the convention
+	// the system itself follows is 0700 (/run/user/<uid>), so insisting on it
+	// turns away nothing that was going to be used anyway.
+	NeedPrivate
+)
+
 // Env holds the environment inputs to the path computation, so Resolve stays a
 // pure function that is easy to test.
 type Env struct {
@@ -74,7 +99,7 @@ type Refusal struct {
 // session loads, the configuration decides where passphrases are filed and
 // which command is run to edit it, and the state directory takes the record of
 // what was done with the keys.
-func Resolve(env Env, probe func(path string, requirePrivate bool) bool) Layout {
+func Resolve(env Env, probe func(path string, need Need) bool) Layout {
 	pick := &chooser{env: env, probe: probe}
 
 	configDir := filepath.Join(
@@ -116,7 +141,7 @@ func (l Layout) WithSocketToken(token string) Layout {
 // for and not used.
 type chooser struct {
 	env     Env
-	probe   func(string, bool) bool
+	probe   func(string, Need) bool
 	refused []Refusal
 }
 
@@ -152,7 +177,7 @@ func (c *chooser) ours(name, named, own string) string {
 // theirs reports whether path is there and is not this account's alone,
 // recording the refusal when it is.
 func (c *chooser) theirs(name, path string) bool {
-	if !c.probe(path, false) || c.probe(path, true) {
+	if !c.probe(path, NeedThere) || c.probe(path, NeedUnwritable) {
 		return false
 	}
 	c.refused = append(c.refused, Refusal{Var: name, Path: path})
@@ -169,25 +194,33 @@ func (c *chooser) theirs(name, path string) bool {
 // costs the session nothing but a different path, while the same doubt about a
 // configuration would cost the user their settings.
 //
+// The first two candidates are asked for more than the last: the system makes
+// /run/user/<uid> at 0700 and a session's own runtime directory is held to the
+// convention the system itself follows, so insisting on it turns away nothing
+// that was going to be used. The cache is a directory people keep other things
+// in, at 0755 on an ordinary machine, and asking that of it would turn away a
+// directory plainly the user's own — so it is asked what actually protects
+// what we put there, which is that nobody else may write it.
+//
 // The private temporary directory is taken before the home because a socket
 // address is bounded and a home directory is not: a home deep enough leaves a
 // session with no agent it can reach at all.
 func (c *chooser) runtimeDir() string {
-	if c.env.RuntimeDir != "" && c.probe(c.env.RuntimeDir, false) {
-		if c.probe(c.env.RuntimeDir, true) {
+	if c.env.RuntimeDir != "" && c.probe(c.env.RuntimeDir, NeedThere) {
+		if c.probe(c.env.RuntimeDir, NeedPrivate) {
 			return filepath.Join(c.env.RuntimeDir, app)
 		}
 		c.refused = append(c.refused, Refusal{Var: "XDG_RUNTIME_DIR", Path: c.env.RuntimeDir})
 	}
 	runUser := filepath.Join("/run/user", strconv.Itoa(c.env.UID))
-	if c.probe(runUser, true) {
+	if c.probe(runUser, NeedPrivate) {
 		return filepath.Join(runUser, app)
 	}
 	if c.env.TempDir != "" {
 		return filepath.Join(c.env.TempDir, app)
 	}
 	// The cache is a directory the socket can land in, so it is asked the same
-	// question as any other: a parent another account owns is one this
+	// question as the homes: a parent another account may write is one this
 	// account's directory can be renamed out of and answered in place of,
 	// whatever the mode on the directory itself.
 	return filepath.Join(
