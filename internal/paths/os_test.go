@@ -130,7 +130,8 @@ func TestFromEnvHomeFallback(t *testing.T) {
 // TestFromEnvTempDir covers the one input that is inspected rather than merely
 // read: a temporary directory this user does not have to themselves is not
 // carried forward at all, so nothing downstream can put a socket in it by
-// mistake.
+// mistake. The runtime directory is asked the same question in Resolve, where
+// a directory that is absent can be told from one that is somebody else's.
 func TestFromEnvTempDir(t *testing.T) {
 	getenv := func(key string) string {
 		if key == "TMPDIR" {

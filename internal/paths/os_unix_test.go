@@ -88,13 +88,19 @@ func TestFromOS(t *testing.T) {
 	})
 }
 
-// TestProbeDir covers the directory/ownership probe: a real directory passes,
-// a plain file and a missing path fail, and requireOwner enforces the uid.
+// TestProbeDir covers the probe both questions go through: a real directory
+// passes, a plain file and a missing path fail, and requirePrivate asks not
+// only who owns the directory but whether anybody else was let into it. The
+// second half is not decoration — renaming and unlinking an entry are governed
+// by the directory, so a directory its owner opened to the group or to everyone
+// is one somebody else can swap our socket out of, whatever the socket's own
+// mode says.
 func TestProbeDir(t *testing.T) {
 	dir := t.TempDir()
+	require.NoError(t, os.Chmod(dir, 0o700), "a directory we have to ourselves") //nolint:gosec // G302: the mode is what is being asked about
 
 	assert.True(t, ProbeDir(dir, false), "a real directory passes")
-	assert.True(t, ProbeDir(dir, true), "a real directory owned by us passes")
+	assert.True(t, ProbeDir(dir, true), "a real directory we have to ourselves passes")
 
 	file := filepath.Join(dir, "f")
 	require.NoError(t, os.WriteFile(file, nil, 0o600))
@@ -103,8 +109,15 @@ func TestProbeDir(t *testing.T) {
 
 	// A uid that cannot own the temp dir must fail the ownership check.
 	assert.False(t, ProbeDirAs(os.Getuid()+99999)(dir, true), "another uid does not own it")
-	// Without requireOwner the same probe ignores ownership.
-	assert.True(t, ProbeDirAs(os.Getuid()+99999)(dir, false), "without requireOwner ownership is ignored")
+	// Without requirePrivate the same probe asks only whether it is there.
+	assert.True(t, ProbeDirAs(os.Getuid()+99999)(dir, false), "without requirePrivate only existence is asked")
+
+	// Ours, and open to everybody: owning it is not having it to ourselves.
+	for _, mode := range []os.FileMode{0o750, 0o770, 0o755, 0o777} {
+		require.NoError(t, os.Chmod(dir, mode), "reopen the directory to others")
+		assert.Falsef(t, ProbeDir(dir, true), "a %o directory of ours is not one we have to ourselves", mode)
+		assert.Truef(t, ProbeDir(dir, false), "a %o directory is still plainly there", mode)
+	}
 }
 
 // TestPrivateDir covers the question asked of a directory somebody else named:

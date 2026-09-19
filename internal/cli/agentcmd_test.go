@@ -54,14 +54,24 @@ func (r refusingEnsurer) EnsureAgent(context.Context, agent.EnsureConfig, agent.
 // tempRuntimeEnv points HOME and the XDG dirs at fresh temp dirs so paths.Resolve
 // and paths.Ensure build and create the runtime layout entirely off the real
 // state, runtime, and config dirs.
+//
+// The runtime directory is narrowed to 0700 because that is what a real one is,
+// and a stand-in that is not one would be turned down as a directory this
+// account does not have to itself — sending the layout to the machine's own
+// runtime directory, which is the one place these tests must not touch. A test
+// helper that leaves the temporary directory as the testing package hands it
+// over (0755, kept unreachable by its parent rather than by its own mode) is
+// modelling something no session is ever given.
 func tempRuntimeEnv(t *testing.T) string {
 	t.Helper()
 	home := t.TempDir()
+	runtimeDir := t.TempDir()
+	require.NoError(t, os.Chmod(runtimeDir, 0o700), "a stand-in runtime directory must be as private as a real one") //nolint:gosec // G302: 0700 is the mode being asked for
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("XDG_STATE_HOME", "")
 	t.Setenv("XDG_CACHE_HOME", "")
-	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	t.Setenv("XDG_RUNTIME_DIR", runtimeDir)
 	return home
 }
 

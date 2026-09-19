@@ -603,6 +603,7 @@ func gatherReport(ctx context.Context, env paths.Env, layout paths.Layout, setti
 		EnvSock:           os.Getenv("SSH_AUTH_SOCK"),
 		LogFile:           layout.LogFile,
 		OurUID:            env.UID,
+		RuntimeDirRefused: layout.RuntimeDirRefused,
 		EnvAskpass:        os.Getenv("SSH_ASKPASS"),
 		EnvAskpassRequire: os.Getenv("SSH_ASKPASS_REQUIRE"),
 		AskpassProg:       helper,

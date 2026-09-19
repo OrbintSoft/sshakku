@@ -17,10 +17,11 @@ func TestResolveRuntimeDir(t *testing.T) {
 	tempDir := filepath.FromSlash("/tmp/private")
 	cacheHome := filepath.FromSlash("/cache")
 	tests := []struct {
-		name     string
-		env      Env
-		probe    func(string, bool) bool
-		wantBase string
+		name        string
+		env         Env
+		probe       func(string, bool) bool
+		wantBase    string
+		wantRefused string
 	}{
 		{
 			name:     "XDG_RUNTIME_DIR present",
@@ -63,6 +64,28 @@ func TestResolveRuntimeDir(t *testing.T) {
 			wantBase: filepath.Join(runUser, "sshakku"),
 		},
 		{
+			// The directory the environment named is there, and is not this
+			// account's alone. It is not used, and it is named: a session whose
+			// endpoint quietly moved is one nobody can work back from, and
+			// where it would have gone is a directory another account can
+			// rename our socket out of.
+			name:        "a runtime directory that is there but not ours alone is refused, and named",
+			env:         Env{Home: home, RuntimeDir: runUser, UID: 1000},
+			probe:       func(p string, private bool) bool { return p == runUser && !private },
+			wantBase:    filepath.Join(home, ".cache", "sshakku"),
+			wantRefused: runUser,
+		},
+		{
+			// Absent is not refused. A stale variable left over from a session
+			// that ended names a directory nobody turned down, and reporting it
+			// as somebody else's would send a person looking for an intruder
+			// where there is only a path that no longer exists.
+			name:     "a runtime directory that is merely absent is not refused",
+			env:      Env{Home: home, RuntimeDir: filepath.FromSlash("/run/user/9999"), UID: 1000},
+			probe:    func(string, bool) bool { return false },
+			wantBase: filepath.Join(home, ".cache", "sshakku"),
+		},
+		{
 			name:     "XDG_CACHE_HOME honoured in cache fallback",
 			env:      Env{Home: home, CacheHome: cacheHome, UID: 1000},
 			probe:    func(string, bool) bool { return false },
@@ -75,6 +98,7 @@ func TestResolveRuntimeDir(t *testing.T) {
 			assert.Equal(t, tc.wantBase, got.RuntimeDir, "RuntimeDir")
 			assert.Equal(t, filepath.Join(tc.wantBase, "agent.sock"), got.AgentSock, "AgentSock")
 			assert.Equal(t, filepath.Join(tc.wantBase, ".start.lock"), got.AgentLock, "AgentLock")
+			assert.Equal(t, tc.wantRefused, got.RuntimeDirRefused, "RuntimeDirRefused")
 		})
 	}
 }

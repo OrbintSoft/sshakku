@@ -16,6 +16,11 @@ import (
 // already a directory we are willing to use — the environment names a
 // temporary directory, and a shared one (a bare /tmp) is somewhere anybody can
 // wait for a socket that is the loaded key's front door.
+//
+// The runtime directory the environment names is asked the same question, but
+// in Resolve rather than here: a directory that is absent and one that belongs
+// to somebody else are both unusable and only the second is worth reporting,
+// and telling them apart needs the question Resolve already asks of a path.
 func fromEnv(getenv func(string) string, homeDir func() (string, error), getuid func() int, private func(string) bool) Env {
 	home := getenv("HOME")
 	if home == "" {

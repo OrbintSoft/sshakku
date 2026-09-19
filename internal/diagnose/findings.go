@@ -132,6 +132,15 @@ func findings(in Inputs, r Report) []string {
 			" nothing was sent to it and no session is pointed at it",
 			r.FixedSock, r.EndpointHeldByAStranger))
 	}
+	// Where the endpoint is belongs ahead of what is answering on it: an
+	// endpoint somewhere other than where this session's environment points is
+	// otherwise a difference the report shows and does not account for.
+	if in.RuntimeDirRefused != "" {
+		f = append(f, fmt.Sprintf("$XDG_RUNTIME_DIR names %s, which is not a directory this account has to"+
+			" itself — nothing of this session was put there, and the endpoint is %s instead."+
+			" A socket under that directory would be one another account could rename away and answer in place of",
+			in.RuntimeDirRefused, r.FixedSock))
+	}
 	if line := answeringFinding(r, reachable); line != "" {
 		f = append(f, line)
 	}
