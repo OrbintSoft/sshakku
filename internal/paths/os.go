@@ -33,13 +33,17 @@ func fromEnv(getenv func(string) string, homeDir func() (string, error), getuid 
 		tempDir = ""
 	}
 	return Env{
-		Home:       home,
-		ConfigHome: getenv("XDG_CONFIG_HOME"),
-		StateHome:  getenv("XDG_STATE_HOME"),
-		RuntimeDir: getenv("XDG_RUNTIME_DIR"),
-		CacheHome:  getenv("XDG_CACHE_HOME"),
-		TempDir:    tempDir,
-		UID:        getuid(),
+		Home: home,
+		// Whether a directory can be attributed at all is this build's answer,
+		// not this session's, so it is settled here with the other inputs
+		// rather than asked again wherever a directory is chosen.
+		OwnerUnknowable: ownerUnknowable,
+		ConfigHome:      getenv("XDG_CONFIG_HOME"),
+		StateHome:       getenv("XDG_STATE_HOME"),
+		RuntimeDir:      getenv("XDG_RUNTIME_DIR"),
+		CacheHome:       getenv("XDG_CACHE_HOME"),
+		TempDir:         tempDir,
+		UID:             getuid(),
 	}
 }
 

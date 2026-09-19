@@ -21,7 +21,7 @@ func TestResolveRuntimeDir(t *testing.T) {
 		env         Env
 		probe       func(string, bool) bool
 		wantBase    string
-		wantRefused string
+		wantRefused []Refusal
 	}{
 		{
 			name:     "XDG_RUNTIME_DIR present",
@@ -73,7 +73,7 @@ func TestResolveRuntimeDir(t *testing.T) {
 			env:         Env{Home: home, RuntimeDir: runUser, UID: 1000},
 			probe:       func(p string, private bool) bool { return p == runUser && !private },
 			wantBase:    filepath.Join(home, ".cache", "sshakku"),
-			wantRefused: runUser,
+			wantRefused: []Refusal{{Var: "XDG_RUNTIME_DIR", Path: runUser}},
 		},
 		{
 			// Absent is not refused. A stale variable left over from a session
@@ -98,7 +98,7 @@ func TestResolveRuntimeDir(t *testing.T) {
 			assert.Equal(t, tc.wantBase, got.RuntimeDir, "RuntimeDir")
 			assert.Equal(t, filepath.Join(tc.wantBase, "agent.sock"), got.AgentSock, "AgentSock")
 			assert.Equal(t, filepath.Join(tc.wantBase, ".start.lock"), got.AgentLock, "AgentLock")
-			assert.Equal(t, tc.wantRefused, got.RuntimeDirRefused, "RuntimeDirRefused")
+			assert.Equal(t, tc.wantRefused, got.Refused, "Refused")
 		})
 	}
 }
@@ -166,34 +166,86 @@ func TestResolveRefusesDirectoriesThatAreNotThisAccountsOwn(t *testing.T) {
 	there := func(p string, private bool) bool { return p == theirs && !private }
 
 	tests := []struct {
-		name string
-		env  Env
-		got  func(Layout) string
-		want string
+		name    string
+		env     Env
+		got     func(Layout) string
+		want    string
+		wantVar string
 	}{
 		{
-			name: "a configuration directory belonging to another account",
-			env:  Env{Home: home, ConfigHome: theirs, UID: 1000},
-			got:  func(l Layout) string { return l.ConfigDir },
-			want: filepath.Join(home, ".config", "sshakku"),
+			name:    "a configuration directory belonging to another account",
+			env:     Env{Home: home, ConfigHome: theirs, UID: 1000},
+			got:     func(l Layout) string { return l.ConfigDir },
+			want:    filepath.Join(home, ".config", "sshakku"),
+			wantVar: "XDG_CONFIG_HOME",
 		},
 		{
-			name: "a state directory belonging to another account",
-			env:  Env{Home: home, StateHome: theirs, UID: 1000},
-			got:  func(l Layout) string { return l.StateDir },
-			want: filepath.Join(home, ".local", "state", "sshakku"),
+			name:    "a state directory belonging to another account",
+			env:     Env{Home: home, StateHome: theirs, UID: 1000},
+			got:     func(l Layout) string { return l.StateDir },
+			want:    filepath.Join(home, ".local", "state", "sshakku"),
+			wantVar: "XDG_STATE_HOME",
 		},
 		{
-			name: "a cache directory belonging to another account",
-			env:  Env{Home: home, CacheHome: theirs, UID: 1000},
-			got:  func(l Layout) string { return l.RuntimeDir },
-			want: filepath.Join(home, ".cache", "sshakku"),
+			name:    "a cache directory belonging to another account",
+			env:     Env{Home: home, CacheHome: theirs, UID: 1000},
+			got:     func(l Layout) string { return l.RuntimeDir },
+			want:    filepath.Join(home, ".cache", "sshakku"),
+			wantVar: "XDG_CACHE_HOME",
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.want, tc.got(Resolve(tc.env, there)),
+			layout := Resolve(tc.env, there)
+			assert.Equal(t, tc.want, tc.got(layout),
 				"nothing of this account's goes in a directory another account may write")
+			// Naming it is the other half. A session whose files quietly moved
+			// is one nobody can work back from, and the variable has to travel
+			// with the path: it is the only part a reader can go and change.
+			assert.Equal(t, []Refusal{{Var: tc.wantVar, Path: theirs}}, layout.Refused,
+				"what was turned down, and which variable named it")
 		})
 	}
+}
+
+// TestResolveDoesNotRefuseADirectoryThatIsMerelyAbsent keeps a stale variable
+// from being reported as an intruder. A path left over from a session that
+// ended was turned down by nobody, and a report calling it somebody else's
+// would send a person looking for an attacker where there is only a path that
+// no longer resolves.
+func TestResolveDoesNotRefuseADirectoryThatIsMerelyAbsent(t *testing.T) {
+	home := filepath.FromSlash("/home/u")
+	gone := filepath.FromSlash("/home/them/.config")
+
+	layout := Resolve(Env{Home: home, ConfigHome: gone, UID: 1000},
+		func(string, bool) bool { return false })
+
+	assert.Equal(t, filepath.Join(gone, "sshakku"), layout.ConfigDir,
+		"a directory that is not there yet is this session's to create")
+	assert.Empty(t, layout.Refused, "nothing was turned down, so there is nothing to report")
+}
+
+// TestResolveKeepsADirectoryItCannotAttribute is the half that keeps the
+// promise a build can keep. Where ownership cannot be established at all, a
+// directory the environment named is used exactly as it was before: an
+// unanswered question is not a refusal, and discarding a user's own
+// configuration for want of an answer would be the worse failure — and one
+// they could do nothing about.
+//
+// The socket is deliberately not covered by this, and the difference is the
+// point: it has somewhere else to go, so doubt costs it a different path and
+// nothing more.
+func TestResolveKeepsADirectoryItCannotAttribute(t *testing.T) {
+	home := filepath.FromSlash("/home/u")
+	named := filepath.FromSlash("/cfg")
+
+	// The directory is there, and the ownership question comes back no because
+	// this build cannot answer it rather than because the answer is no.
+	cannotTell := func(p string, private bool) bool { return p == named && !private }
+
+	layout := Resolve(Env{Home: home, ConfigHome: named, UID: 1000, OwnerUnknowable: true}, cannotTell)
+
+	assert.Equal(t, filepath.Join(named, "sshakku"), layout.ConfigDir,
+		"a question this build cannot answer must leave the configuration where it was")
+	assert.Empty(t, layout.Refused, "nothing may be reported as a stranger's on a build that cannot tell")
 }

@@ -17,6 +17,12 @@ func FromOS() Env {
 	return fromEnv(os.Getenv, os.UserHomeDir, os.Getuid, PrivateDir)
 }
 
+// ownerUnknowable: an account here is a SID and access is granted by ACL,
+// neither of which PrivateDir can read yet, so no directory is turned down for
+// whose it is — a question this build cannot answer must not be answered as
+// though it came back "somebody else's".
+const ownerUnknowable = true
+
 // ProbeDir reports whether path is a directory. requireOwner cannot be answered
 // here (see PrivateDir), so a caller who asks for it is told no.
 func ProbeDir(path string, requireOwner bool) bool {

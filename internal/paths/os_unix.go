@@ -12,6 +12,10 @@ func FromOS() Env {
 	return fromEnv(os.Getenv, os.UserHomeDir, os.Getuid, PrivateDir)
 }
 
+// ownerUnknowable: a uid and a mode are two fields of one stat here, so every
+// directory can be attributed and a doubtful one can be turned down.
+const ownerUnknowable = false
+
 // ProbeDir reports whether path is a directory. When requirePrivate is set it
 // must also be one the current user has to themselves.
 func ProbeDir(path string, requirePrivate bool) bool {
