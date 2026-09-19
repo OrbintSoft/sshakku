@@ -216,6 +216,10 @@ jobs:
       - name: Run make test-bats in ${{ matrix.name }}
         run: docker run --init --rm -e SSHAKKU_TEST_ALLOW_BATS=1 -v "${{ github.workspace }}":/src:ro -w /src sshakku-test-${{ matrix.name }} make test-bats
 
+      # Two accounts on one machine, which no Go test can arrange for itself.
+      - name: Run the two-account agent scenario in ${{ matrix.name }}
+        run: docker run --init --rm -v "${{ github.workspace }}":/src:ro -w /src sshakku-test-${{ matrix.name }} test/containers/two-account-agent-scenario.sh
+
   test-windows:
     name: go test (windows)
     runs-on: windows-latest
