@@ -529,6 +529,63 @@ done are summarised; see the note at the top of this file for full detail.
     unverifiable is a worse failure than the one being guarded against, and one
     the user can do nothing about.
 
+30. **Protecting the private keys at rest (goals 1, 2). Raised 2026-09-19;
+    open.** A key with no passphrase has nothing but its mode bits between it
+    and anyone who reads the disk — a stolen laptop, a backup, a snapshot, a
+    cloned image, a filesystem mounted somewhere else. `fscrypt` would give it
+    real encryption keyed to the login, and with the key removed from the
+    kernel keyring the files are unreadable even by root. What it does not
+    change is the account that is logged in: root and this user's own processes
+    read it exactly as before while it is unlocked, so the trust boundaries in
+    `docs/THREAT-MODEL.md` stay where they are, and a passphrase leaked during a
+    live session is no safer for it. The win is the window where nobody is
+    logged in, which is where a passphraseless key spends most of its life.
+
+    **Not `~/.ssh`, and `authorized_keys` is the reason.** `sshd` reads
+    `authorized_keys` to decide whether to let someone in — before there is a
+    session, and therefore before anything could have unlocked that directory.
+    Encrypting `~/.ssh` wholesale locks the user out of their own machine by
+    key, which is the classic encrypted-home failure; the usual answer is to
+    move the file out with `AuthorizedKeysFile /etc/ssh/authorized_keys/%u`.
+    There is a better one here: `authorized_keys` holds public keys and wants no
+    protection at all. What is worth encrypting is the private keys, and those
+    live in a directory this program already names — `key_dir`.
+
+    **The constraint that shapes the whole feature** is that a policy can only
+    be put on an *empty* directory: nothing is encrypted in place. Protecting
+    keys therefore means making a new directory, moving them into it and
+    swapping it in — a migration of the user's private keys, and the most
+    dangerous thing this program could be asked to do, on a directory whose
+    half-failure locks someone out of every machine they administer.
+
+    **Where it will simply not be available**, and the report has to say which
+    rather than only "no": `btrfs` has no fscrypt at all and is the default on
+    Fedora and openSUSE; `ext4` needs its `encrypt` feature turned on, at times
+    with the filesystem unmounted; `XFS` gained it only recently. `f2fs`, `ceph`
+    and `ubifs` have it.
+
+    **Unlocking is PAM's** (`pam_fscrypt`), a root-level and distro-specific
+    change: print what to run, never edit PAM. And losing a protector loses the
+    keys, which has to be said before anything moves — survivable for SSH keys,
+    since they can be regenerated and the public halves redeployed, but only if
+    the person knew.
+
+    **Split it.** The reporting half — `sshakku doctor` saying whether the keys
+    are protected at rest, and where they are not, why this filesystem cannot —
+    touches nothing, is useful on its own, and is squarely this program's job.
+    The enabling half comes after, behind an explicit command, a dry run, and a
+    confirmation.
+
+    **Rule 16 before any of it**: `fscrypt` would be a runtime-invoked tool
+    (Apache-2.0). Invoking a separate binary does not link it and does not
+    obstruct relicensing, but the check belongs on the record before it is
+    added, not after.
+
+    Worth saying alongside: for a key with no passphrase the cheapest real
+    protection is still a passphrase on it, or a key whose secret never sits in
+    the file at all — FIDO (`ed25519-sk`), a TPM, a smartcard. This is
+    complementary to those, not a substitute for them.
+
 ---
 
 ## Phases
