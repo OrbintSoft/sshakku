@@ -153,3 +153,31 @@ func TestAnEndpointNobodyStrangeIsHoldingIsNotReportedAsHeld(t *testing.T) {
 	assert.Falsef(t, hasFinding(r, "is being held by"),
 		"nothing is holding this endpoint but the agent answering on it: %v", r.Findings)
 }
+
+// F65, F13: a runtime directory the environment named and this session did not
+// put its endpoint in is named in the report, together with the variable that
+// named it. An endpoint somewhere other than where the environment points is
+// otherwise a discrepancy an administrator has to guess at — and guessing is
+// the thing a report exists to spare them.
+func TestReportNamesARuntimeDirectoryThatWasNotUsed(t *testing.T) {
+	r := Gather(t.Context(), Inputs{
+		FixedSock:         "/root/.cache/sshakku/agent.sock",
+		RuntimeDirRefused: "/run/user/1000",
+	}, fakeSource{}, fakeProber{}, nil, nil, nil, nil)
+
+	assert.Truef(t, hasFinding(r, "/run/user/1000"),
+		"the directory the environment asked for must be named: %v", r.Findings)
+	assert.Truef(t, hasFinding(r, "XDG_RUNTIME_DIR"),
+		"and the variable that named it, so there is something to go and unset: %v", r.Findings)
+}
+
+// The counterpart: a session whose runtime directory was used has nothing to
+// report about one, and a report that said so anyway would send somebody to
+// look for a problem they do not have.
+func TestReportSaysNothingOfARuntimeDirectoryThatWasUsed(t *testing.T) {
+	r := Gather(t.Context(), Inputs{FixedSock: "/run/user/1000/sshakku/agent.sock"},
+		fakeSource{}, fakeProber{}, nil, nil, nil, nil)
+
+	assert.Falsef(t, hasFinding(r, "XDG_RUNTIME_DIR"),
+		"nothing was refused, so nothing is said: %v", r.Findings)
+}

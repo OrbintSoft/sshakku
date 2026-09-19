@@ -36,6 +36,13 @@ type Layout struct {
 	AgentSock  string
 	AgentLock  string
 	LogFile    string
+	// RuntimeDirRefused names a runtime directory the environment pointed at
+	// and this layout did not use, because it is there but is not one this
+	// account has to itself. A directory that is merely absent is not refused:
+	// nothing was turned down, so there is nothing to report. Empty in both of
+	// those cases, and it is never a path anything is computed from — it exists
+	// so the session log and the report can name what was asked for.
+	RuntimeDirRefused string
 }
 
 // Resolve computes the layout from env. probe reports whether a directory is

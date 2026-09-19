@@ -120,11 +120,20 @@ type Inputs struct {
 	// report that knew only one of them would call the other one somebody
 	// else's agent.
 	FixedSockPosix string
-	LegacyDir      string // ~/.ssh/agent, for spotting a pre-sshakku agent.
-	StatePath      string // agent.state, holding the pid of the agent we started.
-	EnvSock        string // SSH_AUTH_SOCK as this shell sees it.
-	LogFile        string // session log to tail.
-	OurUID         int    // the invoking user's uid, to tell same-user agents apart.
+	// RuntimeDirRefused names a runtime directory the environment pointed at
+	// and this session did not put its endpoint in, because it is there and is
+	// not one this account has to itself. Stated by the caller, which is the
+	// only part of the program that reads the environment this report is about.
+	// Empty where the environment named none, named one that was used, or named
+	// one that is not there at all — nothing was turned down in that last case,
+	// so there is nothing for a reader to go and look into.
+	RuntimeDirRefused string
+
+	LegacyDir string // ~/.ssh/agent, for spotting a pre-sshakku agent.
+	StatePath string // agent.state, holding the pid of the agent we started.
+	EnvSock   string // SSH_AUTH_SOCK as this shell sees it.
+	LogFile   string // session log to tail.
+	OurUID    int    // the invoking user's uid, to tell same-user agents apart.
 
 	// EnvAskpass and EnvAskpassRequire describe whether this shell's ssh
 	// passphrase prompts are routed through sshakku's wallet-aware askpass
