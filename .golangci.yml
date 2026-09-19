@@ -248,6 +248,15 @@ linters:
     # from.
     - iotamixing
 
+    # `make([]byte, n)` is n zeros, and `append` puts what follows after them,
+    # so a buffer made that way and then appended to carries a run of zeros in
+    # front of what it was meant to hold — `make([]byte, 0, n)` is the one that
+    # reserves without filling. This program frames bytes for somebody else to
+    # read: an agent request is a four-byte length and what that length counts,
+    # and a frame whose count includes the padding is one the other end waits
+    # out rather than refuses.
+    - makezero
+
     # A loop that searches a slice, copies one into another, or picks the
     # larger of two numbers is a loop whose edge cases have to be read to be
     # trusted; the standard function it replaces has a name that says what the

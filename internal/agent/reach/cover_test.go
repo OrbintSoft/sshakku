@@ -67,8 +67,7 @@ func TestIdentitiesAnsweredEdges(t *testing.T) {
 	})
 	t.Run("oversized length frame", func(t *testing.T) {
 		// length = maxFrame+1, above the cap.
-		hdr := make([]byte, 4)
-		binary.BigEndian.PutUint32(hdr, maxFrame+1)
+		hdr := binary.BigEndian.AppendUint32(nil, maxFrame+1)
 		assert.False(t, identitiesAnswered(&errReadWriter{readBuf: append(hdr, answer...)}),
 			"a framed length above the cap is not an answer, whatever byte follows it")
 	})
