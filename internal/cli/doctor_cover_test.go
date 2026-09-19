@@ -15,6 +15,8 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/diagnose"
 	"github.com/OrbintSoft/sshakku/internal/paths"
+	"github.com/OrbintSoft/sshakku/internal/run/runtest"
+	"github.com/OrbintSoft/sshakku/internal/sshtools"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -245,4 +247,34 @@ func TestGatherReport(t *testing.T) {
 	report := gatherReport(t.Context(), env, layout, config.Settings{})
 	assert.Equal(t, platformEndpoint(layout).Native(), report.FixedSock,
 		"the report must be about the endpoint sessions on this system are pointed at")
+}
+
+// errSSHWillNotStart is what a build that cannot be run refuses with, standing
+// for the machine states this test cannot arrange: an ssh that is not
+// executable, a binary for another architecture, a program killed before it
+// printed.
+var errSSHWillNotStart = errors.New("ssh will not start")
+
+// TestSSHVersionHere covers what the report is told about the OpenSSH a session
+// would run for `ssh`: the release a build prints, and the zero value that
+// stands for a build which did not say. The two must not collapse into one
+// another — a version nobody read is not an old version, and a reader told to
+// replace an OpenSSH that was never the problem goes and changes the one thing
+// that was working.
+func TestSSHVersionHere(t *testing.T) {
+	t.Run("a build that answers is read", func(t *testing.T) {
+		r := runtest.NewRunner().On(sshtools.SSHName,
+			runtest.Stdout("OpenSSH_9.6p1, OpenSSL 3.0.13 30 Jan 2024\n", 0))
+		v := sshVersionHere(t.Context(), r)
+		assert.Equal(t, 9, v.Major, "the release a build prints is the release reported")
+		assert.Equal(t, 6, v.Minor, "and so is the minor, which is what decides whether it can be sent to a helper")
+		assert.False(t, v.Unread(), "a build that answered is not one that was never asked")
+	})
+
+	t.Run("a build that will not run says nothing about a version", func(t *testing.T) {
+		r := runtest.NewRunner().On(sshtools.SSHName, runtest.Fails(errSSHWillNotStart))
+		v := sshVersionHere(t.Context(), r)
+		assert.True(t, v.Unread(), "a question that could not be asked has no answer to report")
+		assert.Empty(t, v.Text, "and nothing to quote either")
+	})
 }
