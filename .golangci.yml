@@ -257,6 +257,17 @@ linters:
     # from.
     - iotamixing
 
+    # cyclop counts the paths through a function and gocognit charges it for
+    # nesting; this one puts how much a function does together with how much of
+    # it there is — Halstead volume, cyclomatic complexity and length in one
+    # number — and so reaches the function neither of the other two objects to
+    # and nobody can hold in their head. At its default bar of 20 it reports
+    # nothing here, and that is where it stays: raised, the first thing it
+    # finds is a table-driven test, whose volume is the cases it lists and
+    # whose complexity is 1. The lowest production function in the tree sits
+    # at 34.
+    - maintidx
+
     # `make([]byte, n)` is n zeros, and `append` puts what follows after them,
     # so a buffer made that way and then appended to carries a run of zeros in
     # front of what it was meant to hold — `make([]byte, 0, n)` is the one that
