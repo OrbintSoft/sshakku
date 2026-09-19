@@ -94,7 +94,7 @@ func (m Manager) Reap(ctx context.Context, ourUID int) (ReapResult, error) {
 		if p.Socket == "" || m.Prober.Reachable(ctx, p.Socket) {
 			continue // unknown socket, or healthy — never reap.
 		}
-		if p.UID != ourUID {
+		if !ours(p, ourUID) {
 			continue // not ours to signal.
 		}
 		if err := m.Signaler.Terminate(p.PID); err == nil {
