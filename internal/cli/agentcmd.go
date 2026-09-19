@@ -84,6 +84,7 @@ func (d deps) shellInit(ctx context.Context, stdout, stderr io.Writer, args []st
 		return 1
 	}
 	paths.CleanupLegacyAgentDir(env.Home)
+	logRefusedRuntimeDir(layout)
 
 	live, code := d.runEnsure(ctx, stderr, env, layout)
 	if code != 0 {
@@ -114,6 +115,23 @@ func (d deps) shellInit(ctx context.Context, stdout, stderr io.Writer, args []st
 		}
 	}
 	return 0
+}
+
+// logRefusedRuntimeDir records a runtime directory the environment named and
+// this session did not put its endpoint in. Both halves matter to whoever goes
+// looking later: an endpoint somewhere other than where the environment pointed
+// is a move with nothing on the screen to account for it, and where it would
+// have gone is a directory this account cannot be sure it has to itself. It is
+// a note rather than a complaint — the session opened, with an endpoint of its
+// own — so it goes to the log and not to the terminal.
+func logRefusedRuntimeDir(layout paths.Layout) {
+	if layout.RuntimeDirRefused == "" {
+		return
+	}
+	_ = sessionlog.New(layout.LogFile).Log("INFO", fmt.Sprintf(
+		"$XDG_RUNTIME_DIR names %s, which is not a directory this account has to itself;"+
+			" this session's agent endpoint is under %s instead",
+		layout.RuntimeDirRefused, layout.RuntimeDir))
 }
 
 // ensureAgent resolves the runtime layout, drives the fixed socket to a healthy

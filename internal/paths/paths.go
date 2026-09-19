@@ -46,10 +46,16 @@ type Layout struct {
 }
 
 // Resolve computes the layout from env. probe reports whether a directory is
-// usable; requireOwner additionally asks that it be owned by the current user —
-// used for the guessed /run/user/$UID path, which we did not get from the
-// environment and therefore must not trust blindly.
-func Resolve(env Env, probe func(path string, requireOwner bool) bool) Layout {
+// there; requirePrivate additionally asks that it be one this account has to
+// itself, which is asked of every candidate for the socket's home.
+//
+// It is asked of what the environment named most of all, not least: coming from
+// the environment is what makes a directory worth doubting rather than what
+// settles it. $XDG_RUNTIME_DIR is the one input to these paths that can still
+// be naming another account's directory — which is what a shell carries when it
+// becomes another user without opening a session of its own — and the socket
+// put there is the front door to every key the session loads.
+func Resolve(env Env, probe func(path string, requirePrivate bool) bool) Layout {
 	configHome := env.ConfigHome
 	if configHome == "" {
 		configHome = filepath.Join(env.Home, ".config")
@@ -62,7 +68,7 @@ func Resolve(env Env, probe func(path string, requireOwner bool) bool) Layout {
 	}
 	stateDir := filepath.Join(stateHome, app)
 
-	runtimeDir := resolveRuntimeDir(env, probe)
+	runtimeDir, runtimeDirRefused := resolveRuntimeDir(env, probe)
 	socketDir := runtimeDir // a per-login token is inserted here in a later step.
 
 	return Layout{
@@ -73,6 +79,8 @@ func Resolve(env Env, probe func(path string, requireOwner bool) bool) Layout {
 		AgentSock:  filepath.Join(socketDir, "agent.sock"),
 		AgentLock:  filepath.Join(socketDir, ".start.lock"),
 		LogFile:    filepath.Join(stateDir, "sessions.log"),
+
+		RuntimeDirRefused: runtimeDirRefused,
 	}
 }
 
@@ -90,9 +98,16 @@ func (l Layout) WithSocketToken(token string) Layout {
 }
 
 // resolveRuntimeDir picks the per-user tmpfs base, independent of the desktop or
-// display server: XDG_RUNTIME_DIR, then its canonical /run/user/$UID (only if we
-// own it), then the session's own private temporary directory, and last a
-// private dir under $HOME.
+// display server: XDG_RUNTIME_DIR, then its canonical /run/user/$UID, then the
+// session's own private temporary directory, and last a private dir under
+// $HOME. Every candidate must be one this account has to itself; the first that
+// is, wins.
+//
+// refused names the directory the environment pointed at where that directory
+// is there and is not this account's alone. A directory that is merely absent
+// does not fill it: nothing was turned down, there is nothing to look into, and
+// a report saying otherwise would send somebody after a stale variable as
+// though it were somebody else's directory.
 //
 // The temporary directory comes before the home because the agent socket's
 // address is bound by the kernel to barely a hundred bytes, while a home
@@ -101,20 +116,23 @@ func (l Layout) WithSocketToken(token string) Layout {
 // — a home of ordinary depth still fits, and a long one leaves the session
 // with no agent at all. It is also where that system's own ssh-agent puts its
 // socket when nobody tells it otherwise.
-func resolveRuntimeDir(env Env, probe func(string, bool) bool) string {
+func resolveRuntimeDir(env Env, probe func(string, bool) bool) (dir, refused string) {
 	if env.RuntimeDir != "" && probe(env.RuntimeDir, false) {
-		return filepath.Join(env.RuntimeDir, app)
+		if probe(env.RuntimeDir, true) {
+			return filepath.Join(env.RuntimeDir, app), ""
+		}
+		refused = env.RuntimeDir
 	}
 	runUser := filepath.Join("/run/user", strconv.Itoa(env.UID))
 	if probe(runUser, true) {
-		return filepath.Join(runUser, app)
+		return filepath.Join(runUser, app), refused
 	}
 	if env.TempDir != "" {
-		return filepath.Join(env.TempDir, app)
+		return filepath.Join(env.TempDir, app), refused
 	}
 	cacheHome := env.CacheHome
 	if cacheHome == "" {
 		cacheHome = filepath.Join(env.Home, ".cache")
 	}
-	return filepath.Join(cacheHome, app)
+	return filepath.Join(cacheHome, app), refused
 }
