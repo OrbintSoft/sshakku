@@ -149,6 +149,43 @@ A loaded key can also show:
   will **not** refill the key either, since the loader dedups on an
   already-loaded fingerprint and skips it.
 
+### Keys at rest
+
+Where the system can encrypt a key file to one account, each key SSHakku is
+configured to load carries what it is resting under:
+
+```text
+keys in C:\Users\you\.ssh (2):
+  id_ed25519_github           loaded, expires in 7h12m30s — at rest: protected
+  id_rsa_old                  not loaded — at rest: not protected
+```
+
+A key reading `not protected` is readable now — by another account on this
+machine, or by anyone holding the disk while you are not signed in.
+`sshakku protect-keys` is what changes that, and the findings name it.
+
+The answer has three values. `undetermined` means nobody could tell — a path
+that could not be read about, not a path found in the clear — and the two must
+not be acted on alike.
+
+**Nothing is reported about the directory the keys are in**, and that is a
+decision rather than an omission. Encrypting the directory would cover the keys
+made in it afterwards, which sounds like the better answer and is not one to
+recommend: where that directory is the one your SSH server reads, an
+`authorized_keys` created in it afterwards is born encrypted too, and the server
+reads that file as the system — before there is a session of yours for it to
+unlock anything with. Logins by key into the machine then stop working, and
+nothing says why. `sshakku protect-keys` can still be asked to cover the
+directory, having first said what it costs; a report that recommended it on
+every run would be a different thing. Where your keys live is your decision, and
+`sshakku move-keys` is how you change it.
+
+On a system where this build has no such scheme, these lines are absent
+altogether rather than reading `undetermined` on every key. A machine nobody
+asked and a question that does not arise are different things, and only the
+first is worth going and answering. See [HARDENING.md](HARDENING.md) for what
+each system offers here and what it is worth.
+
 ### The wallet section
 
 Names the wallet SSHakku would use and, for a backend reachable more than one

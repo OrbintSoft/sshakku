@@ -68,7 +68,6 @@ func Gather(ctx context.Context, in Inputs, src AgentSource, prober agent.Prober
 		r.Keys, r.KeysErr = gatherKeys(ctx, *keys)
 		if keys.AtRest != nil {
 			r.KeyProtectionScheme = keys.AtRestScheme
-			r.KeysDirProtected = atRestAnswer(keys.AtRest, keys.Dir)
 		}
 	}
 	r.Findings = findings(in, r)

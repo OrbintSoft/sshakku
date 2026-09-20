@@ -371,12 +371,14 @@ type Report struct {
 	// with on this system — "EFS" — and is empty where this build has none, in
 	// which case the report says nothing about protection at all.
 	KeyProtectionScheme string
-	// KeysDirProtected is the key directory's own answer, kept apart from the
-	// keys' own because marking a directory does nothing for the keys already
-	// in it. A directory reading as protected above keys that are not is the
-	// state this separation exists to show.
-	KeysDirProtected *bool
-	Host             hostcheck.Checks
+	// There is deliberately no answer here for the directory the keys are in.
+	// Encrypting a directory is not the same act as encrypting the keys in it,
+	// and is not one this report may recommend: where that directory is the one
+	// an SSH server reads, a file created in it afterwards is born encrypted,
+	// and the server cannot read `authorized_keys` — so logins by key into the
+	// machine stop, with nothing said. Where the keys live is the user's
+	// decision; what they are resting under is what this reports.
+	Host hostcheck.Checks
 
 	Env           []EnvVar
 	SecretEnv     []SecretEnvVar

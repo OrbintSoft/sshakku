@@ -102,12 +102,6 @@ func formatKeys(p section, r Report) {
 	for _, k := range r.Keys {
 		p("  %-28s %s%s\n", k.Name, keyStatus(k, r.LifetimeKeptBySessions), keyAtRest(r, k))
 	}
-	// The directory's own answer goes below the keys rather than beside them,
-	// because it is about the keys that do not exist yet: what it decides is
-	// whether the next one generated here is born protected.
-	if r.KeyProtectionScheme != "" {
-		p("  %-28s %s (%s)\n", "the directory itself:", atRestWord(r.KeysDirProtected), r.KeyProtectionScheme)
-	}
 	if r.KeysErr != nil {
 		p("  could not enumerate %s: %v\n", keysDirName(r.KeysDir), r.KeysErr)
 	}
