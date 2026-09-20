@@ -72,7 +72,7 @@ func (d deps) loadKeys(ctx context.Context, stderr io.Writer) int {
 	defer closeSecret()
 
 	loader := keys.Loader{
-		Keys:   settings.KeyEnumerator(env.Home),
+		Keys:   settings.KeyEnumerator(layout.Home),
 		Runner: runner,
 		Secret: secret,
 		Prompt: prompter,

@@ -159,3 +159,20 @@ func TestPrivateDir(t *testing.T) {
 	require.NoError(t, os.Symlink(dir, link))
 	assert.False(t, PrivateDir(link), "a symlink to a private directory is not private")
 }
+
+// TestRecordedHome covers both answers the user database can give, because the
+// one that is not a home is half the promise: a machine that cannot be asked
+// about this account leaves the home the session was given standing, and a
+// wrong answer there would send the session somewhere nobody chose.
+func TestRecordedHome(t *testing.T) {
+	// root is asked rather than whoever runs this: every unix has that account
+	// and no runner can be configured without it, where the uid a test happens
+	// to run as may not be in the database at all.
+	home := recordedHome(0)
+	assert.NotEmpty(t, home, "the database has an entry for root")
+	assert.True(t, filepath.IsAbs(home), "a home is an absolute path: %q", home)
+
+	// No account has this uid: -1 is what a failed lookup is spelled as, never
+	// what an entry is numbered.
+	assert.Empty(t, recordedHome(-1), "an account the database has no entry for has no home to give")
+}

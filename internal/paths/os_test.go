@@ -111,6 +111,12 @@ func TestCleanupLegacyAgentDirEarlyReturns(t *testing.T) {
 	})
 }
 
+// noRecordedHome stands for a machine whose user database has no answer about
+// this account, which leaves the home the environment named standing. It is
+// what these tests want: none of them is about the home being measured, and a
+// stub that answered would move the very value they assert on.
+func noRecordedHome(int) string { return "" }
+
 // TestFromEnvHomeFallback drives the branch FromOS cannot reach through the real
 // os functions: HOME unset, so the home directory comes from the injected
 // homeDir lookup.
@@ -122,7 +128,7 @@ func TestFromEnvHomeFallback(t *testing.T) {
 		return ""
 	}
 	homeDir := func() (string, error) { return "/fallback/home", nil }
-	env := fromEnv(getenv, homeDir, func() int { return 4242 }, func(string) bool { return true })
+	env := fromEnv(getenv, homeDir, func() int { return 4242 }, func(string) bool { return true }, noRecordedHome)
 	assert.Equal(t, "/fallback/home", env.Home, "Home comes from the homeDir fallback")
 	assert.Equal(t, 4242, env.UID, "UID")
 }
@@ -142,16 +148,16 @@ func TestFromEnvTempDir(t *testing.T) {
 	homeDir := func() (string, error) { return "/home/alice", nil }
 	uid := func() int { return 1000 }
 
-	env := fromEnv(getenv, homeDir, uid, func(string) bool { return true })
+	env := fromEnv(getenv, homeDir, uid, func(string) bool { return true }, noRecordedHome)
 	assert.Equal(t, "/the/tmp", env.TempDir, "a private temporary directory is kept")
 
-	env = fromEnv(getenv, homeDir, uid, func(string) bool { return false })
+	env = fromEnv(getenv, homeDir, uid, func(string) bool { return false }, noRecordedHome)
 	assert.Empty(t, env.TempDir, "a shared temporary directory is dropped")
 
 	env = fromEnv(func(string) string { return "" }, homeDir, uid, func(string) bool {
 		assert.Fail(t, "a temporary directory that was never named got inspected")
 		return true
-	})
+	}, noRecordedHome)
 	assert.Empty(t, env.TempDir, "no temporary directory was named")
 }
 

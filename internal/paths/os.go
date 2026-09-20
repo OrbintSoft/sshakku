@@ -21,19 +21,25 @@ import (
 // in Resolve rather than here: a directory that is absent and one that belongs
 // to somebody else are both unusable and only the second is worth reporting,
 // and telling them apart needs the question Resolve already asks of a path.
-func fromEnv(getenv func(string) string, homeDir func() (string, error), getuid func() int, private func(string) bool) Env {
+func fromEnv(getenv func(string) string, homeDir func() (string, error), getuid func() int, private func(string) bool, recordedHome func(uid int) string) Env {
 	home := getenv("HOME")
 	if home == "" {
 		if h, err := homeDir(); err == nil {
 			home = h
 		}
 	}
+	uid := getuid()
 	tempDir := getenv("TMPDIR")
 	if tempDir != "" && !private(tempDir) {
 		tempDir = ""
 	}
 	return Env{
 		Home: home,
+		// The home the account is recorded as having is read here, beside the
+		// variable that claims to be it, because that is what makes the two
+		// comparable at all: one is what this session was handed and the other
+		// is what this machine says about the account it is running as.
+		AccountHome: recordedHome(uid),
 		// Whether a directory can be attributed at all is this build's answer,
 		// not this session's, so it is settled here with the other inputs
 		// rather than asked again wherever a directory is chosen.
@@ -43,7 +49,7 @@ func fromEnv(getenv func(string) string, homeDir func() (string, error), getuid 
 		RuntimeDir:      getenv("XDG_RUNTIME_DIR"),
 		CacheHome:       getenv("XDG_CACHE_HOME"),
 		TempDir:         tempDir,
-		UID:             getuid(),
+		UID:             uid,
 	}
 }
 

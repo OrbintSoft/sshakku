@@ -39,11 +39,18 @@ const (
 // Env holds the environment inputs to the path computation, so Resolve stays a
 // pure function that is easy to test.
 type Env struct {
-	Home       string // $HOME.
-	ConfigHome string // $XDG_CONFIG_HOME (may be empty).
-	StateHome  string // $XDG_STATE_HOME (may be empty).
-	RuntimeDir string // $XDG_RUNTIME_DIR (may be empty).
-	CacheHome  string // $XDG_CACHE_HOME (may be empty).
+	Home string // $HOME.
+	// AccountHome is the home directory this account is recorded as having,
+	// read from the user database rather than from the environment. A home is
+	// the one directory here that has an authoritative answer somewhere else,
+	// so $HOME is measured against this one and replaced by it where it names
+	// somebody else's. Empty where this build has no way to look it up — the
+	// same "cannot tell" as OwnerUnknowable, and treated the same way.
+	AccountHome string
+	ConfigHome  string // $XDG_CONFIG_HOME (may be empty).
+	StateHome   string // $XDG_STATE_HOME (may be empty).
+	RuntimeDir  string // $XDG_RUNTIME_DIR (may be empty).
+	CacheHome   string // $XDG_CACHE_HOME (may be empty).
 	// TempDir is the per-user temporary directory this session was given, and
 	// only if it is private to this user — a shared one is left out here
 	// rather than rejected later, so nothing downstream has to know the
@@ -69,6 +76,12 @@ type Layout struct {
 	AgentSock  string
 	AgentLock  string
 	LogFile    string
+	// Home is the home directory this layout was built on, and the one the keys
+	// are looked for under where no key directory is configured. It is here
+	// rather than left to each caller's own reading of $HOME so that a session
+	// has one home: a caller that read the variable for itself would be pointed
+	// at the very directory this layout declined to use.
+	Home string
 	// Refused holds the directories the environment pointed at and this layout
 	// did not use, because each is there but is not one this account has to
 	// itself. A directory that is merely absent is not refused: nothing was
@@ -99,15 +112,20 @@ type Refusal struct {
 // session loads, the configuration decides where passphrases are filed and
 // which command is run to edit it, and the state directory takes the record of
 // what was done with the keys.
+//
+// $HOME is one of those variables and is asked first, because the other three
+// are looked for under it whenever nothing names them outright: a home taken on
+// trust would place all of them at once, and the keys with them.
 func Resolve(env Env, probe func(path string, need Need) bool) Layout {
 	pick := &chooser{env: env, probe: probe}
 
+	home := pick.home()
 	configDir := filepath.Join(
-		pick.ours("XDG_CONFIG_HOME", env.ConfigHome, filepath.Join(env.Home, ".config")), app)
+		pick.ours("XDG_CONFIG_HOME", env.ConfigHome, filepath.Join(home, ".config")), app)
 	stateDir := filepath.Join(
-		pick.ours("XDG_STATE_HOME", env.StateHome, filepath.Join(env.Home, ".local", "state")), app)
+		pick.ours("XDG_STATE_HOME", env.StateHome, filepath.Join(home, ".local", "state")), app)
 
-	runtimeDir := pick.runtimeDir()
+	runtimeDir := pick.runtimeDir(home)
 	socketDir := runtimeDir // a per-login token is inserted here in a later step.
 
 	return Layout{
@@ -118,6 +136,7 @@ func Resolve(env Env, probe func(path string, need Need) bool) Layout {
 		AgentSock:  filepath.Join(socketDir, "agent.sock"),
 		AgentLock:  filepath.Join(socketDir, ".start.lock"),
 		LogFile:    filepath.Join(stateDir, "sessions.log"),
+		Home:       home,
 
 		Refused: pick.refused,
 	}
@@ -174,6 +193,24 @@ func (c *chooser) ours(name, named, own string) string {
 	return named
 }
 
+// home is the directory the rest of the layout is looked for under, and the
+// keys with it. $HOME names a directory the way the XDG variables do and is
+// carried into another account's session the same way, so it is asked the same
+// question — but where a refused configuration home falls back to a guess made
+// from this one, a home has an answer recorded elsewhere, and the account's own
+// entry in the user database is what it falls back to.
+//
+// Where there is no recorded home to fall back on, what the environment named
+// is kept: a session that could not look the answer up is not thereby homeless,
+// and a build with no user database to ask must leave every home exactly as it
+// found it.
+func (c *chooser) home() string {
+	if c.env.AccountHome == "" {
+		return c.env.Home
+	}
+	return c.ours("HOME", c.env.Home, c.env.AccountHome)
+}
+
 // theirs reports whether path is there and is not this account's alone,
 // recording the refusal when it is.
 func (c *chooser) theirs(name, path string) bool {
@@ -205,7 +242,7 @@ func (c *chooser) theirs(name, path string) bool {
 // The private temporary directory is taken before the home because a socket
 // address is bounded and a home directory is not: a home deep enough leaves a
 // session with no agent it can reach at all.
-func (c *chooser) runtimeDir() string {
+func (c *chooser) runtimeDir(home string) string {
 	if c.env.RuntimeDir != "" && c.probe(c.env.RuntimeDir, NeedThere) {
 		if c.probe(c.env.RuntimeDir, NeedPrivate) {
 			return filepath.Join(c.env.RuntimeDir, app)
@@ -224,5 +261,5 @@ func (c *chooser) runtimeDir() string {
 	// account's directory can be renamed out of and answered in place of,
 	// whatever the mode on the directory itself.
 	return filepath.Join(
-		c.ours("XDG_CACHE_HOME", c.env.CacheHome, filepath.Join(c.env.Home, ".cache")), app)
+		c.ours("XDG_CACHE_HOME", c.env.CacheHome, filepath.Join(home, ".cache")), app)
 }
