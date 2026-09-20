@@ -9,6 +9,11 @@
 # it came from -- su without a login shell, sudo without -i -- and the account
 # worth carrying into is root, whose session has something to lose.
 #
+# The last section carries nothing but $HOME, which is where the other four are
+# looked for when none of them is named, and where the keys are looked for as
+# well. It is carried by su -m and by sudo -E where the sudoers file permits
+# it, which is why always_set_home exists to stop it.
+#
 # Nothing here is an attack. Both sessions resolve directories; the whole
 # question is whose they end up being, and whether a session that was sent
 # somewhere else says so. Two of the checks below must hold on any build worth
@@ -25,6 +30,9 @@ readonly HOOK=/etc/profile.d/001-ssh-init.sh
 readonly ALICE_CONFIG=/home/alice/.config
 readonly ALICE_STATE=/home/alice/.local/state
 readonly ALICE_CACHE=/home/alice/.cache
+readonly ALICE_HOME=/home/alice
+readonly ALICE_SSH=/home/alice/.ssh
+readonly ROOT_OWN_HOME=/root/a-home-root-chose
 readonly HERS=AlicePrefixNobodyElseWouldPick
 readonly MARKER=/home/alice/the-editor-alice-named-ran
 
@@ -70,6 +78,8 @@ SH
 su alice -s /bin/bash -c 'chmod +x /home/alice/editor'
 install -d -m 700 /root/.ssh
 ssh-keygen -q -t ed25519 -N "" -C root-key -f /root/.ssh/id_ed25519 <<<y >/dev/null 2>&1
+install -d -o alice -g alice -m 700 "${ALICE_SSH}"
+su alice -s /bin/bash -c "ssh-keygen -q -t ed25519 -N '' -C alice-key -f ${ALICE_SSH}/id_alice_only" >/dev/null 2>&1
 
 # The precondition is asserted positively: a directory alice owns, which root
 # can reach and must decline to use. A scenario that mistook an unreadable path
@@ -187,6 +197,111 @@ if as_root_carrying "XDG_CONFIG_HOME=/root/not-there-at-all" "${SSHAKKU} config"
 	ok "a directory that is not there yet is still this session's to create"
 else
 	fail "a path nobody turned down was treated as though somebody had"
+fi
+
+# ── The home the other four are looked for under, and the keys with them ───
+#
+# Nothing below names a configuration, a state, a cache or a runtime directory.
+# Only the home is carried, which is what su -m and sudo -E leave behind, and
+# every one of those directories is looked for under it.
+echo "== root opens a shell carrying nothing but alice's home"
+report="$(as_root_carrying "HOME=${ALICE_HOME}" "${SSHAKKU} config" 2>&1)"
+
+if grep -q "config directory: ${ALICE_CONFIG}" <<<"${report}"; then
+	fail "root's configuration directory is alice's, reached through her home"
+else
+	ok "root's configuration directory is not alice's"
+fi
+
+if grep -q "${HERS}" <<<"${report}"; then
+	fail "a setting alice wrote is in force in root's session, reached through her home"
+	echo "${report}" >&2
+else
+	ok "no setting of alice's is in force in root's session"
+fi
+
+echo "== and asks to edit its configuration"
+as_root_carrying "HOME=${ALICE_HOME}" "${SSHAKKU} config --edit" </dev/null >/dev/null 2>&1
+
+if [ -e "${MARKER}" ]; then
+	fail "the command alice named ran as $(cat "${MARKER}")"
+else
+	ok "the command alice named was not run"
+fi
+
+if find "${ALICE_STATE}" -name 'sessions.log' | grep -q .; then
+	fail "root's session log was written into alice's state directory"
+else
+	ok "nothing of root's session was written into alice's state directory"
+fi
+
+echo "== and is given an endpoint"
+# shellcheck disable=SC2016 # $SSH_AUTH_SOCK is the login shell's to expand, not this one's: what it was set to there is the answer being read.
+root_sock="$(as_root_carrying "HOME=${ALICE_HOME}" 'printf "%s" "${SSH_AUTH_SOCK:-}"' 2>/dev/null)"
+
+case "${root_sock}" in
+"${ALICE_HOME}"/*)
+	fail "root's endpoint is inside alice's home: ${root_sock}"
+	;;
+"")
+	fail "root's session was given no endpoint at all"
+	;;
+*)
+	ok "root's endpoint is outside alice's home: ${root_sock}"
+	;;
+esac
+
+echo "== root loads a key of root's own"
+as_root_carrying "HOME=${ALICE_HOME}" "ssh-add /root/.ssh/id_ed25519" >/dev/null 2>&1
+
+if su alice -s /bin/bash -c "SSH_AUTH_SOCK=${ALICE_CACHE}/sshakku/agent.sock ssh-add -l" 2>/dev/null | grep -q root-key; then
+	fail "root's key is in alice's agent: she can authenticate as root with it"
+else
+	ok "root's key did not reach the agent alice left waiting"
+fi
+
+# ── F71: the keys acted on are this account's own ──────────────────────────
+echo "== what root is told its keys are"
+findings="$(as_root_carrying "HOME=${ALICE_HOME}" "${SSHAKKU} doctor" 2>&1)"
+
+if grep -q "keys in ${ALICE_SSH}" <<<"${findings}" || grep -q "id_alice_only" <<<"${findings}"; then
+	fail "root's session is acting on alice's private keys"
+	echo "${findings}" >&2
+else
+	ok "root's session is not acting on alice's private keys"
+fi
+
+if grep -q "keys in /root/.ssh" <<<"${findings}"; then
+	ok "the keys root acts on are the ones in root's own key directory"
+else
+	fail "root's session named no key directory of its own"
+	echo "${findings}" >&2
+fi
+
+if grep -q 'HOME' <<<"${findings}" && grep -q "${ALICE_HOME}" <<<"${findings}"; then
+	ok "the report names the home that was asked for and the variable that named it"
+else
+	fail "root was sent elsewhere with nothing said about it"
+	echo "${findings}" >&2
+fi
+
+# ── What must hold on any build, again: whose the home is, not where the ───
+#    answer came from.
+echo "== a home that really is root's own"
+install -d -m 700 "${ROOT_OWN_HOME}"
+
+if as_root_carrying "HOME=${ROOT_OWN_HOME}" "${SSHAKKU} config" 2>&1 |
+	grep -q "config directory: ${ROOT_OWN_HOME}/.config/sshakku"; then
+	ok "a home this account chose for itself is still the home it is given"
+else
+	fail "root's own home was replaced: the environment is being ignored rather than questioned"
+fi
+
+echo "== and alice, in her own session, with her own key"
+if su alice -s /bin/bash -c "${SSHAKKU} doctor" 2>&1 | grep -q "id_alice_only"; then
+	ok "an account's own session still acts on its own keys"
+else
+	fail "alice's own keys went missing from her own report"
 fi
 
 if [ "${failures}" -ne 0 ]; then
