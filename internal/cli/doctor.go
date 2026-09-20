@@ -17,7 +17,6 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/config"
 	"github.com/OrbintSoft/sshakku/internal/diagnose"
 	"github.com/OrbintSoft/sshakku/internal/keys"
-	"github.com/OrbintSoft/sshakku/internal/keys/protect"
 	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
 	"github.com/OrbintSoft/sshakku/internal/keystate"
 	"github.com/OrbintSoft/sshakku/internal/paths"
@@ -591,33 +590,19 @@ func refusedDirs(layout paths.Layout) []diagnose.RefusedDir {
 	return out
 }
 
-// keyProtectionHere says what this system encrypts a key file to a single
-// account with, and hands over the way to ask about one path.
-//
-// A system with no such scheme is given no way to ask rather than a way that
-// always refuses: the report then says nothing about protection at all, which
-// is the honest answer where the question does not arise, and no key file is
-// opened to establish it.
-func keyProtectionHere() (scheme string, atRest func(path string) (*bool, error)) {
-	if protect.Scheme() == "" {
-		return "", nil
-	}
-	return protect.Scheme(), protect.Protected
-}
-
 func gatherReport(ctx context.Context, env paths.Env, layout paths.Layout, settings config.Settings) diagnose.Report {
 	runner := run.ExecRunner{}
 	// One enumerator, read for the keys and named in the report: the set
 	// SSHakku acts on and the set it describes are then the same set.
 	enumerator := settings.KeyEnumerator(env.Home)
-	scheme, atRest := keyProtectionHere()
+	protector := keyProtectionHere()
 	keySource := &diagnose.KeySource{
 		Dir:          enumerator.Dir,
 		Lister:       enumerator,
 		Fingerprint:  keys.RunnerFingerprinter{Runner: runner, SSHAdd: sshtools.SSHAdd},
 		State:        keystate.Store{Dir: keystateDir(layout)},
-		AtRestScheme: scheme,
-		AtRest:       atRest,
+		AtRestScheme: protector.scheme,
+		AtRest:       protector.look,
 	}
 	shownEnv, secretEnv := environmentReport()
 	endpoint := platformEndpoint(layout)

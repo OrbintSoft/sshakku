@@ -57,7 +57,7 @@ commands:
                  --test-backend [name] stores/looks up/deletes a throwaway
                  probe entry in the named (or configured) secret backend
   forget         delete stored passphrases: <keyname>... or --all
-  install        wire the login hook into one shell; uninstall takes it out.
+  install      wire the login hook into one shell; uninstall takes it out.
                  With nothing else, the shell is the one you ran it from.
                  --shell <name> looks one up, --shell-exe <path> names the
                  interpreter to ask about itself, --profile <file> names the
@@ -177,6 +177,18 @@ type deps struct {
 	// answers run from either machine, since which one a system gives is the
 	// system's own (agent.KeepsLifetimes).
 	agentKeepsLifetimes bool
+	// keyProtection is what this system can do about encrypting a key file to
+	// the account that owns it, and the whole of what protect-keys acts
+	// through. Injected so a system with a scheme and one without both run from
+	// either machine, and so that a test decides what is protected instead of
+	// asking the machine it runs on — which here means a run can be exercised
+	// without encrypting anything on it (see keyProtector).
+	keyProtection keyProtector
+	// stdin is where a question a command has to ask gets answered — today the
+	// confirmation protect-keys stops for before it covers a directory an SSH
+	// server reads. Injected so both the asking and every answer to it run
+	// without a terminal.
+	stdin io.Reader
 }
 
 // realDeps wires deps to the production implementations.
@@ -199,6 +211,8 @@ func realDeps() deps {
 		sshAdd:              sync.OnceValues(sshtools.SSHAdd),
 		sshToolsDir:         sessionSSHToolsDir,
 		agentKeepsLifetimes: agent.KeepsLifetimes(),
+		keyProtection:       keyProtectionHere(),
+		stdin:               os.Stdin,
 	}
 }
 
