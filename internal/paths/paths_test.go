@@ -249,3 +249,52 @@ func TestResolveKeepsADirectoryItCannotAttribute(t *testing.T) {
 		"a question this build cannot answer must leave the configuration where it was")
 	assert.Empty(t, layout.Refused, "nothing may be reported as a stranger's on a build that cannot tell")
 }
+
+// TestResolveDoesNotBuildOnAHomeThatIsNotThisAccountsOwn is the same question
+// as the XDG variables are asked, put to the one they all fall back on. Three
+// of these directories are looked for under $HOME whenever nothing names them
+// outright, and $HOME is carried into another account's session exactly as the
+// others are: a shell that becomes root without opening a session of its own
+// keeps the home it came from.
+//
+// What must go there instead is not asserted here — this account's recorded
+// home is a thing Resolve has no way to be told yet — so what is stated is the
+// half the promise turns on: nothing of this session's is put under a home that
+// is there and belongs to somebody else.
+func TestResolveDoesNotBuildOnAHomeThatIsNotThisAccountsOwn(t *testing.T) {
+	theirs := filepath.FromSlash("/home/them")
+
+	// The home is there and is not this account's alone, which is the answer
+	// that has to change where the layout is built.
+	there := func(p string, need Need) bool { return p == theirs && need == NeedThere }
+
+	// No runtime directory and no temporary directory, so the socket falls back
+	// to the cache — which is where a home decides the endpoint's address too.
+	layout := Resolve(Env{Home: theirs, UID: 0}, there)
+
+	assert.NotEqual(t, filepath.Join(theirs, ".config", "sshakku"), layout.ConfigDir,
+		"the settings obeyed are not read out of another account's home")
+	assert.NotEqual(t, filepath.Join(theirs, ".local", "state", "sshakku"), layout.StateDir,
+		"the record of what was done with the keys is not written into another account's home")
+	assert.NotEqual(t, filepath.Join(theirs, ".cache", "sshakku"), layout.RuntimeDir,
+		"the endpoint every loaded key is reached through is not put under another account's home")
+}
+
+// TestResolveKeepsAHomeThatIsThisAccountsOwn is the guard the fix must not
+// break, and it is why the question is whose the home is rather than where it
+// came from. A home somebody set for themselves — a container, a test harness,
+// an account whose home is not under /home — is still their own, and a build
+// that went back to the user database regardless would take it away from them
+// for nothing.
+func TestResolveKeepsAHomeThatIsThisAccountsOwn(t *testing.T) {
+	mine := filepath.FromSlash("/srv/sandbox")
+
+	// There, and nobody else may write it: this account's own.
+	ours := func(p string, need Need) bool { return p == mine && need != NeedPrivate }
+
+	layout := Resolve(Env{Home: mine, UID: 1000}, ours)
+
+	assert.Equal(t, filepath.Join(mine, ".config", "sshakku"), layout.ConfigDir,
+		"a home this account has to itself is still the home this session is built on")
+	assert.Empty(t, layout.Refused, "nothing was turned down, so there is nothing to report")
+}
