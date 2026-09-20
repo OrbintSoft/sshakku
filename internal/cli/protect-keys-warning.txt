@@ -1,0 +1,3 @@
+From now on, any file created here will be encrypted, and your SSH server can't read encrypted files — it runs as the system, not as you. There's no authorized_keys here yet, so if one is ever added, SSH key logins to this machine will stop working and nothing will explain why.
+
+Advice: keep your private keys in a directory your SSH server never reads.

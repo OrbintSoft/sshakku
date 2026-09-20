@@ -57,7 +57,11 @@ commands:
                  --test-backend [name] stores/looks up/deletes a throwaway
                  probe entry in the named (or configured) secret backend
   forget         delete stored passphrases: <keyname>... or --all
-  install      wire the login hook into one shell; uninstall takes it out.
+  protect-keys   encrypt the private keys sshakku loads, so that only your own
+                 account can read them; --dry-run shows what it would encrypt
+                 without changing anything, --directory encrypts the key
+                 directory too, but asks first if an SSH server reads it
+  install     wire the login hook into one shell; uninstall takes it out.
                  With nothing else, the shell is the one you ran it from.
                  --shell <name> looks one up, --shell-exe <path> names the
                  interpreter to ask about itself, --profile <file> names the
@@ -274,6 +278,8 @@ func (d deps) run(ctx context.Context, stdout, stderr io.Writer, args []string) 
 		return d.doctor(ctx, stdout, stderr, args[1:])
 	case "forget":
 		return d.forget(ctx, stdout, stderr, args[1:])
+	case protectKeysCmdName:
+		return d.protectKeys(stdout, stderr, args[1:])
 	case installCmdName:
 		return d.install(ctx, stdout, stderr, args[1:])
 	case uninstallCmdName:
