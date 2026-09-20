@@ -48,10 +48,9 @@ func reportWithKeys(t *testing.T, ks *KeySource) Report {
 		fakeSource{}, fakeProber{}, nil, nil, ks, nil)
 }
 
-// TestTheKeysAndTheDirectoryAreReportedSeparately is the heart of the promise.
-// A directory that says "encrypted" above keys that are not is the state worth
-// catching, and a report that gave one answer for the lot could not show it.
-func TestTheKeysAndTheDirectoryAreReportedSeparately(t *testing.T) {
+// TestEachKeyCarriesWhetherItIsProtected. The promise is about the keys this
+// build is configured to load, one answer each.
+func TestEachKeyCarriesWhetherItIsProtected(t *testing.T) {
 	yes, no := true, false
 	mine, theirs := filepath.Join(keyDir, "id_ed25519"), filepath.Join(keyDir, "id_rsa")
 
@@ -64,7 +63,6 @@ func TestTheKeysAndTheDirectoryAreReportedSeparately(t *testing.T) {
 	require.Len(t, r.Keys, 2)
 	assert.Equal(t, &no, r.Keys[0].Protected, "the key that is not protected says so")
 	assert.Equal(t, &yes, r.Keys[1].Protected, "and the one that is")
-	assert.Equal(t, &yes, r.KeysDirProtected, "the directory's own answer is kept apart from theirs")
 	assert.Equal(t, "EFS", r.KeyProtectionScheme, "and the report names what the answers are about")
 
 	var b strings.Builder
@@ -72,6 +70,32 @@ func TestTheKeysAndTheDirectoryAreReportedSeparately(t *testing.T) {
 	out := b.String()
 	assert.Contains(t, out, "EFS", "the section names the scheme rather than leaving a reader to guess")
 	assert.Contains(t, out, "not protected", "a key in the clear is visible in the report")
+}
+
+// TestTheDirectoryItselfIsNotSomethingTheReportAnswersFor. Encrypting the
+// directory a key lives in is not the same act as encrypting the key, and is
+// not one the report may recommend: where that directory is the one an SSH
+// server reads, a file created in it afterwards is born encrypted, and the
+// server — which reads `authorized_keys` as the system, before there is a
+// session of this account's to unlock anything with — cannot read it. Logins by
+// key into the machine then stop, silently. Measured; see docs/TEST-MATRIX.md.
+//
+// So the report answers for the keys and leaves where they live alone.
+func TestTheDirectoryItselfIsNotSomethingTheReportAnswersFor(t *testing.T) {
+	yes, no := true, false
+	key := filepath.Join(keyDir, "id_ed25519")
+
+	r := reportWithKeys(t, protectedKeySource("EFS", map[string]*bool{
+		keyDir: &no,
+		key:    &yes,
+	}, key))
+
+	var b strings.Builder
+	Format(&b, r)
+	assert.NotContains(t, b.String(), "the directory itself",
+		"the report does not answer for the directory the keys are in")
+	assert.NotContains(t, strings.Join(r.Findings, "\n"), protectKeysCommand,
+		"and it does not send anybody to encrypt it: every key here is already protected")
 }
 
 // TestNothingIsSaidAboutProtectionWhereThisSystemHasNoScheme. Reporting every
@@ -123,25 +147,6 @@ func TestAKeyNobodyCouldAnswerForIsNotCalledUnprotected(t *testing.T) {
 	assert.Nil(t, r.Keys[0].Protected, "a look that could not answer leaves the answer open")
 	assert.NotContains(t, strings.Join(r.Findings, "\n"), "protect-keys",
 		"and nothing is reported as wrong on the strength of a question nobody answered")
-}
-
-// TestProtectedKeysUnderAnUnmarkedDirectoryAreTheirOwnFinding. Every key
-// covered and the directory not means the next key generated there is born in
-// the clear, with nothing said at the time — a state that reads as finished and
-// is not.
-func TestProtectedKeysUnderAnUnmarkedDirectoryAreTheirOwnFinding(t *testing.T) {
-	yes, no := true, false
-	key := filepath.Join(keyDir, "id_ed25519")
-
-	r := reportWithKeys(t, protectedKeySource("EFS", map[string]*bool{
-		keyDir: &no,
-		key:    &yes,
-	}, key))
-
-	joined := strings.Join(r.Findings, "\n")
-	assert.Contains(t, joined, "protect-keys", "the directory is worth a finding of its own")
-	assert.NotContains(t, joined, "id_ed25519",
-		"and it is not about the keys, which are all protected")
 }
 
 // TestEverythingProtectedIsNothingToReport. A report that keeps talking after
