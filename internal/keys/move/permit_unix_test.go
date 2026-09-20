@@ -26,7 +26,7 @@ func modeOf(t *testing.T, path string) os.FileMode {
 
 func TestAPrivateKeyEndsUpReadableOnlyByItsOwner(t *testing.T) {
 	key := filepath.Join(t.TempDir(), "id_ed25519")
-	require.NoError(t, os.WriteFile(key, []byte("not really a key"), 0o644))
+	require.NoError(t, os.WriteFile(key, []byte("not really a key"), 0o644)) //nolint:gosec // G306: a key anyone can read is the precondition, and what this asserts is that it stops being one
 	require.Equalf(t, os.FileMode(0o644), modeOf(t, key),
 		"the precondition: anyone can read it to begin with, or this test proves nothing")
 
@@ -48,7 +48,7 @@ func TestAPublicHalfIsLeftPublic(t *testing.T) {
 
 func TestAKeyDirectoryEndsUpEnterableOnlyByItsOwner(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "keys")
-	require.NoError(t, os.Mkdir(dir, 0o755))
+	require.NoError(t, os.Mkdir(dir, 0o755)) //nolint:gosec // G301: a directory anyone can enter is the precondition, and what this asserts is that it stops being one
 
 	require.NoError(t, Permit(dir, Directory))
 

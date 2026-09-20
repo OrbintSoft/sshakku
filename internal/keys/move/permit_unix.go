@@ -3,9 +3,16 @@
 package move
 
 import (
+	"errors"
 	"fmt"
 	"os"
 )
+
+// errNotAKindOfPath is what a Kind nobody defined answers with. It is a static
+// error rather than one built at the point of failure so that a caller can tell
+// this apart from a filesystem refusing the change, which is the only other way
+// permitting a path can fail here.
+var errNotAKindOfPath = errors.New("not a kind of path this knows about")
 
 // Permit gives one path the mode this system expects of it: a key directory
 // that only its owner may enter, a private key that only its owner may read,
@@ -25,7 +32,7 @@ func Permit(path string, kind Kind) error {
 	case PublicKey:
 		mode = 0o644
 	default:
-		return fmt.Errorf("permitting %s: %d is not a kind of path this knows about", path, kind)
+		return fmt.Errorf("permitting %s: %w: %d", path, errNotAKindOfPath, kind)
 	}
 	if err := os.Chmod(path, mode); err != nil {
 		return fmt.Errorf("permitting %s: %w", path, err)
