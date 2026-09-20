@@ -135,8 +135,7 @@ func TestCoveringTheSSHDirectorySaysWhatItCostsFirst(t *testing.T) {
 
 	require.Zerof(t, code, "asked for, with no authorized_keys there, it proceeds; stderr=%q", errOut)
 	assert.Contains(t, out, "authorized_keys", "what would be born encrypted is named")
-	assert.Contains(t, out, "keep your private keys in a directory your SSH server never reads",
-		"and so is the way to avoid the whole thing")
+	assert.Contains(t, out, "sshakku move-keys", "and so is the command that avoids the whole thing")
 	assert.Equal(t, dir, p.covered[0], "the directory first, so the next key born there is covered")
 }
 
