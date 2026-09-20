@@ -295,3 +295,24 @@ func TestSSHVersionHere(t *testing.T) {
 		assert.Empty(t, r.Calls, "and nothing may be run at all: there was no program to run")
 	})
 }
+
+// TestTheDirectoriesTurnedDownReachTheReport covers the carrying-across the
+// report depends on and cannot do for itself: it reads no environment, so a
+// directory the layout declined is something it has to be told. The variable
+// travels with the path and is named as a variable, which is the part a reader
+// can go and change — a report quoting a bare path sends them looking for the
+// wrong thing.
+func TestTheDirectoriesTurnedDownReachTheReport(t *testing.T) {
+	refused := refusedDirs(paths.Layout{Refused: []paths.Refusal{
+		{Var: "HOME", Path: filepath.FromSlash("/home/them")},
+		{Var: "XDG_CONFIG_HOME", Path: filepath.FromSlash("/home/them/.config")},
+	}})
+
+	assert.Equal(t, []diagnose.RefusedDir{
+		{Var: "$HOME", Path: filepath.FromSlash("/home/them")},
+		{Var: "$XDG_CONFIG_HOME", Path: filepath.FromSlash("/home/them/.config")},
+	}, refused, "every one of them, named as the variable a reader would edit")
+
+	assert.Empty(t, refusedDirs(paths.Layout{}),
+		"a session that was sent nowhere else has nothing to report")
+}
