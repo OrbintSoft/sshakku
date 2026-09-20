@@ -65,7 +65,7 @@ commands:
   move-keys      move your ssh keys into the directory you name, set the
                  permissions they need there, and record the new location in
                  your own config so they go on being loaded at every login
-  install  wire the login hook into one shell; uninstall takes it out.
+  install        wire the login hook into one shell; uninstall takes it out.
                  With nothing else, the shell is the one you ran it from.
                  --shell <name> looks one up, --shell-exe <path> names the
                  interpreter to ask about itself, --profile <file> names the

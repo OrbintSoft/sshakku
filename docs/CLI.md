@@ -29,6 +29,8 @@ name it does not have is a usage error rather than a guess.
 | [`config`](#sshakku-config) | Yes | Prints the configuration in force and where each value came from; with `--edit`, opens your `config.toml`. |
 | [`doctor`](#sshakku-doctor) | Yes | Reports (and, with `--fix`, repairs) the ssh-agent situation. |
 | [`forget`](#sshakku-forget) | Yes | Deletes stored passphrases. |
+| [`protect-keys`](#sshakku-protect-keys) | Yes | Encrypts your private keys so only your own account can read them. |
+| [`move-keys`](#sshakku-move-keys) | Yes | Moves your keys to another directory, permissions and configuration included. |
 | [`install`](#sshakku-install-sshakku-uninstall) | Yes | Wires the login hook into one shell. |
 | [`uninstall`](#sshakku-install-sshakku-uninstall) | Yes | Takes that wiring back out. |
 | [`help`](#sshakku-help--h---help) | Yes | Prints the command list. |
@@ -198,6 +200,69 @@ for when to use it and the native-backend requirement `--all` has.
 
 Prints `forgot <service>` on stdout for each key actually deleted; exits `1`
 if any deletion fails (after attempting the rest), `2` on a usage error.
+
+## `sshakku protect-keys`
+
+```sh
+sshakku protect-keys [--dry-run] [--directory]
+```
+
+Encrypts the private keys sshakku is configured to load, so that only your own
+account can read them. On Windows this is the Encrypting File System; on a
+system where sshakku has no way to do it, the command says so and changes
+nothing. `sshakku doctor` reports which keys are unprotected and names this
+command.
+
+`--dry-run` prints exactly what a real run would print, including any warning,
+and stops before the step that changes anything. It never asks a question.
+
+`--directory` encrypts the key directory itself as well. That is what makes the
+next key generated there protected without running anything again — but it also
+means every *new* file created in that directory is encrypted, so where an SSH
+server reads the directory, the command says what that costs before doing it,
+and where an `authorized_keys` is actually in it, stops and waits for you to
+type `yes`. See [Hardening](HARDENING.md#encrypt-the-keys-themselves-windows)
+for why, and `sshakku move-keys` for the way around it.
+
+`authorized_keys` is never encrypted, whatever you ask for. It holds public
+keys, and your SSH server reads it as the system rather than as you.
+
+Exits `0` when everything asked for was protected (including when there was
+nothing left to do), `1` when a file would not budge, when you declined the
+confirmation, or when this system has no such scheme, and `2` on a usage error.
+
+## `sshakku move-keys`
+
+```sh
+sshakku move-keys <directory>
+```
+
+Moves the keys sshakku loads — private halves and public — into the directory
+you name, gives that directory and the files in it the permissions this system
+expects of a key, and writes the new location into your own `config.toml`, so
+the same keys go on being loaded at every login with nothing else to change. A
+relative path is taken from the directory you are standing in.
+
+It moves rather than copies: no copy is left behind in the directory you have
+decided is the wrong one. `authorized_keys` is not among the files it moves.
+
+Nothing is done by halves. The run stops before moving anything, naming which
+of these it was:
+
+- your keys are already in that directory;
+- a file of that name is already there, and nothing here overwrites a key;
+- the directory cannot be created or given the permissions a key needs;
+- your `config.toml` cannot be written;
+- a `config.d` drop-in already sets `key_dir` and is read after `config.toml`,
+  so the move would look as though it had worked while every login went on
+  reading the old directory.
+
+If a move fails part way through, the files already moved go back where they
+came from; anything that could not be put back is named, and is the only part
+you have to deal with yourself.
+
+Exits `0` on a completed move or when there were no keys to move, `1` on any of
+the refusals above, and `2` on a usage error.
 
 ## `sshakku install`, `sshakku uninstall`
 
