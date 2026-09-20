@@ -1,0 +1,5 @@
+From now on, any file created here will be encrypted, and your SSH server can't read encrypted files — it runs as the system, not as you.
+
+Your current authorized_keys is not affected: it stays readable, and so do edits and additions made to it in place. The risk is the day it gets deleted and recreated — by a reinstall, a cleanup, a tool that replaces it rather than editing it. The new one would be born encrypted, SSH key logins would stop working, and nothing would explain why.
+
+Advice: keep your private keys where your SSH server never looks — "sshakku move-keys <directory>" does the whole move for you: the files, the permissions, and the setting that says where they went.

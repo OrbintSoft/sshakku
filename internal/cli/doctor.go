@@ -595,11 +595,14 @@ func gatherReport(ctx context.Context, env paths.Env, layout paths.Layout, setti
 	// One enumerator, read for the keys and named in the report: the set
 	// SSHakku acts on and the set it describes are then the same set.
 	enumerator := settings.KeyEnumerator(env.Home)
+	protector := keyProtectionHere()
 	keySource := &diagnose.KeySource{
-		Dir:         enumerator.Dir,
-		Lister:      enumerator,
-		Fingerprint: keys.RunnerFingerprinter{Runner: runner, SSHAdd: sshtools.SSHAdd},
-		State:       keystate.Store{Dir: keystateDir(layout)},
+		Dir:          enumerator.Dir,
+		Lister:       enumerator,
+		Fingerprint:  keys.RunnerFingerprinter{Runner: runner, SSHAdd: sshtools.SSHAdd},
+		State:        keystate.Store{Dir: keystateDir(layout)},
+		AtRestScheme: protector.scheme,
+		AtRest:       protector.look,
 	}
 	shownEnv, secretEnv := environmentReport()
 	endpoint := platformEndpoint(layout)

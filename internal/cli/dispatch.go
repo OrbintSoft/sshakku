@@ -25,6 +25,7 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/diagnose"
 	"github.com/OrbintSoft/sshakku/internal/keys"
 	"github.com/OrbintSoft/sshakku/internal/keys/handoff"
+	"github.com/OrbintSoft/sshakku/internal/keys/move"
 	"github.com/OrbintSoft/sshakku/internal/keys/prompt"
 	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
 	"github.com/OrbintSoft/sshakku/internal/paths"
@@ -57,6 +58,13 @@ commands:
                  --test-backend [name] stores/looks up/deletes a throwaway
                  probe entry in the named (or configured) secret backend
   forget         delete stored passphrases: <keyname>... or --all
+  protect-keys   encrypt the private keys sshakku loads, so that only your own
+                 account can read them; --dry-run shows what it would encrypt
+                 without changing anything, --directory encrypts the key
+                 directory too, but asks first if an SSH server reads it
+  move-keys      move your ssh keys into the directory you name, set the
+                 permissions they need there, and record the new location in
+                 your own config so they go on being loaded at every login
   install        wire the login hook into one shell; uninstall takes it out.
                  With nothing else, the shell is the one you ran it from.
                  --shell <name> looks one up, --shell-exe <path> names the
@@ -177,6 +185,24 @@ type deps struct {
 	// answers run from either machine, since which one a system gives is the
 	// system's own (agent.KeepsLifetimes).
 	agentKeepsLifetimes bool
+	// keyProtection is what this system can do about encrypting a key file to
+	// the account that owns it, and the whole of what protect-keys acts
+	// through. Injected so a system with a scheme and one without both run from
+	// either machine, and so that a test decides what is protected instead of
+	// asking the machine it runs on — which here means a run can be exercised
+	// without encrypting anything on it (see keyProtector).
+	keyProtection keyProtector
+	// stdin is where a question a command has to ask gets answered — today the
+	// confirmation protect-keys stops for before it covers a directory an SSH
+	// server reads. Injected so both the asking and every answer to it run
+	// without a terminal.
+	stdin io.Reader
+	// permitKey gives one path what this system expects of a key file, which is
+	// a mode on one system and a list of accounts on another. Injected so that
+	// a move which cannot finish — a directory this account may not permit —
+	// runs on a machine where the real one would succeed, since that refusal is
+	// the whole of what keeps a half-done move from happening.
+	permitKey func(path string, kind move.Kind) error
 }
 
 // realDeps wires deps to the production implementations.
@@ -199,6 +225,9 @@ func realDeps() deps {
 		sshAdd:              sync.OnceValues(sshtools.SSHAdd),
 		sshToolsDir:         sessionSSHToolsDir,
 		agentKeepsLifetimes: agent.KeepsLifetimes(),
+		keyProtection:       keyProtectionHere(),
+		stdin:               os.Stdin,
+		permitKey:           move.Permit,
 	}
 }
 
@@ -260,6 +289,10 @@ func (d deps) run(ctx context.Context, stdout, stderr io.Writer, args []string) 
 		return d.doctor(ctx, stdout, stderr, args[1:])
 	case "forget":
 		return d.forget(ctx, stdout, stderr, args[1:])
+	case protectKeysCmdName:
+		return d.protectKeys(stdout, stderr, args[1:])
+	case moveKeysCmdName:
+		return d.moveKeys(stdout, stderr, args[1:])
 	case installCmdName:
 		return d.install(ctx, stdout, stderr, args[1:])
 	case uninstallCmdName:

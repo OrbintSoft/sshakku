@@ -107,6 +107,17 @@ type KeySource struct {
 	Lister      KeyLister
 	Fingerprint KeyFingerprinter
 	State       KeyStateSource
+	// AtRestScheme names what this system encrypts a key file to a single
+	// account with, and is empty where this build has no such scheme. Empty is
+	// not the same as a no: it keeps the report silent rather than listing
+	// every key as unprotected on a machine where nothing could protect one,
+	// which would send a reader after a setting that is not there to find.
+	AtRestScheme string
+	// AtRest answers whether one path is encrypted to this account alone. nil
+	// where nobody looks. An error from it leaves the answer open rather than
+	// settling it: a path nobody could ask about and a path found in the clear
+	// are different reports, and only one of them is worth acting on.
+	AtRest func(path string) (*bool, error)
 }
 
 // RefusedDir is one directory the environment named and this session did not
@@ -243,6 +254,10 @@ type KeyView struct {
 	Tracked     bool   // whether sshakku recorded adding this key itself.
 	NoExpiry    bool   // Tracked, but recorded with no expiry (lifetime 0).
 	ExpiresAt   time.Time
+	// Protected says whether this key file is encrypted to the account that
+	// owns it, and is nil where nobody could tell — including on every system
+	// that has no such scheme at all.
+	Protected *bool
 }
 
 // Requirement is one thing the configured wallet needs in order to work, and
@@ -352,7 +367,18 @@ type Report struct {
 	Keys           []KeyView
 	KeysDir        string // the directory Keys were read from, as the report names it.
 	KeysErr        error  // key enumeration failed; Keys is empty.
-	Host           hostcheck.Checks
+	// KeyProtectionScheme names what the keys are encrypted to a single account
+	// with on this system — "EFS" — and is empty where this build has none, in
+	// which case the report says nothing about protection at all.
+	KeyProtectionScheme string
+	// There is deliberately no answer here for the directory the keys are in.
+	// Encrypting a directory is not the same act as encrypting the keys in it,
+	// and is not one this report may recommend: where that directory is the one
+	// an SSH server reads, a file created in it afterwards is born encrypted,
+	// and the server cannot read `authorized_keys` — so logins by key into the
+	// machine stop, with nothing said. Where the keys live is the user's
+	// decision; what they are resting under is what this reports.
+	Host hostcheck.Checks
 
 	Env           []EnvVar
 	SecretEnv     []SecretEnvVar

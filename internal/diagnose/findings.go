@@ -195,11 +195,52 @@ func findings(in Inputs, r Report) []string {
 		f = append(f, sshVersionTooOldMsg(in.SSHVersion))
 	}
 	f = append(f, hostFindings(r.Host)...)
+	f = append(f, keyProtectionFindings(r)...)
 
 	if len(f) == 0 {
 		f = append(f, "no problems detected")
 	}
 	return f
+}
+
+// protectKeysCommand is what a reader is sent to run. It appears in the
+// findings rather than only in the documentation, because a report that states
+// a problem and not what answers it leaves the reader exactly where it found
+// them.
+const protectKeysCommand = "sshakku protect-keys"
+
+// keyProtectionFindings names the keys lying in the clear, and nothing else.
+//
+// Nothing is said about the directory they are in, deliberately. Encrypting a
+// directory covers the keys made in it afterwards, which sounds like the better
+// answer and is not one to recommend: where that directory is the one an SSH
+// server reads, an `authorized_keys` created there afterwards is born encrypted
+// too, and the server reads it as the system — before there is a session of
+// this account's for it to unlock anything with. Logins by key into the machine
+// then stop, and nothing says why. `sshakku protect-keys` can still be asked to
+// do it, having said what it costs; a finding that recommends it on every run
+// is a different thing.
+//
+// A system with no scheme for this reports nothing. Nobody looked, and a reader
+// sent to turn on something their machine has never had is worse off than one
+// told nothing at all.
+func keyProtectionFindings(r Report) []string {
+	if r.KeyProtectionScheme == "" {
+		return nil
+	}
+	var bare []string
+	for _, k := range r.Keys {
+		if k.Protected != nil && !*k.Protected {
+			bare = append(bare, k.Name)
+		}
+	}
+	if len(bare) > 0 {
+		return []string{fmt.Sprintf(
+			"%s: these private keys are not encrypted to your account and can be read by anyone"+
+				" with another account on this machine, or with the disk: %s — `%s` encrypts them",
+			r.KeyProtectionScheme, strings.Join(bare, ", "), protectKeysCommand)}
+	}
+	return nil
 }
 
 const minTmpBytes = 512 * 1024 * 1024
@@ -211,7 +252,14 @@ const minTmpBytes = 512 * 1024 * 1024
 func hostFindings(h hostcheck.Checks) []string {
 	var f []string
 	if h.DiskEncrypted != nil && !*h.DiskEncrypted {
-		f = append(f, "the disk does not appear to be encrypted (best-effort LUKS check) — outside sshakku's control, but exposes the wallet database directly if the drive is lost, stolen, or discarded")
+		// The scheme is named by whoever went and looked, never here: this
+		// sentence is read on every platform, and each of them has a different
+		// answer to what "encrypt the disk" means.
+		looked := "best-effort check"
+		if h.DiskEncryptionKind != "" {
+			looked = "best-effort " + h.DiskEncryptionKind + " check"
+		}
+		f = append(f, "the disk does not appear to be encrypted ("+looked+") — outside sshakku's control, but exposes the wallet database directly if the drive is lost, stolen, or discarded")
 	}
 	if h.TmpTmpfs != nil {
 		switch {
@@ -261,7 +309,7 @@ func hostChecksLine(h hostcheck.Checks) string {
 func triStateWord(b *bool) string {
 	switch {
 	case b == nil:
-		return "undetermined"
+		return undetermined
 	case *b:
 		return "yes"
 	default:

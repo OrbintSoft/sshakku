@@ -100,10 +100,39 @@ func formatKeys(p section, r Report) {
 	}
 	p("\nkeys in %s (%d):\n", keysDirName(r.KeysDir), len(r.Keys))
 	for _, k := range r.Keys {
-		p("  %-28s %s\n", k.Name, keyStatus(k, r.LifetimeKeptBySessions))
+		p("  %-28s %s%s\n", k.Name, keyStatus(k, r.LifetimeKeptBySessions), keyAtRest(r, k))
 	}
 	if r.KeysErr != nil {
 		p("  could not enumerate %s: %v\n", keysDirName(r.KeysDir), r.KeysErr)
+	}
+}
+
+// keyAtRest says what a key is resting under, for a system that has an answer
+// to give. A system with no scheme for this prints nothing rather than printing
+// "undetermined" against every key, which would read as a machine whose keys
+// nobody could account for rather than one where the question does not arise.
+func keyAtRest(r Report, k KeyView) string {
+	if r.KeyProtectionScheme == "" {
+		return ""
+	}
+	return " — at rest: " + atRestWord(k.Protected)
+}
+
+// undetermined is the report's one word for a question nobody could answer. It
+// is one word on purpose: a reader who has learned what it means in the wallet
+// section has learned what it means everywhere, and a second word for the same
+// state would read as a different state.
+const undetermined = "undetermined"
+
+// atRestWord renders one three-valued answer.
+func atRestWord(protected *bool) string {
+	switch {
+	case protected == nil:
+		return undetermined
+	case *protected:
+		return "protected"
+	default:
+		return "not protected"
 	}
 }
 
@@ -121,7 +150,7 @@ func formatWallet(p section, r Report) {
 		state := "found"
 		switch {
 		case req.Undetermined:
-			state = "undetermined"
+			state = undetermined
 		case !req.Present:
 			state = "missing"
 		}

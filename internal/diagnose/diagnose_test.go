@@ -332,6 +332,21 @@ func TestHostFindings(t *testing.T) {
 		assert.Contains(t, got[0], "not appear to be encrypted", "the finding must say the disk is not encrypted")
 	}
 
+	// The scheme is named by whoever looked for it, never by this sentence.
+	// Hardcoding one names the wrong thing on every platform but the one it was
+	// written on, and a reader told to go and check LUKS on a Mac is being sent
+	// after something that was never there.
+	got = hostFindings(hostcheck.Checks{DiskEncrypted: &no, DiskEncryptionKind: "BitLocker"})
+	if assert.Len(t, got, 1, "still one finding") {
+		assert.Contains(t, got[0], "BitLocker", "the finding names what was looked for")
+		assert.NotContains(t, got[0], "LUKS", "and nothing this system has never had")
+	}
+	got = hostFindings(hostcheck.Checks{DiskEncrypted: &no, DiskEncryptionKind: "FileVault"})
+	if assert.Len(t, got, 1, "still one finding") {
+		assert.Contains(t, got[0], "FileVault", "on the platform whose answer that is")
+		assert.NotContains(t, got[0], "LUKS", "and not the one it is not")
+	}
+
 	assert.Empty(t, hostFindings(hostcheck.Checks{DiskEncrypted: &yes}), "an encrypted disk is nothing to report")
 
 	got = hostFindings(hostcheck.Checks{TmpTmpfs: &no})

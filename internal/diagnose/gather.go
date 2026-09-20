@@ -60,11 +60,17 @@ func Gather(ctx context.Context, in Inputs, src AgentSource, prober agent.Prober
 	if host != nil {
 		r.Host = host.Checks(ctx)
 	}
-	r.Findings = findings(in, r)
+	// The keys are read before the findings are drawn, because some of what
+	// there is to say is about them: a finding cannot name a key the report has
+	// not looked at yet.
 	if keys != nil {
 		r.KeysDir = keys.Dir
 		r.Keys, r.KeysErr = gatherKeys(ctx, *keys)
+		if keys.AtRest != nil {
+			r.KeyProtectionScheme = keys.AtRestScheme
+		}
 	}
+	r.Findings = findings(in, r)
 	return r
 }
 
@@ -101,6 +107,7 @@ func gatherKeys(ctx context.Context, ks KeySource) ([]KeyView, error) {
 		if ks.Fingerprint != nil {
 			kv.Fingerprint, _ = ks.Fingerprint.FileFingerprint(ctx, f)
 		}
+		kv.Protected = atRestAnswer(ks.AtRest, f)
 		kv.Loaded = kv.Fingerprint != "" && agentFPs[kv.Fingerprint]
 		if kv.Loaded && ks.State != nil {
 			if rec, ok := ks.State.Load(kv.Name); ok {
@@ -115,6 +122,21 @@ func gatherKeys(ctx context.Context, ks KeySource) ([]KeyView, error) {
 		views = append(views, kv)
 	}
 	return views, nil
+}
+
+// atRestAnswer reduces a look at one path to the answer or to not knowing. Why
+// it could not be told does not change what the report does with it: a look
+// that failed and a system that has no scheme to look for both leave the
+// answer open, and neither is evidence that a key is lying in the clear.
+func atRestAnswer(look func(path string) (*bool, error), path string) *bool {
+	if look == nil {
+		return nil
+	}
+	answer, err := look(path)
+	if err != nil {
+		return nil
+	}
+	return answer
 }
 
 // differentUser reports whether a is owned by a real uid other than the one

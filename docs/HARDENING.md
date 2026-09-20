@@ -65,6 +65,78 @@ back a stronger unlock than a plain passphrase — for example,
 `systemd-cryptenroll`'s TPM2 support for LUKS. `doctor` reports whether such
 hardware is present, as a hint of what's available.
 
+## Encrypt the keys themselves (Windows)
+
+Full-disk encryption protects the key while the machine is off. It does nothing
+once you are signed in: every account on the machine, and every program running
+as one, reads the disk through the same unlocked volume. A private key sitting
+in the clear is readable by the other administrator down the corridor, acting
+as themselves.
+
+On Windows, `sshakku protect-keys` closes that gap with the Encrypting File
+System, which encrypts each key to your account alone. `sshakku doctor` reports
+which of the keys it loads are protected and which are not.
+
+What this buys is worth stating exactly, because it is easy to assume more:
+
+- **Another account cannot read the key**, administrator or not, acting as
+  itself.
+- **Nobody holding the disk can read it** while you are not signed in.
+- **An administrator who can run as the system while you are signed in can**,
+  because that can borrow your identity.
+- **A recovery agent can**, by design, where your organisation has configured
+  one. `cipher /c <key>` lists every certificate that can decrypt the file.
+
+Losing the certificate means losing the key. It lives in your Windows user
+profile, and a profile rebuilt from scratch does not have it — export it
+(`certmgr.msc` → Personal → Certificates → the "Encrypting File System"
+certificate → Export, with the private key) and keep the export somewhere the
+key itself is not.
+
+### Where you keep the keys matters more than it looks
+
+`protect-keys --directory` also encrypts the directory, which is what makes the
+next key generated there protected without running anything again. On `~/.ssh`
+that has a second effect nobody asks for.
+
+Encrypting a directory does not touch what is already in it — an existing
+`authorized_keys` goes on working, through appends and edits alike. But every
+file *created* there afterwards is encrypted, and your SSH server reads
+`authorized_keys` as the system, before there is a session of yours for it to
+unlock anything with. The day something replaces that file rather than editing
+it — a reinstall, a cleanup script, a management tool — key logins into the
+machine stop, and nothing says why: a file the server cannot open reads exactly
+like an account that authorised nobody.
+
+So keep your private keys somewhere your SSH server never looks:
+
+```sh
+sshakku move-keys D:\keys
+sshakku protect-keys --directory
+```
+
+The first moves the keys, sets the permissions they need in the new place, and
+records the new location in your `config.toml`. The second then has nothing to
+warn about.
+
+### Linux and macOS
+
+SSHakku has no equivalent here yet, and says so rather than reporting the keys
+as unprotected. Both systems have ways to do it by hand:
+
+- **Linux** — `fscrypt` on a filesystem that supports it (ext4, f2fs, ubifs)
+  encrypts a directory to a key in your kernel keyring, unlocked at login by
+  PAM. `fscrypt setup` then `fscrypt encrypt ~/keys` is the whole of it. A
+  separate LUKS volume for the keys, unlocked with its own passphrase, gets you
+  a coarser version of the same thing.
+- **macOS** — FileVault is whole-volume, so it does not separate you from
+  another account on the machine. For that, an encrypted disk image
+  (`hdiutil create -encryption AES-256 -type SPARSEBUNDLE …`) mounted at login
+  holds the keys behind their own passphrase, kept in the Keychain.
+
+The same `authorized_keys` warning applies to both: whatever you encrypt, keep
+it out of the directory your SSH server reads.
+
 ## Configure `/tmp`
 
 Temporary files from other tools can end up on disk if `/tmp` isn't

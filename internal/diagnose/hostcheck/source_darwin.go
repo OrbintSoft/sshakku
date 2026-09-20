@@ -47,6 +47,7 @@ type Darwin struct {
 func (Darwin) Checks(ctx context.Context) Checks {
 	var hc Checks
 	hc.DiskEncrypted = fileVaultStatus(ctx)
+	hc.DiskEncryptionKind = "FileVault"
 	notTmpfs := false
 	hc.TmpTmpfs = &notTmpfs // macOS has no tmpfs-backed /tmp to detect.
 	hc.SecureHardwarePresent, hc.SecureHardwareKind = secureEnclaveInfo(ctx)
