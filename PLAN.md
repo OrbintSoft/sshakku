@@ -530,7 +530,8 @@ done are summarised; see the note at the top of this file for full detail.
     the user can do nothing about.
 
 30. **Protecting the private keys at rest (goals 1, 2). Raised 2026-09-19;
-    open.** A key with no passphrase has nothing but its mode bits between it
+    Windows half implemented 2026-09-20, Linux and macOS still open.** A key
+    with no passphrase has nothing but its mode bits between it
     and anyone who reads the disk — a stolen laptop, a backup, a snapshot, a
     cloned image, a filesystem mounted somewhere else. `fscrypt` would give it
     real encryption keyed to the login, and with the key removed from the
@@ -585,6 +586,40 @@ done are summarised; see the note at the top of this file for full detail.
     protection is still a passphrase on it, or a key whose secret never sits in
     the file at all — FIDO (`ed25519-sk`), a TPM, a smartcard. This is
     complementary to those, not a substitute for them.
+
+    **What Windows turned out to be (done — F68, F69, F70).** The Encrypting
+    File System does the same job and is shaped differently in two ways that
+    made the feature smaller and one way that made it sharper.
+
+    Smaller: EFS encrypts **in place**, per file, so there is no migration. The
+    most dangerous thing above — moving somebody's private keys to swap a
+    directory in — is not needed at all to protect the keys that exist. And it
+    needs no PAM equivalent: the certificate is in the user's profile and the
+    files open as themselves once they are signed in.
+
+    Sharper: the `authorized_keys` hazard is the same hazard and it is worse,
+    because there is no "encrypt this directory and its contents" to refuse.
+    Marking a directory decides what files **created** in it afterwards are born
+    as. Measured on a real filesystem: an `authorized_keys` already there stays
+    readable through appends, through edits in place, and even through being
+    written elsewhere and moved in — only a delete-and-recreate comes back
+    encrypted. So the failure is not at the moment somebody runs the command; it
+    is months later, when a reinstall or a cleanup replaces that file and key
+    logins stop with nothing to say why.
+
+    That is why `doctor` answers for the keys and says nothing about the
+    directory they sit in, why `protect-keys --directory` says what it costs and
+    asks outright where an `authorized_keys` is present, and why `move-keys`
+    exists at all: the advice "keep your private keys where your SSH server does
+    not look" is only worth giving if taking it is one command.
+
+    The migration this item dreaded is therefore built and tested, just not
+    needed for the Windows case — which puts the Linux half in a better position
+    than it was, since `move-keys` is exactly the step fscrypt's empty-directory
+    constraint forces.
+
+    The split above held: the reporting half shipped first and alone, and what
+    it was allowed to recommend changed once the enabling half was measured.
 
 ---
 
