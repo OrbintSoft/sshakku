@@ -4769,4 +4769,3 @@ two-account direction is the container scenario's, run in CI. `make test`,
 `make lint-go` clean on all five builds; `shellcheck` and `shfmt` clean.
 
 → FEATURES F71, F67, F65; rules 1, 5, 9, 15, 18, 19, 21, 22, 23, 25, 26.
-
