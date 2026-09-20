@@ -290,7 +290,7 @@ func (d deps) doctor(ctx context.Context, stdout, stderr io.Writer, args []strin
 		_, _ = fmt.Fprintf(stderr, "sshakku: %v\n", err)
 		return 1
 	}
-	paths.CleanupLegacyAgentDir(env.Home)
+	paths.CleanupLegacyAgentDir(layout.Home)
 	// Before driving the agent, since a service nothing may start is a state
 	// the lifecycle meets as a refusal and can do nothing about. A failure here
 	// is reported and not fatal: what it could not do it says, and the run goes
@@ -518,7 +518,9 @@ func (d deps) doctorCrossUser(ctx context.Context, stdout, stderr io.Writer, inv
 		_, _ = fmt.Fprintf(stderr, "sshakku: doctor: %v\n", err)
 		return 1
 	}
-	targetEnv := paths.Env{Home: target.Home, UID: target.UID}
+	// Their home comes from the user database and not from any environment:
+	// this session's own variables say nothing about where they live.
+	targetEnv := paths.Env{Home: target.Home, AccountHome: target.Home, UID: target.UID}
 	layout := paths.Resolve(targetEnv, paths.ProbeDirAs(target.UID)).WithSocketToken(token)
 
 	_, _ = fmt.Fprintf(stdout,
@@ -594,7 +596,7 @@ func gatherReport(ctx context.Context, env paths.Env, layout paths.Layout, setti
 	runner := run.ExecRunner{}
 	// One enumerator, read for the keys and named in the report: the set
 	// SSHakku acts on and the set it describes are then the same set.
-	enumerator := settings.KeyEnumerator(env.Home)
+	enumerator := settings.KeyEnumerator(layout.Home)
 	protector := keyProtectionHere()
 	keySource := &diagnose.KeySource{
 		Dir:          enumerator.Dir,
@@ -611,7 +613,7 @@ func gatherReport(ctx context.Context, env paths.Env, layout paths.Layout, setti
 	return diagnose.Gather(ctx, diagnose.Inputs{
 		FixedSock:         endpoint.Native(),
 		FixedSockPosix:    endpoint.ForPosixShell(),
-		LegacyDir:         filepath.Join(env.Home, ".ssh", "agent"),
+		LegacyDir:         filepath.Join(layout.Home, ".ssh", "agent"),
 		StatePath:         filepath.Join(filepath.Dir(layout.AgentSock), "agent.state"),
 		EnvSock:           os.Getenv("SSH_AUTH_SOCK"),
 		LogFile:           layout.LogFile,
@@ -633,7 +635,7 @@ func gatherReport(ctx context.Context, env paths.Env, layout paths.Layout, setti
 		LifetimeKeptBySessions: settings.KeyLifetime > 0 && !agent.KeepsLifetimes(),
 		SSHVersion:             sshVersionHere(ctx, runner, sshtools.ThisSystem()),
 	}, inspect.Inspector{}, platformProber(), newAncestrySource(), newCgroupSource(), keySource,
-		newHostSource(env.Home))
+		newHostSource(layout.Home))
 }
 
 // readSocketTokenInternal prints the calling process's own per-login socket

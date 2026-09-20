@@ -83,7 +83,7 @@ func (d deps) shellInit(ctx context.Context, stdout, stderr io.Writer, args []st
 		_, _ = fmt.Fprintf(stderr, "sshakku: %v\n", err)
 		return 1
 	}
-	paths.CleanupLegacyAgentDir(env.Home)
+	paths.CleanupLegacyAgentDir(layout.Home)
 	logRefusedDirectories(layout)
 
 	live, code := d.runEnsure(ctx, stderr, env, layout)
@@ -202,7 +202,7 @@ func (d deps) runEnsure(ctx context.Context, stderr io.Writer, env paths.Env, la
 	log := sessionlog.New(layout.LogFile)
 	cfg := agent.EnsureConfig{
 		FixedSock: layout.AgentSock,
-		LegacyDir: filepath.Join(env.Home, ".ssh", "agent"),
+		LegacyDir: filepath.Join(layout.Home, ".ssh", "agent"),
 		StatePath: filepath.Join(filepath.Dir(layout.AgentSock), "agent.state"),
 		LockPath:  layout.AgentLock,
 		OurUID:    env.UID,

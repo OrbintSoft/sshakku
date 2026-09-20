@@ -74,7 +74,7 @@ func (d deps) protectKeys(stdout, stderr io.Writer, args []string) int {
 	env := paths.FromOS()
 	layout := paths.Resolve(env, paths.ProbeDir)
 	log := sessionlog.New(layout.LogFile)
-	enumerator := loadSettings(layout, protectKeysCmdName, log).KeyEnumerator(env.Home)
+	enumerator := loadSettings(layout, protectKeysCmdName, log).KeyEnumerator(layout.Home)
 	keyFiles, err := enumerator.Keys()
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "sshakku: protect-keys: %v\n", err)

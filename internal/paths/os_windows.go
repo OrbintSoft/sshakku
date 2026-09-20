@@ -14,8 +14,14 @@ import (
 // Windows — the value the rest of the code already reads as "unknown owner"
 // rather than as a real account.
 func FromOS() Env {
-	return fromEnv(os.Getenv, os.UserHomeDir, os.Getuid, PrivateDir)
+	return fromEnv(os.Getenv, os.UserHomeDir, os.Getuid, PrivateDir, recordedHome)
 }
+
+// recordedHome has nothing to look an account up by here: an account is a SID,
+// and os.Getuid answers -1 for every process alike. "" says so, and leaves the
+// home the environment named exactly as it was — which is what this build can
+// honestly do until a directory can be attributed at all (see ownerUnknowable).
+func recordedHome(int) string { return "" }
 
 // ownerUnknowable: an account here is a SID and access is granted by ACL,
 // neither of which PrivateDir can read yet, so no directory is turned down for

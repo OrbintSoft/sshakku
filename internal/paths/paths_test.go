@@ -250,51 +250,108 @@ func TestResolveKeepsADirectoryItCannotAttribute(t *testing.T) {
 	assert.Empty(t, layout.Refused, "nothing may be reported as a stranger's on a build that cannot tell")
 }
 
-// TestResolveDoesNotBuildOnAHomeThatIsNotThisAccountsOwn is the same question
-// as the XDG variables are asked, put to the one they all fall back on. Three
-// of these directories are looked for under $HOME whenever nothing names them
-// outright, and $HOME is carried into another account's session exactly as the
-// others are: a shell that becomes root without opening a session of its own
-// keeps the home it came from.
+// TestResolveUsesTheAccountsOwnHomeWhenTheEnvironmentNamesAnothers is the
+// same question the XDG variables are asked, put to the one they all fall back
+// on. Three of these directories are looked for under $HOME whenever nothing
+// names them outright, and the keys are looked for there too, so a home taken
+// on trust places every one of them at once.
 //
-// What must go there instead is not asserted here — this account's recorded
-// home is a thing Resolve has no way to be told yet — so what is stated is the
-// half the promise turns on: nothing of this session's is put under a home that
-// is there and belongs to somebody else.
-func TestResolveDoesNotBuildOnAHomeThatIsNotThisAccountsOwn(t *testing.T) {
+// $HOME is carried into another account's session exactly as the others are: a
+// shell that becomes root without opening a session of its own keeps the home
+// it came from.
+func TestResolveUsesTheAccountsOwnHomeWhenTheEnvironmentNamesAnothers(t *testing.T) {
 	theirs := filepath.FromSlash("/home/them")
+	recorded := filepath.FromSlash("/root")
 
 	// The home is there and is not this account's alone, which is the answer
-	// that has to change where the layout is built.
+	// that has to change where the whole layout is built.
 	there := func(p string, need Need) bool { return p == theirs && need == NeedThere }
 
 	// No runtime directory and no temporary directory, so the socket falls back
-	// to the cache — which is where a home decides the endpoint's address too.
-	layout := Resolve(Env{Home: theirs, UID: 0}, there)
+	// to the cache — which is one of the directories a home decides.
+	layout := Resolve(Env{Home: theirs, AccountHome: recorded, UID: 0}, there)
 
-	assert.NotEqual(t, filepath.Join(theirs, ".config", "sshakku"), layout.ConfigDir,
-		"the settings obeyed are not read out of another account's home")
-	assert.NotEqual(t, filepath.Join(theirs, ".local", "state", "sshakku"), layout.StateDir,
-		"the record of what was done with the keys is not written into another account's home")
-	assert.NotEqual(t, filepath.Join(theirs, ".cache", "sshakku"), layout.RuntimeDir,
-		"the endpoint every loaded key is reached through is not put under another account's home")
+	assert.Equal(t, filepath.Join(recorded, ".config", "sshakku"), layout.ConfigDir,
+		"the settings obeyed are read out of this account's own home")
+	assert.Equal(t, filepath.Join(recorded, ".local", "state", "sshakku"), layout.StateDir,
+		"the record of what was done with the keys is written into this account's own home")
+	assert.Equal(t, filepath.Join(recorded, ".cache", "sshakku"), layout.RuntimeDir,
+		"the endpoint every loaded key is reached through is under this account's own home")
+	// The keys are looked for under this one, so a caller that read $HOME for
+	// itself would be sent to the directory this layout has just declined.
+	assert.Equal(t, recorded, layout.Home, "one session, one home")
+	assert.Equal(t, []Refusal{{Var: "HOME", Path: theirs}}, layout.Refused,
+		"what was turned down, and which variable named it")
+}
+
+// TestResolveTakesTheRecordedHomeWhenNothingNamesOne covers the ordinary case
+// of a session started with no home in its environment at all.
+func TestResolveTakesTheRecordedHomeWhenNothingNamesOne(t *testing.T) {
+	recorded := filepath.FromSlash("/home/u")
+
+	layout := Resolve(Env{AccountHome: recorded, UID: 1000},
+		func(string, Need) bool { return false })
+
+	assert.Equal(t, recorded, layout.Home, "the home the account is recorded as having")
+	assert.Empty(t, layout.Refused, "nothing was named, so nothing was turned down")
 }
 
 // TestResolveKeepsAHomeThatIsThisAccountsOwn is the guard the fix must not
-// break, and it is why the question is whose the home is rather than where it
-// came from. A home somebody set for themselves — a container, a test harness,
-// an account whose home is not under /home — is still their own, and a build
-// that went back to the user database regardless would take it away from them
-// for nothing.
+// break, and it is why the question is whose the home is rather than where the
+// answer came from. A home somebody set for themselves — a container, a test
+// harness, an account whose home is not where the database says — is still
+// their own, and a build that went to the user database regardless would take
+// it away from them for nothing.
 func TestResolveKeepsAHomeThatIsThisAccountsOwn(t *testing.T) {
 	mine := filepath.FromSlash("/srv/sandbox")
 
 	// There, and nobody else may write it: this account's own.
 	ours := func(p string, need Need) bool { return p == mine && need != NeedPrivate }
 
-	layout := Resolve(Env{Home: mine, UID: 1000}, ours)
+	layout := Resolve(Env{Home: mine, AccountHome: filepath.FromSlash("/home/u"), UID: 1000}, ours)
 
+	assert.Equal(t, mine, layout.Home, "a home this account has to itself is the one it was given")
 	assert.Equal(t, filepath.Join(mine, ".config", "sshakku"), layout.ConfigDir,
-		"a home this account has to itself is still the home this session is built on")
+		"and the layout is built on it")
 	assert.Empty(t, layout.Refused, "nothing was turned down, so there is nothing to report")
+}
+
+// TestResolveKeepsAHomeItHasNoAnswerAbout is the other half of the same
+// promise: a machine whose user database cannot be asked about this account —
+// a directory service that is unreachable, a passwd file that does not list a
+// network account — leaves the home it was given standing. A session that
+// could not look the answer up is not thereby homeless.
+func TestResolveKeepsAHomeItHasNoAnswerAbout(t *testing.T) {
+	named := filepath.FromSlash("/home/them")
+
+	// There, and not this account's: the answer that would refuse it if there
+	// were anywhere to go instead.
+	there := func(p string, need Need) bool { return p == named && need == NeedThere }
+
+	layout := Resolve(Env{Home: named, UID: 0}, there)
+
+	assert.Equal(t, named, layout.Home, "with no recorded home, what was named stands")
+	assert.Empty(t, layout.Refused, "nothing may be reported as refused that was in fact used")
+}
+
+// TestResolveKeepsAHomeItCannotAttribute is the same for a build that cannot
+// establish whose a directory is at all: the recorded home is there to fall
+// back to, and is still not taken, because nothing has said this home is
+// anybody else's.
+func TestResolveKeepsAHomeItCannotAttribute(t *testing.T) {
+	named := filepath.FromSlash("/users/u")
+
+	// The directory is there, and the ownership question comes back no because
+	// this build cannot answer it rather than because the answer is no.
+	cannotTell := func(p string, need Need) bool { return p == named && need == NeedThere }
+
+	layout := Resolve(Env{
+		Home:            named,
+		AccountHome:     filepath.FromSlash("/home/u"),
+		UID:             1000,
+		OwnerUnknowable: true,
+	}, cannotTell)
+
+	assert.Equal(t, named, layout.Home, "a question this build cannot answer leaves the home where it was")
+	assert.Empty(t, layout.Refused, "nothing may be reported as a stranger's on a build that cannot tell")
 }

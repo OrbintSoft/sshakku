@@ -4,12 +4,31 @@ package paths
 
 import (
 	"os"
+	"os/user"
+	"strconv"
 	"syscall"
 )
 
 // FromOS reads the path inputs from the process environment.
 func FromOS() Env {
-	return fromEnv(os.Getenv, os.UserHomeDir, os.Getuid, PrivateDir)
+	return fromEnv(os.Getenv, os.UserHomeDir, os.Getuid, PrivateDir, recordedHome)
+}
+
+// recordedHome is the home directory the user database gives for uid, or "" —
+// "no answer here" — where it has none to give. It is deliberately the database
+// and not $HOME: the environment is the thing being measured, so it cannot also
+// be the measure.
+//
+// An account the database cannot be asked about is an ordinary state rather
+// than an error: a directory service that is not reachable, a build with no cgo
+// reading a passwd file that does not list a network account. Nothing is
+// concluded from it, and the home the session was given stands.
+func recordedHome(uid int) string {
+	u, err := user.LookupId(strconv.Itoa(uid))
+	if err != nil {
+		return ""
+	}
+	return u.HomeDir
 }
 
 // ownerUnknowable: a uid and a mode are two fields of one stat here, so every
