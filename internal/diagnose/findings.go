@@ -195,11 +195,57 @@ func findings(in Inputs, r Report) []string {
 		f = append(f, sshVersionTooOldMsg(in.SSHVersion))
 	}
 	f = append(f, hostFindings(r.Host)...)
+	f = append(f, keyProtectionFindings(r)...)
 
 	if len(f) == 0 {
 		f = append(f, "no problems detected")
 	}
 	return f
+}
+
+// protectKeysCommand is what a reader is sent to run. It appears in the
+// findings rather than only in the documentation, because a report that states
+// a problem and not what answers it leaves the reader exactly where it found
+// them.
+const protectKeysCommand = "sshakku protect-keys"
+
+// keyProtectionFindings says what is lying in the clear among the keys, and
+// separately whether the directory is marked.
+//
+// The two are not the same problem and do not have the same consequence. Keys
+// in the clear are readable now, by anyone with another account on this machine
+// or with the disk in their hand. A directory left unmarked over keys that are
+// all protected is about the key that does not exist yet: it will be born in
+// the clear, and nothing will say so at the time.
+//
+// A system with no scheme for this reports neither. Nobody looked, and a reader
+// sent to turn on something their machine has never had is worse off than one
+// told nothing at all.
+func keyProtectionFindings(r Report) []string {
+	if r.KeyProtectionScheme == "" {
+		return nil
+	}
+	var bare []string
+	for _, k := range r.Keys {
+		if k.Protected != nil && !*k.Protected {
+			bare = append(bare, k.Name)
+		}
+	}
+	if len(bare) > 0 {
+		return []string{fmt.Sprintf(
+			"%s: these private keys are not encrypted to your account and can be read by anyone"+
+				" with another account on this machine, or with the disk: %s — `%s` encrypts them",
+			r.KeyProtectionScheme, strings.Join(bare, ", "), protectKeysCommand)}
+	}
+	// Only once every key is accounted for, since until then this is advice
+	// about a future key given to somebody whose present ones are readable.
+	if len(r.Keys) > 0 && r.KeysDirProtected != nil && !*r.KeysDirProtected {
+		return []string{fmt.Sprintf(
+			"%s: your keys are protected but %s is not marked, so the next key generated there"+
+				" will not be — and nothing will say so at the time; `%s` marks it",
+			r.KeyProtectionScheme, keysDirName(r.KeysDir), protectKeysCommand)}
+	}
+	return nil
 }
 
 const minTmpBytes = 512 * 1024 * 1024
@@ -268,7 +314,7 @@ func hostChecksLine(h hostcheck.Checks) string {
 func triStateWord(b *bool) string {
 	switch {
 	case b == nil:
-		return "undetermined"
+		return undetermined
 	case *b:
 		return "yes"
 	default:
