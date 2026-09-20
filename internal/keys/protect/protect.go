@@ -35,21 +35,30 @@ type Look func(path string) (*bool, error)
 // login is what would be risked.
 const authorizedKeys = "authorized_keys"
 
-// Survey is what one look at a key directory found.
+// serverKeyDirName is the directory under a home that an SSH server reads a
+// user's authorized_keys from unless it has been told otherwise. It is a fact
+// about the server rather than about where SSHakku looks for keys — the two
+// coincide by default and are free to diverge, which is the whole point of
+// being able to move the keys elsewhere.
+const serverKeyDirName = ".ssh"
+
+// AuthorizedKeysIn names the authorized_keys file of dir, whether or not one is
+// there. Whether it is there is a question for a filesystem; what the name is,
+// is this package's to know, so that nobody deciding what covering a directory
+// would cost has to spell it out again.
+func AuthorizedKeysIn(dir string) string { return filepath.Join(dir, authorizedKeys) }
+
+// Survey is what one look at a set of paths found.
 type Survey struct {
-	// Scheme names what this system protects a key with, empty where it has
+	// Scheme names what this system protects a path with, empty where it has
 	// none this build can use.
 	Scheme string
-	// DirProtected is the directory's own answer. A marked directory covers
-	// the files created in it afterwards and does nothing for the ones already
-	// there, which is why it is kept apart from the keys.
-	DirProtected *bool
-	// Keys is each key path's answer, in the order they were given.
-	Keys []KeyProtection
+	// Paths is each path's answer, in the order they were given.
+	Paths []PathProtection
 }
 
-// KeyProtection is one key file's answer.
-type KeyProtection struct {
+// PathProtection is one path's answer.
+type PathProtection struct {
 	Path      string
 	Protected *bool
 }
@@ -67,14 +76,14 @@ type Result struct {
 	Reasons map[string]string
 }
 
-// Take surveys dir and keys through look. A path that could not be told about
-// is carried as nil rather than as a no: the difference between a key nobody
-// could ask about and a key found unprotected is the difference between a
-// report worth acting on and one worth ignoring.
-func Take(scheme, dir string, keys []string, look Look) Survey {
-	s := Survey{Scheme: scheme, DirProtected: answerFor(look, dir)}
-	for _, key := range keys {
-		s.Keys = append(s.Keys, KeyProtection{Path: key, Protected: answerFor(look, key)})
+// Take surveys paths through look. A path that could not be told about is
+// carried as nil rather than as a no: the difference between a path nobody
+// could ask about and one found unprotected is the difference between a report
+// worth acting on and one worth ignoring.
+func Take(scheme string, paths []string, look Look) Survey {
+	s := Survey{Scheme: scheme}
+	for _, path := range paths {
+		s.Paths = append(s.Paths, PathProtection{Path: path, Protected: answerFor(look, path)})
 	}
 	return s
 }
@@ -89,51 +98,102 @@ func answerFor(look Look, path string) *bool {
 	return answer
 }
 
-// Unprotected names the keys that came back as definitely not protected. A key
-// nobody could answer for is not among them.
-func (s Survey) Unprotected() []string {
-	var bare []string
-	for _, key := range s.Keys {
-		if key.Protected != nil && !*key.Protected {
-			bare = append(bare, key.Path)
+// Already names the paths that came back protected before anything was done,
+// in the order they were given.
+func (s Survey) Already() []string {
+	var done []string
+	for _, p := range s.Paths {
+		if p.Protected != nil && *p.Protected {
+			done = append(done, p.Path)
 		}
 	}
-	return bare
+	return done
 }
 
-// Complete says whether the directory and every key came back protected.
+// Pending names the paths an attempt still has to be made for: every one the
+// survey did not come back certain was protected already.
 //
-// Both halves are required, and each fails in its own way. Keys protected under
-// an unmarked directory means the next key generated there will not be, with
-// nothing said at the time. A marked directory over unprotected keys means the
-// report reads as done while the keys that exist are readable.
-func (s Survey) Complete() bool {
-	if s.DirProtected == nil || !*s.DirProtected {
-		return false
-	}
-	for _, key := range s.Keys {
-		if key.Protected == nil || !*key.Protected {
-			return false
+// A path nobody could answer for is among them, which is the one judgement in
+// here. Attempting is cheap and turning it on twice changes nothing, while
+// leaving a key alone because a look failed is how a key stays in the clear
+// with a run behind it that reported success.
+func (s Survey) Pending() []string {
+	var todo []string
+	for _, p := range s.Paths {
+		if p.Protected == nil || !*p.Protected {
+			todo = append(todo, p.Path)
 		}
 	}
-	return true
+	return todo
 }
 
-// Nothing says whether this survey established anything at all, which is what a
-// system with no scheme for this produces.
-func (s Survey) Nothing() bool {
-	if s.DirProtected != nil {
-		return false
-	}
-	for _, key := range s.Keys {
-		if key.Protected != nil {
-			return false
+// Cost is what covering a key directory itself would cost. The zero value is
+// what an ordinary run costs: protecting the key files alone changes nothing
+// about any file that does not exist yet, and so costs nothing.
+type Cost struct {
+	// Dir is the directory that would be covered, empty where none is.
+	Dir string
+	// ServerReads says whether that is the directory an SSH server reads a
+	// user's authorized_keys from unless it has been told otherwise.
+	ServerReads bool
+	// AuthorizedKeys is the path of the authorized_keys actually sitting in it,
+	// empty where there is none. The file itself is in no danger — covering a
+	// directory does nothing to the files already in it — but its presence is
+	// what says an SSH server really does read this directory, which turns the
+	// cost from something that might apply into something that does.
+	AuthorizedKeys string
+}
+
+// NeedsWarning reports whether covering this directory is something the user
+// has to be told the cost of before it happens.
+func (c Cost) NeedsWarning() bool {
+	return c.Dir != "" && (c.ServerReads || c.AuthorizedKeys != "")
+}
+
+// NeedsConfirmation reports whether being told is not enough, and the run has
+// to stop and be answered before it goes on.
+func (c Cost) NeedsConfirmation() bool { return c.AuthorizedKeys != "" }
+
+// Plan is what a run would change and what changing it would cost, worked out
+// before anything is changed — so the run that says what it would do and the
+// run that does it reach the same decision the same way.
+type Plan struct {
+	// Targets are the paths to protect, in the order they are to be done.
+	Targets []string
+	// Cost is what covering the directory costs, and is the zero value where
+	// the directory is not among the targets.
+	Cost Cost
+}
+
+// PlanFor works out what protecting keys — and, where coverDir says so, the
+// directory holding them — would change.
+//
+// authorizedKeysThere is the path of the authorized_keys actually sitting in
+// dir, empty where there is none: whether a file is there is a question for a
+// filesystem, and this decides what follows from the answer rather than asking
+// it.
+func PlanFor(dir string, keys []string, coverDir bool, authorizedKeysThere string) Plan {
+	var p Plan
+	if coverDir {
+		// The directory first, so that a key generated between this run and the
+		// next is born protected even where a key below will not budge.
+		p.Targets = append(p.Targets, dir)
+		p.Cost = Cost{
+			Dir:            dir,
+			ServerReads:    filepath.Base(dir) == serverKeyDirName,
+			AuthorizedKeys: authorizedKeysThere,
 		}
 	}
-	return true
+	for _, key := range keys {
+		if filepath.Base(key) == authorizedKeys {
+			continue
+		}
+		p.Targets = append(p.Targets, key)
+	}
+	return p
 }
 
-// Apply protects dir and each key through do, then reads every path back
+// Apply protects each target in order through do, then reads every path back
 // through look to say what actually happened.
 //
 // The reading back is the point rather than a precaution. The call that turns
@@ -141,21 +201,16 @@ func (s Survey) Nothing() bool {
 // read-only file is documented as doing exactly that — so a result taken from
 // the return value would tell a reader their keys are covered on the say-so of
 // a call that did not cover them.
-func Apply(dir string, keys []string, do func(path string) error, look Look) Result {
+func Apply(targets []string, do func(path string) error, look Look) Result {
 	res := Result{Reasons: map[string]string{}}
 
-	// The directory first, so that a key generated between this run and the
-	// next is born protected even if a key below refuses to budge.
-	targets := []string{dir}
-	for _, key := range keys {
-		if filepath.Base(key) == authorizedKeys {
-			res.Skipped = append(res.Skipped, key)
+	for _, target := range targets {
+		// A plan does not put this file among the targets; the guard is here so
+		// that no caller can, whatever it worked out or was handed.
+		if filepath.Base(target) == authorizedKeys {
+			res.Skipped = append(res.Skipped, target)
 			continue
 		}
-		targets = append(targets, key)
-	}
-
-	for _, target := range targets {
 		if err := do(target); err != nil {
 			res.Reasons[target] = err.Error()
 		}

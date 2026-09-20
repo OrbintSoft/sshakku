@@ -37,82 +37,134 @@ func lookOf(t *testing.T, answers map[string]*bool) Look {
 	}
 }
 
-// TestASurveyNamesTheKeysThatAreNotProtected is the whole of what the report
-// needs: which keys a reader has to do something about.
-func TestASurveyNamesTheKeysThatAreNotProtected(t *testing.T) {
+// TestASurveyNamesWhatIsDoneAndWhatIsLeft is the whole of what a run needs
+// before it changes anything: which paths it has something to do about.
+func TestASurveyNamesWhatIsDoneAndWhatIsLeft(t *testing.T) {
 	dir := filepath.FromSlash("/home/alice/.ssh")
 	safe := filepath.Join(dir, "id_safe")
 	bare := filepath.Join(dir, "id_bare")
 
-	s := Take("EFS", dir, []string{safe, bare}, lookOf(t, map[string]*bool{
-		dir: &yes, safe: &yes, bare: &no,
-	}))
+	s := Take("EFS", []string{safe, bare}, lookOf(t, map[string]*bool{safe: &yes, bare: &no}))
 
 	assert.Equal(t, "EFS", s.Scheme)
-	assert.Equal(t, []string{bare}, s.Unprotected(), "only the key that is not protected")
-	assert.False(t, s.Complete(), "a directory with one bare key in it is not done")
+	assert.Equal(t, []string{safe}, s.Already(), "the key there is nothing to do about")
+	assert.Equal(t, []string{bare}, s.Pending(), "and the one there is")
 }
 
-// TestAMarkedDirectoryOverBareKeysIsNotProtected is the state this exists to
-// catch. Marking a directory covers the files made in it afterwards and does
-// nothing for the ones already there, so "the directory is encrypted" over keys
-// that are not is exactly the report a reader would act on wrongly.
-func TestAMarkedDirectoryOverBareKeysIsNotProtected(t *testing.T) {
-	dir := filepath.FromSlash("/home/alice/.ssh")
-	bare := filepath.Join(dir, "id_bare")
+// TestAPathNobodyCouldAnswerForIsStillAttempted. A look that failed is not an
+// answer, and the two ways of reading it are not equally safe: attempting again
+// changes nothing where the path is already covered, while leaving a key alone
+// because a look failed is how a key stays in the clear with a run behind it
+// that reported success.
+func TestAPathNobodyCouldAnswerForIsStillAttempted(t *testing.T) {
+	unknown := filepath.FromSlash("/home/alice/keys/id_unknown")
 
-	s := Take("EFS", dir, []string{bare}, lookOf(t, map[string]*bool{dir: &yes, bare: &no}))
+	s := Take("EFS", []string{unknown}, lookOf(t, map[string]*bool{unknown: nil}))
 
-	require.NotNil(t, s.DirProtected)
-	assert.True(t, *s.DirProtected, "the directory really is marked")
-	assert.False(t, s.Complete(), "and that is not the same as the keys being protected")
-}
-
-// TestADirectoryThatIsBareUnderProtectedKeysIsNotDoneEither: the other half of
-// the same question. Every key is covered today, and the next one generated
-// there will not be, with nothing to say so at the time.
-func TestADirectoryThatIsBareUnderProtectedKeysIsNotDoneEither(t *testing.T) {
-	dir := filepath.FromSlash("/home/alice/.ssh")
-	safe := filepath.Join(dir, "id_safe")
-
-	s := Take("EFS", dir, []string{safe}, lookOf(t, map[string]*bool{dir: &no, safe: &yes}))
-
-	assert.Empty(t, s.Unprotected(), "no key needs anything done to it")
-	assert.False(t, s.Complete(), "but the directory still does, for the key that does not exist yet")
+	assert.Empty(t, s.Already(), "nothing may be reported done that nobody established")
+	assert.Equal(t, []string{unknown}, s.Pending())
 }
 
 // TestASurveyOfAPlatformWithNoSchemeClaimsNothing. Where this build has no way
-// to protect a key, the report must not say the keys are unprotected: nobody
+// to protect a key, the survey must not report the keys as unprotected: nobody
 // looked, and a reader sent to turn on something that is not there is worse off
 // than one told nothing.
 func TestASurveyOfAPlatformWithNoSchemeClaimsNothing(t *testing.T) {
-	dir := filepath.FromSlash("/home/alice/.ssh")
-	key := filepath.Join(dir, "id_key")
+	key := filepath.FromSlash("/home/alice/.ssh/id_key")
 
-	s := Take("", dir, []string{key}, func(string) (*bool, error) {
+	s := Take("", []string{key}, func(string) (*bool, error) {
 		return nil, ErrNoSchemeHere
 	})
 
 	assert.Empty(t, s.Scheme)
-	assert.Nil(t, s.DirProtected, "nothing was established about the directory")
-	assert.Empty(t, s.Unprotected(), "and nothing may be demanded of the keys")
-	assert.True(t, s.Nothing(), "the whole survey is an absence, and says so")
+	assert.Empty(t, s.Already(), "nothing was established about the key")
+	require.Len(t, s.Paths, 1)
+	assert.Nil(t, s.Paths[0].Protected, "and the absence is carried as an absence")
 }
 
-// TestApplyProtectsTheKeysAndTheDirectory covers the ordinary run.
-func TestApplyProtectsTheKeysAndTheDirectory(t *testing.T) {
+// TestAPlanForTheKeysAloneCostsNothing is the ordinary run, and the reason it is
+// the default: the files that exist are protected, and nothing that does not
+// exist yet is affected either way.
+func TestAPlanForTheKeysAloneCostsNothing(t *testing.T) {
+	dir := filepath.FromSlash("/home/alice/.ssh")
+	key := filepath.Join(dir, "id_key")
+
+	p := PlanFor(dir, []string{key}, false, AuthorizedKeysIn(dir))
+
+	assert.Equal(t, []string{key}, p.Targets, "the directory is not among them")
+	assert.False(t, p.Cost.NeedsWarning(), "and there is nothing to warn about")
+	assert.False(t, p.Cost.NeedsConfirmation())
+}
+
+// TestAPlanThatCoversTheDirectoryDoesItFirst. A key generated between this run
+// and the next is born protected even where a key below will not budge.
+func TestAPlanThatCoversTheDirectoryDoesItFirst(t *testing.T) {
+	dir := filepath.FromSlash("/home/alice/keys")
+	key := filepath.Join(dir, "id_key")
+
+	p := PlanFor(dir, []string{key}, true, "")
+
+	assert.Equal(t, []string{dir, key}, p.Targets)
+	assert.False(t, p.Cost.NeedsWarning(),
+		"a directory no ssh server reads, with no authorized_keys in it, costs nothing to cover")
+}
+
+// TestCoveringTheDirectoryAnSSHServerReadsIsWarnedAbout. A file created there
+// afterwards is born encrypted, and the server reads authorized_keys as the
+// system, before there is a session of the account's to unlock anything with.
+func TestCoveringTheDirectoryAnSSHServerReadsIsWarnedAbout(t *testing.T) {
+	dir := filepath.FromSlash("/home/alice/.ssh")
+
+	p := PlanFor(dir, nil, true, "")
+
+	assert.True(t, p.Cost.ServerReads, "this is the directory a server reads unless told otherwise")
+	assert.True(t, p.Cost.NeedsWarning(), "so what it costs is said before it happens")
+	assert.False(t, p.Cost.NeedsConfirmation(),
+		"and with no authorized_keys actually there, being told is enough")
+}
+
+// TestAnAuthorizedKeysActuallyThereIsNotAWarning is the sharp end of it. The
+// file itself is in no danger — covering a directory does nothing to what is
+// already in it — but its presence is what says a server really does read this
+// directory, and the one it writes next is born encrypted.
+func TestAnAuthorizedKeysActuallyThereIsNotAWarning(t *testing.T) {
+	dir := filepath.FromSlash("/home/alice/keys")
+	authorized := AuthorizedKeysIn(dir)
+
+	p := PlanFor(dir, nil, true, authorized)
+
+	assert.False(t, p.Cost.ServerReads, "not by its name, wherever this directory is")
+	assert.Equal(t, authorized, p.Cost.AuthorizedKeys, "but by what is sitting in it")
+	assert.True(t, p.Cost.NeedsConfirmation(), "which is asked about, not warned about")
+}
+
+// TestAPlanNeverTargetsAuthorizedKeys. That file holds public keys, so there is
+// nothing in it to protect; and it is read at login by a service running as the
+// system rather than as the account, which has no way to read it encrypted.
+func TestAPlanNeverTargetsAuthorizedKeys(t *testing.T) {
+	dir := filepath.FromSlash("/home/alice/.ssh")
+	authorized := AuthorizedKeysIn(dir)
+	key := filepath.Join(dir, "id_key")
+
+	p := PlanFor(dir, []string{key, authorized}, false, authorized)
+
+	assert.Equal(t, []string{key}, p.Targets, "handed it as a key, it is still not a target")
+}
+
+// TestApplyProtectsEveryTargetItIsGiven covers the ordinary run.
+func TestApplyProtectsEveryTargetItIsGiven(t *testing.T) {
 	dir := filepath.FromSlash("/home/alice/.ssh")
 	key := filepath.Join(dir, "id_key")
 
 	done := map[string]bool{}
 	answers := map[string]*bool{dir: &no, key: &no}
-	res := Apply(dir, []string{key}, func(path string) error {
+	res := Apply([]string{dir, key}, func(path string) error {
 		done[path] = true
 		answers[path] = &yes // What the system would say afterwards.
 		return nil
 	}, lookOf(t, answers))
 
-	assert.True(t, done[dir], "the directory is marked, so the next key is born protected")
+	assert.True(t, done[dir], "the directory is covered, so the next key is born protected")
 	assert.True(t, done[key], "and the key that is already there is protected now")
 	assert.ElementsMatch(t, []string{dir, key}, res.Protected)
 	assert.Empty(t, res.Failed)
@@ -126,7 +178,7 @@ func TestApplyProtectsTheKeysAndTheDirectory(t *testing.T) {
 func TestApplyBelievesTheFilesystemRatherThanTheCall(t *testing.T) {
 	dir := filepath.FromSlash("/home/alice/.ssh")
 
-	res := Apply(dir, nil, func(string) error {
+	res := Apply([]string{dir}, func(string) error {
 		return nil // Reports success.
 	}, lookOf(t, map[string]*bool{dir: &no})) // And yet nothing changed.
 
@@ -135,17 +187,16 @@ func TestApplyBelievesTheFilesystemRatherThanTheCall(t *testing.T) {
 		"a call that succeeded and changed nothing is a failure to protect")
 }
 
-// TestApplyNeverTouchesAuthorizedKeys. That file holds public keys, so there is
-// nothing in it to protect; and it is read at login by a service running as the
-// system rather than as the account, which has no way to read it encrypted.
-// Nothing is gained and a working login is what would be risked.
+// TestApplyNeverTouchesAuthorizedKeys, whatever it is handed. A plan does not
+// put that file among the targets; this is the guard that holds however the
+// targets were arrived at.
 func TestApplyNeverTouchesAuthorizedKeys(t *testing.T) {
 	dir := filepath.FromSlash("/home/alice/.ssh")
-	authorized := filepath.Join(dir, "authorized_keys")
+	authorized := AuthorizedKeysIn(dir)
 	key := filepath.Join(dir, "id_key")
 
-	answers := map[string]*bool{dir: &yes, key: &yes}
-	res := Apply(dir, []string{key, authorized}, func(path string) error {
+	answers := map[string]*bool{key: &yes}
+	res := Apply([]string{key, authorized}, func(path string) error {
 		if path == authorized {
 			t.Fatalf("authorized_keys must never be handed to the protecting call")
 		}
@@ -164,8 +215,8 @@ func TestApplyReportsWhatWouldNotBudge(t *testing.T) {
 	stuck := filepath.Join(dir, "id_stuck")
 	fine := filepath.Join(dir, "id_fine")
 
-	answers := map[string]*bool{dir: &yes, stuck: &no, fine: &yes}
-	res := Apply(dir, []string{stuck, fine}, func(path string) error {
+	answers := map[string]*bool{stuck: &no, fine: &yes}
+	res := Apply([]string{stuck, fine}, func(path string) error {
 		if path == stuck {
 			return errStuck
 		}
