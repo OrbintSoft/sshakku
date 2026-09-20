@@ -333,3 +333,15 @@ func TestNobodyToAskIsNotAYes(t *testing.T) {
 	assert.Contains(t, out.String(), "yes", "and the question is still shown, rather than decided quietly")
 }
 
+// TestWhatAMachineCanDoAboutAKeyAtRest covers both answers a system can give,
+// which no single machine can: the one that has a scheme, and the one that has
+// none and must be given no way to ask rather than a way that always refuses.
+func TestWhatAMachineCanDoAboutAKeyAtRest(t *testing.T) {
+	assert.Equal(t, keyProtector{}, keyProtectionFor(""),
+		"a system with no scheme is given nothing to ask with, so nothing is claimed and no key is opened")
+
+	with := keyProtectionFor("EFS")
+	assert.Equal(t, "EFS", with.scheme, "a system that has one is named by it")
+	assert.NotNil(t, with.look, "and can be asked whether a path is covered")
+	assert.NotNil(t, with.apply, "and told to cover one")
+}
