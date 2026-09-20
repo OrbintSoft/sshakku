@@ -25,6 +25,7 @@ import (
 	"github.com/OrbintSoft/sshakku/internal/diagnose"
 	"github.com/OrbintSoft/sshakku/internal/keys"
 	"github.com/OrbintSoft/sshakku/internal/keys/handoff"
+	"github.com/OrbintSoft/sshakku/internal/keys/move"
 	"github.com/OrbintSoft/sshakku/internal/keys/prompt"
 	"github.com/OrbintSoft/sshakku/internal/keys/wallet"
 	"github.com/OrbintSoft/sshakku/internal/paths"
@@ -61,7 +62,7 @@ commands:
                  account can read them; --dry-run shows what it would encrypt
                  without changing anything, --directory encrypts the key
                  directory too, but asks first if an SSH server reads it
-  install     wire the login hook into one shell; uninstall takes it out.
+  install   wire the login hook into one shell; uninstall takes it out.
                  With nothing else, the shell is the one you ran it from.
                  --shell <name> looks one up, --shell-exe <path> names the
                  interpreter to ask about itself, --profile <file> names the
@@ -193,6 +194,12 @@ type deps struct {
 	// server reads. Injected so both the asking and every answer to it run
 	// without a terminal.
 	stdin io.Reader
+	// permitKey gives one path what this system expects of a key file, which is
+	// a mode on one system and a list of accounts on another. Injected so that
+	// a move which cannot finish — a directory this account may not permit —
+	// runs on a machine where the real one would succeed, since that refusal is
+	// the whole of what keeps a half-done move from happening.
+	permitKey func(path string, kind move.Kind) error
 }
 
 // realDeps wires deps to the production implementations.
@@ -217,6 +224,7 @@ func realDeps() deps {
 		agentKeepsLifetimes: agent.KeepsLifetimes(),
 		keyProtection:       keyProtectionHere(),
 		stdin:               os.Stdin,
+		permitKey:           move.Permit,
 	}
 }
 
