@@ -4720,3 +4720,53 @@ is readable to begin with, so declining it is a decision. `make test`,
 clean.
 
 → FEATURES F67, F65, F64; rules 1, 5, 9, 15, 18, 19, 21, 22, 23, 25, 26.
+
+### Phase 61 — The home the other four were looked for under ✅ Done
+
+Phase 60 asked every XDG variable whose the directory it named was, and left
+the one they all fall back on unasked. With none of them set — the ordinary
+state of a root shell — the configuration, the session log and the endpoint are
+looked for under `$HOME`, and so are the private keys: `key_dir` is resolved
+against the same home, and `protect-keys` and `move-keys` act on what it finds
+there. A home taken on trust placed every one of them at once.
+
+`$HOME` is carried in the same way and by the same commands, spelled `su -m`
+and `sudo -E`; `sudoers` has an `always_set_home` option for no other reason.
+
+**What made it a different fix from Phase 60's** is that a home has an
+authoritative answer somewhere else. The four directories have nowhere to go but
+a default computed from the home, so a refused one falls back to a guess; a
+refused home falls back to what the user database records for the account this
+process is running as. That is the rule this program already follows elsewhere —
+`doctor --user` and the `SUDO_UID` behind it resolve an identity through the
+user database and never take a directory from the environment — stated here as
+the general form: a variable may name an identity, never a directory that will
+be written to.
+
+A home is still kept where it is this account's own, and that is the guard the
+fix had to not break: a home somebody set for themselves — a container, a test
+harness, an account whose home is not where the database says — is theirs, and
+a build that went to the database regardless would take it from them for
+nothing. It is kept, too, where the database has no answer (an unreachable
+directory service, a passwd file with no entry for a network account) and on a
+build that cannot attribute a directory at all. An unanswered question is not a
+refusal, which is the same shape F66 and Phase 60 both needed.
+
+`Layout` now carries the home it settled on and the callers read that instead of
+the variable, because a session with two homes is a session that declines a
+directory and then writes to it anyway.
+
+**F71 is new**: which keys a session acts on had no promise of its own, and
+`protect-keys` and `move-keys` made the gap worth naming — encrypting or
+relocating somebody else's private keys while they are not there to be asked is
+the one thing here that putting a variable back does not undo.
+
+Verified by driving the real binary: handed a home that is there and is not this
+account's, the previous build reported that account's key directory and read its
+configuration, and this one reports this account's own and names `$HOME` in the
+findings; a home this account made for itself is still obeyed by both. The
+two-account direction is the container scenario's, run in CI. `make test`,
+`make lint-go` clean on all five builds; `shellcheck` and `shfmt` clean.
+
+→ FEATURES F71, F67, F65; rules 1, 5, 9, 15, 18, 19, 21, 22, 23, 25, 26.
+
