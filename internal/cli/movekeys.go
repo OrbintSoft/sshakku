@@ -16,6 +16,14 @@ import (
 // moveKeysCmdName is what a user types to reach this.
 const moveKeysCmdName = "move-keys"
 
+// absPath makes a path named at a terminal absolute against the directory the
+// user is standing in. A variable so that the one way it fails — a session
+// whose own directory is no longer there to resolve against — can be produced
+// on purpose: which systems let a process keep a deleted directory as its own
+// is a property of the system, and this arm has to be answerable from all of
+// them.
+var absPath = filepath.Abs
+
 // moveKeys puts the keys SSHakku loads into a directory the user names, gives
 // that directory and the files in it what this system expects of a key, and
 // writes the new location into the user's own configuration — so the same keys
@@ -95,7 +103,7 @@ func parseMoveKeysArgs(stderr io.Writer, args []string) (string, bool) {
 	// what somebody typing a path at a terminal means by a relative one. It is
 	// also what goes into the configuration, where a relative path would be
 	// read against the home directory instead and name somewhere else.
-	dir, err := filepath.Abs(named[0])
+	dir, err := absPath(named[0])
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "sshakku: move-keys: %v\n", err)
 		return "", false

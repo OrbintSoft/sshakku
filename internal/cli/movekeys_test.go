@@ -324,11 +324,17 @@ func TestAKeyThatCannotBeGivenTheRightPermissionsIsPutBack(t *testing.T) {
 // absolute against the directory the user is standing in, and a session whose
 // own directory has been taken away from underneath it has nothing to resolve
 // against.
+//
+// The failure is injected rather than arranged. Removing the directory a
+// process is standing in does not stop every system from answering with it —
+// macOS goes on resolving one that is no longer there — so an arrangement that
+// reproduces this on one machine proves nothing about the others, and this arm
+// has to be answerable from all of them.
 func TestADirectoryNamedFromNowhereIsRefused(t *testing.T) {
 	tempRuntimeEnv(t)
-	gone := t.TempDir()
-	t.Chdir(gone)
-	require.NoError(t, os.Remove(gone), "the session's own directory is taken away")
+	original := absPath
+	absPath = func(string) (string, error) { return "", assert.AnError }
+	t.Cleanup(func() { absPath = original })
 
 	code, _, errOut := runMoveKeys(t, realDeps(), "keys")
 
