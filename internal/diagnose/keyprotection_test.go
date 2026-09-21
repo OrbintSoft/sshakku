@@ -163,3 +163,28 @@ func TestEverythingProtectedIsNothingToReport(t *testing.T) {
 	assert.NotContains(t, strings.Join(r.Findings, "\n"), "protect-keys",
 		"nothing to do is nothing to say")
 }
+
+// TestAKeyNobodyCouldAnswerForIsNotSaidToBeUnprotected is the three-valued
+// half of F68 where a reader actually meets it: a key the system was asked
+// about and gave no answer for is printed as undetermined. Printing "not
+// protected" instead would send somebody to fix a key that may be perfectly
+// well protected, and — worse in the other direction — reads as a fact
+// established about a file nobody managed to look at.
+func TestAKeyNobodyCouldAnswerForIsNotSaidToBeUnprotected(t *testing.T) {
+	yes := true
+	unanswerable := filepath.Join(keyDir, "id_ed25519")
+
+	// Everything but this key has an answer, so what the report shows about it
+	// is the absence of one rather than a system that answers nothing.
+	r := reportWithKeys(t, protectedKeySource("EFS", map[string]*bool{keyDir: &yes}, unanswerable))
+
+	require.Len(t, r.Keys, 1)
+	assert.Nil(t, r.Keys[0].Protected, "a question that could not be answered has no answer")
+
+	var b strings.Builder
+	Format(&b, r)
+	assert.Contains(t, b.String(), "at rest: "+undetermined,
+		"and the key's own line says so, in the word the report uses everywhere for it")
+	assert.NotContains(t, b.String(), "at rest: not protected",
+		"which is a different claim, and one nothing here established")
+}

@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/OrbintSoft/sshakku/internal/keys/move"
+	"github.com/OrbintSoft/sshakku/internal/sessionlog"
 )
 
 // Verifies F70 through the command a user types. Every run goes through the
@@ -182,4 +183,161 @@ func TestMoveKeysRefusesAnArgumentItDoesNotKnow(t *testing.T) {
 
 	assert.Equal(t, 2, code)
 	assert.Contains(t, errOut, "--everything")
+}
+
+// TestAConfigurationThatCouldNotBeWrittenPutsTheKeysBack is the half of F70
+// that costs the most to get wrong and is the hardest to notice: the keys are
+// in the new directory, nothing says so, and every login afterwards looks where
+// they no longer are. The run puts them back rather than leaving that behind.
+//
+// The failure is arranged by making config.toml a directory. The check made
+// before anything moves asks whether the configuration directory can be written
+// and it still can — a file is made beside the target and removed again — so
+// the refusal happens at the write itself, which is the ordering this needs.
+func TestAConfigurationThatCouldNotBeWrittenPutsTheKeysBack(t *testing.T) {
+	home := tempRuntimeEnv(t)
+	old := filepath.Join(home, ".ssh")
+	require.NoError(t, os.MkdirAll(old, 0o700))
+	for _, name := range []string{"id_ed25519", "id_ed25519.pub"} {
+		require.NoError(t, os.WriteFile(filepath.Join(old, name), []byte("not really a key"), 0o600))
+	}
+	require.NoError(t, os.MkdirAll(filepath.Join(home, ".config", "sshakku", "config.toml"), 0o700))
+	newDir := filepath.Join(home, "keys")
+
+	code, _, errOut := runMoveKeys(t, realDeps(), newDir)
+
+	assert.NotZero(t, code, "a move nothing records is a failure, not a success with a note")
+	assert.True(t, there(t, filepath.Join(old, "id_ed25519")), "the key is back where it came from")
+	assert.True(t, there(t, filepath.Join(old, "id_ed25519.pub")), "and so is its public half")
+	assert.False(t, there(t, filepath.Join(newDir, "id_ed25519")),
+		"and not in the directory the configuration was never told about")
+	assert.Contains(t, errOut, "your keys are where they were",
+		"the user is told the state they are actually in")
+}
+
+// TestWhatCouldNotBePutBackIsNamed covers the outcome no rollback can rescue:
+// files moved out and not moved back. Naming them is the whole of what is left
+// to do for the user, so the list is the behaviour rather than a detail of it.
+//
+// It is driven directly because the rename this would need to fail is the
+// filesystem's own, and there is no arrangement of a directory that makes
+// putting a file back where it just came from fail on every system this runs on.
+func TestWhatCouldNotBePutBackIsNamed(t *testing.T) {
+	logFile := filepath.Join(t.TempDir(), "sessions.log")
+	var errOut bytes.Buffer
+
+	moveKeysStopped(&errOut, sessionlog.New(logFile), assert.AnError,
+		move.Result{Stranded: []string{"/keys/id_ed25519", "/keys/id_ed25519.pub"}})
+
+	assert.Contains(t, errOut.String(), "/keys/id_ed25519", "the file left behind is named")
+	assert.Contains(t, errOut.String(), "/keys/id_ed25519.pub", "and so is every other one")
+	assert.NotContains(t, errOut.String(), "your keys are where they were",
+		"which they are not, and saying so would be the one thing worse than the failure")
+
+	recorded, err := os.ReadFile(logFile)
+	require.NoError(t, err, "the session log is where this is worked back from later")
+	assert.Contains(t, string(recorded), "/keys/id_ed25519")
+}
+
+// TestAKeyDirectoryThatCannotBeMadeStopsEverything, before a key moves into a
+// directory that is not there.
+func TestAKeyDirectoryThatCannotBeMadeStopsEverything(t *testing.T) {
+	home := tempRuntimeEnv(t)
+	old := filepath.Join(home, ".ssh")
+	require.NoError(t, os.MkdirAll(old, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(old, "id_ed25519"), []byte("key"), 0o600))
+	// A file, so nothing can be made underneath it.
+	inTheWay := filepath.Join(home, "not-a-directory")
+	require.NoError(t, os.WriteFile(inTheWay, nil, 0o600))
+
+	code, _, errOut := runMoveKeys(t, realDeps(), filepath.Join(inTheWay, "keys"))
+
+	assert.NotZero(t, code)
+	assert.Contains(t, errOut, inTheWay, "the path it could not make is named")
+	assert.True(t, there(t, filepath.Join(old, "id_ed25519")), "and the key has not moved")
+}
+
+// TestAConfigurationThatCannotBeWrittenIsARefusal, found before anything moves
+// rather than after: a refusal discovered later is a user with keys in two
+// places.
+func TestAConfigurationThatCannotBeWrittenIsARefusal(t *testing.T) {
+	home := tempRuntimeEnv(t)
+	old := filepath.Join(home, ".ssh")
+	require.NoError(t, os.MkdirAll(old, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(old, "id_ed25519"), []byte("key"), 0o600))
+	// A file where the configuration directory's parent goes, so the directory
+	// itself can never be made.
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".config"), nil, 0o600))
+	newDir := filepath.Join(home, "keys")
+
+	code, _, errOut := runMoveKeys(t, realDeps(), newDir)
+
+	assert.NotZero(t, code)
+	assert.NotEmpty(t, errOut, "what stopped it is said")
+	assert.True(t, there(t, filepath.Join(old, "id_ed25519")), "the key has not moved")
+	assert.False(t, there(t, filepath.Join(newDir, "id_ed25519")), "and nothing is in the new directory")
+}
+
+// TestAKeyDirectoryThatIsNotADirectoryIsReported rather than read as an account
+// with no keys, which is what a missing one means and is a different answer.
+func TestAKeyDirectoryThatIsNotADirectoryIsReported(t *testing.T) {
+	home := tempRuntimeEnv(t)
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".ssh"), nil, 0o600))
+
+	code, out, errOut := runMoveKeys(t, realDeps(), filepath.Join(home, "keys"))
+
+	assert.NotZero(t, code)
+	assert.NotContains(t, out, "No keys", "an unreadable directory is not an empty one")
+	assert.Contains(t, errOut, ".ssh", "the directory it could not read is named")
+}
+
+// TestAKeyThatCannotBeGivenTheRightPermissionsIsPutBack. The directory is made
+// and permitted first, so this is the failure that happens with keys already
+// moved: they go back, and the run reports what it could not do.
+func TestAKeyThatCannotBeGivenTheRightPermissionsIsPutBack(t *testing.T) {
+	home := tempRuntimeEnv(t)
+	old := filepath.Join(home, ".ssh")
+	require.NoError(t, os.MkdirAll(old, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(old, "id_ed25519"), []byte("key"), 0o600))
+	newDir := filepath.Join(home, "keys")
+
+	d := realDeps()
+	// The directory is allowed, a key is not: the arrangement that gets a file
+	// moved before anything refuses.
+	d.permitKey = func(_ string, kind move.Kind) error {
+		if kind == move.Directory {
+			return nil
+		}
+		return assert.AnError
+	}
+
+	code, _, errOut := runMoveKeys(t, d, newDir)
+
+	assert.NotZero(t, code)
+	assert.True(t, there(t, filepath.Join(old, "id_ed25519")), "the key is back where it came from")
+	assert.False(t, there(t, filepath.Join(newDir, "id_ed25519")), "and not in the new directory")
+	assert.Contains(t, errOut, "your keys are where they were", "which is what the user is told")
+}
+
+// TestADirectoryNamedFromNowhereIsRefused covers the one way naming a
+// directory can fail before it is even looked at: a relative path is made
+// absolute against the directory the user is standing in, and a session whose
+// own directory has been taken away from underneath it has nothing to resolve
+// against.
+//
+// The failure is injected rather than arranged. Removing the directory a
+// process is standing in does not stop every system from answering with it —
+// macOS goes on resolving one that is no longer there — so an arrangement that
+// reproduces this on one machine proves nothing about the others, and this arm
+// has to be answerable from all of them.
+func TestADirectoryNamedFromNowhereIsRefused(t *testing.T) {
+	tempRuntimeEnv(t)
+	original := absPath
+	absPath = func(string) (string, error) { return "", assert.AnError }
+	t.Cleanup(func() { absPath = original })
+
+	code, _, errOut := runMoveKeys(t, realDeps(), "keys")
+
+	assert.Equal(t, 2, code, "a usage answer: nothing was wrong with the command, the path could not be read")
+	assert.NotEmpty(t, errOut, "and what went wrong is said rather than left blank")
 }

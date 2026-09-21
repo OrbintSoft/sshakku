@@ -3,12 +3,34 @@ package config
 import (
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+)
+
+// stagedFile is the part of a newly made file this package uses: what goes into it,
+// the permissions it has to end up with, and the two ways it can fail to reach
+// the disk. It is an interface, and the calls below are variables, so that the
+// failures a filesystem produces can be produced on purpose — a disk that fills
+// between one call and the next, a directory that stops being writable while a
+// file is open in it. Every one of those arms decides whether a user is told
+// their configuration was written when it was not.
+type stagedFile interface {
+	io.StringWriter
+	Chmod(mode fs.FileMode) error
+	Close() error
+	Name() string
+}
+
+var (
+	makeDir    = os.MkdirAll
+	createTemp = func(dir, pattern string) (stagedFile, error) { return os.CreateTemp(dir, pattern) }
+	renameFile = os.Rename
+	removeFile = os.Remove
 )
 
 // keyDirAssignment matches a line that actually sets key_dir, whatever spacing
@@ -63,19 +85,19 @@ func SetKeyDir(configDir, dir string) error {
 		return fmt.Errorf("read %s: %w", path, err)
 	}
 
-	if err := os.MkdirAll(configDir, 0o700); err != nil {
+	if err := makeDir(configDir, 0o700); err != nil {
 		return fmt.Errorf("create %s: %w", configDir, err)
 	}
-	staged, err := os.CreateTemp(configDir, MainFileName+".*")
+	staged, err := createTemp(configDir, MainFileName+".*")
 	if err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
-	defer func() { _ = os.Remove(staged.Name()) }() // Harmless once the rename has taken it.
+	defer func() { _ = removeFile(staged.Name()) }() // Harmless once the rename has taken it.
 
 	if err := writeAndClose(staged, WithKeyDir(body, dir)); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
-	if err := os.Rename(staged.Name(), path); err != nil {
+	if err := renameFile(staged.Name(), path); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
 	return nil
@@ -84,7 +106,7 @@ func SetKeyDir(configDir, dir string) error {
 // writeAndClose writes the body and closes the file, reporting whichever of the
 // two failed. A close that fails after a successful write is still a file that
 // may not be on the disk.
-func writeAndClose(f *os.File, body string) error {
+func writeAndClose(f stagedFile, body string) error {
 	if _, err := f.WriteString(body); err != nil {
 		_ = f.Close()
 		return err
@@ -103,18 +125,18 @@ func writeAndClose(f *os.File, body string) error {
 // A caller that must not half-do its work needs this answer before it starts,
 // and the only way to find out whether a file can be written is to write one.
 func WritableConfig(configDir string) error {
-	if err := os.MkdirAll(configDir, 0o700); err != nil {
+	if err := makeDir(configDir, 0o700); err != nil {
 		return fmt.Errorf("create %s: %w", configDir, err)
 	}
-	probe, err := os.CreateTemp(configDir, MainFileName+".probe.*")
+	probe, err := createTemp(configDir, MainFileName+".probe.*")
 	if err != nil {
 		return fmt.Errorf("write %s: %w", MainFile(configDir), err)
 	}
 	if err := probe.Close(); err != nil {
-		_ = os.Remove(probe.Name())
+		_ = removeFile(probe.Name())
 		return fmt.Errorf("write %s: %w", MainFile(configDir), err)
 	}
-	if err := os.Remove(probe.Name()); err != nil {
+	if err := removeFile(probe.Name()); err != nil {
 		return fmt.Errorf("write %s: %w", filepath.Dir(probe.Name()), err)
 	}
 	return nil
@@ -137,5 +159,8 @@ func KeyDirDecidedElsewhere(sources []Source, lookup func(string) (string, bool)
 		}
 		return ""
 	}
+	// Unreachable: every setting is listed, key_dir among them, so the loop
+	// above returns. Go needs the function to end with a return all the same.
+	//coverage:ignore
 	return ""
 }

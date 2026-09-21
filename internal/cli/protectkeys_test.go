@@ -263,3 +263,85 @@ func TestAnArgumentItDoesNotKnowIsAUsageError(t *testing.T) {
 	assert.Contains(t, errOut, "--everything")
 	assert.Empty(t, p.covered)
 }
+
+// TestNoKeysToProtectSaysSoRatherThanSucceedingSilently, and names where it
+// looked: an empty answer about the wrong directory is how somebody concludes
+// their keys are covered when nothing of theirs was ever read.
+func TestNoKeysToProtectSaysSoRatherThanSucceedingSilently(t *testing.T) {
+	dir := aKeyDirectory(t, ".ssh")
+	p := newProtector()
+
+	code, out, errOut := runProtectKeys(t, p, "")
+
+	require.Zerof(t, code, "having nothing to do is not a failure; stderr=%q", errOut)
+	assert.Contains(t, out, "No keys")
+	assert.Contains(t, out, dir, "and where it looked")
+	assert.Empty(t, p.covered)
+}
+
+// TestAKeyDirectoryThatCannotBeReadIsReported rather than read as an account
+// with no keys: "there is nothing to protect" and "I could not look" are
+// different answers, and only one of them means everything is in order.
+func TestAKeyDirectoryThatCannotBeReadIsReported(t *testing.T) {
+	home := tempRuntimeEnv(t)
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".ssh"), nil, 0o600))
+	p := newProtector()
+
+	code, out, errOut := runProtectKeys(t, p, "")
+
+	assert.NotZero(t, code)
+	assert.NotContains(t, out, "No keys", "an unreadable directory is not an empty one")
+	assert.Contains(t, errOut, ".ssh", "the directory it could not read is named")
+	assert.Empty(t, p.covered)
+}
+
+// TestAKeyThatCouldNotBeProtectedIsNamed. The run reports what the filesystem
+// says afterwards rather than what the calls returned, and a key it could not
+// cover has to be named: it is the one the user still has to do something
+// about, and a count alone does not say which.
+func TestAKeyThatCouldNotBeProtectedIsNamed(t *testing.T) {
+	dir := aKeyDirectory(t, ".ssh", "id_ed25519")
+	d := realDeps()
+	d.stdin = strings.NewReader("")
+	d.keyProtection = keyProtector{
+		scheme: "EFS",
+		look: func(string) (*bool, error) {
+			no := false
+			return &no, nil
+		},
+		apply: func(string) error { return assert.AnError },
+	}
+
+	var out, errOut bytes.Buffer
+	code := d.run(t.Context(), &out, &errOut, []string{"protect-keys"})
+
+	assert.NotZero(t, code, "a key that is not protected is not a successful run")
+	assert.Contains(t, errOut.String(), filepath.Join(dir, "id_ed25519"), "the key is named")
+	assert.Contains(t, out.String(), "0 of 1", "and the count says how much of the job was done")
+}
+
+// TestNobodyToAskIsNotAYes covers a run with no standard input at all, as
+// against one where somebody is there and says nothing. Both are no: a default
+// of yes would be the same as never having asked, and what is at stake is key
+// logins into the machine.
+func TestNobodyToAskIsNotAYes(t *testing.T) {
+	var out bytes.Buffer
+
+	answered := protectKeysConfirmed(nil, &out)
+
+	assert.False(t, answered, "with nowhere to ask, the answer is no")
+	assert.Contains(t, out.String(), "yes", "and the question is still shown, rather than decided quietly")
+}
+
+// TestWhatAMachineCanDoAboutAKeyAtRest covers both answers a system can give,
+// which no single machine can: the one that has a scheme, and the one that has
+// none and must be given no way to ask rather than a way that always refuses.
+func TestWhatAMachineCanDoAboutAKeyAtRest(t *testing.T) {
+	assert.Equal(t, keyProtector{}, keyProtectionFor(""),
+		"a system with no scheme is given nothing to ask with, so nothing is claimed and no key is opened")
+
+	with := keyProtectionFor("EFS")
+	assert.Equal(t, "EFS", with.scheme, "a system that has one is named by it")
+	assert.NotNil(t, with.look, "and can be asked whether a path is covered")
+	assert.NotNil(t, with.apply, "and told to cover one")
+}

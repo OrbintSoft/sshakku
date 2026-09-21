@@ -25,17 +25,26 @@ type keyProtector struct {
 }
 
 // keyProtectionHere is what this machine can do about it.
+func keyProtectionHere() keyProtector {
+	return keyProtectionFor(protect.Scheme())
+}
+
+// keyProtectionFor turns the name of a scheme into what the rest of the program
+// works with. The name is an argument rather than something read in here, so
+// that both answers stay exercisable from either machine: a machine can only
+// ever give one of the two, and the arm it does not give is the one nobody
+// would otherwise try.
 //
 // A system with no such scheme is given no way to ask rather than a way that
 // always refuses: the report then says nothing about protection at all, which
 // is the honest answer where the question does not arise, and no key file is
 // opened to establish it.
-func keyProtectionHere() keyProtector {
-	if protect.Scheme() == "" {
+func keyProtectionFor(scheme string) keyProtector {
+	if scheme == "" {
 		return keyProtector{}
 	}
 	return keyProtector{
-		scheme: protect.Scheme(),
+		scheme: scheme,
 		look:   protect.Protected,
 		apply:  protect.Protect,
 	}

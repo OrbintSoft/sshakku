@@ -4769,3 +4769,53 @@ two-account direction is the container scenario's, run in CI. `make test`,
 `make lint-go` clean on all five builds; `shellcheck` and `shfmt` clean.
 
 → FEATURES F71, F67, F65; rules 1, 5, 9, 15, 18, 19, 21, 22, 23, 25, 26.
+
+### Phase 62 — The branches the key commands arrived without ✅ Done
+
+Coverage had been 100% on Linux and macOS and 99% on Windows for several
+releases. `protect-keys` and `move-keys` brought it to 98.8 / 98.7 / 97.6, and
+it stayed there: the packages that dropped are the ones those commands were
+written in, and nothing since had touched them.
+
+What was missing was not spread evenly. `move-keys` had no test of the arm it
+exists for — the keys moved and the configuration that says where they went
+could not be written, so every login afterwards looks where they no longer are.
+`reversed`, `keepingWhateverTheyHad` and `moveKeysStopped` were at 0%. Getting
+there needs the write to fail *after* the check that runs before anything moves,
+and the way to arrange that is to make `config.toml` a directory: the directory
+holding it is still writable, so the question asked in advance is answered yes
+and the write itself is what refuses. Broken on purpose — the rollback taken
+out — the test says "the key is back where it came from: Should be true", which
+is the defect in the user's own words.
+
+The other 0% was the two platforms that have no scheme for protecting a key at
+rest. What they answer is the thing worth asserting: **"cannot tell" is not
+"unprotected"**, and a build that handed back a false would tell every Linux and
+macOS user their keys are readable by anyone on the machine and send them after
+a setting that does not exist there. `Protect` is handed a real file and the
+file is read back afterwards, so refusing is measured as having left it alone.
+
+**Two changes to code rather than tests**, both to make an arm reachable that
+otherwise could not be:
+
+`keyProtectionHere` read the platform and decided what to do with the answer in
+one function, so each machine could exercise only its own arm. The name is now
+an argument, which is the containment this seam already described but did not
+follow — only the answers belong to a platform.
+
+`config.SetKeyDir` and `WritableConfig` call the filesystem directly, and every
+one of their failure arms decides whether somebody is told their configuration
+was written when it was not. None of them can be produced by arranging a
+directory; the only lever without a seam is permissions, and permissions do not
+refuse root, so a test built on `chmod` passes on a runner and fails in the
+container job that runs the suite as root. The four calls are now variables and
+the staged file an interface — the idiom `internal/keys/handoff` already uses.
+
+One block is marked rather than tested, and it is the only one: the `return`
+after the loop in `KeyDirDecidedElsewhere` cannot be reached, because `Explain`
+lists every setting and `key_dir` is one of them.
+
+100.0% on Linux with no uncovered block anywhere in the repository; `make test`
+green and `make lint-go` clean on all five builds.
+
+→ FEATURES F68, F69, F70; rules 1, 5, 9, 15, 19, 20, 22, 23, 24, 26, 27.
